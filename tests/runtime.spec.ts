@@ -4,6 +4,9 @@ import ReferenceRuntime from '../src/index.ts'
 import { ReferenceAnythingError } from '../src/errors.ts'
 import type { ReferenceRef, ReferenceSnapshot, ReferenceSource, ReferenceSummary } from '../src/types.ts'
 
+/** Every read in this suite asks for the same window; the shape is not what is under test. */
+const WINDOW = { limit: 10 }
+
 function stubSource(id: string, over: Partial<ReferenceSource> = {}): ReferenceSource {
   return {
     id,
@@ -16,7 +19,13 @@ function stubSource(id: string, over: Partial<ReferenceSource> = {}): ReferenceS
     read: (ref: ReferenceRef): Promise<ReferenceSnapshot> => Promise.resolve({
       ref,
       label: `${id} one`,
-      body: { kind: 'conversation', items: [{ role: 'user', text: 'hi' }] },
+      body: {
+        kind: 'conversation',
+        items: [{ role: 'user', text: 'hi' }],
+        startIndex: 0,
+        totalTurns: 1,
+        hasOlder: false,
+      },
       partial: false,
       capturedAt: 0,
     }),
@@ -69,25 +78,25 @@ describe('read', () => {
   it('dispatches on the reference’s own source', async () => {
     ctx.references.registerSource(stubSource('a'))
     ctx.references.registerSource(stubSource('b'))
-    const snapshot = await ctx.references.read({ source: 'b', id: 'x' })
+    const snapshot = await ctx.references.read({ source: 'b', id: 'x' }, WINDOW)
     expect(snapshot.label).toBe('b one')
   })
 
   it('names an unregistered source instead of returning nothing', async () => {
-    await expect(ctx.references.read({ source: 'ghost', id: 'x' }))
+    await expect(ctx.references.read({ source: 'ghost', id: 'x' }, WINDOW))
       .rejects.toThrow(expect.objectContaining({ code: 'SOURCE_UNKNOWN' }))
   })
 
   it('reports a registered but unusable source distinctly from a missing one', async () => {
     ctx.references.registerSource(stubSource('off', { available: () => Promise.resolve(false) }))
-    await expect(ctx.references.read({ source: 'off', id: 'x' }))
+    await expect(ctx.references.read({ source: 'off', id: 'x' }, WINDOW))
       .rejects.toThrow(expect.objectContaining({ code: 'SOURCE_UNAVAILABLE' }))
   })
 
   it('wraps a source failure while keeping its cause', async () => {
     const cause = new Error('disk gone')
     ctx.references.registerSource(stubSource('bad', { read: () => Promise.reject(cause) }))
-    await expect(ctx.references.read({ source: 'bad', id: 'x' })).rejects.toMatchObject({
+    await expect(ctx.references.read({ source: 'bad', id: 'x' }, WINDOW)).rejects.toMatchObject({
       code: 'REFERENCE_READ_FAILED',
       cause,
     })
@@ -96,12 +105,12 @@ describe('read', () => {
   it('passes a package error through unchanged', async () => {
     const own = new ReferenceAnythingError('nope', 'REFERENCE_NOT_FOUND')
     ctx.references.registerSource(stubSource('own', { read: () => Promise.reject(own) }))
-    await expect(ctx.references.read({ source: 'own', id: 'x' })).rejects.toBe(own)
+    await expect(ctx.references.read({ source: 'own', id: 'x' }, WINDOW)).rejects.toBe(own)
   })
 
   it('honors an already-aborted signal', async () => {
     ctx.references.registerSource(stubSource('a'))
-    await expect(ctx.references.read({ source: 'a', id: 'x' }, AbortSignal.abort()))
+    await expect(ctx.references.read({ source: 'a', id: 'x' }, WINDOW, AbortSignal.abort()))
       .rejects.toThrow(expect.objectContaining({ code: 'REFERENCE_CANCELLED' }))
   })
 })

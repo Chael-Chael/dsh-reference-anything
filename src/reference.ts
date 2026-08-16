@@ -45,6 +45,9 @@ export const MAX_REFERENCES = 3
 /** Serialized byte budget applied to each reference when none is configured. */
 export const DEFAULT_MAX_REFERENCE_BYTES = 65_536
 
+/** Turns previewed per reference when none is configured. */
+export const DEFAULT_PREVIEW_TURNS = 10
+
 /** Deployment settings for mention expansion. */
 export interface Config {
   /**
@@ -55,6 +58,12 @@ export interface Config {
   maxReferences?: number
   /** Serialized byte budget for each reference, applied independently. */
   maxReferenceBytes?: number
+  /**
+   * Turns previewed per reference, counting back from the newest. The rest
+   * stay reachable through `reference_read`, so this trades prompt size
+   * against how often the model has to ask for more.
+   */
+  previewTurns?: number
   /**
    * Also expand `dsh-session:` mentions. Deployments that deliberately do not
    * mount the cross-session resolver set this false, so such a mention is
@@ -67,6 +76,7 @@ export interface Config {
 export const Config: z<Config> = z.object({
   maxReferences: z.number().step(1).min(1).max(MAX_REFERENCES).default(MAX_REFERENCES),
   maxReferenceBytes: z.number().step(1).min(1).default(DEFAULT_MAX_REFERENCE_BYTES),
+  previewTurns: z.number().step(1).min(1).default(DEFAULT_PREVIEW_TURNS),
   serveSessionScheme: z.boolean().default(true),
 })
 
@@ -85,6 +95,7 @@ interface ParsedMessage {
 export function apply(ctx: Context, config: Config = {}): void {
   const maxReferences = Math.min(config.maxReferences ?? MAX_REFERENCES, MAX_REFERENCES)
   const maxReferenceBytes = config.maxReferenceBytes ?? DEFAULT_MAX_REFERENCE_BYTES
+  const previewTurns = config.previewTurns ?? DEFAULT_PREVIEW_TURNS
   const serveSessionScheme = config.serveSessionScheme ?? true
 
   ctx.on('agent/pre-step', async ({ agent, signal }, next): Promise<PreStepDecision> => {
@@ -115,7 +126,13 @@ export function apply(ctx: Context, config: Config = {}): void {
 
     let contexts: UserMessage[]
     try {
-      contexts = await resolve(ctx, agent, parsed, { maxReferences, maxReferenceBytes, serveSessionScheme }, signal)
+      contexts = await resolve(
+        ctx,
+        agent,
+        parsed,
+        { maxReferences, maxReferenceBytes, previewTurns, serveSessionScheme },
+        signal,
+      )
     } catch (error: unknown) {
       if (signal.aborted) return decision
       contexts = [notice(describe(error))]
@@ -129,15 +146,18 @@ export function apply(ctx: Context, config: Config = {}): void {
 interface Limits {
   readonly maxReferences: number
   readonly maxReferenceBytes: number
+  readonly previewTurns: number
   readonly serveSessionScheme: boolean
 }
 
 /**
- * Read everything the message named and render it as background.
+ * Read a preview of everything the message named and render it as background.
  *
- * All-or-nothing on purpose: a block that silently omitted one of the
- * conversations the user named would leave the model answering from material
- * the user believes it already has.
+ * Every named reference appears in the block, whether or not its preview could
+ * be read — one that silently vanished would leave the model answering from
+ * material the user believes it already has. A reference whose read failed
+ * appears with a null preview and the reason, still carrying the uri that
+ * fetches it later.
  */
 async function resolve(
   ctx: Context,
@@ -169,7 +189,7 @@ async function resolve(
         'REFERENCE_TOO_MANY',
       )
     }
-    const rendered = renderReferences(await readAll(ctx, inputs, signal), limits.maxReferenceBytes)
+    const rendered = renderReferences(await readAll(ctx, inputs, limits, signal), limits.maxReferenceBytes)
     contexts.push(createUserMessage({
       content: [{ type: 'text', text: rendered.text }],
       source: {
@@ -184,15 +204,34 @@ async function resolve(
   return contexts
 }
 
+/**
+ * Read a preview of every named reference.
+ *
+ * Settled per reference rather than all-or-nothing: a browser that is closed
+ * right now should cost the model that one preview, not the whole message. The
+ * entry still carries its uri and says why the preview is missing, so the
+ * model can fetch it with the tool once the source is back.
+ */
 async function readAll(
   ctx: Context,
   inputs: readonly ReferenceInput[],
+  limits: Limits,
   signal: AbortSignal,
 ): Promise<RenderInput[]> {
-  const snapshots = await Promise.all(inputs.map(input => ctx.references.read(input.ref, signal)))
-  return snapshots.map((snapshot, index) => {
-    const label = inputs[index]?.label
-    return label === undefined ? { snapshot } : { snapshot, label }
+  const settled = await Promise.allSettled(
+    inputs.map(input => ctx.references.read(input.ref, { limit: limits.previewTurns }, signal)),
+  )
+  return settled.map((result, index) => {
+    const input = inputs[index]
+    /* c8 ignore next -- settled has exactly one entry per input, by construction. */
+    if (input === undefined) throw new Error('reference input disappeared while reading')
+    return result.status === 'fulfilled'
+      ? input.label === undefined
+        ? { snapshot: result.value }
+        : { snapshot: result.value, label: input.label }
+      : input.label === undefined
+        ? { ref: input.ref, unavailable: describe(result.reason) }
+        : { ref: input.ref, label: input.label, unavailable: describe(result.reason) }
   })
 }
 

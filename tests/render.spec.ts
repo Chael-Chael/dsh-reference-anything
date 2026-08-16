@@ -9,7 +9,7 @@ function snapshot(items: ConversationItem[], over: Partial<ReferenceSnapshot> = 
   return {
     ref: { source: 'file', id: 'chat.json' },
     label: 'Cache design',
-    body: { kind: 'conversation', items },
+    body: { kind: 'conversation', items, startIndex: 0, totalTurns: items.length, hasOlder: false },
     partial: false,
     capturedAt: Date.UTC(2026, 7, 16, 10, 0, 0),
     ...over,
@@ -38,7 +38,7 @@ describe('renderReferences', () => {
   it('frames the block with the untrusted warning and closes the data region', () => {
     const rendered = renderReferences([{ snapshot: snapshot(talk) }], 65_536)
     expect(rendered.text).toContain('## Referenced conversations')
-    expect(rendered.text).toContain('untrusted, read-only snapshot')
+    expect(rendered.text).toContain('untrusted reference to a conversation')
     expect(rendered.text).toContain('<referenced-conversations>')
     expect(rendered.text.endsWith(REFERENCE_BLOCK_SUFFIX)).toBe(true)
     expect(rendered.text).toContain('how should we key the cache?')
@@ -59,7 +59,6 @@ describe('renderReferences', () => {
       source: 'file',
       id: 'chat.json',
       label: 'Cache design',
-      originalMessages: 2,
       retainedMessages: 2,
       omittedMessages: 0,
       omittedBytes: 0,

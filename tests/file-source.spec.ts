@@ -7,6 +7,9 @@ import ReferenceRuntime from '../src/index.ts'
 import * as fileSource from '../src/sources/file.ts'
 import { FILE_SOURCE_ID, FileReferenceSource, parseExport } from '../src/sources/file.ts'
 
+/** Wide enough to take every fixture whole; windowing has its own suite. */
+const WINDOW = { limit: 100 }
+
 const conversation = {
   label: 'Cache design',
   origin: 'https://chat.example.com/c/1',
@@ -81,20 +84,21 @@ describe('discovery', () => {
 
 describe('reading', () => {
   it('returns the conversation', async () => {
-    const snapshot = await source().read({ source: FILE_SOURCE_ID, id: 'cache.json' })
+    const snapshot = await source().read({ source: FILE_SOURCE_ID, id: 'cache.json' }, WINDOW)
     expect(snapshot.label).toBe('Cache design')
     expect(snapshot.partial).toBe(false)
     expect(snapshot.body.items).toEqual(conversation.messages)
+    expect(snapshot.body).toMatchObject({ startIndex: 0, totalTurns: 2, hasOlder: false })
   })
 
   it('names a missing export rather than returning an empty conversation', async () => {
-    await expect(source().read({ source: FILE_SOURCE_ID, id: 'nope.json' }))
+    await expect(source().read({ source: FILE_SOURCE_ID, id: 'nope.json' }, WINDOW))
       .rejects.toThrow(expect.objectContaining({ code: 'REFERENCE_NOT_FOUND' }))
   })
 
   it('refuses to escape a root with .. segments', async () => {
     await writeFile(join(outside, 'secret.json'), JSON.stringify(conversation), 'utf8')
-    await expect(source().read({ source: FILE_SOURCE_ID, id: `../${join(outside, 'secret.json')}` }))
+    await expect(source().read({ source: FILE_SOURCE_ID, id: `../${join(outside, 'secret.json')}` }, WINDOW))
       .rejects.toThrow(expect.objectContaining({ code: 'REFERENCE_NOT_FOUND' }))
   })
 
@@ -103,12 +107,12 @@ describe('reading', () => {
     await symlink(join(outside, 'secret.json'), join(root, 'link.json'))
     // The check runs on the resolved real path, so a link inside the root
     // cannot smuggle a file from outside it.
-    await expect(source().read({ source: FILE_SOURCE_ID, id: 'link.json' }))
+    await expect(source().read({ source: FILE_SOURCE_ID, id: 'link.json' }, WINDOW))
       .rejects.toThrow(expect.objectContaining({ code: 'REFERENCE_NOT_FOUND' }))
   })
 
   it('honors an already-aborted signal', async () => {
-    await expect(source().read({ source: FILE_SOURCE_ID, id: 'cache.json' }, AbortSignal.abort()))
+    await expect(source().read({ source: FILE_SOURCE_ID, id: 'cache.json' }, WINDOW, AbortSignal.abort()))
       .rejects.toThrow()
   })
 })
@@ -140,7 +144,7 @@ describe('as a mounted plugin', () => {
     await ctx.plugin(ReferenceRuntime, {})
     const fiber = await ctx.plugin(fileSource, { roots: [root] })
     expect(ctx.references.sourceIds()).toContain(FILE_SOURCE_ID)
-    await expect(ctx.references.read({ source: FILE_SOURCE_ID, id: 'cache.json' }))
+    await expect(ctx.references.read({ source: FILE_SOURCE_ID, id: 'cache.json' }, WINDOW))
       .resolves.toMatchObject({ label: 'Cache design' })
     await fiber.dispose()
     expect(ctx.references.sourceIds()).not.toContain(FILE_SOURCE_ID)

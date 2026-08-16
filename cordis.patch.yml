@@ -18,20 +18,26 @@
         listLimit: 20
 
     # Expands `@[label](dsh-ref:…)` and `dsh-session:` mentions in a user's
-    # prompt into untrusted background, on every surface.
+    # prompt into untrusted background, on every surface. Each reference
+    # contributes a bounded preview of its most recent turns; the rest stay
+    # reachable through reference_read.
     - id: reference-mention
       name: 'dsh-reference-anything/reference'
       config:
         maxReferences: 3
         maxReferenceBytes: 65536
+        previewTurns: 10
         serveSessionScheme: true
 
-    # Lets the model go looking on its own: reference_list / reference_read.
+    # Lets the model go looking on its own, and page backwards through a
+    # conversation it has only seen the end of.
     - id: reference-tool
       name: 'dsh-reference-anything/tool'
       config:
         listLimit: 20
         maxOutputBytes: 65536
+        readTurns: 10
+        maxReadTurns: 50
         timeoutMs: 30000
 
     # Exported conversations on disk. Inert until the directory exists, so the
@@ -41,3 +47,19 @@
       config:
         roots: !!js [dshHomePath('references')]
         extensions: ['.json']
+
+    # Your DeepSeek web chats, read from a browser you are already signed in to.
+    #
+    # Disabled on purpose. Enabling it means starting Chrome with
+    # --remote-debugging-port, and that port grants full read/write access to
+    # every tab, cookie, and session in that browser — not just DeepSeek. Use a
+    # dedicated Chrome profile (--user-data-dir) rather than your daily one.
+    # This plugin never starts a browser, never navigates, and never scrolls.
+    - id: reference-deepseek
+      name: 'dsh-reference-anything/deepseek'
+      disabled: true
+      config:
+        endpoint: 'http://127.0.0.1:9222'
+        origins: ['https://chat.deepseek.com']
+        evaluateTimeoutMs: 5000
+        maxTurns: 400

@@ -19,7 +19,9 @@ import type {
   ReferenceSnapshot,
   ReferenceSource,
   ReferenceSummary,
+  ReferenceWindow,
 } from '../types.ts'
+import { sliceTurns } from '../window.ts'
 import type {} from '../index.ts'
 
 /** Cordis plugin name used by loader diagnostics. */
@@ -116,21 +118,24 @@ export class FileReferenceSource implements ReferenceSource {
   }
 
   /**
-   * Read one export.
+   * Read one window of turns from an export.
    * @param ref - a reference this source owns; `ref.id` is a root-relative path.
+   * @param window - which turns to return.
    * @param signal - cancellation from the caller.
-   * @returns the exported conversation.
+   * @returns the requested turns and their position in the conversation.
    */
-  async read(ref: ReferenceRef, signal?: AbortSignal): Promise<ReferenceSnapshot> {
+  async read(ref: ReferenceRef, window: ReferenceWindow, signal?: AbortSignal): Promise<ReferenceSnapshot> {
     signal?.throwIfAborted()
     const path = await this.locate(ref.id)
     const document = parseExport(await readFile(path, 'utf8'), path)
+    const slice = sliceTurns(document.messages, window)
     return {
       ref,
       label: labelOf(document, ref.id),
       ...document.origin === undefined ? {} : { origin: document.origin },
       ...document.updatedAt === undefined ? {} : { updatedAt: document.updatedAt },
-      body: { kind: 'conversation', items: document.messages },
+      body: slice,
+      // The whole file is read every time, so nothing is beyond this source's reach.
       partial: false,
       capturedAt: Date.now(),
     }

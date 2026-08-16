@@ -51,23 +51,49 @@ export interface ConversationItem {
 }
 
 /**
- * What a reference resolved to.
+ * Which turns to read.
+ *
+ * Indices count from the **oldest** turn, because a conversation grows at its
+ * newest end: an index from the start still names the same turn tomorrow,
+ * while an index from the end would silently slide. That is what lets a model
+ * page backwards across several calls without a continuation token.
+ */
+export interface ReferenceWindow {
+  /** Maximum turns to return. */
+  readonly limit: number
+  /** Exclusive upper bound; absent means the newest turns. */
+  readonly before?: number
+}
+
+/**
+ * The turns a source returned, and where they sit in the whole conversation.
  *
  * Discriminated from the start so a later non-conversation referent is an
  * added member rather than a rewrite of every consumer.
  */
-export type ReferenceBody = {
+export interface ReferenceSlice {
   readonly kind: 'conversation'
+  /** Turns in chronological order, oldest first. */
   readonly items: readonly ConversationItem[]
+  /** Index of `items[0]` in the whole conversation. */
+  readonly startIndex: number
+  /** Total turns, when the source can count them. */
+  readonly totalTurns?: number
+  /** Whether turns exist before `startIndex`. */
+  readonly hasOlder: boolean
 }
 
-/** One referenceable item together with the content a source read for it. */
+/** One referenceable item together with the turns a source read for it. */
 export interface ReferenceSnapshot extends ReferenceSummary {
-  readonly body: ReferenceBody
+  readonly body: ReferenceSlice
   /**
-   * The source knows its read was incomplete — a virtualized list that had not
-   * rendered fully, a paginated history it did not exhaust. Distinct from the
-   * consumer-side budget, which reports its own omissions separately.
+   * The source could not see the whole conversation — a virtualized list that
+   * had not rendered fully, a history it has no way to page.
+   *
+   * Distinct from {@link ReferenceSlice.hasOlder}, and the two must never be
+   * folded together: `hasOlder` means turns exist that the caller has not
+   * asked for yet, while `partial` means turns exist that nobody here can
+   * reach. One is a viewport, the other is loss.
    */
   readonly partial: boolean
   /** When this snapshot was read, in Unix epoch milliseconds. */
@@ -101,12 +127,17 @@ export interface ReferenceSource {
    */
   list(query: string, limit: number, signal?: AbortSignal): Promise<ReferenceSummary[]>
   /**
-   * Read one item exactly.
+   * Read one window of turns from an item.
+   *
+   * Must fail rather than return an empty conversation for an item that
+   * exists: an empty success is indistinguishable from a broken reader, and
+   * the model would answer as if the user's chat had said nothing.
    * @param ref - a reference this source owns; `ref.source` always equals {@link ReferenceSource.id}.
+   * @param window - which turns to return.
    * @param signal - cancellation from the caller.
-   * @returns the item and its content.
+   * @returns the requested turns and their position in the conversation.
    */
-  read(ref: ReferenceRef, signal?: AbortSignal): Promise<ReferenceSnapshot>
+  read(ref: ReferenceRef, window: ReferenceWindow, signal?: AbortSignal): Promise<ReferenceSnapshot>
 }
 
 /**
@@ -125,25 +156,31 @@ export interface ReferenceContextSource {
   readonly references: readonly ReferenceProvenance[]
 }
 
-/** What one reference contributed, and what was dropped getting it here. */
+/** What one reference contributed, and what was left out getting it here. */
 export interface ReferenceProvenance {
   readonly source: string
   readonly id: string
   /** Display name carried into the model-facing block; never empty. */
   readonly label: string
   readonly capturedAt: number
-  /** Conversation turns present before the byte budget ran. */
-  readonly originalMessages: number
-  /** Conversation turns still present after it. */
+  /** Index of the first previewed turn within the whole conversation. */
+  readonly startIndex: number
+  /** Total turns, when the source can count them. */
+  readonly totalTurns?: number
+  /** Turns actually shown to the model. */
   readonly retainedMessages: number
-  /** Turns the budget dropped whole. */
+  /** Turns not shown, whether older than the window or dropped by the budget. */
   readonly omittedMessages: number
-  /** UTF-8 bytes lost to dropped turns and to truncation inside kept ones. */
+  /** UTF-8 bytes lost to shortening inside the turns that were shown. */
   readonly omittedBytes: number
-  /** Whether anything at all was dropped or shortened. */
+  /** Whether anything at all was left out. */
   readonly truncated: boolean
-  /** Whether the source itself reported an incomplete read. */
+  /** Whether older turns can still be fetched. */
+  readonly hasOlder: boolean
+  /** Whether the source itself could not see the whole conversation. */
   readonly partial: boolean
+  /** Why the preview is absent, when the read failed. */
+  readonly error?: string
   /** Position in the user's mention order, preserved after deduplication. */
   readonly inputIndex: number
 }

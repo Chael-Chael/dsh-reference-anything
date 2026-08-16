@@ -28,6 +28,22 @@ export type ReferenceErrorCode =
   | 'REFERENCE_BUDGET_EXCEEDED'
   /** A plugin config value was outside its documented domain. */
   | 'REFERENCE_INVALID_CONFIG'
+  /** No browser is listening for DevTools connections where the config says. */
+  | 'CDP_ENDPOINT_UNREACHABLE'
+  /** The page exists but another debugger client already holds it. */
+  | 'CDP_TARGET_BUSY'
+  /** No open tab matches the reference, or none is on an allowed origin. */
+  | 'CDP_NO_MATCHING_TARGET'
+  /** The page did not answer in time. */
+  | 'CDP_EVALUATE_TIMEOUT'
+  /** The browser refused the evaluation, or the extractor threw inside the page. */
+  | 'CDP_EVALUATE_FAILED'
+  /**
+   * The page answered but no turns could be read from it. Always loud: an
+   * empty conversation returned as success is indistinguishable from an
+   * extractor the site's layout has outgrown.
+   */
+  | 'CDP_EXTRACTION_EMPTY'
 
 /**
  * Named distinctly from the global `ReferenceError` — these describe this

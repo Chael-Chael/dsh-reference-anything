@@ -13,7 +13,13 @@
 import { Context, Service } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
 import { ReferenceAnythingError } from './errors.ts'
-import type { ReferenceRef, ReferenceSnapshot, ReferenceSource, ReferenceSummary } from './types.ts'
+import type {
+  ReferenceRef,
+  ReferenceSnapshot,
+  ReferenceSource,
+  ReferenceSummary,
+  ReferenceWindow,
+} from './types.ts'
 
 export type * from './types.ts'
 export { ReferenceAnythingError, type ReferenceErrorCode } from './errors.ts'
@@ -128,12 +134,13 @@ export default class ReferenceRuntime extends Service {
   }
 
   /**
-   * Read one reference exactly.
+   * Read one window of turns from a reference.
    * @param ref - the reference to resolve; its `source` selects the owning implementation.
+   * @param window - which turns to return.
    * @param signal - cancellation from the caller.
-   * @returns the referenced item and its content.
+   * @returns the requested turns and their position in the conversation.
    */
-  async read(ref: ReferenceRef, signal?: AbortSignal): Promise<ReferenceSnapshot> {
+  async read(ref: ReferenceRef, window: ReferenceWindow, signal?: AbortSignal): Promise<ReferenceSnapshot> {
     throwIfCancelled(signal)
     const source = this.sources.get(ref.source)
     if (source === undefined) {
@@ -150,7 +157,7 @@ export default class ReferenceRuntime extends Service {
     }
     throwIfCancelled(signal)
     try {
-      return await source.read(ref, signal)
+      return await source.read(ref, window, signal)
     } catch (error: unknown) {
       if (error instanceof ReferenceAnythingError) throw error
       throwIfCancelled(signal)

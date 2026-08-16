@@ -27,6 +27,10 @@
       "types": "./lib/sources/file.d.ts",
       "default": "./lib/sources/file.js"
     },
+    "./deepseek": {
+      "types": "./lib/sources/deepseek/index.d.ts",
+      "default": "./lib/sources/deepseek/index.js"
+    },
     "./package.json": "./package.json"
   },
   "files": [
@@ -71,7 +75,9 @@
     "@deepseek-ai/dsh-system-prompt": "0.1.0-rc.6",
     "@deepseek-ai/dsh-tools": "0.1.0-rc.6",
     "@types/node": "^22.20.1",
+    "@types/ws": "^8.18.1",
     "typescript": "^5.7.0",
-    "vitest": "^3.0.0"
+    "vitest": "^3.0.0",
+    "ws": "^8.21.3"
   }
 }

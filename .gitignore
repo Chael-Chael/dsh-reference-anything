@@ -3,3 +3,7 @@ lib/
 *.tgz
 *.log
 .DS_Store
+
+# Reference screenshots and other local scratch images: this repo is public.
+*.png
+*.jpg

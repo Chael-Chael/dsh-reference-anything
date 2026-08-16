@@ -24,6 +24,9 @@ function source(over: Partial<ReferenceSource> = {}): ReferenceSource {
           { role: 'user', text: 'how should we key the cache?' },
           { role: 'assistant', text: 'by request hash' },
         ],
+        startIndex: 0,
+        totalTurns: 2,
+        hasOlder: false,
       },
       partial: false,
       capturedAt: Date.UTC(2026, 7, 16),
@@ -95,7 +98,7 @@ describe('expansion', () => {
     const result = await step(ctx, [userMessage(`see ${formatReferenceMention(ref, 'Cache design')}`)])
     const context = (result as Extract<PreStepDecision, { kind: 'enter' }>).messages[0]
     const text = context?.content.flatMap(block => block.type === 'text' ? [block.text] : []).join('')
-    expect(text).toContain('untrusted, read-only snapshot')
+    expect(text).toContain('untrusted reference to a conversation')
     expect(text).toContain('by request hash')
   })
 
@@ -132,7 +135,7 @@ describe('expansion', () => {
     const scoped = await mount({
       read: (target: ReferenceRef) => {
         reads.push(target.id)
-        return source().read(target)
+        return source().read(target, { limit: 10 })
       },
     })
     const uri = formatReferenceMention(ref, 'Cache design')
@@ -142,14 +145,18 @@ describe('expansion', () => {
 })
 
 describe('a reference that cannot be honored says so', () => {
-  it('reports a source failure instead of sending a prompt whose label means nothing', async () => {
+  it('keeps the reference with a null preview when the source is down, and says why', async () => {
     const scoped = await mount({ read: () => Promise.reject(new Error('browser is closed')) })
     const result = await step(scoped, [userMessage(`see ${formatReferenceMention(ref, 'Cache design')}`)])
     const entered = (result as Extract<PreStepDecision, { kind: 'enter' }>).messages
-    expect(entered[0]?.source).toMatchObject({ kind: 'plugin', form: 'notice' })
+    // Still the ordinary recall block, not a notice: one unreachable source
+    // costs its preview, not the whole message.
+    expect(entered[0]?.source).toMatchObject({ kind: 'reference-anything', form: 'recall' })
     const text = entered[0]?.content.flatMap(block => block.type === 'text' ? [block.text] : []).join('')
     expect(text).toContain('browser is closed')
-    // The prompt is still made readable — the user should see what they meant.
+    expect(text).toContain('"preview": null')
+    // The uri survives, so the model can retry once the browser is back.
+    expect(text).toContain(encodeReferenceUri(ref))
     const prompt = entered[1]?.content.flatMap(block => block.type === 'text' ? [block.text] : []).join('')
     expect(prompt).toBe('see @Cache design')
   })
