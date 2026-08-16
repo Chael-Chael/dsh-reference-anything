@@ -34,7 +34,15 @@ function target(over: Partial<CdpTarget> = {}): CdpTarget {
 }
 
 function payload(turns: { role: string; text: string }[], over: Record<string, unknown> = {}): unknown {
-  return { strategy: 'roleAttributed', title: 'Cache design', turns, complete: true, diagnostics: {}, ...over }
+  return {
+    strategy: 'roleAttributed',
+    title: 'Cache design',
+    turns,
+    complete: true,
+    location: CHAT,
+    diagnostics: {},
+    ...over,
+  }
 }
 
 const TALK = [
@@ -217,6 +225,34 @@ describe('reading a conversation', () => {
     expect(seen[0]).not.toContain(CHAT_ID)
     expect(seen[0]).not.toContain('before')
     expect(seen[0]).toContain('document.querySelectorAll')
+  })
+})
+
+describe('the page can move under us', () => {
+  it('discards a read whose tab navigated to another conversation', async () => {
+    const scoped = source({
+      evaluate: () => Promise.resolve(payload(TALK, {
+        location: 'https://chat.deepseek.com/a/chat/s/some-other-conversation',
+      })),
+    })
+    // Without this check the read would quietly return a conversation the
+    // user never referenced.
+    await expect(scoped.read({ source: DEEPSEEK_SOURCE_ID, id: CHAT_ID }, { limit: 10 }))
+      .rejects.toThrow(expect.objectContaining({ code: 'CDP_NO_MATCHING_TARGET' }))
+  })
+
+  it('discards a read whose tab left the allowed origins', async () => {
+    const scoped = source({
+      evaluate: () => Promise.resolve(payload(TALK, { location: 'https://evil.test/a/chat/s/' + CHAT_ID })),
+    })
+    await expect(scoped.read({ source: DEEPSEEK_SOURCE_ID, id: CHAT_ID }, { limit: 10 }))
+      .rejects.toThrow(expect.objectContaining({ code: 'CDP_NO_MATCHING_TARGET' }))
+  })
+
+  it('discards a read from a page that would not say where it was', async () => {
+    const scoped = source({ evaluate: () => Promise.resolve(payload(TALK, { location: null })) })
+    await expect(scoped.read({ source: DEEPSEEK_SOURCE_ID, id: CHAT_ID }, { limit: 10 }))
+      .rejects.toThrow(expect.objectContaining({ code: 'CDP_NO_MATCHING_TARGET' }))
   })
 })
 

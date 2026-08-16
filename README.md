@@ -101,11 +101,13 @@ Unlike `dsh-session-reference`, which snapshots once and offers no way to fetch 
 
 `chat.deepseek.com` sits behind an AWS WAF that answers any plain HTTP request — including one for a public `/share/` link — with a challenge, so nothing headless can fetch a conversation. A browser you are already signed in to can, so this source attaches to one.
 
-**Read the security note before enabling it.** Starting Chrome with `--remote-debugging-port` grants anything that can reach that port full read/write access to *every* tab, cookie, and session in that browser — not just DeepSeek. Use a dedicated profile:
+**Read the security note before enabling it.** Starting Chrome with `--remote-debugging-port` grants anything that can reach that port full read/write access to *every* tab, cookie, and session in that browser — not just DeepSeek. A separate profile is also mandatory in practice: Chrome 136 and later refuse the flag on the default user-data-dir.
 
 ```sh
 google-chrome --remote-debugging-port=9222 --user-data-dir="$HOME/.dsh-chrome"
 ```
+
+The `endpoint` must be on this machine — `127.0.0.1`, `localhost`, or `[::1]` over plain http. Anything else is refused at mount, because "point this at a browser across the network" has no safe reading. To use a browser on another host, forward the port over SSH and point this at the local end.
 
 Sign in to DeepSeek in that window, open the conversation you want, then enable the row in your profile's `cordis.patch.yml`:
 
@@ -126,18 +128,46 @@ What this source will never do, at any configuration: start a browser, navigate,
 DeepSeek's front end is undocumented and unversioned, so the selectors are a best guess and a release can break them. When that happens the read **fails loudly** — an empty conversation is never returned as success — and the error names what each selector matched:
 
 ```
-no conversation turns could be read … (selectors matched: roleAttributed=0, dsMarkdown=12, userBubble=0)
+no conversation turns could be read … (selectors matched: container=1, roleAttributed=0, userText=0, markdown=14, think=3)
 ```
 
-To correct it, open the conversation in the attached browser, open DevTools, and run:
+That line is the diagnosis. `markdown=14, userText=0` means the assistant selector still works and the user one has rotated; `container=0` means the outer selector went first.
+
+To correct it, open the conversation in the attached browser and run this in its DevTools console:
 
 ```js
-document.querySelectorAll('[data-role],[data-message-author-role]').length   // shape 1
-document.querySelectorAll('.ds-markdown,[class*="ds-markdown"]').length      // shape 2 (assistant)
-document.querySelectorAll('[class*="_user"]').length                          // shape 2 (user)
+const S = { container: '.dad65929', userText: '.fbb737a4', message: '.ds-message',
+            markdown: '.ds-markdown', think: '.ds-think-content' }
+Object.fromEntries(Object.entries(S).map(([k, v]) => [k, document.querySelectorAll(v).length]))
 ```
 
-Whichever returns a plausible turn count tells you which shape the page is using; adjust the selectors in `src/sources/deepseek/extract.ts` and capture the page as a fixture so the parser stays covered.
+Expect `container: 1`, `userText` equal to your prompt count, and `markdown` at least your reply count. For whichever one reads 0: right-click that part of the page, Inspect, then
+
+```js
+let e = $0, names = []; while (e && e !== document.body) { names.push(e.className); e = e.parentElement } names
+```
+
+The live class is in that list. Put it in the `S` table at the top of `src/sources/deepseek/extract.ts` — every selector lives there and nowhere else — and save the page as a fixture so the parser stays covered.
+
+Those class names come from three independent open-source DeepSeek exporters, so they are evidence rather than invention, but they are hashed CSS-module names and a redesign will rotate them.
+
+### Helping the API strategy land
+
+Reading rendered HTML is the fallback. DeepSeek's own web app fetches conversations from `/api/v0/chat/history_messages`, and an in-page `fetch` would inherit the cookies and WAF clearance the browser already has — giving exact turn counts, real titles, and immunity to class-name churn. The open question is whether that endpoint requires the site's proof-of-work header; the evidence says it is only demanded on the completion path, but that is unverified. Running this on a logged-in tab answers it:
+
+```js
+(async () => {
+  const t = JSON.parse(localStorage.getItem('userToken')).value
+  const id = location.pathname.split('/').pop()
+  const r = await fetch(`/api/v0/chat/history_messages?chat_session_id=${id}&cache_version=0`,
+    { headers: { Authorization: `Bearer ${t}`, Accept: 'application/json' } })
+  const j = await r.json()
+  return { status: r.status, code: j.code, biz: j.data?.biz_code,
+           turns: j.data?.biz_data?.chat_messages?.length }
+})()
+```
+
+`status: 200` with `code: 0` means the API strategy is viable and should become the default. **Report the status and code, never the token** — it is a full account credential.
 
 ## Configuration
 

@@ -87,6 +87,24 @@ afterEach(async () => {
   running = undefined
 })
 
+describe('the endpoint must be on this machine', () => {
+  it.each([
+    ['a public host', 'http://198.51.100.7:9222'],
+    ['a hostname that is not loopback', 'http://browser.internal:9222'],
+    ['https', 'https://127.0.0.1:9222'],
+    ['not a URL at all', 'nope'],
+  ])('refuses %s', (_label, endpoint) => {
+    // Whoever reaches a DevTools port can read every page and cookie in that
+    // browser, so this is a fixed invariant rather than a setting.
+    expect(() => httpCdpTransport(endpoint))
+      .toThrow(expect.objectContaining({ code: 'REFERENCE_INVALID_CONFIG' }))
+  })
+
+  it.each(['http://127.0.0.1:9222', 'http://localhost:9222', 'http://[::1]:9222'])('accepts %s', (endpoint) => {
+    expect(() => httpCdpTransport(endpoint)).not.toThrow()
+  })
+})
+
 describe('listTargets', () => {
   it('returns the targets the endpoint reports', async () => {
     const browser = await startBrowser({ targets: [pageTarget(1)] })

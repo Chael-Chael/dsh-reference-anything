@@ -30,6 +30,12 @@ export interface DeepSeekPayload {
    * DOM at all.
    */
   readonly complete: boolean
+  /**
+   * The page's URL at the moment it was read. The tab can navigate between
+   * being listed and being evaluated, so the caller checks this rather than
+   * trusting that it read the conversation it asked for.
+   */
+  readonly location: string | null
   /** Per-selector match counts, so a failed extraction says what it saw. */
   readonly diagnostics: Readonly<Record<string, number>>
 }
@@ -42,45 +48,90 @@ export interface DeepSeekPayload {
  * and they did not ask us to drive it.
  */
 export const EXTRACT_CONVERSATION = `(() => {
-  const diagnostics = {}
-  const count = (name, nodes) => { diagnostics[name] = nodes.length; return nodes }
-  const text = (node) => (node && node.innerText ? node.innerText : '').replace(/\\u00a0/g, ' ').trim()
-  const title = (document.title || '').replace(/\\s*[|-]\\s*DeepSeek.*$/i, '').trim() || null
+  // The only site knowledge in this package. DeepSeek ships hashed CSS-module
+  // class names, so these WILL age; the counts below are what makes a stale
+  // selector diagnosable from an ordinary error message.
+  const S = {
+    container: '.dad65929',
+    userText: '.fbb737a4',
+    message: '.ds-message',
+    markdown: '.ds-markdown',
+    think: '.ds-think-content, .e1675d8b',
+    loader: '.ds-loading, [class*="skeleton"], [class*="loading"]',
+  }
+  const MAX_TURNS = 2000
+  const diagnostics = { container: 0, roleAttributed: 0, userText: 0, markdown: 0, think: 0 }
 
-  // Shape 1: nodes that name their own role. Cheapest and most stable when present.
-  const roled = count('roleAttributed', Array.from(document.querySelectorAll(
-    '[data-role="user"], [data-role="assistant"], [data-message-author-role]',
-  )))
+  // Block-aware text rather than innerText: innerText depends on layout and
+  // forces a reflow on a page we are only supposed to be reading.
+  const BLOCK = new Set(['P','DIV','LI','PRE','BR','TR','H1','H2','H3','H4','H5','H6','BLOCKQUOTE'])
+  const textOf = (el) => {
+    let out = ''
+    const walk = (n) => {
+      if (n.nodeType === 3) { out += n.nodeValue; return }
+      if (n.nodeType !== 1) return
+      for (const c of n.childNodes) walk(c)
+      if (BLOCK.has(n.tagName)) out += '\n'
+    }
+    walk(el)
+    return out.replace(/\u00a0/g, ' ').replace(/\n{3,}/g, '\n\n').trim()
+  }
+  const inOrder = (nodes) => nodes.sort((a, b) => {
+    const relation = a.el.compareDocumentPosition(b.el)
+    if (relation & Node.DOCUMENT_POSITION_FOLLOWING) return -1
+    if (relation & Node.DOCUMENT_POSITION_PRECEDING) return 1
+    return 0
+  })
+  const done = (strategy, turns, extra) => {
+    let kept = turns.filter((t) => t.text !== '')
+    const droppedOldest = Math.max(0, kept.length - MAX_TURNS)
+    if (droppedOldest > 0) kept = kept.slice(droppedOldest)
+    return Object.assign({
+      strategy, turns: kept, droppedOldest, diagnostics,
+      title: (document.title || '').trim() || null,
+      location: location.href,
+    }, extra)
+  }
+
+  const root = document.querySelector(S.container) || document.body
+  diagnostics.container = document.querySelectorAll(S.container).length
+
+  // Shape 1: nodes that name their own role. Not observed on DeepSeek today,
+  // but it is cheap and it is what a redesign would most likely introduce.
+  const roled = Array.from(root.querySelectorAll('[data-role="user"], [data-role="assistant"], [data-message-author-role]'))
+  diagnostics.roleAttributed = roled.length
   if (roled.length > 0) {
-    const turns = roled.map((node) => ({
-      role: node.getAttribute('data-role') || node.getAttribute('data-message-author-role') || 'assistant',
-      text: text(node),
-    })).filter((turn) => turn.text !== '')
-    if (turns.length > 0) return { strategy: 'roleAttributed', title, turns, complete: true, diagnostics }
+    return done('roleAttributed', roled.map((el) => ({
+      role: el.getAttribute('data-role') || el.getAttribute('data-message-author-role') || 'assistant',
+      text: textOf(el),
+    })), { complete: true })
   }
 
-  // Shape 2: DeepSeek renders assistant answers into markdown containers and
-  // user messages into plainer bubbles. Pairing them in document order
-  // recovers the alternation without depending on either class alone.
-  const markdown = count('dsMarkdown', Array.from(document.querySelectorAll('.ds-markdown, [class*="ds-markdown"]')))
-  const bubbles = count('userBubble', Array.from(document.querySelectorAll('[class*="_user"], [class*="fbb737a4"]')))
-  if (markdown.length > 0 || bubbles.length > 0) {
-    const tagged = []
-    for (const node of markdown) tagged.push({ node, role: 'assistant' })
-    for (const node of bubbles) tagged.push({ node, role: 'user' })
-    tagged.sort((a, b) => {
-      const relation = a.node.compareDocumentPosition(b.node)
-      if (relation & Node.DOCUMENT_POSITION_FOLLOWING) return -1
-      if (relation & Node.DOCUMENT_POSITION_PRECEDING) return 1
-      return 0
-    })
-    const turns = tagged.map((entry) => ({ role: entry.role, text: text(entry.node) }))
-      .filter((turn) => turn.text !== '')
-    if (turns.length > 0) return { strategy: 'markdownPairing', title, turns, complete: true, diagnostics }
+  // Shape 2: user prompts are plain bubbles, assistant answers are rendered
+  // markdown inside a message wrapper. Reasoning blocks are excluded rather
+  // than collected: they are not part of the conversation.
+  const users = Array.from(root.querySelectorAll(S.userText))
+  const answers = Array.from(root.querySelectorAll(S.message + ' ' + S.markdown))
+    .filter((el) => !el.closest(S.think))
+  diagnostics.userText = users.length
+  diagnostics.markdown = answers.length
+  diagnostics.think = root.querySelectorAll(S.think).length
+  if (users.length > 0 || answers.length > 0) {
+    const nodes = inOrder(
+      users.map((el) => ({ el, role: 'user' })).concat(answers.map((el) => ({ el, role: 'assistant' }))),
+    )
+    const turns = nodes.map((entry) => ({ role: entry.role, text: textOf(entry.el) }))
+    // A DeepSeek conversation always opens with a user turn, and a loader
+    // above the first turn means older ones have not been fetched. Either
+    // tells us the page is showing only part of the conversation.
+    const first = nodes.length > 0 ? nodes[0] : null
+    const loaderAbove = !!(first && Array.from(root.querySelectorAll(S.loader))
+      .some((l) => l.compareDocumentPosition(first.el) & Node.DOCUMENT_POSITION_FOLLOWING))
+    const complete = !!first && first.role === 'user' && !loaderAbove
+    return done('markdownPairing', turns, { complete })
   }
 
-  count('nextData', document.querySelectorAll('#__NEXT_DATA__'))
-  return { strategy: null, title, turns: [], complete: true, diagnostics }
+  return done(null, [], { complete: true })
 })()`
 
 /**
@@ -97,6 +148,7 @@ export function parseDeepSeekPayload(raw: unknown, label: string): {
   items: ConversationItem[]
   title: string | null
   complete: boolean
+  location: string | null
 } {
   const payload = asPayload(raw)
   if (payload === undefined) {
@@ -118,7 +170,7 @@ export function parseDeepSeekPayload(raw: unknown, label: string): {
       'CDP_EXTRACTION_EMPTY',
     )
   }
-  return { items, title: payload.title, complete: payload.complete }
+  return { items, title: payload.title, complete: payload.complete, location: payload.location }
 }
 
 /** Anything that is not clearly the user is treated as the assistant's turn. */
@@ -142,6 +194,7 @@ function asPayload(raw: unknown): DeepSeekPayload | undefined {
     title: typeof record.title === 'string' && record.title !== '' ? record.title : null,
     turns: turns as DeepSeekPayload['turns'],
     complete: record.complete !== false,
+    location: typeof record.location === 'string' ? record.location : null,
     diagnostics: typeof record.diagnostics === 'object' && record.diagnostics !== null
       ? record.diagnostics as Record<string, number>
       : {},

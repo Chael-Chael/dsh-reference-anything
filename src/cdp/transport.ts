@@ -57,6 +57,7 @@ export interface CdpTransport {
  * @returns a transport bound to that endpoint.
  */
 export function httpCdpTransport(endpoint: string): CdpTransport {
+  assertLoopback(endpoint)
   const base = endpoint.replace(/\/+$/u, '')
   return {
     async listTargets(signal?: AbortSignal): Promise<CdpTarget[]> {
@@ -154,6 +155,18 @@ function evaluateOverSocket(
           // a remote object handle we would have to fetch separately.
           awaitPromise: true,
           returnByValue: true,
+          // The page belongs to the user and they are probably looking at it:
+          // do not surface errors in their console, do not honour a
+          // breakpoint they left in DeepSeek's own code, and do not hand the
+          // page a user-activation it did not earn.
+          silent: true,
+          disableBreaks: true,
+          userGesture: false,
+          includeCommandLineAPI: false,
+          generatePreview: false,
+          // V8 terminates a runaway expression on its own, which surfaces as a
+          // real exception instead of an opaque socket timeout.
+          timeout: timeoutMs,
         },
       }))
     })
@@ -205,6 +218,46 @@ interface EvaluateResult {
     readonly exception?: { readonly description?: string }
   }
 }
+
+/**
+ * Refuse a DevTools endpoint that is not on this machine.
+ *
+ * Whoever can reach a DevTools port can read and write every page, cookie, and
+ * stored credential in that browser. Restricting it to loopback is a fixed
+ * invariant rather than a setting, because there is no deployment for which
+ * "point this at a browser across the network" is the safe answer. Tunnelling
+ * a remote browser over SSH still works: the local end is loopback.
+ * @param endpoint - the configured endpoint.
+ */
+function assertLoopback(endpoint: string): void {
+  let parsed: URL
+  try {
+    parsed = new URL(endpoint)
+  } catch (error: unknown) {
+    throw new ReferenceAnythingError(
+      `"${endpoint}" is not a URL; the DevTools endpoint looks like http://127.0.0.1:9222`,
+      'REFERENCE_INVALID_CONFIG',
+      { cause: error },
+    )
+  }
+  if (parsed.protocol !== 'http:') {
+    throw new ReferenceAnythingError(
+      `the DevTools endpoint must be http:, not ${parsed.protocol}`,
+      'REFERENCE_INVALID_CONFIG',
+    )
+  }
+  if (!LOOPBACK_HOSTS.has(parsed.hostname)) {
+    throw new ReferenceAnythingError(
+      `the DevTools endpoint must be on this machine, not ${JSON.stringify(parsed.hostname)}:`
+      + ' anything that can reach that port can read every page and cookie in the browser.'
+      + ' Forward a remote browser over SSH and point this at the local end instead.',
+      'REFERENCE_INVALID_CONFIG',
+    )
+  }
+}
+
+/** Hostnames that can only mean "this machine". */
+const LOOPBACK_HOSTS = new Set(['127.0.0.1', 'localhost', '[::1]', '::1'])
 
 function isTarget(value: unknown): value is CdpTarget {
   if (typeof value !== 'object' || value === null) return false

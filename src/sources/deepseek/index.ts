@@ -149,6 +149,11 @@ export class DeepSeekReferenceSource implements ReferenceSource {
       signal,
     )
     const extracted = parseDeepSeekPayload(raw, tab.label)
+    // The tab could have navigated between being listed and being read — the
+    // user is using this browser. Without re-checking, a read of one
+    // conversation could quietly return a different one, or a page on an
+    // origin this deployment never allowed.
+    this.assertStillTheSamePage(extracted.location, ref.id)
     // Bound what one page can contribute before any window arithmetic, so a
     // pathological conversation cannot dominate memory on the way in.
     const capped = extracted.items.length > this.options.maxTurns
@@ -170,6 +175,28 @@ export class DeepSeekReferenceSource implements ReferenceSource {
       // whatever the page held back is genuinely out of reach from here.
       partial: !whole,
       capturedAt: Date.now(),
+    }
+  }
+
+  /**
+   * Confirm the page we just read is still the one that was asked for.
+   * @param location - the URL the page reported at read time.
+   * @param expected - the conversation id the reference named.
+   */
+  private assertStillTheSamePage(location: string | null, expected: string): void {
+    if (location === null || !isAllowedOrigin(location, this.options.origins)) {
+      throw new ReferenceAnythingError(
+        `the tab navigated away from an allowed page while conversation ${JSON.stringify(expected)} was being read`,
+        'CDP_NO_MATCHING_TARGET',
+      )
+    }
+    const actual = conversationIdOf(location)
+    if (actual !== expected) {
+      throw new ReferenceAnythingError(
+        `the tab moved to a different conversation while ${JSON.stringify(expected)} was being read;`
+        + ' nothing from it was used',
+        'CDP_NO_MATCHING_TARGET',
+      )
     }
   }
 
