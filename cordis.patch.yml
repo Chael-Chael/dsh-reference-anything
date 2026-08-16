@@ -1,0 +1,43 @@
+# dsh-reference-anything — the layer this bundle contributes.
+#
+# A patch REPLACES a row's whole `config` rather than merging keys, so when you
+# override one of these in your profile's cordis.patch.yml, restate every key
+# the row needs.
+- insert:
+    # The harness's own cross-session resolver. It ships with dsh but no shipped
+    # composition mounts it, so `dsh-session:` mentions resolve to nothing until
+    # something does. Mounting it here is what makes the mention expander below
+    # able to serve both schemes.
+    - id: session-reference
+      name: '@deepseek-ai/dsh-session-reference'
+
+    # The registry every source registers into.
+    - id: references
+      name: 'dsh-reference-anything'
+      config:
+        listLimit: 20
+
+    # Expands `@[label](dsh-ref:…)` and `dsh-session:` mentions in a user's
+    # prompt into untrusted background, on every surface.
+    - id: reference-mention
+      name: 'dsh-reference-anything/reference'
+      config:
+        maxReferences: 3
+        maxReferenceBytes: 65536
+        serveSessionScheme: true
+
+    # Lets the model go looking on its own: reference_list / reference_read.
+    - id: reference-tool
+      name: 'dsh-reference-anything/tool'
+      config:
+        listLimit: 20
+        maxOutputBytes: 65536
+        timeoutMs: 30000
+
+    # Exported conversations on disk. Inert until the directory exists, so the
+    # default is safe; point `roots` wherever you keep your exports.
+    - id: reference-file
+      name: 'dsh-reference-anything/file'
+      config:
+        roots: !!js [dshHomePath('references')]
+        extensions: ['.json']
