@@ -62,6 +62,7 @@ export default class ReferenceRuntime extends Service {
   static Config: z<Config> = Config
 
   private readonly sources = new Map<string, ReferenceSource>()
+  private readonly grants = new Map<string, Set<string>>()
   private readonly listLimit: number
 
   /**
@@ -71,6 +72,7 @@ export default class ReferenceRuntime extends Service {
   constructor(ctx: Context, config: Config = {}) {
     super(ctx, 'references')
     this.listLimit = config.listLimit ?? DEFAULT_LIST_LIMIT
+    ctx.on('session/disposed', session => { this.revoke(String(session.id)) })
   }
 
   /**
@@ -99,6 +101,28 @@ export default class ReferenceRuntime extends Service {
   sourceIds(): string[] {
     return [...this.sources.keys()]
   }
+
+  /** Authorize one task to read a Web conversation named by its user or discovery tool. */
+  grant(sessionId: string, ref: ReferenceRef): void {
+    if (ref.source !== 'web-chat') return
+    const values = this.grants.get(sessionId) ?? new Set<string>()
+    values.add(ref.id)
+    this.grants.set(sessionId, values)
+  }
+
+  /** Enforce that a Web conversation URI originated in this task's mention/list surface. */
+  assertGranted(sessionId: string | undefined, ref: ReferenceRef): void {
+    if (ref.source !== 'web-chat') return
+    if (!sessionId || !this.grants.get(sessionId)?.has(ref.id)) {
+      throw new ReferenceAnythingError(
+        'this task has not been granted access to that conversation reference',
+        'CONVERSATION_REFERENCE_NOT_GRANTED',
+      )
+    }
+  }
+
+  /** Release task-local grants when a host knows the task is gone. */
+  revoke(sessionId: string): void { this.grants.delete(sessionId) }
 
   /**
    * Discover referenceable items across every available source.

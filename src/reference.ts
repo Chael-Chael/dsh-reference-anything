@@ -189,6 +189,7 @@ async function resolve(
         'REFERENCE_TOO_MANY',
       )
     }
+    for (const input of inputs) ctx.references.grant(String(agent.session.id), input.ref)
     const rendered = renderReferences(await readAll(ctx, inputs, limits, signal), limits.maxReferenceBytes)
     contexts.push(createUserMessage({
       content: [{ type: 'text', text: rendered.text }],

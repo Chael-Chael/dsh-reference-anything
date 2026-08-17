@@ -22,28 +22,22 @@ export type ReferenceErrorCode =
   | 'REFERENCE_CANCELLED'
   /** A `dsh-ref:` URI was malformed, non-canonical, or not a reference at all. */
   | 'REFERENCE_INVALID_URI'
+  /** A continuation token is malformed or belongs to another reference. */
+  | 'REFERENCE_INVALID_CURSOR'
+  /** The immutable revision pinned by a cursor aged out of retention. */
+  | 'REFERENCE_CURSOR_EXPIRED'
+  /** The current task did not mention or discover this conversation. */
+  | 'CONVERSATION_REFERENCE_NOT_GRANTED'
+  /** A provider cannot materialize this attachment from a stable locator. */
+  | 'ATTACHMENT_UNAVAILABLE'
+  /** Provider bytes exceeded the attachment cap. */
+  | 'ATTACHMENT_TOO_LARGE'
   /** One message named more distinct references than the configured limit allows. */
   | 'REFERENCE_TOO_MANY'
   /** A reference's fixed fields alone exceed its byte budget, so no honest partial exists. */
   | 'REFERENCE_BUDGET_EXCEEDED'
   /** A plugin config value was outside its documented domain. */
   | 'REFERENCE_INVALID_CONFIG'
-  /** No browser is listening for DevTools connections where the config says. */
-  | 'CDP_ENDPOINT_UNREACHABLE'
-  /** The page exists but another debugger client already holds it. */
-  | 'CDP_TARGET_BUSY'
-  /** No open tab matches the reference, or none is on an allowed origin. */
-  | 'CDP_NO_MATCHING_TARGET'
-  /** The page did not answer in time. */
-  | 'CDP_EVALUATE_TIMEOUT'
-  /** The browser refused the evaluation, or the extractor threw inside the page. */
-  | 'CDP_EVALUATE_FAILED'
-  /**
-   * The page answered but no turns could be read from it. Always loud: an
-   * empty conversation returned as success is indistinguishable from an
-   * extractor the site's layout has outgrown.
-   */
-  | 'CDP_EXTRACTION_EMPTY'
 
 /**
  * Named distinctly from the global `ReferenceError` — these describe this

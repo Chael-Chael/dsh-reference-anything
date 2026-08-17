@@ -115,6 +115,28 @@ describe('read', () => {
   })
 })
 
+describe('task-local Web conversation grants', () => {
+  const web = { source: 'web-chat', id: 'conversation-1' }
+
+  it('allows only the task that mentioned or discovered the conversation', () => {
+    ctx.references.grant('task-a', web)
+    expect(() => ctx.references.assertGranted('task-a', web)).not.toThrow()
+    expect(() => ctx.references.assertGranted('task-b', web))
+      .toThrow(expect.objectContaining({ code: 'CONVERSATION_REFERENCE_NOT_GRANTED' }))
+  })
+
+  it('revokes all Web conversation grants for a completed task', () => {
+    ctx.references.grant('task-a', web)
+    ctx.references.revoke('task-a')
+    expect(() => ctx.references.assertGranted('task-a', web))
+      .toThrow(expect.objectContaining({ code: 'CONVERSATION_REFERENCE_NOT_GRANTED' }))
+  })
+
+  it('does not impose Web authorization on generic reference sources', () => {
+    expect(() => ctx.references.assertGranted(undefined, { source: 'file', id: 'chat.json' })).not.toThrow()
+  })
+})
+
 describe('list', () => {
   it('returns nothing when no source is registered', async () => {
     await expect(ctx.references.list()).resolves.toEqual([])

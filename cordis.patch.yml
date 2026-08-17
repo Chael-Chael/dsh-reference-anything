@@ -40,26 +40,25 @@
         maxReadTurns: 50
         timeoutMs: 30000
 
+    # Durable, local-only mirror of ChatGPT/Claude/Gemini/DeepSeek/Grok.
+    # Browser requests happen only during an explicit sync operation.
+    - id: reference-web-chat
+      name: 'dsh-reference-anything/web-chat'
+      config:
+        timeoutMs: 60000
+        maxStdoutBytes: 33554432
+
+    # Host Remote used by the Web @Conversation source and settings panel.
+    - id: reference-anything-web
+      name: 'dsh-reference-anything/web'
+
     # Exported conversations on disk. Inert until the directory exists, so the
     # default is safe; point `roots` wherever you keep your exports.
     - id: reference-file
       name: 'dsh-reference-anything/file'
       config:
-        roots: !!js [dshHomePath('references')]
+        # External plugin overlays intentionally cannot evaluate !!js. This
+        # portable relative root stays inert unless the launched workspace has
+        # a references/ directory; users may override it with absolute roots.
+        roots: ['references']
         extensions: ['.json']
-
-    # Your DeepSeek web chats, read from a browser you are already signed in to.
-    #
-    # Disabled on purpose. Enabling it means starting Chrome with
-    # --remote-debugging-port, and that port grants full read/write access to
-    # every tab, cookie, and session in that browser — not just DeepSeek. Use a
-    # dedicated Chrome profile (--user-data-dir) rather than your daily one.
-    # This plugin never starts a browser, never navigates, and never scrolls.
-    - id: reference-deepseek
-      name: 'dsh-reference-anything/deepseek'
-      disabled: true
-      config:
-        endpoint: 'http://127.0.0.1:9222'
-        origins: ['https://chat.deepseek.com']
-        evaluateTimeoutMs: 5000
-        maxTurns: 400

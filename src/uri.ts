@@ -11,22 +11,9 @@
 
 import { ReferenceAnythingError } from './errors.ts'
 import type { ReferenceInput, ReferenceRef } from './types.ts'
+import { decodeReferenceUriUnchecked, encodeReferenceUri, REFERENCE_SCHEME } from './uri-codec.ts'
 
-/** URI scheme reserved for referenced outside material. */
-export const REFERENCE_SCHEME = 'dsh-ref:'
-
-/** Base64url payload alphabet; anything else is not a reference we minted. */
-const PAYLOAD_PATTERN = /^[A-Za-z0-9_-]+$/u
-
-/**
- * Encode one reference as its canonical URI.
- * @param ref - source and item id to serialize.
- * @returns the canonical `dsh-ref:` URI.
- */
-export function encodeReferenceUri(ref: ReferenceRef): string {
-  const payload = Buffer.from(JSON.stringify({ source: ref.source, id: ref.id }), 'utf8').toString('base64url')
-  return `${REFERENCE_SCHEME}${payload}`
-}
+export { encodeReferenceUri, REFERENCE_SCHEME }
 
 /**
  * Decode one canonical reference URI.
@@ -39,25 +26,11 @@ export function encodeReferenceUri(ref: ReferenceRef): string {
  * @returns the decoded reference.
  */
 export function decodeReferenceUri(uri: string): ReferenceRef {
-  if (!uri.startsWith(REFERENCE_SCHEME)) throw invalidUri(uri)
-  const payload = uri.slice(REFERENCE_SCHEME.length)
-  if (!PAYLOAD_PATTERN.test(payload)) throw invalidUri(uri)
-  let ref: ReferenceRef
   try {
-    const parsed: unknown = JSON.parse(Buffer.from(payload, 'base64url').toString('utf8'))
-    if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
-      throw new TypeError('decoded reference is not an object')
-    }
-    const { source, id } = parsed as Partial<ReferenceRef>
-    if (typeof source !== 'string' || typeof id !== 'string') {
-      throw new TypeError('decoded reference lacks string source and id')
-    }
-    ref = { source, id }
+    return decodeReferenceUriUnchecked(uri)
   } catch (error: unknown) {
     throw invalidUri(uri, error)
   }
-  if (encodeReferenceUri(ref) !== uri) throw invalidUri(uri, new TypeError('URI is not canonical'))
-  return ref
 }
 
 /**

@@ -41,6 +41,11 @@ export interface ReferenceSummary {
   readonly origin?: string
   /** Last known activity in Unix epoch milliseconds, when the source knows it. */
   readonly updatedAt?: number
+  /** Optional provider metadata used by rich discovery surfaces. */
+  readonly provider?: string
+  readonly messageCount?: number
+  readonly partial?: boolean
+  readonly syncedAt?: number
 }
 
 /** One projected turn of a referenced conversation. */
@@ -48,6 +53,17 @@ export interface ConversationItem {
   readonly role: 'user' | 'assistant'
   /** Visible text of that turn. Tool calls, reasoning, and injected context are not projected. */
   readonly text: string
+  /** Attachment metadata only; bytes stay behind an explicit authorized read. */
+  readonly attachments?: readonly ConversationAttachment[]
+}
+
+/** Stable, non-secret metadata for one provider attachment. */
+export interface ConversationAttachment {
+  readonly attachmentId: string
+  readonly name: string
+  readonly mimeType: string
+  readonly size: number
+  readonly status: 'available' | 'unavailable' | 'expired'
 }
 
 /**
@@ -63,6 +79,8 @@ export interface ReferenceWindow {
   readonly limit: number
   /** Exclusive upper bound; absent means the newest turns. */
   readonly before?: number
+  /** Opaque revision-pinned continuation returned by a previous read. */
+  readonly cursor?: string
 }
 
 /**
@@ -81,6 +99,10 @@ export interface ReferenceSlice {
   readonly totalTurns?: number
   /** Whether turns exist before `startIndex`. */
   readonly hasOlder: boolean
+  /** Opaque token for the next older page. */
+  readonly nextCursor?: string
+  /** Immutable content version backing this page. */
+  readonly revision?: string
 }
 
 /** One referenceable item together with the turns a source read for it. */
@@ -98,6 +120,10 @@ export interface ReferenceSnapshot extends ReferenceSummary {
   readonly partial: boolean
   /** When this snapshot was read, in Unix epoch milliseconds. */
   readonly capturedAt: number
+  /** Provider name when this is a mirrored Web chat. */
+  readonly provider?: string
+  /** Immutable content revision selected for this read. */
+  readonly revision?: string
 }
 
 /**

@@ -10,8 +10,12 @@
  */
 
 import type { Context } from '@deepseek-ai/cordis'
+import { mkdtemp, readFile, rm } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { basename, join } from 'node:path'
 import z from '@deepseek-ai/schemastery'
 import { defineTool } from '@deepseek-ai/dsh-tools'
+import { AttachmentId, type ImageMediaType } from '@deepseek-ai/dsh-attachment'
 import { continuationFooter, frameReferenceBlock } from './render.ts'
 import { retainConversation } from './retain.ts'
 import { decodeReferenceUri, encodeReferenceUri } from './uri.ts'
@@ -118,6 +122,7 @@ export function apply(ctx: Context, config: Config = {}): void {
     isConcurrencySafe: () => true,
     async execute(args, exec) {
       const summaries = await ctx.references.list(args.query ?? '', listLimit, exec.signal)
+      if (exec.agent) for (const summary of summaries) ctx.references.grant(String(exec.agent.session.id), summary.ref)
       return {
         references: summaries.map(summary => ({
           uri: encodeReferenceUri(summary.ref),
@@ -157,6 +162,10 @@ export function apply(ctx: Context, config: Config = {}): void {
           'Return turns earlier than this turn number, to continue reading backwards. '
           + 'Omit for the most recent turns.',
       },
+      cursor: {
+        type: 'string',
+        description: 'Opaque nextCursor returned by the previous page. Do not combine with before.',
+      },
     },
     output: {
       schema: {
@@ -170,6 +179,8 @@ export function apply(ctx: Context, config: Config = {}): void {
           hasOlder: { type: 'boolean', required: true },
           partial: { type: 'boolean', required: true },
           omittedBytes: { type: 'integer', required: true },
+          revision: { type: 'string' },
+          nextCursor: { type: 'string' },
           messages: {
             type: 'array',
             required: true,
@@ -196,6 +207,7 @@ export function apply(ctx: Context, config: Config = {}): void {
           count: value.messages.length,
           ...value.totalTurns === undefined ? {} : { totalTurns: value.totalTurns },
           hasOlder: value.hasOlder,
+          ...value.nextCursor === undefined ? {} : { nextCursor: value.nextCursor },
         })}`,
       }],
       presentationMeta: (_args, value) => ({
@@ -208,8 +220,10 @@ export function apply(ctx: Context, config: Config = {}): void {
     timeoutMs,
     isConcurrencySafe: () => true,
     async execute(args, exec) {
+      const ref = decodeReferenceUri(args.uri)
+      ctx.references.assertGranted(exec.agent ? String(exec.agent.session.id) : undefined, ref)
       const window = parseWindow(args, readTurns, maxReadTurns)
-      const snapshot = await ctx.references.read(decodeReferenceUri(args.uri), window, exec.signal)
+      const snapshot = await ctx.references.read(ref, window, exec.signal)
       const slice = snapshot.body
       // The turn window is the model's bound; this byte budget is only a
       // backstop for a conversation whose individual turns are enormous.
@@ -233,6 +247,8 @@ export function apply(ctx: Context, config: Config = {}): void {
         hasOlder: slice.hasOlder || dropped > 0,
         partial: snapshot.partial,
         omittedBytes: outcome.omittedBytes,
+        ...(snapshot.revision ? { revision: snapshot.revision } : {}),
+        ...(slice.nextCursor && dropped === 0 ? { nextCursor: slice.nextCursor } : {}),
         messages: outcome.items.map(item => ({ role: item.role, text: item.text })),
       }
     },
@@ -243,6 +259,84 @@ export function apply(ctx: Context, config: Config = {}): void {
       rawInput: args.uri,
     }),
   })), 'reference-tool.reference_read()')
+
+  const tempRoots = new Set<string>()
+  ctx.effect(() => async () => {
+    await Promise.all([...tempRoots].map(path => rm(path, { recursive: true, force: true }).catch(() => {})))
+  }, 'reference-tool.attachmentTempCleanup()')
+
+  ctx.effect(() => ctx.tools.register(defineTool({
+    name: 'reference_attachment_read',
+    description: 'Read one attachment from an authorized Web conversation. The bytes are fetched on demand through the logged-in provider page.',
+    parameters: {
+      uri: { type: 'string', required: true, description: 'The dsh-ref URI that exposed the attachment.' },
+      attachmentId: { type: 'string', required: true, description: 'Attachment id exactly as shown in the conversation page.' },
+    },
+    output: {
+      schema: {
+        type: 'object', additionalProperties: false,
+        properties: {
+          name: { type: 'string', required: true }, mimeType: { type: 'string', required: true },
+          size: { type: 'integer', required: true }, localPath: { type: 'string', required: true },
+          image: {
+            type: 'object', additionalProperties: false,
+            properties: {
+              attachmentId: { type: 'string', required: true }, mediaType: { type: 'string', required: true },
+              bytes: { type: 'integer', required: true }, width: { type: 'integer', required: true }, height: { type: 'integer', required: true },
+              name: { type: 'string' },
+            },
+          },
+        },
+      },
+      render: (_args, value) => value.image
+        ? [{ type: 'text', text: `${value.name} (${value.mimeType}, ${value.size} bytes)` },
+          { type: 'image', attachment: {
+            ...value.image,
+            attachmentId: AttachmentId(value.image.attachmentId),
+            mediaType: value.image.mediaType as ImageMediaType,
+          } }]
+        : [{ type: 'text', text: `Attachment materialized at ${value.localPath} (${value.mimeType}, ${value.size} bytes).` }],
+    },
+    timeoutMs,
+    isConcurrencySafe: () => true,
+    async execute(args, exec) {
+      const ref = decodeReferenceUri(args.uri)
+      ctx.references.assertGranted(exec.agent ? String(exec.agent.session.id) : undefined, ref)
+      if (ref.source !== 'web-chat') throw new Error('attachments are available only for synchronized Web conversations')
+      const service = ctx.get('referenceChatHistory')
+      if (!service) throw new Error('Web conversation history service is not mounted')
+      const conversation = service.store.conversations.get(ref.id)
+      const revision = conversation?.currentRevision
+      if (!conversation || !revision) throw new Error('conversation has no synchronized revision')
+      const attachment = service.store.attachment(ref.id, revision, args.attachmentId)
+      if (!attachment?.locator || attachment.status !== 'available') {
+        throw new Error('ATTACHMENT_UNAVAILABLE: provider supplied no stable attachment locator')
+      }
+      const root = await mkdtemp(join(tmpdir(), 'dsh-reference-attachment-'))
+      tempRoots.add(root)
+      const safeName = basename(attachment.name).replace(/[<>:"/\\|?*\x00-\x1f]/g, '_') || 'attachment'
+      const localPath = join(root, safeName)
+      const settings = service.store.settings
+      const runner = new (await import('./opencli.ts')).OpenCliRunner({
+        executable: settings.opencliPath, profile: settings.profile, timeoutMs, maxStdoutBytes: 32 * 1024 * 1024,
+      })
+      await runner.attachment(conversation.provider, attachment.locator, localPath, 25 * 1024 * 1024, exec.signal)
+      const bytes = await readFile(localPath)
+      if (bytes.byteLength > 25 * 1024 * 1024) throw new Error('ATTACHMENT_TOO_LARGE: attachment exceeds 25 MiB')
+      const mimeType = sniffMime(bytes, attachment.mimeType)
+      const timer = setTimeout(() => {
+        tempRoots.delete(root)
+        void rm(root, { recursive: true, force: true })
+      }, 60 * 60 * 1000)
+      timer.unref?.()
+      const image = mimeType.startsWith('image/') ? await saveImage(ctx, bytes, mimeType, attachment.name) : undefined
+      return {
+        name: attachment.name, mimeType, size: bytes.byteLength, localPath,
+        ...(image ? { image } : {}),
+      }
+    },
+    presentCall: args => ({ card: 'generic', title: 'Read conversation attachment', kind: 'read', rawInput: args.attachmentId }),
+  })), 'reference-tool.reference_attachment_read()')
 }
 
 /**
@@ -257,7 +351,7 @@ export function apply(ctx: Context, config: Config = {}): void {
  * @returns the window to request.
  */
 export function parseWindow(
-  args: { limit?: number; before?: number },
+  args: { limit?: number; before?: number; cursor?: string },
   fallback: number,
   ceiling: number,
 ): ReferenceWindow {
@@ -267,5 +361,29 @@ export function parseWindow(
   if (args.before !== undefined && (!Number.isInteger(args.before) || args.before < 0)) {
     throw new Error('before must be a turn number of zero or more')
   }
+  if (args.before !== undefined && args.cursor !== undefined) throw new Error('before and cursor cannot be used together')
+  if (args.cursor !== undefined && args.cursor.trim() === '') throw new Error('cursor must not be empty')
+  if (args.cursor !== undefined) return { limit, cursor: args.cursor }
   return args.before === undefined ? { limit } : { limit, before: args.before }
+}
+
+function sniffMime(bytes: Buffer, declared: string): string {
+  const detected = bytes.subarray(0, 12)
+  const mime = detected.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])) ? 'image/png'
+    : detected[0] === 0xff && detected[1] === 0xd8 && detected[2] === 0xff ? 'image/jpeg'
+      : detected.subarray(0, 6).toString('ascii').match(/^GIF8[79]a$/) ? 'image/gif'
+        : detected.subarray(0, 4).toString('ascii') === 'RIFF' && detected.subarray(8, 12).toString('ascii') === 'WEBP' ? 'image/webp'
+          : detected.subarray(0, 5).toString('ascii') === '%PDF-' ? 'application/pdf'
+            : 'application/octet-stream'
+  if (declared.startsWith('image/') && !mime.startsWith('image/')) throw new Error('ATTACHMENT_UNAVAILABLE: attachment MIME did not match its bytes')
+  return mime === 'application/octet-stream' && declared ? declared : mime
+}
+
+async function saveImage(ctx: Context, bytes: Buffer, mimeType: string, name: string) {
+  const attachments = ctx.get('attachments')
+  if (!attachments) throw new Error('ATTACHMENT_UNAVAILABLE: no DSH attachment store is mounted for image output')
+  if (mimeType !== 'image/png' && mimeType !== 'image/jpeg' && mimeType !== 'image/webp' && mimeType !== 'image/gif') {
+    throw new Error(`ATTACHMENT_UNAVAILABLE: unsupported image type ${mimeType}`)
+  }
+  return await attachments.saveImage({ data: bytes, mediaType: mimeType, name })
 }

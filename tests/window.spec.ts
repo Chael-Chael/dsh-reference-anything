@@ -151,14 +151,14 @@ describe('a preview must be a door, not a dead end', () => {
     const rendered = renderReferences([{ snapshot: windowed(7, 3, 10) }], 65_536)
     // Not merely recorded in the durable source for the UI — the model itself
     // must be able to tell that this is an excerpt.
-    expect(rendered.text).toContain('"olderTurnsAvailable": true')
-    expect(rendered.text).toContain('"totalTurns": 10')
-    expect(rendered.text).toContain('"from": 7')
+    expect(rendered.text).toContain('"hasMore": true')
+    expect(rendered.text).toContain('"order": "newest_first"')
+    expect(rendered.text).toContain('"limit": 3')
   })
 
   it('says plainly when nothing was left out', () => {
     const rendered = renderReferences([{ snapshot: windowed(0, 10, 10) }], 65_536)
-    expect(rendered.text).toContain('"olderTurnsAvailable": false')
+    expect(rendered.text).toContain('"hasMore": false')
   })
 
   it('turns the byte backstop into more available turns, not silent loss', () => {
@@ -178,7 +178,7 @@ describe('a preview must be a door, not a dead end', () => {
     const rendered = renderReferences([{ snapshot: long }], 1200)
     // The source said there was nothing older; the budget then dropped the
     // oldest of what it sent, so now there IS something older to fetch.
-    expect(rendered.text).toContain('"olderTurnsAvailable": true')
+    expect(rendered.text).toContain('"hasMore": true')
     expect(rendered.provenance[0]?.hasOlder).toBe(true)
     expect(rendered.provenance[0]?.startIndex).toBeGreaterThan(0)
   })
@@ -187,8 +187,8 @@ describe('a preview must be a door, not a dead end', () => {
     const rendered = renderReferences([{ snapshot: { ...windowed(0, 3, 3), partial: true } }], 65_536)
     // `partial` is "nobody here can reach the rest"; `olderTurnsAvailable` is
     // "you have not asked yet". Conflating them would misreport both.
-    expect(rendered.text).toContain('"conversationTruncatedAtSource": true')
-    expect(rendered.text).toContain('"olderTurnsAvailable": false')
+    expect(rendered.text).toContain('"partial": true')
+    expect(rendered.text).toContain('"hasMore": false')
     expect(rendered.provenance[0]).toMatchObject({ partial: true, hasOlder: false })
   })
 

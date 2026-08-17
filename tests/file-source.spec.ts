@@ -102,9 +102,14 @@ describe('reading', () => {
       .rejects.toThrow(expect.objectContaining({ code: 'REFERENCE_NOT_FOUND' }))
   })
 
-  it('refuses to follow a symlink pointing outside a root', async () => {
+  it('refuses to follow a symlink pointing outside a root', async ({ skip }) => {
     await writeFile(join(outside, 'secret.json'), JSON.stringify(conversation), 'utf8')
-    await symlink(join(outside, 'secret.json'), join(root, 'link.json'))
+    try {
+      await symlink(join(outside, 'secret.json'), join(root, 'link.json'))
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'EPERM') skip()
+      throw error
+    }
     // The check runs on the resolved real path, so a link inside the root
     // cannot smuggle a file from outside it.
     await expect(source().read({ source: FILE_SOURCE_ID, id: 'link.json' }, WINDOW))

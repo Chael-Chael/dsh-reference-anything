@@ -1,0 +1,82 @@
+import type {} from '@deepseek-ai/dsh-api-remotes/client'
+import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
+import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
+import { createSnapshotStore, type ClientContext } from '@deepseek-ai/dsh-client-runtime/client'
+import type { InputTriggerServiceContract } from '@deepseek-ai/dsh-client-ui-input-trigger/client'
+import type { ChatProvider, SettingsRecord } from '../wire.ts'
+import { REFERENCE_ANYTHING_REMOTE, type ReferenceAnythingRemoteFace, type SyncStatus } from './remote.ts'
+import { conversationReferenceUri, createConversationSource } from './source.ts'
+import { ConversationsDock, ConversationSettings, type SettingsSnapshot } from './components.tsx'
+import { adoptStyles } from './styles.ts'
+
+export const inject = ['inputTriggers', 'remote', 'slots']
+
+export function apply(ctx: ClientContext): void {
+  adoptStyles()
+  let remote: ReferenceAnythingRemoteFace | undefined
+  const scope = createSnapshotStore<SettingsSnapshot>({
+    settings: { opencliPath: 'opencli', profile: '', detailConcurrency: 2 },
+  })
+  let currentJob = ''
+  let poll: ReturnType<typeof setInterval> | undefined
+
+  const unwrap = <T>(result: { ok: true; value: T } | { ok: false; error: { code: string; message: string } }): T => {
+    if (!result.ok) throw new Error(`${result.error.code}: ${result.error.message}`)
+    return result.value
+  }
+  const refresh = async (): Promise<void> => {
+    if (!remote) return
+    try {
+      const [settings, health] = await Promise.all([remote.settingsGet(), remote.health()])
+      scope.set({ ...scope.getSnapshot(), settings: unwrap(settings), health: unwrap(health), error: undefined })
+    } catch (error) { scope.set({ ...scope.getSnapshot(), error: error instanceof Error ? error.message : String(error) }) }
+  }
+  const pollJob = async (): Promise<void> => {
+    if (!remote || !currentJob) return
+    const status = unwrap(await remote.syncStatus({ jobId: currentJob }))
+    if (status) scope.set({ ...scope.getSnapshot(), sync: status })
+    if (!status || status.status !== 'running') { if (poll) clearInterval(poll); poll = undefined }
+  }
+
+  ctx.effect(async () => {
+    const dispose = await ctx.remote.$mount(REFERENCE_ANYTHING_REMOTE)
+    remote = (ctx.reflect as unknown as { get(name: string): unknown }).get('remote.referenceAnything') as ReferenceAnythingRemoteFace | undefined
+    if (!remote) throw new Error('referenceAnything Remote did not mount')
+    await refresh()
+    return () => { remote = undefined; if (poll) clearInterval(poll); void dispose() }
+  }, 'reference-anything.client.remote')
+
+  const inputTriggers = ctx.get('inputTriggers') as InputTriggerServiceContract
+  const urlByUri = new Map<string, string>()
+  const source = createConversationSource(async (query, provider, signal) => {
+    if (!remote) return []
+    const rows = unwrap(await remote.search({ query, ...(provider ? { provider } : {}), limit: 12 }, signal))
+    for (const row of rows) urlByUri.set(conversationReferenceUri(row.uriId), row.url)
+    return rows
+  })
+  ctx.effect(() => inputTriggers.registerSource(source), 'reference-anything.client.source')
+
+  ctx.slots.inject('conversation.input.dock', () => ctx.slots.register({
+    name: 'conversation.input.dock', id: 'reference-anything', order: 25,
+    inject: () => ({ open: (uri: string) => { const url = urlByUri.get(uri); if (url) window.open(url, '_blank', 'noopener,noreferrer') } }),
+  }, ConversationsDock))
+
+  const save = async (settings: SettingsRecord): Promise<void> => {
+    if (!remote) return
+    const value = unwrap(await remote.settingsUpdate(settings)); scope.set({ ...scope.getSnapshot(), settings: value })
+  }
+  const startSync = async (providers: ChatProvider[], mode: 'incremental' | 'full'): Promise<void> => {
+    if (!remote) return
+    currentJob = unwrap(await remote.syncStart({ providers, mode }))
+    const initial: SyncStatus = { jobId: currentJob, status: 'running', providers, completed: 0, total: 0 }
+    scope.set({ ...scope.getSnapshot(), sync: initial })
+    if (poll) clearInterval(poll); poll = setInterval(() => { void pollJob() }, 1_000); await pollJob()
+  }
+  ctx.slots.inject('settings.section', () => ctx.slots.register({
+    name: 'settings.section', id: 'reference-anything', order: 56, label: () => 'Conversations',
+    inject: () => ({
+      hooks: { scope }, save, sync: startSync, refresh,
+      cancel: async () => { if (remote && currentJob) unwrap(await remote.syncCancel({ jobId: currentJob })); await pollJob() },
+    }),
+  }, ConversationSettings))
+}
