@@ -6,7 +6,15 @@ export interface SearchResult {
   uriId: string; provider: ChatProvider; title: string; url: string; updatedAt: string
   turnCount: number; partial: boolean; syncedAt: string
 }
-export interface Health { version: string; daemon: string; pluginInstalled: boolean }
+export interface Health {
+  version: string; daemon: string; pluginInstalled: boolean
+  versionError?: string; daemonError?: string; pluginError?: string
+}
+export interface BrowserProfile { id: string; alias?: string; connected: boolean; isDefault: boolean }
+export interface ProviderStats {
+  provider: ChatProvider; conversations: number; lastSyncedAt: string
+  status: 'ready' | 'syncing' | 'error' | 'empty'; error?: string
+}
 export interface SyncStatus {
   jobId: string; status: 'running' | 'complete' | 'cancelled' | 'failed'; providers: ChatProvider[]
   provider?: ChatProvider; completed: number; total: number; error?: string
@@ -19,6 +27,9 @@ export const REFERENCE_ANYTHING_REMOTE: TypertRemoteContribution = {
 export interface ReferenceAnythingRemoteFace {
   search(input: { query: string; provider?: ChatProvider; limit: number }, signal?: AbortSignal): Promise<RemoteResult<readonly SearchResult[]>>
   health(signal?: AbortSignal): Promise<RemoteResult<Health>>
+  profiles(signal?: AbortSignal): Promise<RemoteResult<readonly BrowserProfile[]>>
+  installAdapter(signal?: AbortSignal): Promise<RemoteResult<boolean>>
+  stats(): Promise<RemoteResult<readonly ProviderStats[]>>
   syncStart(input: { providers: ChatProvider[]; mode: 'incremental' | 'full' }): Promise<RemoteResult<string>>
   syncStatus(input: { jobId: string }): Promise<RemoteResult<SyncStatus | undefined>>
   syncCancel(input: { jobId: string }): Promise<RemoteResult<boolean>>

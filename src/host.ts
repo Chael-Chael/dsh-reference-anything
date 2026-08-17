@@ -12,6 +12,9 @@ export class ReferenceAnythingRemote extends TypertRemoteService {
     return this.ctx.referenceChatHistory.search(input.query, input.provider, input.limit)
   }
   health(signal: AbortSignal) { return this.ctx.referenceChatHistory.health(signal) }
+  profiles(signal: AbortSignal) { return this.ctx.referenceChatHistory.profiles(signal) }
+  installAdapter(signal: AbortSignal) { return this.ctx.referenceChatHistory.installAdapter(signal) }
+  stats() { return this.ctx.referenceChatHistory.stats() }
   syncStart(input: { providers: ChatProvider[]; mode: SyncMode }): string {
     return this.ctx.referenceChatHistory.sync.start(input.providers, input.mode)
   }

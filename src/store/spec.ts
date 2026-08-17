@@ -8,6 +8,7 @@ export type { ChatProvider, SettingsRecord }
 
 export const storedAttachmentSchema = z.object({
   attachmentId: z.string(),
+  kind: z.enum(['image', 'file']).default('file'),
   name: z.string(),
   mimeType: z.string(),
   size: z.number(),
@@ -91,7 +92,7 @@ export const referenceAnythingDomainSpec = defineDomain({
   version: 1,
   global: {
     schema: settingsRecordSchema,
-    initial: { opencliPath: 'opencli', profile: '', detailConcurrency: 2 },
+    initial: { opencliPath: 'opencli', profile: '', detailConcurrency: 2, autoSync: false, autoSyncMinutes: 60 },
   },
   tables: {
     conversations: domainTable<string, ConversationRecord>(conversationRecordSchema),

@@ -60,6 +60,8 @@ export interface ConversationItem {
 /** Stable, non-secret metadata for one provider attachment. */
 export interface ConversationAttachment {
   readonly attachmentId: string
+  /** Coarse content class captured during provider projection. */
+  readonly kind: 'image' | 'file'
   readonly name: string
   readonly mimeType: string
   readonly size: number

@@ -83,9 +83,11 @@ const detailScript = String.raw`async function (args) {
       const attachments = (Array.isArray(files) ? files : []).map((file, index) => {
         const candidate = String(file.url || file.downloadUrl || '')
         let locator = ''
-        try { const url = new URL(candidate, location.origin); if (url.origin === location.origin) locator = url.pathname + url.search } catch {}
-        return { attachmentId: String(file.id || index), name: String(file.name || 'attachment'),
-          mimeType: String(file.mimeType || file.mime_type || ''), size: Number(file.size || 0),
+        try { if (candidate) { const url = new URL(candidate, location.origin); if (url.origin === location.origin && url.pathname !== '/') locator = url.pathname + url.search } } catch {}
+        const name = String(file.name || 'attachment')
+        const mimeType = String(file.mimeType || file.mime_type || '')
+        return { attachmentId: String(file.id || index), kind: mimeType.startsWith('image/') || /\.(?:gif|jpe?g|png|webp)$/i.test(name) ? 'image' : 'file', name,
+          mimeType, size: Number(file.size || 0),
           locator, status: locator ? 'available' : 'unavailable' }
       })
       rows.push({ conversationId: args.id, ordinal: rows.length, messageId: responseId,

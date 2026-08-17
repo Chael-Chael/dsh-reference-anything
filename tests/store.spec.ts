@@ -18,7 +18,7 @@ class Table<V> implements KvTable<string, V> {
 
 function store() {
   const tables = new Map<string, Table<never>>()
-  let settings: SettingsRecord = { opencliPath: 'opencli', profile: '', detailConcurrency: 2 }
+  let settings: SettingsRecord = { opencliPath: 'opencli', profile: '', detailConcurrency: 2, autoSync: false, autoSyncMinutes: 60 }
   const domain = {
     name: 'reference_anything',
     global: { get: () => settings, set: async (value: SettingsRecord) => { settings = value } },
@@ -79,10 +79,33 @@ describe('conversation mirror', () => {
     expect(db.read(key, { limit: 10 }).body.items.map(item => item.text)).not.toContain('sibling')
   })
 
+  it('classifies attachment kinds during ingestion and preserves unavailable status', async () => {
+    const db = store(); const key = await db.putConversation(history, 'scope')
+    await db.commitRevision(key, [{
+      ...turns(1)[0]!, text: '', attachmentsJson: JSON.stringify([
+        { attachmentId: 'a', name: 'capture.PNG', mimeType: '', size: 0, status: 'unavailable' },
+        { attachmentId: 'b', name: 'notes.txt', mimeType: 'text/plain', size: 5, status: 'available', locator: '/files/b' },
+      ]),
+    }])
+    expect(db.read(key, { limit: 1 }).body.items[0]?.attachments).toEqual([
+      { attachmentId: 'a', kind: 'image', name: 'capture.PNG', mimeType: '', size: 0, status: 'unavailable' },
+      { attachmentId: 'b', kind: 'file', name: 'notes.txt', mimeType: 'text/plain', size: 5, status: 'available' },
+    ])
+    expect(db.attachment(key, db.conversations.get(key)!.currentRevision!, 'b')?.locator).toBe('/files/b')
+  })
+
   it('marks remote-missing only after the caller supplies a completed scan set', async () => {
     const db = store(); const key = await db.putConversation(history, 'scope')
     await db.markRemoteMissing('chatgpt', 'scope', new Set())
     expect(db.conversations.get(key)?.remoteMissing).toBe(true)
+  })
+
+  it('derives provider statistics from existing local records without a sync-state row', async () => {
+    const db = store()
+    await db.putConversation(history, 'scope')
+    const stats = db.stats(['chatgpt'])[0]
+    expect(stats).toMatchObject({ provider: 'chatgpt', conversations: 1, status: 'ready' })
+    expect(stats?.lastSyncedAt).not.toBe('')
   })
 
   it('persists a completed incremental sync and its atomic revision', async () => {

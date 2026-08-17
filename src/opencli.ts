@@ -28,6 +28,17 @@ export interface OpenCliRunnerOptions {
   maxStdoutBytes?: number
 }
 
+export interface OpenCliHealth {
+  version: string
+  daemon: string
+  pluginInstalled: boolean
+  versionError?: string
+  daemonError?: string
+  pluginError?: string
+}
+
+export interface BrowserProfile { id: string; alias?: string; connected: boolean; isDefault: boolean }
+
 export class OpenCliRunner {
   readonly executable: string
   readonly profile: string
@@ -84,11 +95,37 @@ export class OpenCliRunner {
     return rows[0] ?? {}
   }
 
-  async health(signal?: AbortSignal): Promise<{ version: string; daemon: string; pluginInstalled: boolean }> {
-    const version = (await this.raw(['--version'], signal)).trim()
-    const daemon = (await this.raw(['daemon', 'status'], signal)).trim()
-    const plugins = await this.raw(['plugin', 'list'], signal)
-    return { version, daemon, pluginInstalled: /dsh-chat-history/i.test(plugins) }
+  async health(signal?: AbortSignal): Promise<OpenCliHealth> {
+    const [version, daemon, plugins] = await Promise.all([
+      this.probe(['--version'], signal), this.probe(['daemon', 'status'], signal), this.probe(['plugin', 'list'], signal),
+    ])
+    return {
+      version: version.value.trim(), daemon: daemon.value.trim(), pluginInstalled: /dsh-chat-history/i.test(plugins.value),
+      ...(version.error ? { versionError: version.error } : {}),
+      ...(daemon.error ? { daemonError: daemon.error } : {}),
+      ...(plugins.error ? { pluginError: plugins.error } : {}),
+    }
+  }
+
+  async profiles(signal?: AbortSignal): Promise<BrowserProfile[]> {
+    const output = await this.raw(['profile', 'list'], signal)
+    const disconnected = output.indexOf('Disconnected saved profiles:')
+    return output.split(/\r?\n/).flatMap((line) => {
+      const match = line.match(/^\s{2}([A-Za-z0-9_-]+)(?:\s+([A-Za-z0-9_-]+))?(?:\s+default)?\s+—\s+(connected|not connected)/)
+      if (!match) return []
+      const position = output.indexOf(line)
+      return [{ id: match[1]!, ...(match[2] && match[2] !== 'default' ? { alias: match[2] } : {}),
+        connected: match[3] === 'connected' && (disconnected < 0 || position < disconnected), isDefault: /\sdefault\s+—/.test(line) }]
+    })
+  }
+
+  async installPlugin(pluginUrl: string, signal?: AbortSignal): Promise<void> {
+    await this.raw(['plugin', 'install', pluginUrl], signal)
+  }
+
+  private async probe(args: string[], signal?: AbortSignal): Promise<{ value: string; error?: string }> {
+    try { return { value: await this.raw(args, signal) } }
+    catch (error) { return { value: '', error: error instanceof Error ? error.message : String(error) } }
   }
 
   private async json(site: string, operation: string, args: string[], signal?: AbortSignal): Promise<Record<string, unknown>[]> {

@@ -16,7 +16,7 @@ import { basename, join } from 'node:path'
 import z from '@deepseek-ai/schemastery'
 import { defineTool } from '@deepseek-ai/dsh-tools'
 import { AttachmentId, type ImageMediaType } from '@deepseek-ai/dsh-attachment'
-import { continuationFooter, frameReferenceBlock } from './render.ts'
+import { addUnavailableAttachmentNotices, continuationFooter, frameReferenceBlock } from './render.ts'
 import { retainConversation } from './retain.ts'
 import { decodeReferenceUri, encodeReferenceUri } from './uri.ts'
 import { stringifyTagSafeJson } from './serialize.ts'
@@ -228,7 +228,7 @@ export function apply(ctx: Context, config: Config = {}): void {
       // The turn window is the model's bound; this byte budget is only a
       // backstop for a conversation whose individual turns are enormous.
       const outcome = retainConversation(
-        slice.items,
+        addUnavailableAttachmentNotices(slice.items),
         maxOutputBytes,
         items => stringifyTagSafeJson({ label: snapshot.label, conversation: items }),
       )

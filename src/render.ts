@@ -85,6 +85,7 @@ interface ReferenceBlockEntry {
     readonly turns: readonly ConversationItem[]
     readonly attachments: readonly {
       readonly attachmentId: string
+      readonly kind: 'image' | 'file'
       readonly name: string
       readonly mimeType: string
       readonly size: number
@@ -150,6 +151,7 @@ export function renderReferences(
     const reference = encodeReferenceUri(snapshot.ref)
     const label = displayLabel(input.label, snapshot.label, snapshot.ref.id)
     const slice = snapshot.body
+    const projectedItems = addUnavailableAttachmentNotices(slice.items)
     const build = (items: readonly ConversationItem[]): ReferenceBlockEntry => {
       // The backstop drops from the front of the window, so the first shown
       // turn moves forward by however many it took.
@@ -175,7 +177,7 @@ export function renderReferences(
     }
 
     const outcome = retainConversation(
-      slice.items,
+      projectedItems,
       maxBytesPerReference,
       items => stringifyTagSafeJson(build(items)),
     )
@@ -214,6 +216,22 @@ export function renderReferences(
     }),
     provenance,
   }
+}
+
+/** Add explicit model-facing notices without changing the stored transcript. */
+export function addUnavailableAttachmentNotices(items: readonly ConversationItem[]): ConversationItem[] {
+  return items.map((item) => {
+    const missing = (item.attachments ?? []).filter(attachment => attachment.status !== 'available')
+    if (missing.length === 0) return item
+    const actor = item.role === 'user' ? 'User' : 'Assistant'
+    const images = missing.filter(attachment => attachment.kind === 'image').length
+    const files = missing.length - images
+    const notices = [
+      ...(images ? [`[${actor} attached ${images} image${images === 1 ? '' : 's'}; image contents were not included]`] : []),
+      ...(files ? [`[${actor} attached ${files} file${files === 1 ? '' : 's'}; file contents were not included]`] : []),
+    ]
+    return { ...item, text: item.text ? `${item.text}\n\n${notices.join('\n')}` : notices.join('\n') }
+  })
 }
 
 /**

@@ -15,7 +15,7 @@ export function apply(ctx: ClientContext): void {
   adoptStyles()
   let remote: ReferenceAnythingRemoteFace | undefined
   const scope = createSnapshotStore<SettingsSnapshot>({
-    settings: { opencliPath: 'opencli', profile: '', detailConcurrency: 2 },
+    settings: { opencliPath: 'opencli', profile: '', detailConcurrency: 2, autoSync: false, autoSyncMinutes: 60 }, loading: true,
   })
   let currentJob = ''
   let poll: ReturnType<typeof setInterval> | undefined
@@ -28,14 +28,25 @@ export function apply(ctx: ClientContext): void {
     if (!remote) return
     try {
       const [settings, health] = await Promise.all([remote.settingsGet(), remote.health()])
-      scope.set({ ...scope.getSnapshot(), settings: unwrap(settings), health: unwrap(health), error: undefined })
-    } catch (error) { scope.set({ ...scope.getSnapshot(), error: error instanceof Error ? error.message : String(error) }) }
+      let profiles = scope.getSnapshot().profiles
+      try { profiles = unwrap(await remote.profiles()) } catch { /* Profile discovery failure is represented by bridge health. */ }
+      let stats = scope.getSnapshot().stats
+      let statsUnavailable = false
+      try { stats = unwrap(await remote.stats()) } catch { statsUnavailable = true }
+      scope.set({ ...scope.getSnapshot(), settings: unwrap(settings), health: unwrap(health), profiles, stats,
+        error: statsUnavailable && !stats ? 'Local conversation statistics are unavailable until the DSH host is restarted.' : undefined, loading: false })
+    } catch (error) { scope.set({ ...scope.getSnapshot(), error: error instanceof Error ? error.message : String(error), loading: false }) }
   }
   const pollJob = async (): Promise<void> => {
     if (!remote || !currentJob) return
-    const status = unwrap(await remote.syncStatus({ jobId: currentJob }))
-    if (status) scope.set({ ...scope.getSnapshot(), sync: status })
-    if (!status || status.status !== 'running') { if (poll) clearInterval(poll); poll = undefined }
+    try {
+      const status = unwrap(await remote.syncStatus({ jobId: currentJob }))
+      if (status) scope.set({ ...scope.getSnapshot(), sync: status })
+      if (!status || status.status !== 'running') { if (poll) clearInterval(poll); poll = undefined; await refresh() }
+    } catch (error) {
+      if (poll) clearInterval(poll); poll = undefined
+      scope.set({ ...scope.getSnapshot(), error: message(error) })
+    }
   }
 
   ctx.effect(async () => {
@@ -63,20 +74,28 @@ export function apply(ctx: ClientContext): void {
 
   const save = async (settings: SettingsRecord): Promise<void> => {
     if (!remote) return
-    const value = unwrap(await remote.settingsUpdate(settings)); scope.set({ ...scope.getSnapshot(), settings: value })
+    try {
+      const value = unwrap(await remote.settingsUpdate(settings))
+      scope.set({ ...scope.getSnapshot(), settings: value, error: undefined, notice: 'Settings saved.' })
+    } catch (error) { scope.set({ ...scope.getSnapshot(), error: message(error), notice: undefined }) }
   }
   const startSync = async (providers: ChatProvider[], mode: 'incremental' | 'full'): Promise<void> => {
     if (!remote) return
-    currentJob = unwrap(await remote.syncStart({ providers, mode }))
-    const initial: SyncStatus = { jobId: currentJob, status: 'running', providers, completed: 0, total: 0 }
-    scope.set({ ...scope.getSnapshot(), sync: initial })
-    if (poll) clearInterval(poll); poll = setInterval(() => { void pollJob() }, 1_000); await pollJob()
+    try {
+      currentJob = unwrap(await remote.syncStart({ providers, mode }))
+      const initial: SyncStatus = { jobId: currentJob, status: 'running', providers, completed: 0, total: 0 }
+      scope.set({ ...scope.getSnapshot(), sync: initial, error: undefined, notice: undefined })
+      if (poll) clearInterval(poll); poll = setInterval(() => { void pollJob() }, 1_000); await pollJob()
+    } catch (error) { scope.set({ ...scope.getSnapshot(), error: message(error) }) }
   }
   ctx.slots.inject('settings.section', () => ctx.slots.register({
-    name: 'settings.section', id: 'reference-anything', order: 56, label: () => 'Conversations',
+    name: 'settings.section', id: 'reference-anything', order: 56, label: () => 'Reference Anything',
     inject: () => ({
       hooks: { scope }, save, sync: startSync, refresh,
-      cancel: async () => { if (remote && currentJob) unwrap(await remote.syncCancel({ jobId: currentJob })); await pollJob() },
+      install: async () => { try { if (!remote) return; unwrap(await remote.installAdapter()); await refresh(); scope.set({ ...scope.getSnapshot(), notice: 'Adapter installed.' }) } catch (error) { scope.set({ ...scope.getSnapshot(), error: message(error) }) } },
+      cancel: async () => { try { if (remote && currentJob) unwrap(await remote.syncCancel({ jobId: currentJob })); await pollJob() } catch (error) { scope.set({ ...scope.getSnapshot(), error: message(error) }) } },
     }),
   }, ConversationSettings))
 }
+
+function message(error: unknown): string { return error instanceof Error ? error.message : String(error) }

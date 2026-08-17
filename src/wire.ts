@@ -8,5 +8,7 @@ export const settingsRecordSchema = z.object({
   opencliPath: z.string(),
   profile: z.string(),
   detailConcurrency: z.number().int().min(1).max(8),
+  autoSync: z.boolean().default(false),
+  autoSyncMinutes: z.number().int().min(15).max(1440).default(60),
 })
 export type SettingsRecord = z.infer<typeof settingsRecordSchema>

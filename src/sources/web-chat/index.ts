@@ -34,6 +34,7 @@ export interface ConversationSearchResult {
   partial: boolean
   syncedAt: string
 }
+const PROVIDERS: ChatProvider[] = ['chatgpt', 'claude', 'gemini', 'deepseek', 'grok']
 
 export default class WebChatHistoryService extends Service implements ReferenceSource {
   static inject = inject
@@ -41,6 +42,8 @@ export default class WebChatHistoryService extends Service implements ReferenceS
   readonly id = 'web-chat'
   private storeValue?: ConversationStore
   private syncValue?: ConversationSyncManager
+  private autoSyncTimer?: ReturnType<typeof setInterval>
+  private autoSyncJob = ''
 
   constructor(ctx: Context, private readonly config: Config = {}) { super(ctx, 'referenceChatHistory') }
 
@@ -53,6 +56,8 @@ export default class WebChatHistoryService extends Service implements ReferenceS
       timeoutMs: this.config.timeoutMs, maxStdoutBytes: this.config.maxStdoutBytes,
     }))
     this.ctx.references.registerSource(this)
+    this.scheduleAutoSync()
+    this.ctx.effect(() => () => { if (this.autoSyncTimer) clearInterval(this.autoSyncTimer) }, 'reference-web-chat.autoSyncCleanup')
   }
 
   get store(): ConversationStore {
@@ -87,10 +92,13 @@ export default class WebChatHistoryService extends Service implements ReferenceS
     }))
   }
 
+  stats() { return this.store.stats(PROVIDERS) }
+
   getSettings(): SettingsRecord { return this.store.settings }
   async updateSettings(value: unknown): Promise<SettingsRecord> {
     const settings = settingsRecordSchema.parse(value)
     await this.store.setSettings(settings)
+    this.scheduleAutoSync()
     return settings
   }
 
@@ -98,6 +106,33 @@ export default class WebChatHistoryService extends Service implements ReferenceS
     const settings = this.store.settings
     return new OpenCliRunner({ executable: settings.opencliPath, profile: settings.profile,
       timeoutMs: this.config.timeoutMs, maxStdoutBytes: this.config.maxStdoutBytes }).health(signal)
+  }
+
+  profiles(signal?: AbortSignal) {
+    const settings = this.store.settings
+    return new OpenCliRunner({ executable: settings.opencliPath, profile: '',
+      timeoutMs: this.config.timeoutMs, maxStdoutBytes: this.config.maxStdoutBytes }).profiles(signal)
+  }
+
+  async installAdapter(signal?: AbortSignal): Promise<boolean> {
+    const settings = this.store.settings
+    const runner = new OpenCliRunner({ executable: settings.opencliPath, profile: settings.profile,
+      timeoutMs: this.config.timeoutMs, maxStdoutBytes: this.config.maxStdoutBytes })
+    await runner.installPlugin(new URL('../../../opencli-plugin/', import.meta.url).href, signal)
+    return true
+  }
+
+
+  private scheduleAutoSync(): void {
+    if (this.autoSyncTimer) clearInterval(this.autoSyncTimer)
+    this.autoSyncTimer = undefined
+    const settings = this.store.settings
+    if (!settings.autoSync) return
+    this.autoSyncTimer = setInterval(() => {
+      if (this.autoSyncJob && this.sync.status(this.autoSyncJob)?.status === 'running') return
+      this.autoSyncJob = this.sync.start(PROVIDERS, 'incremental')
+    }, settings.autoSyncMinutes * 60_000)
+    this.autoSyncTimer.unref?.()
   }
 }
 

@@ -88,6 +88,8 @@ DSH 插件安装阶段不会静默修改 `~/.opencli/plugins`。如果 OpenCLI �
 - mention 或 `reference_list` 会授予当前 task 对 URI 的读取权限；未授权 URI 会被拒绝。
 - 每条 conversation 的旧 revision 至少保留 30 天，因此同步后旧 cursor 仍能重放原内容。
 - `reference_attachment_read` 单独校验 conversation 授权，附件上限为 25 MiB。
+- 同步只保存附件元数据和同源 locator，并将附件归类为 `image` 或 `file`；空地址和站点根路径不会标记为可用。
+- 不可读取的附件会在模型侧附加 `[User attached 1 image; image contents were not included]` 或对应的 file 提示，原始对话正文保持不变。
 
 ## 同步与存储
 

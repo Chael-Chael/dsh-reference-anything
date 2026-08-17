@@ -42,9 +42,9 @@ const detailScript = String.raw`async function (args) {
     const pointer = part.asset_pointer || part.file_id || part.id || ''
     const rawUrl = part.url || part.download_url || ''
     let locator = ''
-    try { if (rawUrl) { const u = new URL(rawUrl, location.origin); if (u.origin === location.origin) locator = u.pathname } } catch {}
+    try { if (rawUrl) { const u = new URL(rawUrl, location.origin); if (u.origin === location.origin && u.pathname !== '/') locator = u.pathname + u.search } } catch {}
     if (!pointer && !locator) return null
-    return { id: String(pointer || locator || index), type: part.content_type === 'image_asset_pointer' || /^image\//.test(part.mime_type || '') ? 'image' : 'file', name: part.name || part.file_name || '', mimeType: part.mime_type || '', size: part.size || null, locator, status: locator ? 'available' : 'metadata-only' }
+    return { attachmentId: String(pointer || locator || index), kind: part.content_type === 'image_asset_pointer' || /^image\//.test(part.mime_type || '') ? 'image' : 'file', name: part.name || part.file_name || '', mimeType: part.mime_type || '', size: part.size || null, locator, status: locator ? 'available' : 'unavailable' }
   }
   const partsOf = (msg) => {
     const parts = Array.isArray(msg && msg.content && msg.content.parts) ? msg.content.parts : []

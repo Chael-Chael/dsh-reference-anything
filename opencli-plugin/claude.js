@@ -95,9 +95,12 @@ const detailScript = String.raw`async function (args) {
       const attachments = (message.attachments || message.files || []).map((file, index) => {
         const candidate = String(file.download_url || file.url || '')
         let locator = ''
-        try { const url = new URL(candidate, location.origin); if (url.origin === location.origin) locator = url.pathname + url.search } catch {}
+        try { if (candidate) { const url = new URL(candidate, location.origin); if (url.origin === location.origin && url.pathname !== '/') locator = url.pathname + url.search } } catch {}
+        const name = String(file.name || file.file_name || 'attachment')
+        const mimeType = String(file.mime_type || file.mimeType || '')
         return { attachmentId: String(file.id || file.uuid || index), name: String(file.name || file.file_name || 'attachment'),
-          mimeType: String(file.mime_type || file.mimeType || ''), size: Number(file.size || 0),
+          kind: mimeType.startsWith('image/') || /\.(?:gif|jpe?g|png|webp)$/i.test(name) ? 'image' : 'file',
+          mimeType, size: Number(file.size || 0),
           locator, status: locator ? 'available' : 'unavailable' }
       })
       return { conversationId: args.id, ordinal, messageId: id,

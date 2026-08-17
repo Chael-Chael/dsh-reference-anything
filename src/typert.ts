@@ -9,6 +9,9 @@ export const TYPERT_MANIFEST: TypertContribution = {
     members: [
       { kind: 'method', name: 'search', signature: 'search(input: SearchInput): SearchResult[]' },
       { kind: 'method', name: 'health', signature: 'health(signal: AbortSignal): Promise<Health>' },
+      { kind: 'method', name: 'profiles', signature: 'profiles(signal: AbortSignal): Promise<BrowserProfile[]>' },
+      { kind: 'method', name: 'installAdapter', signature: 'installAdapter(signal: AbortSignal): Promise<boolean>' },
+      { kind: 'method', name: 'stats', signature: 'stats(): ProviderStats[]' },
       { kind: 'method', name: 'syncStart', signature: 'syncStart(input: SyncStart): string' },
       { kind: 'method', name: 'syncStatus', signature: 'syncStatus(input: JobInput): SyncStatus | undefined' },
       { kind: 'method', name: 'syncCancel', signature: 'syncCancel(input: JobInput): boolean' },

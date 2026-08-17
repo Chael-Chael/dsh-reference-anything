@@ -9,7 +9,15 @@ export const searchResultSchema = z.object({
   uriId: z.string(), provider: providerSchema, title: z.string(), url: z.string(), updatedAt: z.string(),
   turnCount: z.number().int().nonnegative(), partial: z.boolean(), syncedAt: z.string(),
 }).readonly()
-export const healthSchema = z.object({ version: z.string(), daemon: z.string(), pluginInstalled: z.boolean() }).readonly()
+export const healthSchema = z.object({
+  version: z.string(), daemon: z.string(), pluginInstalled: z.boolean(),
+  versionError: z.string().optional(), daemonError: z.string().optional(), pluginError: z.string().optional(),
+}).readonly()
+export const browserProfileSchema = z.object({ id: z.string(), alias: z.string().optional(), connected: z.boolean(), isDefault: z.boolean() }).readonly()
+export const providerStatsSchema = z.object({
+  provider: providerSchema, conversations: z.number().int().nonnegative(), lastSyncedAt: z.string(),
+  status: z.enum(['ready', 'syncing', 'error', 'empty']), error: z.string().optional(),
+}).readonly()
 export const syncStartSchema = z.object({ providers: z.array(providerSchema).min(1), mode: z.enum(['incremental', 'full']) }).readonly()
 export const syncStatusSchema = z.object({
   jobId: z.string(), status: z.enum(['running', 'complete', 'cancelled', 'failed']),
@@ -20,6 +28,9 @@ export const jobInputSchema = z.object({ jobId: z.string().min(1) }).readonly()
 export const REFERENCE_ANYTHING_INVOCATIONS: readonly InvocationDescriptor[] = [
   descriptor('search', [{ name: 'input', wire: 'input', source: 'json', codec: strict('SearchInput', searchInputSchema) }], strict('SearchResult[]', z.array(searchResultSchema)), true),
   descriptor('health', [], strict('Health', healthSchema), true),
+  descriptor('profiles', [], strict('BrowserProfile[]', z.array(browserProfileSchema)), true),
+  descriptor('installAdapter', [], strict('Boolean', z.boolean()), true),
+  descriptor('stats', [], strict('ProviderStats[]', z.array(providerStatsSchema))),
   descriptor('syncStart', [{ name: 'input', wire: 'input', source: 'json', codec: strict('SyncStart', syncStartSchema) }], strict('JobId', z.string())),
   descriptor('syncStatus', [{ name: 'input', wire: 'input', source: 'json', codec: strict('JobInput', jobInputSchema) }], strict('SyncStatus?', syncStatusSchema.optional())),
   descriptor('syncCancel', [{ name: 'input', wire: 'input', source: 'json', codec: strict('JobInput', jobInputSchema) }], strict('Boolean', z.boolean())),

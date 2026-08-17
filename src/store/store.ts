@@ -38,6 +38,14 @@ export interface ProviderTurnRow {
   partial: boolean
 }
 
+export interface ProviderStats {
+  provider: ChatProvider
+  conversations: number
+  lastSyncedAt: string
+  status: 'ready' | 'syncing' | 'error' | 'empty'
+  error?: string
+}
+
 interface CursorPayload {
   v: 1
   ref: string
@@ -86,6 +94,24 @@ export class ConversationStore {
       .filter(([, row]) => needle === '' || row.title.toLocaleLowerCase().includes(needle))
       .sort((a, b) => Date.parse(b[1].updatedAt || b[1].syncedAt) - Date.parse(a[1].updatedAt || a[1].syncedAt))
       .slice(0, limit)
+  }
+
+  stats(providers: readonly ChatProvider[]): ProviderStats[] {
+    return providers.map((provider) => {
+      const conversations = [...this.conversations.entries()].filter(([, row]) => row.provider === provider && !row.remoteMissing)
+      const states = [...this.syncStates.entries()].map(([, row]) => row).filter(row => row.provider === provider)
+      const latest = states.sort((a, b) => Date.parse(b.lastSyncAt || '') - Date.parse(a.lastSyncAt || ''))[0]
+      const latestSuccessful = states.find(row => row.status === 'idle')
+      const latestLocalUpdate = conversations.reduce((latestAt, [, row]) => {
+        const candidate = row.syncedAt || row.updatedAt
+        return !latestAt || Date.parse(candidate) > Date.parse(latestAt) ? candidate : latestAt
+      }, '')
+      return {
+        provider, conversations: conversations.length, lastSyncedAt: latestSuccessful?.lastSyncAt || latestLocalUpdate,
+        status: latest?.status === 'running' ? 'syncing' : latest?.status === 'failed' ? 'error' : conversations.length ? 'ready' : 'empty',
+        ...(latest?.error ? { error: latest.error } : {}),
+      }
+    })
   }
 
   async putConversation(row: ProviderConversationRow, accountScope: string): Promise<string> {
@@ -177,7 +203,10 @@ export class ConversationStore {
         kind: 'conversation',
         items: all.slice(start, boundedEnd).map((turn): ConversationItem => ({
           role: turn.role, text: turn.text,
-          ...(turn.attachments.length ? { attachments: turn.attachments } : {}),
+          ...(turn.attachments.length ? { attachments: turn.attachments.map(attachment => ({
+            attachmentId: attachment.attachmentId, kind: attachment.kind, name: attachment.name,
+            mimeType: attachment.mimeType, size: attachment.size, status: attachment.status,
+          })) } : {}),
         })),
         startIndex: start, totalTurns: all.length, hasOlder: start > 0,
         ...(nextCursor ? { nextCursor } : {}), revision,
@@ -218,13 +247,22 @@ function parseAttachments(raw: string): StoredAttachment[] {
       const row = item && typeof item === 'object' ? item as Record<string, unknown> : {}
       const status = row.status === 'available' || row.status === 'expired' ? row.status : 'unavailable'
       const locator = typeof row.locator === 'string' && row.locator ? row.locator : undefined
+      const name = String(row.name ?? 'attachment')
+      const mimeType = String(row.mimeType ?? '')
       return {
-        attachmentId: String(row.attachmentId ?? index), name: String(row.name ?? 'attachment'),
-        mimeType: String(row.mimeType ?? ''), size: Number(row.size ?? 0), status,
+        attachmentId: String(row.attachmentId ?? row.id ?? index),
+        kind: attachmentKind(row.kind ?? row.type, mimeType, name), name,
+        mimeType, size: Number(row.size ?? 0), status,
         ...(locator ? { locator } : {}),
       }
     })
   } catch { return [] }
+}
+
+function attachmentKind(value: unknown, mimeType: string, name: string): 'image' | 'file' {
+  if (value === 'image' || value === 'file') return value
+  if (mimeType.toLowerCase().startsWith('image/')) return 'image'
+  return /\.(?:avif|bmp|gif|heic|heif|jpe?g|png|svg|tiff?|webp)$/i.test(name) ? 'image' : 'file'
 }
 
 function encodeCursor(value: CursorPayload): string {
