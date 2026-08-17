@@ -1,15 +1,15 @@
-import type {} from '@deepseek-ai/dsh-api-remotes/client'
+import type { ConnectionHandle } from '@deepseek-ai/dsh-api-remotes/client'
 import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
 import { createSnapshotStore, type ClientContext } from '@deepseek-ai/dsh-client-runtime/client'
 import type { InputTriggerServiceContract } from '@deepseek-ai/dsh-client-ui-input-trigger/client'
 import type { ChatProvider, SettingsRecord } from '../wire.ts'
 import { REFERENCE_ANYTHING_REMOTE, type ReferenceAnythingRemoteFace, type SyncStatus } from './remote.ts'
-import { conversationReferenceUri, createConversationSource, createSessionSource, createWorkspaceSource } from './source.ts'
+import { conversationReferenceUri, createCommandSource, createConversationSource, createSessionSource, createSkillSource, createWorkspaceSource } from './source.ts'
 import { ConversationsDock, ConversationSettings, type SettingsSnapshot } from './components.tsx'
 import { adoptStyles } from './styles.ts'
 
-export const inject = ['inputTriggers', 'remote', 'slots']
+export const inject = ['inputTriggers', 'remote', 'slots', 'connection']
 
 export function apply(ctx: ClientContext): void {
   adoptStyles()
@@ -58,6 +58,7 @@ export function apply(ctx: ClientContext): void {
   }, 'reference-anything.client.remote')
 
   const inputTriggers = ctx.get('inputTriggers') as InputTriggerServiceContract
+  const connection = ctx.get('connection') as ConnectionHandle
   const urlByUri = new Map<string, string>()
   const source = createConversationSource(async (query, provider, signal) => {
     if (!remote) return []
@@ -66,6 +67,15 @@ export function apply(ctx: ClientContext): void {
     return rows
   })
   ctx.effect(() => inputTriggers.registerSource(source), 'reference-anything.client.source')
+  ctx.effect(() => inputTriggers.registerSource(createCommandSource(async (sessionId, signal) => {
+    signal.throwIfAborted()
+    return unwrap(await ctx.remote.commands.list(sessionId))
+  })), 'reference-anything.client.command-source')
+  ctx.effect(() => inputTriggers.registerSource(createSkillSource(async (sessionId, signal) => {
+    const { result } = await connection.api.skills.list({ sessionId }, signal)
+    if (!result.ok) throw new Error(`${result.error.code}: ${result.error.message}`)
+    return result.value.skills
+  })), 'reference-anything.client.skill-source')
   ctx.effect(() => inputTriggers.registerSource(createWorkspaceSource(async (sessionId, signal) => {
     if (!remote) return []
     return unwrap(await remote.workspaceSearch(sessionId, signal))

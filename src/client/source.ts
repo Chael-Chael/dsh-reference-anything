@@ -1,4 +1,5 @@
 import type { InputTriggerCandidate, InputTriggerSource } from '@deepseek-ai/dsh-client-ui-input-trigger/client'
+import type { SessionId } from '@deepseek-ai/dsh-client-runtime/client'
 import type { ChatProvider } from '../wire.ts'
 import { encodeReferenceUri } from '../uri-codec.ts'
 import type { SearchResult, SessionCandidate, WorkspaceEntry } from './remote.ts'
@@ -8,6 +9,8 @@ declare module '@deepseek-ai/dsh-client-ui-input-trigger/client' {
     readonly conversation?: SearchResult
     readonly workspaceEntry?: WorkspaceEntry
     readonly sessionCandidate?: SessionCandidate
+    readonly commandName?: string
+    readonly skillName?: string
   }
 }
 
@@ -17,6 +20,8 @@ const LABEL: Record<ChatProvider, string> = {
 const CONVERSATION_SOURCE = 'External conversations'
 const FILE_SOURCE = 'Files and folders'
 const SESSION_SOURCE = 'DSH sessions'
+const COMMAND_SOURCE = 'Commands'
+const SKILL_SOURCE = 'Skills'
 
 interface ConversationReference {
   uriId: string
@@ -117,6 +122,43 @@ export function createSessionSource(search: (sessionId: string, query: string, s
       return { insert: { source: SESSION_SOURCE, ref, label: `💬 ${row.label}`, clipboardText: sessionMention(ref) } }
     },
     codec: { clipboardText: sessionMention, serialize: ref => Promise.resolve(sessionMention(ref)) },
+  }
+}
+
+interface CommandCandidate { name: string; description?: string; input?: { hint?: string } }
+interface SkillCandidate { name: string; description: string; modelInvocable?: boolean }
+
+export function createCommandSource(load: (sessionId: SessionId, signal: AbortSignal) => Promise<readonly CommandCandidate[]>): InputTriggerSource {
+  return {
+    trigger: '@', name: COMMAND_SOURCE, order: 0,
+    async candidates(session, { query, position, signal }) {
+      if (position !== 'leading') return []
+      const needle = query.trim().toLocaleLowerCase()
+      return (await load(session.sessionId, signal))
+        .filter(row => row.name.toLocaleLowerCase().includes(needle))
+        .map(row => ({ name: row.name, description: row.description, hint: row.input?.hint, icon: '⌘', commandName: row.name }))
+    },
+    onPick({ candidate }) { return candidate.commandName ? { text: `/${candidate.commandName} ` } : undefined },
+  }
+}
+
+export function createSkillSource(load: (sessionId: SessionId, signal: AbortSignal) => Promise<readonly SkillCandidate[]>): InputTriggerSource {
+  const cache = new Map<string, readonly SkillCandidate[]>()
+  return {
+    trigger: '@', name: SKILL_SOURCE, order: 5,
+    async candidates(session, { query, position, signal }) {
+      if (position !== 'leading') return []
+      let rows = cache.get(session.sessionId)
+      if (!rows) { rows = await load(session.sessionId, signal); cache.set(session.sessionId, rows) }
+      const needle = query.trim().toLocaleLowerCase()
+      return rows.filter(row => row.name.toLocaleLowerCase().includes(needle)).map(row => ({
+        name: row.name,
+        description: `${row.modelInvocable === false ? 'user-only · ' : ''}${row.description}`,
+        icon: '✦',
+        skillName: row.name,
+      }))
+    },
+    onPick({ candidate }) { return candidate.skillName ? { text: `/${candidate.skillName} ` } : undefined },
   }
 }
 

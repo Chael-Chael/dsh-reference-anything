@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { conversationMentions } from '../src/client/components.tsx'
-import { conversationReferenceUri, createConversationSource, createSessionSource, createWorkspaceSource, parseQuery } from '../src/client/source.ts'
+import { conversationReferenceUri, createCommandSource, createConversationSource, createSessionSource, createSkillSource, createWorkspaceSource, parseQuery } from '../src/client/source.ts'
 import { REFERENCE_ANYTHING_INVOCATIONS } from '../src/contract.ts'
 import { decodeReferenceUri } from '../src/uri.ts'
 
@@ -58,6 +58,21 @@ describe('conversation client references', () => {
     const outcome = source.onPick({ candidate: candidates[0]!, session: { sessionId: 'session-1' as never }, position: 'inline', via: 'menu', span: { start: 0, end: 1, draftRev: 1 } })
     if (outcome === undefined || outcome === 'handled' || !('insert' in outcome)) throw new Error('expected session insert')
     await expect(source.codec?.serialize(outcome.insert.ref, new AbortController().signal)).resolves.toBe(`@[项目聊天导出](${uri})`)
+  })
+
+  it('exposes host commands in the leading @ panel and hands execution back to the native slash pipeline', async () => {
+    const source = createCommandSource(async () => [{ name: 'plan', description: 'Plan mode' }])
+    const candidates = await source.candidates({ sessionId: 'session-1' as never }, { query: 'pla', position: 'leading', signal: new AbortController().signal })
+    expect(candidates).toEqual([expect.objectContaining({ name: 'plan', commandName: 'plan' })])
+    expect(source.onPick({ candidate: candidates[0]!, session: { sessionId: 'session-1' as never }, position: 'leading', via: 'menu', span: { start: 0, end: 4, draftRev: 1 } })).toEqual({ text: '/plan ' })
+    await expect(source.candidates({ sessionId: 'session-1' as never }, { query: '', position: 'inline', signal: new AbortController().signal })).resolves.toEqual([])
+  })
+
+  it('exposes filesystem-backed skills in the leading @ panel', async () => {
+    const source = createSkillSource(async () => [{ name: 'review', description: 'Review code', modelInvocable: false }])
+    const candidates = await source.candidates({ sessionId: 'session-1' as never }, { query: 'rev', position: 'leading', signal: new AbortController().signal })
+    expect(candidates).toEqual([expect.objectContaining({ name: 'review', description: 'user-only · Review code', skillName: 'review' })])
+    expect(source.onPick({ candidate: candidates[0]!, session: { sessionId: 'session-1' as never }, position: 'leading', via: 'menu', span: { start: 0, end: 4, draftRev: 1 } })).toEqual({ text: '/review ' })
   })
 
   it('declares search cancellation so the input-trigger AbortSignal is accepted by the Remote API', () => {
