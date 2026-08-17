@@ -3,9 +3,18 @@ import { TypertRemoteService } from '@deepseek-ai/dsh-typert-protocol'
 import type { ChatProvider, SettingsRecord } from './store/spec.ts'
 import type { SyncMode } from './sync/index.ts'
 import type {} from './sources/web-chat/index.ts'
+import type { Agent } from '@deepseek-ai/dsh-agent'
+import { encodeSessionReferenceUri } from '@deepseek-ai/dsh-session-reference'
+import { indexWorkspace } from './workspace.ts'
 
 export class ReferenceAnythingRemote extends TypertRemoteService {
   constructor(ctx: Context) { super(ctx, 'referenceAnything') }
+
+  workspaceSearch(agent: Agent, signal: AbortSignal) { return indexWorkspace(agent, signal) }
+  async sessionSearch(agent: Agent, input: { query: string; limit: number }, signal: AbortSignal) {
+    const rows = await this.ctx.sessionReferenceResolver.listCandidates(agent, input.query, input.limit, signal)
+    return rows.map(row => ({ ...row, sessionId: encodeSessionReferenceUri(row.sessionId) }))
+  }
 
   search(input: { query: string; provider?: ChatProvider; limit: number }, signal: AbortSignal) {
     signal.throwIfAborted()

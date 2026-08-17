@@ -2,6 +2,11 @@ import { z } from 'zod'
 import type { InvocationDescriptor } from '@deepseek-ai/dsh-typert-protocol'
 import { providerSchema, settingsRecordSchema } from './wire.ts'
 
+export const workspaceEntrySchema = z.object({ path: z.string(), kind: z.enum(['file', 'directory']) }).readonly()
+export const sessionCandidateSchema = z.object({ sessionId: z.string(), label: z.string(), cwd: z.string().optional(), createdAt: z.number() }).readonly()
+const agentLookup = { name: 'agent', wire: 'agentId', source: 'lookup' as const, lookup: 'agent' as const,
+  codec: { mode: 'strict' as const, typeSymbol: '@deepseek-ai/dsh-session/types#SessionId', schema: z.string().min(1) } }
+
 export const searchInputSchema = z.object({
   query: z.string(), provider: providerSchema.optional(), limit: z.number().int().min(1).max(100),
 }).readonly()
@@ -26,6 +31,8 @@ export const syncStatusSchema = z.object({
 export const jobInputSchema = z.object({ jobId: z.string().min(1) }).readonly()
 
 export const REFERENCE_ANYTHING_INVOCATIONS: readonly InvocationDescriptor[] = [
+  descriptor('workspaceSearch', [agentLookup], strict('WorkspaceEntry[]', z.array(workspaceEntrySchema)), true),
+  descriptor('sessionSearch', [agentLookup, { name: 'input', wire: 'input', source: 'json', codec: strict('SessionSearchInput', z.object({ query: z.string(), limit: z.number().int().min(1).max(100) }).readonly()) }], strict('SessionCandidate[]', z.array(sessionCandidateSchema)), true),
   descriptor('search', [{ name: 'input', wire: 'input', source: 'json', codec: strict('SearchInput', searchInputSchema) }], strict('SearchResult[]', z.array(searchResultSchema)), true),
   descriptor('health', [], strict('Health', healthSchema), true),
   descriptor('profiles', [], strict('BrowserProfile[]', z.array(browserProfileSchema)), true),

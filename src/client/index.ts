@@ -5,7 +5,7 @@ import { createSnapshotStore, type ClientContext } from '@deepseek-ai/dsh-client
 import type { InputTriggerServiceContract } from '@deepseek-ai/dsh-client-ui-input-trigger/client'
 import type { ChatProvider, SettingsRecord } from '../wire.ts'
 import { REFERENCE_ANYTHING_REMOTE, type ReferenceAnythingRemoteFace, type SyncStatus } from './remote.ts'
-import { conversationReferenceUri, createConversationSource } from './source.ts'
+import { conversationReferenceUri, createConversationSource, createSessionSource, createWorkspaceSource } from './source.ts'
 import { ConversationsDock, ConversationSettings, type SettingsSnapshot } from './components.tsx'
 import { adoptStyles } from './styles.ts'
 
@@ -66,6 +66,14 @@ export function apply(ctx: ClientContext): void {
     return rows
   })
   ctx.effect(() => inputTriggers.registerSource(source), 'reference-anything.client.source')
+  ctx.effect(() => inputTriggers.registerSource(createWorkspaceSource(async (sessionId, signal) => {
+    if (!remote) return []
+    return unwrap(await remote.workspaceSearch(sessionId, signal))
+  })), 'reference-anything.client.workspace-source')
+  ctx.effect(() => inputTriggers.registerSource(createSessionSource(async (sessionId, query, signal) => {
+    if (!remote) return []
+    return unwrap(await remote.sessionSearch(sessionId, { query, limit: 12 }, signal))
+  })), 'reference-anything.client.session-source')
 
   ctx.slots.inject('conversation.input.dock', () => ctx.slots.register({
     name: 'conversation.input.dock', id: 'reference-anything', order: 25,

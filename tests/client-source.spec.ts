@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { conversationMentions } from '../src/client/components.tsx'
-import { conversationReferenceUri, createConversationSource, parseQuery } from '../src/client/source.ts'
+import { conversationReferenceUri, createConversationSource, createSessionSource, createWorkspaceSource, parseQuery } from '../src/client/source.ts'
 import { REFERENCE_ANYTHING_INVOCATIONS } from '../src/contract.ts'
 import { decodeReferenceUri } from '../src/uri.ts'
 
@@ -34,14 +34,36 @@ describe('conversation client references', () => {
       candidate: { name: row.title, conversation: row }, session: { sessionId: 'session-1' as never },
       position: 'inline', via: 'menu', span: { start: 0, end: 1, draftRev: 1 },
     })
-    expect(outcome).toMatchObject({ insert: { source: 'Conversations', label: '💬 ChatGPT · BiWM SFT Loss 解释' } })
+    expect(outcome).toMatchObject({ insert: { source: 'External conversations', label: '💬 ChatGPT · BiWM SFT Loss 解释' } })
     if (outcome === undefined || outcome === 'handled' || !('insert' in outcome)) throw new Error('expected reference insert')
     await expect(source.codec?.serialize(outcome.insert.ref, new AbortController().signal))
       .resolves.toBe(`@[ChatGPT · BiWM SFT Loss 解释](${conversationReferenceUri(row.uriId)})`)
   })
 
+  it('groups workspace paths and serializes a compact dsh-file chip', async () => {
+    const source = createWorkspaceSource(async () => [{ path: 'src/index.ts', kind: 'file' }])
+    const candidates = await source.candidates({ sessionId: 'session-1' as never }, { query: 'index', position: 'inline', signal: new AbortController().signal })
+    expect(source.name).toBe('Files and folders')
+    const outcome = source.onPick({ candidate: candidates[0]!, session: { sessionId: 'session-1' as never }, position: 'inline', via: 'menu', span: { start: 0, end: 1, draftRev: 1 } })
+    if (outcome === undefined || outcome === 'handled' || !('insert' in outcome)) throw new Error('expected file insert')
+    expect(outcome.insert.label).toBe('📄 index.ts')
+    await expect(source.codec?.serialize(outcome.insert.ref, new AbortController().signal)).resolves.toMatch(/^@\[index\.ts\]\(dsh-file:[A-Za-z0-9_-]+\)$/u)
+  })
+
+  it('uses the official dsh-session URI returned by the host', async () => {
+    const uri = 'dsh-session:InNvdXJjZSI'
+    const source = createSessionSource(async () => [{ sessionId: uri, label: '项目聊天导出', cwd: 'D:\\repo', createdAt: 1 }])
+    const candidates = await source.candidates({ sessionId: 'session-1' as never }, { query: '', position: 'inline', signal: new AbortController().signal })
+    expect(source.name).toBe('DSH sessions')
+    const outcome = source.onPick({ candidate: candidates[0]!, session: { sessionId: 'session-1' as never }, position: 'inline', via: 'menu', span: { start: 0, end: 1, draftRev: 1 } })
+    if (outcome === undefined || outcome === 'handled' || !('insert' in outcome)) throw new Error('expected session insert')
+    await expect(source.codec?.serialize(outcome.insert.ref, new AbortController().signal)).resolves.toBe(`@[项目聊天导出](${uri})`)
+  })
+
   it('declares search cancellation so the input-trigger AbortSignal is accepted by the Remote API', () => {
     const search = REFERENCE_ANYTHING_INVOCATIONS.find(descriptor => descriptor.method === 'search')
     expect(search?.cancellation).toEqual({ parameter: 'signal' })
+    expect(REFERENCE_ANYTHING_INVOCATIONS.find(descriptor => descriptor.method === 'workspaceSearch')?.cancellation).toEqual({ parameter: 'signal' })
+    expect(REFERENCE_ANYTHING_INVOCATIONS.find(descriptor => descriptor.method === 'sessionSearch')?.cancellation).toEqual({ parameter: 'signal' })
   })
 })

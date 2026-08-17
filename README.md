@@ -1,6 +1,6 @@
 # dsh-reference-anything
 
-在 DeepSeek Harness（DSH）里通过 `@Conversations` 引用 ChatGPT、Claude、Gemini、DeepSeek 和 Grok 的历史对话。
+在 DeepSeek Harness（DSH）的统一 `@` 菜单里引用工作区文件/文件夹、DSH 会话，以及 ChatGPT、Claude、Gemini、DeepSeek 和 Grok 的历史对话。
 
 插件把在线对话显式同步到 DSH 的本地镜像；输入 `@` 时只查询本地数据，不会在写提示词的过程中访问浏览器或 Provider。模型默认收到最近 10 个 turn，并可通过 `reference_read` 沿 revision 固定的 cursor 继续向前读取。
 
@@ -45,7 +45,7 @@ DSH 插件安装阶段不会静默修改 `~/.opencli/plugins`。如果 OpenCLI �
 1. 打开 DSH Web 的 `Settings → Conversations`。
 2. 检查 OpenCLI CLI、daemon、Browser Bridge 和适配器状态。
 3. 选择 Chrome Profile，点击 `Sync all`，或单独同步一个 Provider。
-4. 在输入框键入 `@`，从 `Conversations` 分组选择对话。
+4. 在输入框键入 `@`，从 `Files and folders`、`DSH sessions` 或 `External conversations` 分组选择来源。
 5. 可用 `@chatgpt 关键词`、`@claude 关键词` 等形式过滤候选。
 
 选中后草稿保存为规范的引用 mention：
@@ -55,6 +55,8 @@ DSH 插件安装阶段不会静默修改 `~/.opencli/plugins`。如果 OpenCLI �
 ```
 
 界面把它显示为可删除的 conversation chip；打开来源 URL 只发生在 UI 中，URL 不会注入模型上下文。
+
+文件引用只向模型写入经过工作区边界校验的路径与类型标记，不会在自动补全或 pre-step 中读取文件内容；模型如需内容，仍须通过已有、受权限约束的文件工具读取。DSH 会话引用沿用官方 `dsh-session:` 协议与不可变快照语义。
 
 ## 模型侧协议
 
@@ -126,6 +128,13 @@ npm pack --dry-run
 
 测试覆盖同步中断、不可变 revision、旧 cursor、分支过滤、参数注入、输出上限、超时、权限、附件和 UI 引用 URI。Windows 无创建 symlink 权限时只跳过该项平台前置条件；Linux CI 或具备权限的 Windows 仍执行越界 symlink 安全测试。
 
+## Acknowledgements
+
+- 工作区文件/文件夹自动补全、路径排序和 existence-only 引用实现包含从 [omdsh-dev/dsh-at-file](https://github.com/omdsh-dev/dsh-at-file) 改编的部分。
+- DSH 跨会话候选、规范 `dsh-session:` 引用与不可变快照能力使用官方 `@deepseek-ai/dsh-session-reference` 包。
+
+这里的致谢不替代许可证声明。`dsh-at-file` 的原始版权声明、完整 MIT License 文本和固定上游 revision 均保留在 [NOTICE.md](./NOTICE.md)。
+
 ## 来源与许可
 
-本项目为 MIT。Provider API、分页、标准化和 DOM fallback 的移植来源及固定上游 commit 记录在 [NOTICE.md](./NOTICE.md)。OpenCLI 作为 Apache-2.0 外部依赖，不被打包进本插件。
+本项目为 MIT。第三方代码的版权声明、许可证文本、移植来源及固定上游 commit 记录在 [NOTICE.md](./NOTICE.md)。OpenCLI 作为 Apache-2.0 外部依赖，不被打包进本插件。

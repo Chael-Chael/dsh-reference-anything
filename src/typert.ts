@@ -7,6 +7,8 @@ export const TYPERT_MANIFEST: TypertContribution = {
     key: 'referenceAnything', exportName: 'ReferenceAnythingRemote',
     description: 'Local conversation mirror, synchronization, and settings for @Conversation.', tags: [],
     members: [
+      { kind: 'method', name: 'workspaceSearch', signature: 'workspaceSearch(agent: Agent, signal: AbortSignal): Promise<WorkspaceEntry[]>' },
+      { kind: 'method', name: 'sessionSearch', signature: 'sessionSearch(agent: Agent, input: SessionSearchInput, signal: AbortSignal): Promise<SessionCandidate[]>' },
       { kind: 'method', name: 'search', signature: 'search(input: SearchInput): SearchResult[]' },
       { kind: 'method', name: 'health', signature: 'health(signal: AbortSignal): Promise<Health>' },
       { kind: 'method', name: 'profiles', signature: 'profiles(signal: AbortSignal): Promise<BrowserProfile[]>' },

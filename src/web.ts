@@ -4,7 +4,7 @@ import { ReferenceAnythingRemote } from './host.ts'
 import { TYPERT_MANIFEST } from './typert.ts'
 
 export const name = 'reference-anything-web'
-export const inject = ['typert', 'referenceChatHistory']
+export const inject = ['typert', 'referenceChatHistory', 'sessionReferenceResolver']
 
 export function apply(ctx: Context): void {
   new ReferenceAnythingRemote(ctx)

@@ -6,6 +6,8 @@ export interface SearchResult {
   uriId: string; provider: ChatProvider; title: string; url: string; updatedAt: string
   turnCount: number; partial: boolean; syncedAt: string
 }
+export interface WorkspaceEntry { path: string; kind: 'file' | 'directory' }
+export interface SessionCandidate { sessionId: string; label: string; cwd?: string; createdAt: number }
 export interface Health {
   version: string; daemon: string; pluginInstalled: boolean
   versionError?: string; daemonError?: string; pluginError?: string
@@ -25,6 +27,8 @@ export const REFERENCE_ANYTHING_REMOTE: TypertRemoteContribution = {
 }
 
 export interface ReferenceAnythingRemoteFace {
+  workspaceSearch(agentId: string, signal?: AbortSignal): Promise<RemoteResult<readonly WorkspaceEntry[]>>
+  sessionSearch(agentId: string, input: { query: string; limit: number }, signal?: AbortSignal): Promise<RemoteResult<readonly SessionCandidate[]>>
   search(input: { query: string; provider?: ChatProvider; limit: number }, signal?: AbortSignal): Promise<RemoteResult<readonly SearchResult[]>>
   health(signal?: AbortSignal): Promise<RemoteResult<Health>>
   profiles(signal?: AbortSignal): Promise<RemoteResult<readonly BrowserProfile[]>>

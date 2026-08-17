@@ -32,6 +32,7 @@ import { renderReferences, type RenderInput } from './render.ts'
 import type { ReferenceContextSource, ReferenceInput } from './types.ts'
 import { mayContainReference, parseReferenceText } from './uri.ts'
 import type {} from './index.ts'
+import { WORKSPACE_REFERENCE_SCHEME, parseWorkspaceReferenceText, renderWorkspaceReferences, type WorkspaceReference } from './workspace.ts'
 
 /** Cordis plugin name used by loader diagnostics. */
 export const name = 'reference-mention'
@@ -85,6 +86,7 @@ interface ParsedMessage {
   readonly message: UserMessage
   readonly references: readonly ReferenceInput[]
   readonly sessionReferences: readonly SessionReferenceInput[]
+  readonly workspaceReferences: readonly WorkspaceReference[]
 }
 
 /**
@@ -122,7 +124,7 @@ export function apply(ctx: Context, config: Config = {}): void {
       return entered(decision, target, [notice(describe(error))], original)
     }
 
-    if (parsed.references.length === 0 && parsed.sessionReferences.length === 0) return decision
+    if (parsed.references.length === 0 && parsed.sessionReferences.length === 0 && parsed.workspaceReferences.length === 0) return decision
 
     let contexts: UserMessage[]
     try {
@@ -167,6 +169,13 @@ async function resolve(
   signal: AbortSignal,
 ): Promise<UserMessage[]> {
   const contexts: UserMessage[] = []
+
+  if (parsed.workspaceReferences.length > 0) {
+    contexts.push(createUserMessage({
+      content: [{ type: 'text', text: await renderWorkspaceReferences(agent, parsed.workspaceReferences) }],
+      source: { kind: 'plugin', plugin: name, form: 'recall' },
+    }))
+  }
 
   if (parsed.sessionReferences.length > 0) {
     const resolver = ctx.get('sessionReferenceResolver')
@@ -257,12 +266,18 @@ function entered(
 function parseMessage(message: UserMessage, serveSessionScheme: boolean): ParsedMessage {
   const references: ReferenceInput[] = []
   const sessionReferences: SessionReferenceInput[] = []
+  const workspaceReferences: WorkspaceReference[] = []
   let changed = false
   const content: ContentBlock[] = message.content.map((block) => {
     if (block.type !== 'text') return block
     const own = parseReferenceText(block.text)
     references.push(...own.references)
     let text = own.text
+    if (text.includes(WORKSPACE_REFERENCE_SCHEME)) {
+      const workspace = parseWorkspaceReferenceText(text)
+      workspaceReferences.push(...workspace.references)
+      text = workspace.text
+    }
     if (serveSessionScheme && text.includes(SESSION_REFERENCE_SCHEME)) {
       const session = parseSessionReferenceText(text)
       sessionReferences.push(...session.references)
@@ -278,6 +293,7 @@ function parseMessage(message: UserMessage, serveSessionScheme: boolean): Parsed
     message: changed ? freezeMessage({ ...message, content }) : message,
     references,
     sessionReferences,
+    workspaceReferences,
   }
 }
 
@@ -295,7 +311,7 @@ function dedupe(references: readonly ReferenceInput[]): ReferenceInput[] {
 }
 
 function mentions(text: string, serveSessionScheme: boolean): boolean {
-  return mayContainReference(text) || (serveSessionScheme && text.includes(SESSION_REFERENCE_SCHEME))
+  return mayContainReference(text) || text.includes(WORKSPACE_REFERENCE_SCHEME) || (serveSessionScheme && text.includes(SESSION_REFERENCE_SCHEME))
 }
 
 function messageText(message: UserMessage): string[] {
