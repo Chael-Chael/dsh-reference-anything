@@ -6,7 +6,7 @@ import type { InputTriggerServiceContract } from '@deepseek-ai/dsh-client-ui-inp
 import type { ChatProvider, SettingsRecord } from '../wire.ts'
 import { REFERENCE_ANYTHING_REMOTE, type ReferenceAnythingRemoteFace, type SyncStatus } from './remote.ts'
 import { conversationReferenceUri, createCommandSource, createConversationSource, createSessionSource, createSkillSource, createWorkspaceSource } from './source.ts'
-import { ConversationsDock, ConversationSettings, type SettingsSnapshot } from './components.tsx'
+import { ConversationsDock, ConversationSettings, PAGE_SIZE, type SettingsSnapshot } from './components.tsx'
 import { adoptConversationMentionProjection, adoptStyles } from './styles.ts'
 
 export const inject = ['inputTriggers', 'remote', 'slots', 'connection']
@@ -38,12 +38,50 @@ export function apply(ctx: ClientContext): void {
         error: statsUnavailable && !stats ? 'Local conversation statistics are unavailable until the DSH host is restarted.' : undefined, loading: false })
     } catch (error) { scope.set({ ...scope.getSnapshot(), error: error instanceof Error ? error.message : String(error), loading: false }) }
   }
+  /**
+   * Re-read provider statistics only.
+   *
+   * Deliberately not `refresh()`: that also probes OpenCLI health, which
+   * spawns three processes, and this runs on a timer while the panel is open.
+   * A failure leaves the last known figures rather than replacing the panel
+   * with an error — the next tick tries again.
+   */
+  const urlByUri = new Map<string, string>()
+  const refreshStats = async (): Promise<void> => {
+    if (!remote) return
+    try {
+      scope.set({ ...scope.getSnapshot(), stats: unwrap(await remote.stats()) })
+    } catch { /* keep showing the last known statistics */ }
+  }
+  const browse = async (query: string, provider: ChatProvider | undefined, offset: number): Promise<void> => {
+    if (!remote) return
+    try {
+      const page = unwrap(await remote.browse({ query, ...(provider ? { provider } : {}), limit: PAGE_SIZE, offset }))
+      scope.set({ ...scope.getSnapshot(), browse: { query, provider, offset, page }, error: undefined })
+    } catch (error) { scope.set({ ...scope.getSnapshot(), error: message(error) }) }
+  }
+  const deleteConversation = async (uriId: string): Promise<void> => {
+    if (!remote) return
+    try {
+      unwrap(await remote.deleteConversation({ uriId }))
+      urlByUri.delete(conversationReferenceUri(uriId))
+      const current = scope.getSnapshot().browse
+      await browse(current?.query ?? '', current?.provider, current?.offset ?? 0)
+      await refreshStats()
+    } catch (error) { scope.set({ ...scope.getSnapshot(), error: message(error) }) }
+  }
   const pollJob = async (): Promise<void> => {
     if (!remote || !currentJob) return
     try {
       const status = unwrap(await remote.syncStatus({ jobId: currentJob }))
       if (status) scope.set({ ...scope.getSnapshot(), sync: status })
-      if (!status || status.status !== 'running') { if (poll) clearInterval(poll); poll = undefined; await refresh() }
+      if (!status || status.status !== 'running') {
+        if (poll) clearInterval(poll)
+        poll = undefined
+        await refresh()
+        const current = scope.getSnapshot().browse
+        if (current) await browse(current.query, current.provider, current.offset)
+      }
     } catch (error) {
       if (poll) clearInterval(poll); poll = undefined
       scope.set({ ...scope.getSnapshot(), error: message(error) })
@@ -60,7 +98,6 @@ export function apply(ctx: ClientContext): void {
 
   const inputTriggers = ctx.get('inputTriggers') as InputTriggerServiceContract
   const connection = ctx.get('connection') as ConnectionHandle
-  const urlByUri = new Map<string, string>()
   const source = createConversationSource(async (query, provider, signal) => {
     if (!remote) return []
     const rows = unwrap(await remote.search({ query, ...(provider ? { provider } : {}), limit: 12 }, signal))
@@ -110,7 +147,7 @@ export function apply(ctx: ClientContext): void {
   ctx.slots.inject('settings.section', () => ctx.slots.register({
     name: 'settings.section', id: 'reference-anything', order: 56, label: () => 'Reference Anything',
     inject: () => ({
-      hooks: { scope }, save, sync: startSync, refresh,
+      hooks: { scope }, save, sync: startSync, refresh, browse, deleteConversation, refreshStats,
       install: async () => { try { if (!remote) return; unwrap(await remote.installAdapter()); await refresh(); scope.set({ ...scope.getSnapshot(), notice: 'Adapter installed.' }) } catch (error) { scope.set({ ...scope.getSnapshot(), error: message(error) }) } },
       cancel: async () => { try { if (remote && currentJob) unwrap(await remote.syncCancel({ jobId: currentJob })); await pollJob() } catch (error) { scope.set({ ...scope.getSnapshot(), error: message(error) }) } },
     }),

@@ -25,7 +25,7 @@ export interface ProviderStats {
   status: 'ready' | 'syncing' | 'error' | 'empty'; error?: string
 }
 export interface SyncStatus {
-  jobId: string; status: 'running' | 'complete' | 'cancelled' | 'failed'; providers: ChatProvider[]
+  jobId: string; status: 'running' | 'complete' | 'partial' | 'cancelled' | 'failed'; providers: ChatProvider[]
   provider?: ChatProvider; completed: number; total: number; error?: string
 }
 

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { conversationMentions } from '../src/client/components.tsx'
-import { conversationReferenceUri, createCommandSource, createConversationSource, createSessionSource, createSkillSource, createWorkspaceSource, parseQuery } from '../src/client/source.ts'
+import { conversationReferenceUri, createCommandSource, createConversationSource, createSessionSource, createSkillSource, createWorkspaceSource, describeRow, disambiguate, parseQuery } from '../src/client/source.ts'
+import type { SearchResult } from '../src/client/remote.ts'
 import { REFERENCE_ANYTHING_INVOCATIONS } from '../src/contract.ts'
 import { decodeReferenceUri } from '../src/uri.ts'
 
@@ -22,6 +23,40 @@ describe('conversation client references', () => {
   it('parses a provider prefix without treating ordinary search text as one', () => {
     expect(parseQuery('chatgpt cache design')).toEqual({ provider: 'chatgpt', query: 'cache design' })
     expect(parseQuery('cache design')).toEqual({ query: 'cache design' })
+  })
+
+  it('accepts the separators and short spellings that survive @ token detection', () => {
+    // The `@` token ends at the first space, so `:` and `/` are the only
+    // separators a mention query can actually carry.
+    expect(parseQuery('chatgpt:cache')).toEqual({ provider: 'chatgpt', query: 'cache' })
+    expect(parseQuery('gpt:cache')).toEqual({ provider: 'chatgpt', query: 'cache' })
+    expect(parseQuery('ds/cache')).toEqual({ provider: 'deepseek', query: 'cache' })
+    expect(parseQuery('claude')).toEqual({ provider: 'claude', query: '' })
+    expect(parseQuery('caching')).toEqual({ query: 'caching' })
+  })
+
+  it('describes a title hit with its provider, age, and size', () => {
+    expect(describeRow(searchRow())).toBe('ChatGPT · 3d ago · 24 turns')
+    expect(describeRow(searchRow({ partial: true }))).toBe('ChatGPT · 3d ago · 24 turns · partial')
+  })
+
+  it('shows the matched excerpt instead of the turn count when the title did not match', () => {
+    const described = describeRow(searchRow({ title: 'New chat', matchedVia: 'content', snippet: '…used pgvector for…' }))
+    expect(described).toBe('ChatGPT · 3d ago · …used pgvector for…')
+    expect(described).not.toContain('turns')
+  })
+
+  it('numbers repeated titles so the menu can key rows by name', () => {
+    const numbered = disambiguate([
+      { name: 'New chat' }, { name: 'Cache design' }, { name: 'New chat' }, { name: 'New chat' },
+    ])
+    expect(numbered.map(item => item.name)).toEqual(['New chat', 'Cache design', 'New chat (2)', 'New chat (3)'])
+  })
+
+  it('does not let a generated suffix collide with a title that already looks like one', () => {
+    const numbered = disambiguate([{ name: 'New chat' }, { name: 'New chat (2)' }, { name: 'New chat' }])
+    expect(numbered.map(item => item.name)).toEqual(['New chat', 'New chat (2)', 'New chat (3)'])
+    expect(new Set(numbered.map(item => item.name)).size).toBe(numbered.length)
   })
 
   it('inserts a visual composer chip while serializing the canonical mention on send', async () => {
@@ -83,3 +118,11 @@ describe('conversation client references', () => {
     expect(REFERENCE_ANYTHING_INVOCATIONS.find(descriptor => descriptor.method === 'sessionSearch')?.cancellation).toEqual({ parameter: 'signal' })
   })
 })
+
+function searchRow(overrides: Partial<SearchResult> = {}): SearchResult {
+  return {
+    uriId: 'id', provider: 'chatgpt', title: 'Cache design notes', url: 'https://example.test/c/1',
+    updatedAt: new Date(Date.now() - 3 * 24 * 60 * 60_000).toISOString(),
+    turnCount: 24, partial: false, syncedAt: new Date().toISOString(), matchedVia: 'title', ...overrides,
+  }
+}

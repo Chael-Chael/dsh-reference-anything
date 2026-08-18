@@ -2,7 +2,8 @@ import { defineConfig } from 'vitest/config'
 
 export default defineConfig({
   test: {
-    include: ['tests/**/*.spec.ts'],
+    // `.tsx` too: the settings panel's own tests render React.
+    include: ['tests/**/*.spec.ts', 'tests/**/*.spec.tsx'],
     environment: 'node',
   },
 })

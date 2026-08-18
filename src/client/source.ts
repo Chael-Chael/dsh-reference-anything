@@ -1,7 +1,9 @@
 import type { InputTriggerCandidate, InputTriggerSource } from '@deepseek-ai/dsh-client-ui-input-trigger/client'
 import type { SessionId } from '@deepseek-ai/dsh-client-runtime/client'
 import type { ChatProvider } from '../wire.ts'
+import { parseProviderQuery } from '../search.ts'
 import { encodeReferenceUri } from '../uri-codec.ts'
+import { formatRelative } from './format.ts'
 import type { SearchResult, SessionCandidate, WorkspaceEntry } from './remote.ts'
 
 declare module '@deepseek-ai/dsh-client-ui-input-trigger/client' {
@@ -52,11 +54,11 @@ export function createConversationSource(search: (
     async candidates(_session, { query, signal }) {
       const parsed = parseQuery(query)
       const rows = await search(parsed.query, parsed.provider, signal)
-      return rows.map((row): InputTriggerCandidate => ({
-        name: row.title,
-        description: `${LABEL[row.provider]} · ${row.turnCount} turns · ${formatDate(row.updatedAt)}${row.partial ? ' · partial' : ''}`,
+      return disambiguate(rows.map((row): InputTriggerCandidate => ({
+        name: row.title.trim() || 'Untitled',
+        description: describeRow(row),
         icon: '💬', conversation: row,
-      }))
+      })))
     },
     onPick({ candidate }) {
       const row = candidate.conversation
@@ -191,12 +193,49 @@ export function conversationReferenceUri(uriId: string): string {
   return encodeReferenceUri({ source: 'web-chat', id: uriId })
 }
 
+/**
+ * Split a leading provider scope off a menu query.
+ *
+ * Delegates to the Host's own parser so both ends agree on what counts as a
+ * prefix — including the `:` and `/` separators that survive `@` token
+ * detection, and short spellings like `gpt:` and `ds:`.
+ */
 export function parseQuery(value: string): { query: string; provider?: ChatProvider } {
-  const match = value.trim().match(/^(chatgpt|claude|gemini|deepseek|grok)(?:\s+|$)(.*)$/i)
-  return match ? { provider: match[1]!.toLowerCase() as ChatProvider, query: (match[2] || '').trim() } : { query: value.trim() }
+  return parseProviderQuery(value)
 }
 
-function formatDate(value: string): string {
-  const date = new Date(value)
-  return Number.isNaN(date.getTime()) ? 'unknown date' : date.toLocaleDateString()
+/**
+ * The dimmed trailing line of one menu row.
+ *
+ * A body hit shows its excerpt in place of the turn count: when the title did
+ * not match, the excerpt is the only thing on the row that explains why it is
+ * there.
+ */
+export function describeRow(row: SearchResult): string {
+  const parts = [LABEL[row.provider], formatRelative(row.updatedAt)]
+  parts.push(row.matchedVia === 'content' && row.snippet ? row.snippet : `${row.turnCount} turns`)
+  if (row.partial) parts.push('partial')
+  return parts.join(' · ')
+}
+
+/**
+ * Suffix repeated names so each row in a batch is uniquely named.
+ *
+ * Providers leave many conversations titled "New chat", and the menu keys its
+ * rows by `source:name` — identical names collide there.
+ * @param rows - candidates in display order.
+ * @returns the same rows, with the 2nd and later duplicate of a name numbered.
+ */
+export function disambiguate(rows: readonly InputTriggerCandidate[]): InputTriggerCandidate[] {
+  const taken = new Set<string>()
+  return rows.map((row) => {
+    if (!taken.has(row.name)) { taken.add(row.name); return row }
+    // Counting up rather than counting occurrences: a conversation genuinely
+    // titled "New chat (2)" must not collide with a generated suffix.
+    let ordinal = 2
+    while (taken.has(`${row.name} (${ordinal})`)) ordinal++
+    const name = `${row.name} (${ordinal})`
+    taken.add(name)
+    return { ...row, name }
+  })
 }
