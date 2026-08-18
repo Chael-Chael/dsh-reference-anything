@@ -26,6 +26,8 @@ describe('conversation client references', () => {
   })
 
   it('routes type:name prefixes to one @ group while keeping unprefixed search global', () => {
+    expect(scopedQuery('commands', 'commands')).toBe('')
+    expect(scopedQuery('commands', 'files')).toBeUndefined()
     expect(scopedQuery('skills:creator', 'skills')).toBe('creator')
     expect(scopedQuery('skills:creator', 'files')).toBeUndefined()
     expect(scopedQuery('chatgpt:loss', 'conversations')).toBe('loss')
@@ -71,6 +73,8 @@ describe('conversation client references', () => {
 
   it('exposes host commands in the leading @ panel and hands execution back to the native slash pipeline', async () => {
     const source = createCommandSource(async () => [{ name: 'plan', description: 'Plan mode' }])
+    await expect(source.candidates({ sessionId: 'session-1' as never }, { query: 'commands', position: 'leading', signal: new AbortController().signal }))
+      .resolves.toEqual([expect.objectContaining({ name: 'plan', commandName: 'plan' })])
     const candidates = await source.candidates({ sessionId: 'session-1' as never }, { query: 'pla', position: 'leading', signal: new AbortController().signal })
     expect(candidates).toEqual([expect.objectContaining({ name: 'plan', commandName: 'plan' })])
     expect(source.onPick({ candidate: candidates[0]!, session: { sessionId: 'session-1' as never }, position: 'leading', via: 'menu', span: { start: 0, end: 4, draftRev: 1 } })).toEqual({ text: '/plan ' })

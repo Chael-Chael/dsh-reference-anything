@@ -117,12 +117,18 @@ export class ConversationStore {
   async putConversation(row: ProviderConversationRow, accountScope: string): Promise<string> {
     const key = ConversationStore.conversationKey(row.provider, accountScope, row.id)
     const current = this.conversations.get(key)
+    // The local detail snapshot is authoritative for menu metadata. Directory
+    // rows only discover conversations; their count and timestamp fields are
+    // often missing or stale and must not overwrite a mirrored revision.
+    const hasMirroredTurns = current?.currentRevision !== undefined
+    const messageCount = hasMirroredTurns ? current.messageCount : row.messageCount
+    const updatedAt = hasMirroredTurns ? current.updatedAt : row.updatedAt.trim()
     await this.conversations.put(key, {
       provider: row.provider, accountScope, externalId: row.id,
       title: row.title.trim() || row.id, url: row.url,
       ...(current?.currentRevision ? { currentRevision: current.currentRevision } : {}),
-      createdAt: row.createdAt, updatedAt: row.updatedAt,
-      messageCount: Math.max(0, Math.trunc(row.messageCount || 0)),
+      createdAt: row.createdAt || current?.createdAt || '', updatedAt,
+      messageCount: Math.max(0, Math.trunc(messageCount || 0)),
       partial: row.partial, remoteMissing: false, syncedAt: new Date().toISOString(),
     })
     return key
@@ -131,7 +137,10 @@ export class ConversationStore {
   needsDetail(key: string, row: ProviderConversationRow, full: boolean): boolean {
     if (full) return true
     const current = this.conversations.get(key)
-    return !current?.currentRevision || current.updatedAt !== row.updatedAt || current.partial !== row.partial
+    // Incremental discovery only fills gaps. A separate sync process updates
+    // local revisions, so do not re-read every known conversation merely to
+    // compare directory metadata.
+    return !current?.currentRevision
   }
 
   async commitRevision(conversationKey: string, rows: readonly ProviderTurnRow[]): Promise<string> {
@@ -169,8 +178,14 @@ export class ConversationStore {
         ...attachment, conversationKey, revision, ordinal: turn.ordinal,
       })
     }
+    const newestTurnAt = turns.reduce<string>((latest, turn) => {
+      const latestAt = parseTimestamp(latest)
+      const candidateAt = parseTimestamp(turn.createdAt)
+      return candidateAt !== undefined && (latestAt === undefined || candidateAt > latestAt) ? turn.createdAt : latest
+    }, '')
     await this.conversations.put(conversationKey, {
-      ...conversation, currentRevision: revision, messageCount: turns.length, syncedAt: new Date(now).toISOString(),
+      ...conversation, currentRevision: revision, messageCount: turns.length,
+      updatedAt: newestTurnAt || conversation.updatedAt, syncedAt: new Date(now).toISOString(),
     })
     return revision
   }

@@ -54,6 +54,7 @@ DSH 插件安装阶段不会静默修改 `~/.opencli/plugins`。如果 OpenCLI �
 - `@files:名称`、`@sessions:名称`、`@skills:名称`、`@commands:名称`
 
 冒号后可以留空以浏览该类型的全部候选，例如 `@skills:`。没有类型前缀时仍同时搜索所有分组。
+也可直接输入组名浏览全部候选，例如 `@commands`、`@skills` 或 `@files`。
 
 选中后草稿保存为规范的引用 mention：
 

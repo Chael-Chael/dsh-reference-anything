@@ -221,6 +221,12 @@ export function parseQuery(value: string): { query: string; provider?: ChatProvi
 /** Route `type:name` autocomplete syntax to one @ source and strip its prefix. */
 export function scopedQuery(value: string, scope: SourceScope): string | undefined {
   const trimmed = value.trim()
+  // Accept the group name itself as a shortcut for an empty scoped query.
+  // Without this, typing `@commands` searches command names for the literal
+  // word "commands", so the documented group appears empty unless a colon is
+  // added. Keep the `type:name` form for filtering within a group.
+  const bareScope = PREFIX_SCOPE[trimmed.toLocaleLowerCase()]
+  if (bareScope !== undefined) return bareScope === scope ? '' : undefined
   const match = trimmed.match(/^([a-z-]+):(.*)$/iu)
   if (!match) return trimmed
   const requested = PREFIX_SCOPE[match[1]!.toLocaleLowerCase()]
