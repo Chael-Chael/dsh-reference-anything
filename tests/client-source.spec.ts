@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { conversationMentions } from '../src/client/components.tsx'
-import { conversationReferenceUri, createCommandSource, createConversationSource, createSessionSource, createSkillSource, createWorkspaceSource, describeRow, disambiguate, parseQuery, scopedQuery } from '../src/client/source.ts'
+import { CONVERSATION_SOURCE, conversationReferenceUri, createCommandSource, createConversationSource, createSessionSource, createSkillSource, createWorkspaceSource, describeRow, disambiguate, parseQuery, scopedQuery } from '../src/client/source.ts'
 import type { SearchResult } from '../src/client/remote.ts'
 import { REFERENCE_ANYTHING_INVOCATIONS } from '../src/contract.ts'
 import { decodeReferenceUri } from '../src/uri.ts'
@@ -68,6 +68,19 @@ describe('conversation client references', () => {
     expect(scopedQuery('chatgpt:loss', 'conversations')).toBe('loss')
     expect(scopedQuery('ordinary search', 'files')).toBe('ordinary search')
     expect(scopedQuery('unknown:value', 'files')).toBe('unknown:value')
+    expect(scopedQuery('外部对话', 'conversations')).toBe('')
+  })
+
+  it('keeps the chip owner stable when a localized menu label is used', () => {
+    const zh = ((key: string) => key === 'source.conversations' ? '外部对话' : key) as never
+    const source = createConversationSource(async () => [], zh)
+    const row = searchRow()
+    const outcome = source.onPick({
+      candidate: { name: row.title, conversation: row }, session: { sessionId: 'session-1' as never },
+      position: 'inline', via: 'menu', span: { start: 0, end: 1, draftRev: 1 },
+    })
+    expect(source.name).toBe(CONVERSATION_SOURCE)
+    expect(outcome).toMatchObject({ insert: { source: CONVERSATION_SOURCE } })
   })
 
   it('inserts a visual composer chip while serializing the canonical mention on send', async () => {
