@@ -104,7 +104,7 @@ export function createConversationSource(search: (
       if (scoped === undefined) return []
       const parsed = parseQuery(query)
       if (parsed.provider === undefined && scoped !== query.trim()) parsed.query = scoped
-      const rows = await search(parsed.query, parsed.provider, signal, options.limit)
+      const rows = await search(parsed.query, parsed.provider, signal, 50)
       return disambiguate(rows.map((row): InputTriggerCandidate => ({
         name: row.title.trim() || 'Untitled',
         description: row.matchedVia === 'content' && row.snippet
@@ -144,7 +144,7 @@ export function createWorkspaceSource(load: (sessionId: string, signal: AbortSig
       if (scoped === undefined) return []
       const entries = await load(session.sessionId, signal)
       const needle = scoped.toLocaleLowerCase()
-      return entries.filter(row => row.path.toLocaleLowerCase().includes(needle)).sort((a, b) => rankPath(a.path, needle) - rankPath(b.path, needle) || a.path.localeCompare(b.path)).slice(0, options.limit).map(row => ({
+      return entries.filter(row => row.path.toLocaleLowerCase().includes(needle)).sort((a, b) => rankPath(a.path, needle) - rankPath(b.path, needle) || a.path.localeCompare(b.path)).slice(0, 50).map(row => ({
         name: row.path.split('/').at(-1) ?? row.path,
         description: row.path,
         icon: row.kind === 'directory' ? '📁' : '📄',
@@ -171,7 +171,7 @@ export function createSessionSource(search: (sessionId: string, query: string, s
     async candidates(session, { query, signal }) {
       const scoped = scopedQuery(query, 'sessions')
       if (scoped === undefined) return []
-      return (await search(session.sessionId, scoped, signal)).slice(0, options.limit).map(row => ({
+      return (await search(session.sessionId, scoped, signal)).slice(0, 50).map(row => ({
         name: row.label, description: row.cwd ?? new Date(row.createdAt).toLocaleString(), icon: '💬', sessionCandidate: row,
       }))
     },
@@ -198,7 +198,7 @@ export function createCommandSource(load: (sessionId: SessionId, signal: AbortSi
       const needle = scoped.toLocaleLowerCase()
       return (await load(session.sessionId, signal))
         .filter(row => row.name.toLocaleLowerCase().includes(needle))
-        .slice(0, options.limit).map(row => ({ name: row.name, description: row.description, hint: row.input?.hint, icon: '⌘', commandName: row.name }))
+        .slice(0, 50).map(row => ({ name: row.name, description: row.description, hint: row.input?.hint, icon: '⌘', commandName: row.name }))
     },
     onPick({ candidate }) { return candidate.commandName ? { text: `/${candidate.commandName} ` } : undefined },
   }
@@ -213,7 +213,7 @@ export function createSkillSource(load: (sessionId: SessionId, signal: AbortSign
       if (scoped === undefined) return []
       const rows = await load(session.sessionId, signal)
       const needle = scoped.toLocaleLowerCase()
-      return rows.filter(row => row.name.toLocaleLowerCase().includes(needle)).slice(0, options.limit).map(row => ({
+      return rows.filter(row => row.name.toLocaleLowerCase().includes(needle)).slice(0, 50).map(row => ({
         name: row.name,
         description: `${row.modelInvocable === false ? t('skill.userOnly') : ''}${row.description}`,
         icon: '✦',
@@ -317,7 +317,10 @@ export function scopedQuery(value: string, scope: SourceScope): string | undefin
 
 function formatDate(value: string, t: T): string {
   const date = new Date(value)
-  return Number.isNaN(date.getTime()) ? t('conversation.unknownDate') : date.toLocaleDateString()
+  return Number.isNaN(date.getTime()) ? t('conversation.unknownDate') : date.toLocaleString(undefined, {
+    year: 'numeric', month: 'numeric', day: 'numeric',
+    hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false,
+  })
 }
 
 const fallback: T = (key, params) => {

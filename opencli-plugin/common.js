@@ -1,4 +1,5 @@
 import { mkdir, writeFile } from 'node:fs/promises'
+import { createHash } from 'node:crypto'
 import { dirname, resolve } from 'node:path'
 import { cli, Strategy } from '@jackwener/opencli/registry'
 import { sinceGuardSource } from './since-guard.js'
@@ -15,6 +16,8 @@ const HISTORY_COLUMNS = [
   'provider', 'accountScope', 'id', 'title', 'url', 'createdAt', 'updatedAt',
   'messageCount', 'cursor', 'partial',
 ]
+
+const SYNC_INDEX_COLUMNS = ['kind', 'identity', 'sinceApplied', ...HISTORY_COLUMNS]
 
 const DETAIL_COLUMNS = [
   'conversationId', 'ordinal', 'messageId', 'parentId', 'branchId',
@@ -47,10 +50,9 @@ function assertResult(result, domain, operation) {
 }
 
 /**
- * OpenCLI's `close-window` relinquishes an automation lease but deliberately
- * leaves its reusable container window alive.  For a one-shot sync that
- * container becomes a visible `about:blank` window.  The adapter session is
- * ephemeral and owns its active tab, so close that tab explicitly instead.
+ * Release only the one-shot task tab. Browser Bridge deliberately keeps its
+ * empty adapter container alive so the next sync can reuse it; if the user
+ * closes that container, Browser Bridge recreates it on demand.
  */
 async function inTemporaryTab(page, task) {
   try {
@@ -65,12 +67,7 @@ async function inTemporaryTab(page, task) {
 }
 
 export function registerProvider(config) {
-  // Synchronization is a background, read-only operation.  Use a distinct
-  // session for each command and keep its temporary window out of focus.
-  const browserSession = {
-    siteSession: 'ephemeral',
-    defaultWindowMode: 'background',
-  }
+  const browserSession = SYNC_BROWSER_SESSION
 
   cli({
     site: config.site,
@@ -92,6 +89,45 @@ export function registerProvider(config) {
         throw new CommandExecutionError(`${config.site} whoami: ${result?.message || 'stable account identity unavailable'}`)
       }
       return [{ identity: result.identity }]
+    }),
+  })
+
+  cli({
+    site: config.site,
+    name: 'sync-index',
+    access: 'read',
+    description: `Resolve the ${config.provider} account and list its conversation history in one browser session`,
+    domain: config.domain,
+    strategy: Strategy.COOKIE,
+    browser: true,
+    ...browserSession,
+    navigateBefore: false,
+    args: [{
+      name: 'since',
+      help: 'ISO 8601 instant; stop paging once the listing predates it. Honoured only while the provider pages newest-first',
+    }, { name: 'accountScope', help: 'Previously observed hashed account scope; mismatch forces a full listing' }],
+    columns: SYNC_INDEX_COLUMNS,
+    func: async (page, kwargs) => inTemporaryTab(page, async () => {
+      const since = String(kwargs.since || '').trim()
+      if (since && Number.isNaN(Date.parse(since))) throw new ArgumentError('since must be an ISO 8601 instant')
+      await page.goto(config.home, { settleMs: 1200 })
+      const identity = await evaluate(page, config.whoamiScript, {}, `${config.site} sync-index identity`)
+      if (identity?.code === 'AUTH') throw new AuthRequiredError(config.domain)
+      if (identity?.ok !== true || typeof identity.identity !== 'string' || !identity.identity) {
+        throw new CommandExecutionError(`${config.site} sync-index: ${identity?.message || 'stable account identity unavailable'}`)
+      }
+      const accountScope = createHash('sha256').update(`${config.provider.toLocaleLowerCase()}\0${identity.identity}`).digest('hex')
+      const effectiveSince = String(kwargs.accountScope || '') === accountScope ? since : ''
+      const rows = assertResult(
+        await evaluate(page, config.historyScript, { since: effectiveSince }, `${config.site} sync-index history`),
+        config.domain,
+        `${config.site} sync-index`,
+      )
+      if (rows.length === 0 && !effectiveSince) throw new EmptyResultError(`${config.site} sync-index`, 'No conversations found')
+      return [
+        { kind: 'identity', identity: identity.identity, sinceApplied: effectiveSince },
+        ...rows.map(row => ({ kind: 'conversation', identity: '', sinceApplied: '', ...row })),
+      ]
     }),
   })
 
@@ -204,6 +240,12 @@ export function registerProvider(config) {
     }),
   })
 }
+
+/** Browser Bridge lifecycle contract shared by every web-chat sync command. */
+export const SYNC_BROWSER_SESSION = Object.freeze({
+  siteSession: 'ephemeral',
+  defaultWindowMode: 'background',
+})
 
 const ATTACHMENT_SCRIPT = String.raw`async function (args) {
   try {

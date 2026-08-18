@@ -62,13 +62,14 @@ const STATS_POLL_MS = 30_000
 const PROVIDER_LABEL: Record<ChatProvider, string> = {
   chatgpt: 'ChatGPT', claude: 'Claude', gemini: 'Gemini', deepseek: 'DeepSeek', grok: 'Grok', kimi: 'Kimi',
 }
-const PICKER_SOURCES: ReadonlyArray<{ id: PickerSource; label: string }> = [
-  { id: 'commands', label: 'Commands' },
-  { id: 'skills', label: 'Skills' },
-  { id: 'files', label: 'Files & folders' },
-  { id: 'sessions', label: 'DSH sessions' },
-  { id: 'conversations', label: 'External conversations' },
+const PICKER_SOURCES: ReadonlyArray<{ id: PickerSource; label: keyof typeof SOURCE_KEYS }> = [
+  { id: 'commands', label: 'commands' },
+  { id: 'skills', label: 'skills' },
+  { id: 'files', label: 'files' },
+  { id: 'sessions', label: 'sessions' },
+  { id: 'conversations', label: 'conversations' },
 ]
+const SOURCE_KEYS = { commands: 'source.commands', skills: 'source.skills', files: 'source.files', sessions: 'source.sessions', conversations: 'source.conversations' } as const
 export function ConversationSettings({ useScope, save, sync, cancel, refresh, install, restartDaemon, browse, deleteConversation, refreshStats, t }: SettingsProps) {
   const state = useScope(value => value)
   const settings = state.settings
@@ -110,16 +111,16 @@ export function ConversationSettings({ useScope, save, sync, cancel, refresh, in
     {state.notice && <div className="dsh_ref_notice" role="status">{state.notice}</div>}
     <section className="dsh_ref_panel dsh_ref_general_settings"><div className="dsh_ref_section_head"><div><h3>{t('settings.general')}</h3><p>{t('settings.generalDetail')}</p></div></div>
       <div className="dsh_ref_picker_list">{[...PICKER_SOURCES].sort((a, b) => picker[a.id].order - picker[b.id].order).map((row, index, rows) => <div className="dsh_ref_picker_row" key={row.id}>
-        <label><input type="checkbox" checked={picker[row.id].enabled} onChange={event => { patchPicker(row.id, { enabled: event.target.checked }) }} /><span>{row.label}</span></label>
+        <label><input type="checkbox" checked={picker[row.id].enabled} onChange={event => { patchPicker(row.id, { enabled: event.target.checked }) }} /><span>{t(SOURCE_KEYS[row.label])}</span></label>
         <label className="dsh_ref_picker_limit"><span>{t('settings.maxItems')}</span><select value={picker[row.id].limit} onChange={event => { patchPicker(row.id, { limit: Number(event.target.value) }) }}>{[5, 8, 12, 20, 50].map(value => <option key={value} value={value}>{value}</option>)}</select></label>
-        <div className="dsh_ref_picker_order"><button type="button" disabled={index === 0} aria-label={t('settings.moveUp', { item: row.label })} onClick={() => { movePicker(row.id, -1) }}>↑</button><button type="button" disabled={index === rows.length - 1} aria-label={t('settings.moveDown', { item: row.label })} onClick={() => { movePicker(row.id, 1) }}>↓</button></div>
+        <div className="dsh_ref_picker_order"><button type="button" disabled={index === 0} aria-label={t('settings.moveUp', { item: t(SOURCE_KEYS[row.label]) })} onClick={() => { movePicker(row.id, -1) }}>↑</button><button type="button" disabled={index === rows.length - 1} aria-label={t('settings.moveDown', { item: t(SOURCE_KEYS[row.label]) })} onClick={() => { movePicker(row.id, 1) }}>↓</button></div>
       </div>)}</div>
     </section>
     <section className="dsh_ref_panel"><div className="dsh_ref_section_head"><div><h3>{t('settings.viability')}</h3><p>{t('settings.viabilityDetail')}</p></div><span className={`dsh_ref_health ${ready ? 'is_ready' : ''}`}>{ready ? t('settings.ready') : t('settings.needsAttention')}</span></div>
       {state.loading ? <div className="dsh_ref_skeleton"><i/><i/><i/></div> : <div className="dsh_ref_checklist">
         <CheckRow label="OpenCLI" detail={state.health?.version || state.health?.versionError || t('settings.notDetected')} ready={Boolean(state.health?.version)} />
-        <CheckRow label="Browser bridge" detail={state.health?.daemon || state.health?.daemonError || t('settings.daemonUnavailable')} ready={Boolean(state.health?.daemon)} />
-        <CheckRow label="Conversation adapter" detail={state.health?.pluginInstalled ? t('settings.adapterInstalled') : state.health?.pluginError || t('settings.adapterMissing')} ready={Boolean(state.health?.pluginInstalled)} />
+        <CheckRow label={t('check.browserBridge')} detail={state.health?.daemon || state.health?.daemonError || t('settings.daemonUnavailable')} ready={Boolean(state.health?.daemon)} />
+        <CheckRow label={t('check.conversationAdapter')} detail={state.health?.pluginInstalled ? t('settings.adapterInstalled') : state.health?.pluginError || t('settings.adapterMissing')} ready={Boolean(state.health?.pluginInstalled)} />
       </div>}
       <div className="dsh_ref_install"><div><strong>{t('settings.serviceActions')}</strong><span>{t('settings.serviceActionsDetail')}</span></div><div className="dsh_ref_service_actions"><button type="button" disabled={installing} onClick={() => { setInstalling(true); void install().finally(() => { setInstalling(false) }) }}>{installing ? t('settings.installing') : state.health?.pluginInstalled ? t('settings.reinstall') : t('settings.install')}</button><button type="button" onClick={() => { void restartDaemon() }}>{t('settings.restartDaemon')}</button></div></div>
     </section>
@@ -137,32 +138,36 @@ export function ConversationSettings({ useScope, save, sync, cancel, refresh, in
       </div>
       <p className="dsh_ref_auto_note">{settings.historyMode === 'metadata-only' ? t('settings.metadataOnlyDetail') : t('settings.offlineMirrorDetail')}</p>
       <div className="dsh_ref_actions"><button className="is_primary" type="button" disabled={state.sync?.status === 'running'} onClick={() => { void sync(PROVIDERS, 'incremental') }}>{t('settings.syncAll')}</button><button type="button" disabled={state.sync?.status === 'running'} onClick={() => { if (window.confirm(t('settings.fullConfirmAll'))) void sync(PROVIDERS, 'full') }}>{t('settings.fullRescanAll')}</button>{state.sync?.status === 'running' && <button className="is_danger" type="button" onClick={() => { void cancel() }}>{t('settings.cancel')}</button>}</div>
-      {state.sync && <SyncProgress sync={state.sync} />}
+      {state.sync && <SyncProgress sync={state.sync} t={t} />}
       {state.sync?.error && <p className="dsh_ref_inline_error">{state.sync.error}</p>}
       {settings.autoSync && <p className="dsh_ref_auto_note">{t('settings.autoNote', { minutes: settings.autoSyncMinutes })}</p>}
       </div>
       <div className="dsh_ref_chat_divider" />
-      <ManageConversations state={state} syncing={state.sync?.status === 'running'} browse={browse} deleteConversation={deleteConversation} />
+      <ManageConversations state={state} syncing={state.sync?.status === 'running'} browse={browse} deleteConversation={deleteConversation} t={t} />
     </section>
     </div>
   </section>
 }
 
 /** Progress of the job this tab started, including its terminal outcome. */
-export function SyncProgress({ sync }: { sync: SyncStatus }) {
+export function SyncProgress({ sync, t }: { sync: SyncStatus; t: T }) {
   const listing = sync.providerProgress.filter(row => row.phase === 'listing').length
   const pct = sync.total > 0 ? Math.min(100, Math.round((sync.completed / sync.total) * 100)) : sync.status === 'running' ? 0 : 100
   return <div className="dsh_ref_progress_wrap">
-    <div className={`dsh_ref_progress_track${listing > 0 ? ' is_listing' : ''}`} role="progressbar" aria-valuemin={0} aria-valuemax={Math.max(sync.total, 1)} aria-valuenow={sync.completed} aria-valuetext={listing > 0 ? tProgressListing(listing, sync.completed, sync.total) : `${sync.completed}/${sync.total}`}>
+    <div className={`dsh_ref_progress_track${listing > 0 ? ' is_listing' : ''}`} role="progressbar" aria-valuemin={0} aria-valuemax={Math.max(sync.total, 1)} aria-valuenow={sync.completed} aria-valuetext={listing > 0 ? tProgressListing(listing, sync.completed, sync.total, t) : `${sync.completed}/${sync.total}`}>
       <div className={`dsh_ref_progress_fill is_${sync.status}`} style={{ width: `${pct}%` }} />
     </div>
-    <p className="dsh_ref_progress_label">{sync.status} · {sync.completed}/{sync.total}{listing > 0 ? ` · ${listing} source${listing === 1 ? '' : 's'} listing` : ''}</p>
-    <div className="dsh_ref_progress_sources">{sync.providerProgress.map(row => <span key={row.provider}><b>{PROVIDER_LABEL[row.provider]}</b><i>{row.phase === 'listing' ? 'listing…' : `${row.completed}/${row.total}`}</i></span>)}</div>
+    <p className="dsh_ref_progress_label">{t(syncStatusKey(sync.status))} · {sync.completed}/{sync.total}{listing > 0 ? ` · ${t('sync.progressSourcesListing', { count: listing })}` : ''}</p>
+    <div className="dsh_ref_progress_sources">{sync.providerProgress.map(row => <span key={row.provider}><b>{PROVIDER_LABEL[row.provider]}</b><i>{row.phase === 'listing' ? t('sync.progressSourceListing') : `${row.completed}/${row.total}`}</i></span>)}</div>
   </div>
 }
 
-function tProgressListing(listing: number, completed: number, total: number): string {
-  return `${String(listing)} sources are still listing; ${String(completed)} of ${String(total)} discovered conversations processed`
+function tProgressListing(listing: number, completed: number, total: number, t: T): string {
+  return t('sync.progressListing', { listing, completed, total })
+}
+
+function syncStatusKey(status: SyncStatus['status']): 'sync.running' | 'sync.complete' | 'sync.partial' | 'sync.cancelled' | 'sync.failed' {
+  return `sync.${status}` as 'sync.running' | 'sync.complete' | 'sync.partial' | 'sync.cancelled' | 'sync.failed'
 }
 
 interface ManageProps {
@@ -170,6 +175,7 @@ interface ManageProps {
   syncing: boolean
   browse(query: string, provider: ChatProvider | undefined, offset: number): Promise<void>
   deleteConversation(uriId: string): Promise<void>
+  t: T
 }
 /**
  * The local mirror as a list you can prune.
@@ -178,7 +184,7 @@ interface ManageProps {
  * individual rows — including ones the provider no longer lists, which are
  * exactly the ones worth deleting.
  */
-export function ManageConversations({ state, syncing, browse, deleteConversation }: ManageProps) {
+export function ManageConversations({ state, syncing, browse, deleteConversation, t }: ManageProps) {
   const browseState = state.browse
   const [text, setText] = useState(browseState?.query ?? '')
   const debounce = useRef<ReturnType<typeof setTimeout>>()
@@ -202,54 +208,54 @@ export function ManageConversations({ state, syncing, browse, deleteConversation
   const offset = browseState?.offset ?? 0
 
   return <div className="dsh_ref_manage">
-    <div className="dsh_ref_section_head"><div><h3>Manage synced conversations</h3><p>Everything mirrored locally, including conversations the provider no longer lists.</p></div></div>
+    <div className="dsh_ref_section_head"><div><h3>{t('manage.title')}</h3><p>{t('manage.detail')}</p></div></div>
     <div className="dsh_ref_manage_filters">
-      <input placeholder="Search titles…" value={text} onChange={event => { setText(event.target.value) }} />
+      <input placeholder={t('manage.searchPlaceholder')} value={text} onChange={event => { setText(event.target.value) }} />
       <select value={browseState?.provider ?? ''} onChange={event => {
         void browse(text, (event.target.value || undefined) as ChatProvider | undefined, 0)
       }}>
-        <option value="">All providers</option>
+        <option value="">{t('manage.allProviders')}</option>
         {PROVIDERS.map(provider => <option key={provider} value={provider}>{PROVIDER_LABEL[provider]}</option>)}
       </select>
     </div>
     {items.length === 0
-      ? <p className="dsh_ref_manage_empty">{page === undefined ? 'Loading…' : 'No synced conversations match.'}</p>
+      ? <p className="dsh_ref_manage_empty">{page === undefined ? t('manage.loading') : t('manage.empty')}</p>
       : <ul className="dsh_ref_manage_list">
         {items.map(item => <li className="dsh_ref_manage_row" key={item.uriId}>
           <div className="dsh_ref_manage_main">
             <div className="dsh_ref_manage_title_row">
               <span className="dsh_ref_manage_title">{item.title}</span>
               <span className="dsh_ref_badge">{PROVIDER_LABEL[item.provider]}</span>
-              {item.remoteMissing && <span className="dsh_ref_badge is_warn">no longer listed</span>}
+              {item.remoteMissing && <span className="dsh_ref_badge is_warn">{t('manage.noLongerListed')}</span>}
             </div>
-            <span className="dsh_ref_manage_meta">updated {formatUpdatedDate(item.updatedAt)}</span>
+            <span className="dsh_ref_manage_meta">{t('manage.updated', { date: formatUpdatedDate(item.updatedAt, t) })}</span>
           </div>
           <button type="button" className="is_danger" disabled={syncing}
-            title={syncing ? 'Cannot delete while a sync is running' : undefined}
+            title={syncing ? t('manage.deleteDisabled') : undefined}
             onClick={() => {
-              if (window.confirm(`Delete "${item.title}" from the local mirror? A later sync may bring it back.`)) void deleteConversation(item.uriId)
-            }}>Delete</button>
+              if (window.confirm(t('manage.deleteConfirm', { title: item.title }))) void deleteConversation(item.uriId)
+            }}>{t('manage.delete')}</button>
         </li>)}
       </ul>}
     <div className="dsh_ref_pagination">
-      <button type="button" disabled={offset === 0} onClick={() => { void browse(text, browseState?.provider, Math.max(0, offset - PAGE_SIZE)) }}>Previous</button>
-      <span>{total === 0 ? '0 of 0' : `${offset + 1}–${offset + items.length} of ${total}`}</span>
-      <button type="button" disabled={offset + items.length >= total} onClick={() => { void browse(text, browseState?.provider, offset + PAGE_SIZE) }}>Next</button>
+      <button type="button" disabled={offset === 0} onClick={() => { void browse(text, browseState?.provider, Math.max(0, offset - PAGE_SIZE)) }}>{t('manage.previous')}</button>
+      <span>{total === 0 ? t('manage.paginationEmpty') : t('manage.pagination', { start: offset + 1, end: offset + items.length, total })}</span>
+      <button type="button" disabled={offset + items.length >= total} onClick={() => { void browse(text, browseState?.provider, offset + PAGE_SIZE) }}>{t('manage.next')}</button>
     </div>
   </div>
 }
 
-function formatUpdatedDate(value: string): string {
+function formatUpdatedDate(value: string, t: T): string {
   const date = new Date(value)
-  return Number.isNaN(date.getTime()) ? 'unknown date' : date.toLocaleDateString()
+  return Number.isNaN(date.getTime()) ? t('conversation.unknownDate') : date.toLocaleDateString()
 }
 
 function CheckRow({ label, detail, ready }: { label: string; detail: string; ready: boolean }) {
-  return <div className="dsh_ref_check"><span className={ready ? 'is_ready' : ''}>{ready ? '✓' : '!'}</span><div><strong>{label}</strong><small>{detail}</small></div></div>
+  return <div className="dsh_ref_check"><span className={ready ? 'is_ready' : ''}>{ready ? '✓' : '!'}</span><div><strong>{label}</strong><small className={ready ? undefined : 'is_warning'}>{detail}</small></div></div>
 }
 
 function ProviderCard({ provider, stats, busy, autoSync, onSync, index, t }: { provider: ChatProvider; stats?: ProviderStats; busy: boolean; autoSync: boolean; onSync(mode: 'incremental' | 'full'): void; index: number; t: T }) {
   const label = PROVIDER_LABEL[provider]
   const date = stats?.lastSyncedAt ? new Date(stats.lastSyncedAt).toLocaleString() : t('provider.neverSynced')
-  return <article className={`dsh_ref_provider dsh_ref_provider_${provider}`} style={{ '--dsh-ref-index': index } as CSSProperties}><div className="dsh_ref_provider_top"><span className="dsh_ref_provider_mark"><ProviderLogo provider={provider} /></span><span className={`dsh_ref_status_dot is_${stats?.status || 'empty'}`} /><span>{stats?.status === 'error' ? t('provider.error') : stats?.status === 'syncing' ? t('provider.syncing') : stats?.conversations ? t('provider.connected') : t('provider.notSynced')}</span></div><h4>{label}</h4><strong>{stats?.conversations ?? 0}</strong><p>{t('provider.localConversations')}</p><small>{t('provider.lastUpdated', { date })}</small>{stats?.error && <em>{stats.error}</em>}<div className="dsh_ref_provider_foot"><span>{autoSync ? t('provider.autoSyncOn') : t('provider.manualSync')}</span><div className="dsh_ref_provider_actions"><button type="button" disabled={busy} onClick={() => { onSync('incremental') }}>{t('provider.syncNow')}</button><button type="button" disabled={busy} onClick={() => { if (window.confirm(t('provider.fullConfirm', { provider: label }))) onSync('full') }}>{t('provider.fullResync')}</button></div></div></article>
+  return <article className={`dsh_ref_provider dsh_ref_provider_${provider}`} style={{ '--dsh-ref-index': index } as CSSProperties}><div className="dsh_ref_provider_top"><span className="dsh_ref_provider_mark"><ProviderLogo provider={provider} /></span><span className={`dsh_ref_status_dot is_${stats?.status || 'empty'}`} /><span>{stats?.status === 'error' ? t('provider.error') : stats?.status === 'syncing' ? t('provider.syncing') : stats?.conversations ? t('provider.connected') : t('provider.notSynced')}</span></div><h4>{label}</h4><strong>{stats?.conversations ?? 0}<span>{t('provider.localConversations')}</span></strong><small>{t('provider.lastUpdated', { date })}</small>{stats?.error && <em>{stats.error}</em>}<div className="dsh_ref_provider_foot"><span>{autoSync ? t('provider.autoSyncOn') : t('provider.manualSync')}</span><div className="dsh_ref_provider_actions"><button type="button" disabled={busy} onClick={() => { onSync('incremental') }}>{t('provider.syncNow')}</button><button type="button" disabled={busy} onClick={() => { if (window.confirm(t('provider.fullConfirm', { provider: label }))) onSync('full') }}>{t('provider.fullResync')}</button></div></div></article>
 }

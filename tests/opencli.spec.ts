@@ -20,6 +20,18 @@ describe('OpenCLI execFile boundary', () => {
     expect(rows[0]?.conversationId).toBe(id)
   })
 
+  it('parses account identity and history from one sync-index command', async () => {
+    const script = await fake(`process.stdout.write(JSON.stringify([
+      {kind:'identity',identity:'account-1',sinceApplied:'2026-08-18T00:00:00.000Z'},
+      {kind:'conversation',id:'c1',title:'One',url:'https://example.test/c1',createdAt:'',updatedAt:'2026-08-18T01:02:03.004Z',messageCount:2,cursor:'',partial:false}
+    ]))`)
+    const runner = new OpenCliRunner({ executable: process.execPath, prefixArgs: [script] })
+    const index = await runner.syncIndex('chatgpt', undefined, '2026-08-18T00:00:00.000Z', 'old-scope')
+    expect(index.accountScope).toMatch(/^[a-f0-9]{64}$/)
+    expect(index.sinceApplied).toBe('2026-08-18T00:00:00.000Z')
+    expect(index.rows).toEqual([expect.objectContaining({ provider: 'chatgpt', id: 'c1', title: 'One' })])
+  })
+
   it('enforces the stdout cap', async () => {
     const script = await fake(`process.stdout.write('['+' '.repeat(10000)+']')`)
     const runner = new OpenCliRunner({ executable: process.execPath, prefixArgs: [script], maxStdoutBytes: 1000 })

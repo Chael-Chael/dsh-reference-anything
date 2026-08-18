@@ -219,14 +219,30 @@ export class ConversationSyncManager {
     let accountScope = ''
     let progress: ProgressWriter | undefined
     try {
-      accountScope = await retry(() => runner.whoami(provider, signal), signal)
+      const sinceFor = (scope: string): string => mode === 'incremental' ? this.listingSince(provider, scope) : ''
+      let rows: ProviderConversationRow[]
+      let since = ''
+      if (typeof runner.syncIndex === 'function') {
+        // The first pass has no account scope yet, so use the newest known
+        // scope for this provider only as a listing hint. The adapter returns
+        // the authoritative scope together with the rows in the same tab.
+        const knownScope = this.latestAccountScope(provider)
+        const index = await retry(() => runner.syncIndex(provider, signal, sinceFor(knownScope), knownScope), signal)
+        accountScope = index.accountScope
+        rows = index.rows
+        since = index.sinceApplied
+      } else {
+        // Compatibility for injected runners and adapters predating
+        // `sync-index`; production OpenCliRunner always takes the branch above.
+        accountScope = await retry(() => runner.whoami(provider, signal), signal)
+        since = sinceFor(accountScope)
+        rows = await retry(() => runner.history(provider, signal, since), signal)
+      }
       await this.store.syncStates.delete(`${provider}:pending`)
       // Incremental means incremental at both levels: list only recently
       // changed rows when a trustworthy watermark exists, then fetch detail
       // only for rows whose provider timestamp changed. Full always enumerates
       // and re-fetches everything, replacing each current local revision.
-      const since = mode === 'incremental' ? this.listingSince(provider, accountScope) : ''
-      const rows = await retry(() => runner.history(provider, signal, since), signal)
       const seen = new Set(rows.map(row => row.id))
       job.total += rows.length
       const providerProgress = this.providerProgress(job, provider)
@@ -359,6 +375,18 @@ export class ConversationSyncManager {
         await save('running')
       },
     }
+  }
+
+  /** Newest durable account scope for a provider, used only as an incremental listing hint. */
+  private latestAccountScope(provider: ChatProvider): string {
+    let scope = ''
+    let newest = 0
+    for (const [, state] of this.store.syncStates.entries()) {
+      if (state.provider !== provider || !state.accountScope) continue
+      const at = Date.parse(state.lastSyncAt || '')
+      if (!Number.isNaN(at) && at >= newest) { newest = at; scope = state.accountScope }
+    }
+    return scope
   }
 
   private providerProgress(job: SyncJob, provider: ChatProvider): ProviderSyncProgress {

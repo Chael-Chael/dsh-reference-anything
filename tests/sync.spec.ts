@@ -109,6 +109,23 @@ describe('auto-sync resilience', () => {
     })
   })
 
+  it('uses the combined account-and-history command when the runner provides it', async () => {
+    const db = store({ historyMode: 'metadata-only' })
+    let combined = 0
+    let legacy = 0
+    const manager = new ConversationSyncManager(db, () => fakeRunner({
+      syncIndex: async provider => {
+        combined++
+        return { accountScope: `scope-${provider}`, sinceApplied: '', rows: [row(provider, 'c1')] }
+      },
+      whoami: async () => { legacy++; return 'legacy' },
+      history: async () => { legacy++; return [] },
+    }))
+    await settled(manager, manager.start(['chatgpt'], 'full'))
+    expect(combined).toBe(1)
+    expect(legacy).toBe(0)
+  })
+
   it('uses a recent listing watermark for incremental sync but not full resync', async () => {
     const db = store()
     const since: string[] = []

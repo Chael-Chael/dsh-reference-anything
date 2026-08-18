@@ -40,9 +40,14 @@ describe('conversation client references', () => {
     expect(parseQuery('caching')).toEqual({ query: 'caching' })
   })
 
-  it('describes a title hit with its provider and updated date', () => {
-    const updatedAt = '2026-08-17T00:00:00.000Z'
-    expect(describeRow(searchRow({ updatedAt }))).toBe(`ChatGPT · ${new Date(updatedAt).toLocaleDateString()}`)
+  it('describes a title hit with its provider and updated time through seconds', () => {
+    const updatedAt = '2026-08-17T00:00:27.456Z'
+    const displayed = new Date(updatedAt).toLocaleString(undefined, {
+      year: 'numeric', month: 'numeric', day: 'numeric',
+      hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false,
+    })
+    expect(describeRow(searchRow({ updatedAt }))).toBe(`ChatGPT · ${displayed}`)
+    expect(displayed).toMatch(/27/)
   })
 
   it('shows the matched excerpt after the updated date when the title did not match', () => {
@@ -88,7 +93,7 @@ describe('conversation client references', () => {
     expect(outcome).toMatchObject({ insert: { source: CONVERSATION_SOURCE } })
   })
 
-  it('honors the configured @ group order and maximum item count', async () => {
+  it('honors the configured @ group order and prefetches expandable results', async () => {
     const requested: number[] = []
     const source = createConversationSource(async (_query, _provider, _signal, limit) => {
       requested.push(limit)
@@ -96,7 +101,7 @@ describe('conversation client references', () => {
     }, undefined, { order: 77, limit: 5 })
     await source.candidates({ sessionId: 'session-1' as never }, { query: '', position: 'inline', signal: new AbortController().signal })
     expect(source.order).toBe(77)
-    expect(requested).toEqual([5])
+    expect(requested).toEqual([50])
   })
 
   it('inserts a visual composer chip while serializing the canonical mention on send', async () => {

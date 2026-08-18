@@ -38,6 +38,7 @@ export interface OpenCliHealth {
 }
 
 export interface BrowserProfile { id: string; alias?: string; connected: boolean; isDefault: boolean }
+export interface ProviderIndex { accountScope: string; sinceApplied: string; rows: ProviderConversationRow[] }
 
 export class OpenCliRunner {
   readonly executable: string
@@ -73,14 +74,21 @@ export class OpenCliRunner {
    */
   async history(provider: ChatProvider, signal?: AbortSignal, since = ''): Promise<ProviderConversationRow[]> {
     const rows = await this.historyRows(provider, since, signal)
-    return rows.map((raw) => ({
-      provider,
-      accountScope: '',
-      id: required(raw, 'id'), title: required(raw, 'title'), url: required(raw, 'url'),
-      createdAt: stringField(raw, 'createdAt'), updatedAt: stringField(raw, 'updatedAt'),
-      messageCount: integerField(raw, 'messageCount'), cursor: stringField(raw, 'cursor'),
-      partial: booleanField(raw, 'partial'),
-    }))
+    return conversationRows(provider, rows)
+  }
+
+  /** Resolve account identity and history through one OpenCLI browser command. */
+  async syncIndex(provider: ChatProvider, signal?: AbortSignal, since = '', accountScope = ''): Promise<ProviderIndex> {
+    const args = [...(since ? ['--since', since] : []), ...(accountScope ? ['--accountScope', accountScope] : [])]
+    const rows = await this.json(SITE[provider], 'sync-index', args, signal)
+    const identity = rows.find(row => stringField(row, 'kind') === 'identity')
+    const stableIdentity = stringField(identity, 'identity')
+    if (!stableIdentity) throw new OpenCliError(`${provider} returned no stable account identity`, 'PROVIDER_NOT_LOGGED_IN')
+    return {
+      accountScope: createHash('sha256').update(`${provider}\0${stableIdentity}`).digest('hex'),
+      sinceApplied: stringField(identity, 'sinceApplied'),
+      rows: conversationRows(provider, rows.filter(row => stringField(row, 'kind') === 'conversation')),
+    }
   }
 
   async detail(provider: ChatProvider, id: string, signal?: AbortSignal): Promise<ProviderTurnRow[]> {
@@ -205,6 +213,16 @@ function resolveInvocation(configured: string): { file: string; prefix: string[]
 function stringField(row: Record<string, unknown> | undefined, key: string, fallback = ''): string {
   const value = row?.[key]
   return value === undefined || value === null ? fallback : String(value)
+}
+function conversationRows(provider: ChatProvider, rows: readonly Record<string, unknown>[]): ProviderConversationRow[] {
+  return rows.map(raw => ({
+    provider,
+    accountScope: '',
+    id: required(raw, 'id'), title: required(raw, 'title'), url: required(raw, 'url'),
+    createdAt: stringField(raw, 'createdAt'), updatedAt: stringField(raw, 'updatedAt'),
+    messageCount: integerField(raw, 'messageCount'), cursor: stringField(raw, 'cursor'),
+    partial: booleanField(raw, 'partial'),
+  }))
 }
 function required(row: Record<string, unknown>, key: string): string {
   const value = stringField(row, key).trim()

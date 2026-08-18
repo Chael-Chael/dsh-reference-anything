@@ -6,9 +6,9 @@ import { createSnapshotStore, type ClientContext } from '@deepseek-ai/dsh-client
 import type { InputTriggerServiceContract } from '@deepseek-ai/dsh-client-ui-input-trigger/client'
 import { defaultPickerSettings, samePickerSettings, type ChatProvider, type PickerSettings, type SettingsRecord } from '../wire.ts'
 import { REFERENCE_ANYTHING_REMOTE, type ReferenceAnythingRemoteFace, type SearchResult, type SessionCandidate, type SyncStatus } from './remote.ts'
-import { CONVERSATION_SOURCE, conversationReferenceUri, createCommandSource, createConversationSource, createSearchDebounce, createSessionSource, createSkillSource, createWorkspaceSource } from './source.ts'
+import { COMMAND_SOURCE, CONVERSATION_SOURCE, FILE_SOURCE, SESSION_SOURCE, SKILL_SOURCE, conversationReferenceUri, createCommandSource, createConversationSource, createSearchDebounce, createSessionSource, createSkillSource, createWorkspaceSource } from './source.ts'
 import { ConversationsDock, ConversationSettings, PAGE_SIZE, type SettingsSnapshot } from './components.tsx'
-import { adoptAdaptiveChipCaret, adoptConversationMentionProjection, adoptConversationSyncActionProjection, adoptReferenceIconProjection, adoptStyles } from './styles.ts'
+import { adoptAdaptiveChipCaret, adoptConversationMentionProjection, adoptConversationSyncActionProjection, adoptMenuExpansionProjection, adoptMenuGroupTitleProjection, adoptReferenceIconProjection, adoptStyles } from './styles.ts'
 import { en, REFERENCE_ANYTHING_NS, zh } from './locale.ts'
 
 // `ctx.remote.commands` is a separately injected Remote face. Declaring only
@@ -30,6 +30,7 @@ export function apply(ctx: ClientContext): void {
   const t = ctx.locale.bind(REFERENCE_ANYTHING_NS)
   let applySources: ((picker: PickerSettings | undefined) => void) | undefined
   ctx.effect(() => ctx.locale.register(REFERENCE_ANYTHING_NS, { zh, en }), 'reference-anything.client.dictionaries')
+  ctx.effect(() => adoptMenuGroupTitleProjection(t), 'reference-anything.client.menu-group-localization')
 
   const unwrap = <T>(result: { ok: true; value: T } | { ok: false; error: { code: string; message: string } }): T => {
     if (!result.ok) throw new Error(`${result.error.code}: ${result.error.message}`)
@@ -115,7 +116,9 @@ export function apply(ctx: ClientContext): void {
   const connection = ctx.get('connection') as ConnectionHandle
   let sourceDisposers: Array<() => void> = []
   let appliedPicker: PickerSettings | undefined
+  let menuPicker = defaultPickerSettings()
   const registerSources = (picker: PickerSettings) => {
+    menuPicker = picker
     const source = createConversationSource((query, provider, signal, limit) =>
       conversationSearch.run(query, signal, async () => {
         // Re-read after the debounce: the Remote can unmount with its scope.
@@ -139,7 +142,7 @@ export function apply(ctx: ClientContext): void {
     if (picker.sessions.enabled) disposers.push(inputTriggers.registerSource(createSessionSource((sessionId, query, signal) =>
       sessionSearch.run(query, signal, async () => {
         if (!remote) return []
-        return unwrap(await remote.sessionSearch(sessionId, { query, limit: picker.sessions.limit }, signal))
+        return unwrap(await remote.sessionSearch(sessionId, { query, limit: 50 }, signal))
       }), t, picker.sessions)))
     return disposers
   }
@@ -185,12 +188,22 @@ export function apply(ctx: ClientContext): void {
   }
   ctx.effect(() => adoptConversationSyncActionProjection({
     source: CONVERSATION_SOURCE,
-    idleLabel: t('menu.syncAll'), listingLabel: t('menu.syncListing'),
+    idleLabel: t('menu.syncAll'), listingLabel: (completed, total) => t('menu.syncListingProgress', { completed, total }),
     progressLabel: (completed, total) => t('menu.syncProgress', { completed, total }),
+    completeLabel: t('sync.complete'), partialLabel: t('sync.partial'),
+    failedLabel: t('sync.failed'), cancelledLabel: t('sync.cancelled'),
     start: () => startSync(['chatgpt', 'claude', 'gemini', 'deepseek', 'grok', 'kimi'], 'incremental'),
     getStatus: () => scope.getSnapshot().sync,
     subscribe: listener => scope.subscribe(listener),
   }), 'reference-anything.client.conversation-sync-action')
+  const menuSourceKeys: Readonly<Record<string, keyof PickerSettings>> = {
+    [COMMAND_SOURCE]: 'commands', [SKILL_SOURCE]: 'skills', [FILE_SOURCE]: 'files',
+    [SESSION_SOURCE]: 'sessions', [CONVERSATION_SOURCE]: 'conversations',
+  }
+  ctx.effect(() => adoptMenuExpansionProjection({
+    sources: Object.keys(menuSourceKeys), label: t('menu.expandAll'),
+    getVisibleLimit: source => menuPicker[menuSourceKeys[source] ?? 'conversations'].limit, batchSize: 5,
+  }), 'reference-anything.client.menu-expansion')
   ctx.slots.inject('settings.section', () => ctx.slots.register({
     name: 'settings.section', id: 'reference-anything', order: 56, label: () => t('settings.title'), locale: REFERENCE_ANYTHING_NS,
     inject: () => ({
