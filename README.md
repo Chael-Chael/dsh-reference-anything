@@ -23,7 +23,6 @@ ChatGPT / Claude / Gemini / DeepSeek / Grok / Kimi
 前置条件：
 
 - 已全局安装 `dsh` 和 `opencli`。
-- 已安装并连接 OpenCLI 官方 Browser Bridge 扩展。
 - 要同步的平台已在所选 Chrome Profile 中登录。
 
 安装 DSH 插件：
@@ -32,13 +31,15 @@ ChatGPT / Claude / Gemini / DeepSeek / Grok / Kimi
 dsh plugin --profile web add D:\dsh-reference-anything
 ```
 
-显式安装仓库内的 OpenCLI 适配器：
+安装 DSH 插件后，打开 DSH Web 的 `Settings → Conversations → 可用性检查`，点击**「一键安装」**：它会自动安装仓库内的 OpenCLI 适配器（等价于 `opencli plugin install file:///D:/dsh-reference-anything/opencli-plugin`）、在需要时启动 Browser Bridge 守护进程，并打开 OpenCLI Browser Bridge 扩展的 Chrome Web Store 安装页（`https://chromewebstore.google.com/detail/opencli/ildkmabpimmkaediidaifkhjpohdnifk`）。在商店页点击 “Add to Chrome” 后，回到设置页点击「重新检查」，扩展即显示为已连接。
+
+也可以手动分别完成：
 
 ```powershell
 opencli plugin install file:///D:/dsh-reference-anything/opencli-plugin
 ```
 
-DSH 插件安装阶段不会静默修改 `~/.opencli/plugins`。如果 OpenCLI 发现多个浏览器 Profile，请在 DSH 的 Conversations 设置页选择一个 Profile，再执行同步。
+浏览器扩展无法由网页静默安装，必须通过 Chrome Web Store（或从 [OpenCLI Releases](https://github.com/jackwener/opencli/releases) 手动 “Load unpacked”）安装。DSH 插件安装阶段不会静默修改 `~/.opencli/plugins`。如果 OpenCLI 发现多个浏览器 Profile，请在 DSH 的 Conversations 设置页选择一个 Profile，再执行同步。
 
 ## 使用
 

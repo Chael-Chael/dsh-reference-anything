@@ -2,7 +2,7 @@ import { chmod, mkdtemp, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { describe, expect, it } from 'vitest'
-import { OpenCliError, OpenCliRunner } from '../src/opencli.ts'
+import { OpenCliError, OpenCliRunner, parseDaemonStatus } from '../src/opencli.ts'
 
 async function fake(source: string): Promise<string> {
   const root = await mkdtemp(join(tmpdir(), 'opencli-fake-'))
@@ -52,7 +52,10 @@ describe('OpenCLI execFile boundary', () => {
       else if(args==='plugin list') process.stdout.write('opencli-plugin-dsh-chat-history')
     `)
     const health = await new OpenCliRunner({ executable: process.execPath, prefixArgs: [script] }).health()
-    expect(health).toMatchObject({ version: '1.8.6', daemon: '', pluginInstalled: true, daemonError: 'bridge offline' })
+    expect(health).toMatchObject({
+      version: '1.8.6', daemon: '', pluginInstalled: true, daemonError: 'bridge offline',
+      daemonRunning: false, extensionConnected: false, extensionState: 'daemon-offline',
+    })
   })
 
   it('discovers connected and saved Browser Bridge profiles', async () => {
@@ -62,5 +65,61 @@ describe('OpenCLI execFile boundary', () => {
       { id: 'abc', alias: 'work', connected: true, isDefault: true },
       { id: 'xyz', alias: 'personal', connected: false, isDefault: false },
     ])
+  })
+})
+
+describe('parseDaemonStatus', () => {
+  it('parses a connected extension with a version', () => {
+    expect(parseDaemonStatus([
+      'Daemon: running (PID 1234)',
+      'Version: 1.8.6',
+      'Extension: connected (v1.0.22)',
+      'Port: 19825',
+    ].join('\n'))).toEqual({
+      daemonRunning: true, extensionState: 'connected', extensionConnected: true, extensionVersion: '1.0.22',
+    })
+  })
+
+  it('treats a stale daemon as running', () => {
+    expect(parseDaemonStatus('Daemon: stale (PID 9)\nExtension: connected (version unknown)')).toEqual({
+      daemonRunning: true, extensionState: 'connected', extensionConnected: true,
+    })
+  })
+
+  it('parses a connected extension without a version', () => {
+    expect(parseDaemonStatus('Daemon: running (PID 1)\nExtension: connected (version unknown)')).toMatchObject({
+      daemonRunning: true, extensionConnected: true, extensionState: 'connected',
+    })
+    expect(parseDaemonStatus('Daemon: running (PID 1)\nExtension: connected (version unknown)').extensionVersion).toBeUndefined()
+  })
+
+  it('parses multiple profiles with none selected', () => {
+    expect(parseDaemonStatus('Daemon: running (PID 1)\nExtension: 2 profiles connected, none selected — run `opencli profile use <name>`')).toEqual({
+      daemonRunning: true, extensionState: 'profile-required', extensionConnected: false, profileCount: 2,
+    })
+  })
+
+  it('parses a disconnected requested profile', () => {
+    expect(parseDaemonStatus('Daemon: running (PID 1)\nExtension: requested profile not connected — run `opencli profile use <name>`')).toMatchObject({
+      daemonRunning: true, extensionState: 'profile-disconnected', extensionConnected: false,
+    })
+  })
+
+  it('parses a plain disconnected extension', () => {
+    expect(parseDaemonStatus('Daemon: running (PID 1)\nExtension: disconnected')).toMatchObject({
+      daemonRunning: true, extensionState: 'disconnected', extensionConnected: false,
+    })
+  })
+
+  it('parses a not-running daemon, including its single-line output', () => {
+    expect(parseDaemonStatus('Daemon: not running')).toEqual({
+      daemonRunning: false, extensionState: 'daemon-offline', extensionConnected: false,
+    })
+  })
+
+  it('degrades empty output to daemon-offline', () => {
+    expect(parseDaemonStatus('')).toEqual({
+      daemonRunning: false, extensionState: 'daemon-offline', extensionConnected: false,
+    })
   })
 })

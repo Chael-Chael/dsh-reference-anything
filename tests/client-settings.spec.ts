@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest'
 import { defaultPickerSettings, samePickerSettings } from '../src/wire.ts'
+import { OPENCLI_EXTENSION_STORE_URL, setupReady } from '../src/client/health.ts'
+import type { Health } from '../src/client/remote.ts'
+
+const healthy: Health = {
+  version: '1.8.6', daemon: 'Daemon: running (PID 1)', pluginInstalled: true,
+  daemonRunning: true, extensionConnected: true, extensionState: 'connected',
+}
 
 describe('settings source registration guard', () => {
   it('treats an unchanged picker returned by an unrelated settings save as equal', () => {
@@ -15,5 +22,20 @@ describe('settings source registration guard', () => {
     changed.conversations.enabled = false
 
     expect(samePickerSettings(original, changed)).toBe(false)
+  })
+})
+
+describe('browser extension install', () => {
+  it('points the store URL at the OpenCLI Browser Bridge extension', () => {
+    expect(OPENCLI_EXTENSION_STORE_URL).toBe('https://chromewebstore.google.com/detail/opencli/ildkmabpimmkaediidaifkhjpohdnifk')
+  })
+
+  it('is ready only when every bridge prerequisite is satisfied', () => {
+    expect(setupReady(healthy)).toBe(true)
+    expect(setupReady(undefined)).toBe(false)
+    expect(setupReady({ ...healthy, version: '' })).toBe(false)
+    expect(setupReady({ ...healthy, daemonRunning: false })).toBe(false)
+    expect(setupReady({ ...healthy, extensionConnected: false })).toBe(false)
+    expect(setupReady({ ...healthy, pluginInstalled: false })).toBe(false)
   })
 })

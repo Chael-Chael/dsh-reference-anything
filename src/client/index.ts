@@ -10,6 +10,7 @@ import { COMMAND_SOURCE, CONVERSATION_SOURCE, FILE_SOURCE, SESSION_SOURCE, SKILL
 import { ConversationsDock, ConversationSettings, PAGE_SIZE, type SettingsSnapshot } from './components.tsx'
 import { adoptAdaptiveChipCaret, adoptConversationMentionProjection, adoptConversationSyncActionProjection, adoptMenuExpansionProjection, adoptMenuGroupTitleProjection, adoptReferenceIconProjection, adoptStyles } from './styles.ts'
 import { en, REFERENCE_ANYTHING_NS, zh } from './locale.ts'
+import { OPENCLI_EXTENSION_STORE_URL } from './health.ts'
 
 // `ctx.remote.commands` is a separately injected Remote face. Declaring only
 // `remote` lets the @ source register, but its candidate request can fail and
@@ -208,6 +209,22 @@ export function apply(ctx: ClientContext): void {
     name: 'settings.section', id: 'reference-anything', order: 56, label: () => t('settings.title'), locale: REFERENCE_ANYTHING_NS,
     inject: () => ({
       hooks: { scope }, save, sync: startSync, refresh, browse, deleteConversation, refreshStats,
+      setupAll: async () => {
+        if (!remote) return
+        try {
+          const health = scope.getSnapshot().health
+          // The adapter install is idempotent, but skip it when already present
+          // so a healthy deployment isn't needlessly rewritten.
+          if (health && !health.pluginInstalled) unwrap(await remote.installAdapter())
+          if (health && !health.daemonRunning) unwrap(await remote.restartDaemon())
+          // Chrome cannot be told to install an extension programmatically; the
+          // "one-click" step is opening the Web Store listing for the user's
+          // single "Add to Chrome" press.
+          window.open(OPENCLI_EXTENSION_STORE_URL, '_blank', 'noopener,noreferrer')
+          await refresh()
+          scope.set({ ...scope.getSnapshot(), notice: t('notice.oneClickSetup') })
+        } catch (error) { scope.set({ ...scope.getSnapshot(), error: message(error) }) }
+      },
       install: async () => { try { if (!remote) return; unwrap(await remote.installAdapter()); await refresh(); scope.set({ ...scope.getSnapshot(), notice: t('notice.adapterInstalled') }) } catch (error) { scope.set({ ...scope.getSnapshot(), error: message(error) }) } },
       restartDaemon: async () => { try { if (!remote) return; unwrap(await remote.restartDaemon()); await refresh(); scope.set({ ...scope.getSnapshot(), notice: t('notice.daemonRestarted') }) } catch (error) { scope.set({ ...scope.getSnapshot(), error: message(error) }) } },
       cancel: async () => { try { if (remote && currentJob) unwrap(await remote.syncCancel({ jobId: currentJob })); await pollJob() } catch (error) { scope.set({ ...scope.getSnapshot(), error: message(error) }) } },
