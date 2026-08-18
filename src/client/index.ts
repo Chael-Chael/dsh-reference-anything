@@ -4,7 +4,7 @@ import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
 import type {} from '@deepseek-ai/dsh-client-locale/client'
 import { createSnapshotStore, type ClientContext } from '@deepseek-ai/dsh-client-runtime/client'
 import type { InputTriggerServiceContract } from '@deepseek-ai/dsh-client-ui-input-trigger/client'
-import type { ChatProvider, SettingsRecord } from '../wire.ts'
+import { defaultPickerSettings, type ChatProvider, type PickerSettings, type SettingsRecord } from '../wire.ts'
 import { REFERENCE_ANYTHING_REMOTE, type ReferenceAnythingRemoteFace, type SyncStatus } from './remote.ts'
 import { conversationReferenceUri, createCommandSource, createConversationSource, createSessionSource, createSkillSource, createWorkspaceSource } from './source.ts'
 import { ConversationsDock, ConversationSettings, PAGE_SIZE, type SettingsSnapshot } from './components.tsx'
@@ -23,11 +23,12 @@ export function apply(ctx: ClientContext): void {
   ctx.effect(() => adoptAdaptiveChipCaret(), 'reference-anything.client.adaptive-chip-caret')
   let remote: ReferenceAnythingRemoteFace | undefined
   const scope = createSnapshotStore<SettingsSnapshot>({
-    settings: { opencliPath: 'opencli', profile: '', detailConcurrency: 2, autoSync: false, autoSyncMinutes: 60 }, loading: true,
+    settings: { opencliPath: 'opencli', profile: '', detailConcurrency: 2, autoSync: false, autoSyncMinutes: 60, historyMode: 'metadata-only' }, loading: true,
   })
   let currentJob = ''
   let poll: ReturnType<typeof setInterval> | undefined
   const t = ctx.locale.bind(REFERENCE_ANYTHING_NS)
+  let applySources: ((picker: PickerSettings | undefined) => void) | undefined
   ctx.effect(() => ctx.locale.register(REFERENCE_ANYTHING_NS, { zh, en }), 'reference-anything.client.dictionaries')
 
   const unwrap = <T>(result: { ok: true; value: T } | { ok: false; error: { code: string; message: string } }): T => {
@@ -43,7 +44,9 @@ export function apply(ctx: ClientContext): void {
       let stats = scope.getSnapshot().stats
       let statsUnavailable = false
       try { stats = unwrap(await remote.stats()) } catch { statsUnavailable = true }
-      scope.set({ ...scope.getSnapshot(), settings: unwrap(settings), health: unwrap(health), profiles, stats,
+      const currentSettings = unwrap(settings)
+      applySources?.(currentSettings.picker)
+      scope.set({ ...scope.getSnapshot(), settings: currentSettings, health: unwrap(health), profiles, stats,
         error: statsUnavailable && !stats ? 'Local conversation statistics are unavailable until the DSH host is restarted.' : undefined, loading: false })
     } catch (error) { scope.set({ ...scope.getSnapshot(), error: error instanceof Error ? error.message : String(error), loading: false }) }
   }
@@ -107,32 +110,37 @@ export function apply(ctx: ClientContext): void {
 
   const inputTriggers = ctx.get('inputTriggers') as InputTriggerServiceContract
   const connection = ctx.get('connection') as ConnectionHandle
-  const registerSources = () => {
-    const source = createConversationSource(async (query, provider, signal) => {
+  let sourceDisposers: Array<() => void> = []
+  const registerSources = (picker: PickerSettings) => {
+    const source = createConversationSource(async (query, provider, signal, limit) => {
       if (!remote) return []
-      const rows = unwrap(await remote.search({ query, ...(provider ? { provider } : {}), limit: 12 }, signal))
+      const rows = unwrap(await remote.search({ query, ...(provider ? { provider } : {}), limit }, signal))
       for (const row of rows) urlByUri.set(conversationReferenceUri(row.uriId), row.url)
       return rows
-    }, t)
-    return [
-      inputTriggers.registerSource(source),
-      inputTriggers.registerSource(createCommandSource(async (sessionId, signal) => { signal.throwIfAborted(); return unwrap(await ctx.remote.commands.list(sessionId)) }, t)),
-      inputTriggers.registerSource(createSkillSource(async (sessionId, signal) => {
+    }, t, picker.conversations)
+    const disposers: Array<() => void> = []
+    if (picker.conversations.enabled) disposers.push(inputTriggers.registerSource(source))
+    if (picker.commands.enabled) disposers.push(inputTriggers.registerSource(createCommandSource(async (sessionId, signal) => { signal.throwIfAborted(); return unwrap(await ctx.remote.commands.list(sessionId)) }, t, picker.commands)))
+    if (picker.skills.enabled) disposers.push(inputTriggers.registerSource(createSkillSource(async (sessionId, signal) => {
         const { result } = await connection.api.skills.list({ sessionId }, signal)
         if (!result.ok) throw new Error(`${result.error.code}: ${result.error.message}`)
         return result.value.skills
-      }, t)),
-      inputTriggers.registerSource(createWorkspaceSource(async (sessionId, signal) => {
+      }, t, picker.skills)))
+    if (picker.files.enabled) disposers.push(inputTriggers.registerSource(createWorkspaceSource(async (sessionId, signal) => {
         if (!remote) return []
         return unwrap(await remote.workspaceSearch(sessionId, signal))
-      }, t)),
-      inputTriggers.registerSource(createSessionSource(async (sessionId, query, signal) => {
+      }, t, picker.files)))
+    if (picker.sessions.enabled) disposers.push(inputTriggers.registerSource(createSessionSource(async (sessionId, query, signal) => {
         if (!remote) return []
-        return unwrap(await remote.sessionSearch(sessionId, { query, limit: 12 }, signal))
-      }, t)),
-    ]
+        return unwrap(await remote.sessionSearch(sessionId, { query, limit: picker.sessions.limit }, signal))
+      }, t, picker.sessions)))
+    return disposers
   }
-  const sourceDisposers = registerSources()
+  applySources = (picker) => {
+    for (const dispose of sourceDisposers) dispose()
+    sourceDisposers = registerSources(picker ?? defaultPickerSettings())
+  }
+  applySources(undefined)
   ctx.effect(() => () => { for (const dispose of sourceDisposers) dispose() }, 'reference-anything.client.sources')
 
   ctx.slots.inject('conversation.input.dock', () => ctx.slots.register({
@@ -144,6 +152,7 @@ export function apply(ctx: ClientContext): void {
     if (!remote) return
     try {
       const value = unwrap(await remote.settingsUpdate(settings))
+      applySources?.(value.picker)
       scope.set({ ...scope.getSnapshot(), settings: value, error: undefined, notice: t('notice.settingsSaved') })
     } catch (error) { scope.set({ ...scope.getSnapshot(), error: message(error), notice: undefined }) }
   }
@@ -161,6 +170,7 @@ export function apply(ctx: ClientContext): void {
     inject: () => ({
       hooks: { scope }, save, sync: startSync, refresh, browse, deleteConversation, refreshStats,
       install: async () => { try { if (!remote) return; unwrap(await remote.installAdapter()); await refresh(); scope.set({ ...scope.getSnapshot(), notice: t('notice.adapterInstalled') }) } catch (error) { scope.set({ ...scope.getSnapshot(), error: message(error) }) } },
+      restartDaemon: async () => { try { if (!remote) return; unwrap(await remote.restartDaemon()); await refresh(); scope.set({ ...scope.getSnapshot(), notice: t('notice.daemonRestarted') }) } catch (error) { scope.set({ ...scope.getSnapshot(), error: message(error) }) } },
       cancel: async () => { try { if (remote && currentJob) unwrap(await remote.syncCancel({ jobId: currentJob })); await pollJob() } catch (error) { scope.set({ ...scope.getSnapshot(), error: message(error) }) } },
     }),
   }, ConversationSettings))

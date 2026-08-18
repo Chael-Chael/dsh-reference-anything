@@ -36,14 +36,15 @@ describe('conversation client references', () => {
     expect(parseQuery('caching')).toEqual({ query: 'caching' })
   })
 
-  it('describes a title hit with its provider, age, and size', () => {
-    expect(describeRow(searchRow())).toBe('ChatGPT · 3d ago · 24 turns')
-    expect(describeRow(searchRow({ partial: true }))).toBe('ChatGPT · 3d ago · 24 turns · partial')
+  it('describes a title hit with its provider and updated date', () => {
+    const updatedAt = '2026-08-17T00:00:00.000Z'
+    expect(describeRow(searchRow({ updatedAt }))).toBe(`ChatGPT · ${new Date(updatedAt).toLocaleDateString()}`)
   })
 
-  it('shows the matched excerpt instead of the turn count when the title did not match', () => {
+  it('shows the matched excerpt after the updated date when the title did not match', () => {
     const described = describeRow(searchRow({ title: 'New chat', matchedVia: 'content', snippet: '…used pgvector for…' }))
-    expect(described).toBe('ChatGPT · 3d ago · …used pgvector for…')
+    expect(described).toContain('ChatGPT · ')
+    expect(described).toContain('…used pgvector for…')
     expect(described).not.toContain('turns')
   })
 
@@ -83,6 +84,17 @@ describe('conversation client references', () => {
     expect(outcome).toMatchObject({ insert: { source: CONVERSATION_SOURCE } })
   })
 
+  it('honors the configured @ group order and maximum item count', async () => {
+    const requested: number[] = []
+    const source = createConversationSource(async (_query, _provider, _signal, limit) => {
+      requested.push(limit)
+      return [searchRow({ uriId: '1' }), searchRow({ uriId: '2' })]
+    }, undefined, { order: 77, limit: 5 })
+    await source.candidates({ sessionId: 'session-1' as never }, { query: '', position: 'inline', signal: new AbortController().signal })
+    expect(source.order).toBe(77)
+    expect(requested).toEqual([5])
+  })
+
   it('inserts a visual composer chip while serializing the canonical mention on send', async () => {
     const source = createConversationSource(async () => [])
     const row = {
@@ -100,14 +112,14 @@ describe('conversation client references', () => {
       .resolves.toBe(`@[ChatGPT · BiWM SFT Loss 解释](${conversationReferenceUri(row.uriId)})`)
   })
 
-  it('groups workspace paths and serializes a compact dsh-file chip', async () => {
+  it('groups workspace paths and serializes a relative-path dsh-file chip', async () => {
     const source = createWorkspaceSource(async () => [{ path: 'src/index.ts', kind: 'file' }])
     const candidates = await source.candidates({ sessionId: 'session-1' as never }, { query: 'index', position: 'inline', signal: new AbortController().signal })
     expect(source.name).toBe('Files and folders')
     const outcome = source.onPick({ candidate: candidates[0]!, session: { sessionId: 'session-1' as never }, position: 'inline', via: 'menu', span: { start: 0, end: 1, draftRev: 1 } })
     if (outcome === undefined || outcome === 'handled' || !('insert' in outcome)) throw new Error('expected file insert')
-    expect(outcome.insert.label).toBe('📄 index.ts')
-    await expect(source.codec?.serialize(outcome.insert.ref, new AbortController().signal)).resolves.toMatch(/^@\[index\.ts\]\(dsh-file:[A-Za-z0-9_-]+\)$/u)
+    expect(outcome.insert.label).toBe('📄 src/index.ts')
+    await expect(source.codec?.serialize(outcome.insert.ref, new AbortController().signal)).resolves.toMatch(/^@\[src\/index\.ts\]\(dsh-file:[A-Za-z0-9_-]+\)$/u)
   })
 
   it('uses the official dsh-session URI returned by the host', async () => {

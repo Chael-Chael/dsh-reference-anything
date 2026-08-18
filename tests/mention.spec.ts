@@ -94,12 +94,14 @@ describe('expansion', () => {
     expect(entered[1]?.source.kind).toBe('user')
   })
 
-  it('carries the conversation and the untrusted warning into the context', async () => {
+  it('carries an untrusted deferred reference into the context without its body', async () => {
     const result = await step(ctx, [userMessage(`see ${formatReferenceMention(ref, 'Cache design')}`)])
     const context = (result as Extract<PreStepDecision, { kind: 'enter' }>).messages[0]
     const text = context?.content.flatMap(block => block.type === 'text' ? [block.text] : []).join('')
     expect(text).toContain('untrusted reference to a conversation')
-    expect(text).toContain('by request hash')
+    expect(text).toContain('bodies were not fetched')
+    expect(text).toContain(encodeReferenceUri(ref))
+    expect(text).not.toContain('by request hash')
   })
 
   it('replaces the opaque URI with a readable label and keeps the message identity', async () => {
@@ -123,14 +125,14 @@ describe('expansion', () => {
       version: 1,
       references: [expect.objectContaining({
         label: 'Cache design',
-        retainedMessages: 2,
+        retainedMessages: 0,
         omittedMessages: 0,
-        truncated: false,
+        truncated: true,
       })],
     })
   })
 
-  it('reads one snapshot per distinct reference, however often it is mentioned', async () => {
+  it('does not read a snapshot when a reference is mentioned', async () => {
     const reads: string[] = []
     const scoped = await mount({
       read: (target: ReferenceRef) => {
@@ -140,20 +142,18 @@ describe('expansion', () => {
     })
     const uri = formatReferenceMention(ref, 'Cache design')
     await step(scoped, [userMessage(`${uri} and again ${uri}`)])
-    expect(reads).toEqual(['chat.json'])
+    expect(reads).toEqual([])
   })
 })
 
-describe('a reference that cannot be honored says so', () => {
-  it('keeps the reference with a null preview when the source is down, and says why', async () => {
+describe('deferred references', () => {
+  it('does not probe a source while making a reference available to the agent', async () => {
     const scoped = await mount({ read: () => Promise.reject(new Error('browser is closed')) })
     const result = await step(scoped, [userMessage(`see ${formatReferenceMention(ref, 'Cache design')}`)])
     const entered = (result as Extract<PreStepDecision, { kind: 'enter' }>).messages
-    // Still the ordinary recall block, not a notice: one unreachable source
-    // costs its preview, not the whole message.
     expect(entered[0]?.source).toMatchObject({ kind: 'reference-anything', form: 'recall' })
     const text = entered[0]?.content.flatMap(block => block.type === 'text' ? [block.text] : []).join('')
-    expect(text).toContain('browser is closed')
+    expect(text).toContain('bodies were not fetched')
     expect(text).toContain('"preview": null')
     // The uri survives, so the model can retry once the browser is back.
     expect(text).toContain(encodeReferenceUri(ref))

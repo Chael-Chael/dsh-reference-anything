@@ -9,7 +9,7 @@ import type { ProviderConversationRow, ProviderTurnRow } from './store/store.ts'
 const execFile = promisify(nodeExecFile)
 const SITE: Record<ChatProvider, string> = {
   chatgpt: 'dsh-chatgpt', claude: 'dsh-claude', gemini: 'dsh-gemini',
-  deepseek: 'dsh-deepseek', grok: 'dsh-grok',
+  deepseek: 'dsh-deepseek', grok: 'dsh-grok', kimi: 'dsh-kimi',
 }
 
 export type OpenCliErrorCode = 'EXTENSION_NOT_CONNECTED' | 'PROVIDER_TIMEOUT' | 'PROVIDER_NOT_LOGGED_IN'
@@ -132,6 +132,8 @@ export class OpenCliRunner {
   async installPlugin(pluginUrl: string, signal?: AbortSignal): Promise<void> {
     await this.raw(['plugin', 'install', pluginUrl], signal)
   }
+
+  async restartDaemon(signal?: AbortSignal): Promise<void> { await this.raw(['daemon', 'restart'], signal) }
 
   private async probe(args: string[], signal?: AbortSignal): Promise<{ value: string; error?: string }> {
     try { return { value: await this.raw(args, signal) } }

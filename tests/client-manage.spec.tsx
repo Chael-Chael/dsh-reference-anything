@@ -9,7 +9,7 @@ import type { ManagedConversation } from '../src/client/remote.ts'
 // in a test environment; without this every act() call warns and defers.
 ;(globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
-const settings = { opencliPath: 'opencli', profile: '', detailConcurrency: 2, autoSync: false, autoSyncMinutes: 60 }
+const settings = { opencliPath: 'opencli', profile: '', detailConcurrency: 2, autoSync: false, autoSyncMinutes: 60, historyMode: 'metadata-only' as const }
 
 function conversation(overrides: Partial<ManagedConversation> = {}): ManagedConversation {
   return {
@@ -40,13 +40,14 @@ afterEach(() => {
 describe('manage synced conversations', () => {
   const noop = async () => {}
 
-  it('lists a page and flags rows the provider no longer lists', () => {
+  it('lists a page with the updated date and flags rows the provider no longer lists', () => {
     const page = { items: [conversation(), conversation({ uriId: 'b', title: 'Old thread', remoteMissing: true, partial: true })], total: 2 }
     const el = render(<ManageConversations state={snapshot({ query: '', offset: 0, page })} syncing={false} browse={noop} deleteConversation={noop} />)
     expect(el.querySelectorAll('.dsh_ref_manage_row')).toHaveLength(2)
     expect(el.textContent).toContain('Cache design notes')
     expect(el.textContent).toContain('no longer listed')
-    expect(el.textContent).toContain('partial')
+    expect(el.textContent).not.toContain('partial')
+    expect(el.textContent).not.toContain('24 turns')
     expect(el.querySelector('.dsh_ref_pagination span')?.textContent).toBe('1–2 of 2')
   })
 

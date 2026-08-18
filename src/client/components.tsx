@@ -1,9 +1,8 @@
 import type { InjectFace, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import type { ObservableSnapshot } from '@deepseek-ai/dsh-client-runtime/client'
 import { useEffect, useRef, useState, type CSSProperties } from 'react'
-import type { ChatProvider, SettingsRecord } from '../wire.ts'
+import { defaultPickerSettings, type ChatProvider, type PickerSettings, type PickerSource, type SettingsRecord } from '../wire.ts'
 import type { BrowsePage, BrowserProfile, Health, ProviderStats, SyncStatus } from './remote.ts'
-import { formatRelative } from './format.ts'
 import { ProviderLogo } from './provider-icons.tsx'
 import { type REFERENCE_ANYTHING_NS } from './locale.ts'
 import type { TranslateNS } from '@deepseek-ai/dsh-client-locale/client'
@@ -40,13 +39,14 @@ export interface SettingsInjected {
   cancel(): Promise<void>
   refresh(): Promise<void>
   install(): Promise<void>
+  restartDaemon(): Promise<void>
   browse(query: string, provider: ChatProvider | undefined, offset: number): Promise<void>
   deleteConversation(uriId: string): Promise<void>
   refreshStats(): Promise<void>
 }
 type T = TranslateNS<typeof REFERENCE_ANYTHING_NS>
 type SettingsProps = PropsRuntime<'settings.section'> & InjectFace<SettingsInjected> & { t: T }
-const PROVIDERS: ChatProvider[] = ['chatgpt', 'claude', 'gemini', 'deepseek', 'grok']
+const PROVIDERS: ChatProvider[] = ['chatgpt', 'claude', 'gemini', 'deepseek', 'grok', 'kimi']
 /** Keystrokes to ride out before a typed filter re-queries the Host. */
 const SEARCH_DEBOUNCE_MS = 300
 /** Rows fetched per page in the "Manage synced conversations" list. */
@@ -60,9 +60,16 @@ export const PAGE_SIZE = 20
  */
 const STATS_POLL_MS = 30_000
 const PROVIDER_LABEL: Record<ChatProvider, string> = {
-  chatgpt: 'ChatGPT', claude: 'Claude', gemini: 'Gemini', deepseek: 'DeepSeek', grok: 'Grok',
+  chatgpt: 'ChatGPT', claude: 'Claude', gemini: 'Gemini', deepseek: 'DeepSeek', grok: 'Grok', kimi: 'Kimi',
 }
-export function ConversationSettings({ useScope, save, sync, cancel, refresh, install, browse, deleteConversation, refreshStats, t }: SettingsProps) {
+const PICKER_SOURCES: ReadonlyArray<{ id: PickerSource; label: string }> = [
+  { id: 'commands', label: 'Commands' },
+  { id: 'skills', label: 'Skills' },
+  { id: 'files', label: 'Files & folders' },
+  { id: 'sessions', label: 'DSH sessions' },
+  { id: 'conversations', label: 'External conversations' },
+]
+export function ConversationSettings({ useScope, save, sync, cancel, refresh, install, restartDaemon, browse, deleteConversation, refreshStats, t }: SettingsProps) {
   const state = useScope(value => value)
   const settings = state.settings
   const [installing, setInstalling] = useState(false)
@@ -85,36 +92,58 @@ export function ConversationSettings({ useScope, save, sync, cancel, refresh, in
     const value = Number(detailConcurrency)
     if (Number.isInteger(value) && value >= 1 && value <= 8) void save({ ...settings, detailConcurrency: value })
   }
+  const picker = settings.picker ?? defaultPickerSettings()
+  const savePicker = (next: PickerSettings) => { void save({ ...settings, picker: next }) }
+  const patchPicker = (id: PickerSource, patch: Partial<PickerSettings[PickerSource]>) => {
+    savePicker({ ...picker, [id]: { ...picker[id], ...patch } })
+  }
+  const movePicker = (id: PickerSource, direction: -1 | 1) => {
+    const ids = [...PICKER_SOURCES].sort((a, b) => picker[a.id].order - picker[b.id].order).map(row => row.id)
+    const index = ids.indexOf(id); const other = ids[index + direction]
+    if (other === undefined) return
+    savePicker({ ...picker, [id]: { ...picker[id], order: picker[other].order }, [other]: { ...picker[other], order: picker[id].order } })
+  }
   return <section className="dsh_ref_settings">
     <header className="dsh_ref_header"><div><h2>{t('settings.title')}</h2><p>{t('settings.subtitle')}</p></div><button className="dsh_ref_recheck" type="button" onClick={() => { void refresh() }}>{t('settings.recheck')}</button></header>
     <div className="dsh_ref_workspace">
     {state.error && <div className="dsh_ref_error" role="alert"><strong>{t('settings.actionFailed')}</strong><span>{state.error}</span></div>}
     {state.notice && <div className="dsh_ref_notice" role="status">{state.notice}</div>}
+    <section className="dsh_ref_panel dsh_ref_general_settings"><div className="dsh_ref_section_head"><div><h3>{t('settings.general')}</h3><p>{t('settings.generalDetail')}</p></div></div>
+      <div className="dsh_ref_picker_list">{[...PICKER_SOURCES].sort((a, b) => picker[a.id].order - picker[b.id].order).map((row, index, rows) => <div className="dsh_ref_picker_row" key={row.id}>
+        <label><input type="checkbox" checked={picker[row.id].enabled} onChange={event => { patchPicker(row.id, { enabled: event.target.checked }) }} /><span>{row.label}</span></label>
+        <label className="dsh_ref_picker_limit"><span>{t('settings.maxItems')}</span><select value={picker[row.id].limit} onChange={event => { patchPicker(row.id, { limit: Number(event.target.value) }) }}>{[5, 8, 12, 20, 50].map(value => <option key={value} value={value}>{value}</option>)}</select></label>
+        <div className="dsh_ref_picker_order"><button type="button" disabled={index === 0} aria-label={t('settings.moveUp', { item: row.label })} onClick={() => { movePicker(row.id, -1) }}>↑</button><button type="button" disabled={index === rows.length - 1} aria-label={t('settings.moveDown', { item: row.label })} onClick={() => { movePicker(row.id, 1) }}>↓</button></div>
+      </div>)}</div>
+    </section>
     <section className="dsh_ref_panel"><div className="dsh_ref_section_head"><div><h3>{t('settings.viability')}</h3><p>{t('settings.viabilityDetail')}</p></div><span className={`dsh_ref_health ${ready ? 'is_ready' : ''}`}>{ready ? t('settings.ready') : t('settings.needsAttention')}</span></div>
       {state.loading ? <div className="dsh_ref_skeleton"><i/><i/><i/></div> : <div className="dsh_ref_checklist">
         <CheckRow label="OpenCLI" detail={state.health?.version || state.health?.versionError || t('settings.notDetected')} ready={Boolean(state.health?.version)} />
         <CheckRow label="Browser bridge" detail={state.health?.daemon || state.health?.daemonError || t('settings.daemonUnavailable')} ready={Boolean(state.health?.daemon)} />
         <CheckRow label="Conversation adapter" detail={state.health?.pluginInstalled ? t('settings.adapterInstalled') : state.health?.pluginError || t('settings.adapterMissing')} ready={Boolean(state.health?.pluginInstalled)} />
       </div>}
-      {!state.health?.pluginInstalled && <div className="dsh_ref_install"><div><strong>{t('settings.adapterRequired')}</strong><span>{t('settings.adapterRequiredDetail')}</span></div><button type="button" disabled={installing} onClick={() => { setInstalling(true); void install().finally(() => { setInstalling(false) }) }}>{installing ? t('settings.installing') : t('settings.install')}</button></div>}
+      <div className="dsh_ref_install"><div><strong>{t('settings.serviceActions')}</strong><span>{t('settings.serviceActionsDetail')}</span></div><div className="dsh_ref_service_actions"><button type="button" disabled={installing} onClick={() => { setInstalling(true); void install().finally(() => { setInstalling(false) }) }}>{installing ? t('settings.installing') : state.health?.pluginInstalled ? t('settings.reinstall') : t('settings.install')}</button><button type="button" onClick={() => { void restartDaemon() }}>{t('settings.restartDaemon')}</button></div></div>
     </section>
-    <section className="dsh_ref_sources"><div className="dsh_ref_section_head"><div><h3>{t('settings.sources')}</h3><p>{t('settings.sourcesDetail')}</p></div>{state.sync?.status === 'running' && <span className="dsh_ref_syncing">{t('settings.syncing', { source: state.sync.provider ? PROVIDER_LABEL[state.sync.provider] : t('settings.sources'), completed: state.sync.completed, total: state.sync.total })}</span>}</div>
+    <section className="dsh_ref_sources dsh_ref_chat"><div className="dsh_ref_section_head"><div><h3>{t('settings.sources')}</h3><p>{t('settings.sourcesDetail')}</p></div>{state.sync?.status === 'running' && <span className="dsh_ref_syncing">{t('settings.syncing', { source: state.sync.provider ? PROVIDER_LABEL[state.sync.provider] : t('settings.sources'), completed: state.sync.completed, total: state.sync.total })}</span>}</div>
       <div className="dsh_ref_provider_grid">{PROVIDERS.map((provider, index) => <ProviderCard key={provider} provider={provider} index={index} stats={state.stats?.find(row => row.provider === provider)} busy={state.sync?.status === 'running'} autoSync={settings.autoSync} onSync={() => { void sync([provider], 'incremental') }} t={t} />)}</div>
       {!state.loading && state.stats?.every(item => item.conversations === 0) && <div className="dsh_ref_empty">{t('settings.empty')}</div>}
-    </section>
-    <section className="dsh_ref_panel dsh_ref_sync_settings"><div className="dsh_ref_section_head"><div><h3>{t('settings.syncSettings')}</h3><p>{t('settings.syncSettingsDetail')}</p></div><label className="dsh_ref_toggle"><input type="checkbox" checked={settings.autoSync} onChange={event => { void save({ ...settings, autoSync: event.target.checked }) }} /><span/><b>{t('settings.autoSync')}</b></label></div>
+      <div className="dsh_ref_chat_divider" />
+      <div className="dsh_ref_sync_settings"><div className="dsh_ref_section_head"><div><h3>{t('settings.syncSettings')}</h3><p>{t('settings.syncSettingsDetail')}</p></div><label className="dsh_ref_toggle"><input type="checkbox" checked={settings.autoSync} onChange={event => { void save({ ...settings, autoSync: event.target.checked }) }} /><span/><b>{t('settings.autoSync')}</b></label></div>
       <div className="dsh_ref_form_grid">
+        <label><span>{t('settings.historyMode')}</span><select value={settings.historyMode} onChange={event => { void save({ ...settings, historyMode: event.target.value as SettingsRecord['historyMode'] }) }}><option value="metadata-only">{t('settings.metadataOnly')}</option><option value="offline-mirror">{t('settings.offlineMirror')}</option></select></label>
         <label><span>{t('settings.opencli')}</span><input value={opencliPath} onChange={event => { setOpencliPath(event.target.value) }} onBlur={() => { if (opencliPath.trim()) void save({ ...settings, opencliPath: opencliPath.trim() }) }} /></label>
         <label><span>{t('settings.chromeProfile')}</span><select value={settings.profile} onChange={event => { void save({ ...settings, profile: event.target.value }) }}><option value="">{t('settings.defaultProfile')}</option>{state.profiles?.map(profile => <option key={profile.id} value={profile.alias || profile.id} disabled={!profile.connected}>{profile.alias ? `${profile.alias} · ${profile.id}` : profile.id}{profile.isDefault ? ` · ${t('settings.default')}` : ''}{profile.connected ? '' : ` · ${t('settings.disconnected')}`}</option>)}</select></label>
         <label><span>{t('settings.detailConcurrency')}</span><input type="number" min={1} max={8} value={detailConcurrency} aria-invalid={!(Number(detailConcurrency) >= 1 && Number(detailConcurrency) <= 8)} onChange={event => { setDetailConcurrency(event.target.value) }} onBlur={saveConcurrency} /></label>
         <label><span>{t('settings.interval')}</span><select disabled={!settings.autoSync} value={settings.autoSyncMinutes} onChange={event => { void save({ ...settings, autoSyncMinutes: Number(event.target.value) }) }}><option value={30}>{t('settings.every30')}</option><option value={60}>{t('settings.everyHour')}</option><option value={180}>{t('settings.every3Hours')}</option><option value={720}>{t('settings.every12Hours')}</option><option value={1440}>{t('settings.daily')}</option></select></label>
       </div>
+      <p className="dsh_ref_auto_note">{settings.historyMode === 'metadata-only' ? t('settings.metadataOnlyDetail') : t('settings.offlineMirrorDetail')}</p>
       <div className="dsh_ref_actions"><button className="is_primary" type="button" disabled={state.sync?.status === 'running'} onClick={() => { void sync(PROVIDERS, 'incremental') }}>{t('settings.syncAll')}</button><button type="button" disabled={state.sync?.status === 'running'} onClick={() => { void sync(PROVIDERS, 'full') }}>{t('settings.fullRescan')}</button>{state.sync?.status === 'running' && <button className="is_danger" type="button" onClick={() => { void cancel() }}>{t('settings.cancel')}</button>}</div>
       {state.sync && <SyncProgress sync={state.sync} />}
       {state.sync?.error && <p className="dsh_ref_inline_error">{state.sync.error}</p>}
       {settings.autoSync && <p className="dsh_ref_auto_note">{t('settings.autoNote', { minutes: settings.autoSyncMinutes })}</p>}
+      </div>
+      <div className="dsh_ref_chat_divider" />
+      <ManageConversations state={state} syncing={state.sync?.status === 'running'} browse={browse} deleteConversation={deleteConversation} />
     </section>
-    <ManageConversations state={state} syncing={state.sync?.status === 'running'} browse={browse} deleteConversation={deleteConversation} />
     </div>
   </section>
 }
@@ -166,7 +195,7 @@ export function ManageConversations({ state, syncing, browse, deleteConversation
   const total = page?.total ?? 0
   const offset = browseState?.offset ?? 0
 
-  return <section className="dsh_ref_panel dsh_ref_manage">
+  return <div className="dsh_ref_manage">
     <div className="dsh_ref_section_head"><div><h3>Manage synced conversations</h3><p>Everything mirrored locally, including conversations the provider no longer lists.</p></div></div>
     <div className="dsh_ref_manage_filters">
       <input placeholder="Search titles…" value={text} onChange={event => { setText(event.target.value) }} />
@@ -185,10 +214,9 @@ export function ManageConversations({ state, syncing, browse, deleteConversation
             <div className="dsh_ref_manage_title_row">
               <span className="dsh_ref_manage_title">{item.title}</span>
               <span className="dsh_ref_badge">{PROVIDER_LABEL[item.provider]}</span>
-              {item.partial && <span className="dsh_ref_badge is_warn">partial</span>}
               {item.remoteMissing && <span className="dsh_ref_badge is_warn">no longer listed</span>}
             </div>
-            <span className="dsh_ref_manage_meta">{item.turnCount} turns · updated {formatRelative(item.updatedAt)}</span>
+            <span className="dsh_ref_manage_meta">updated {formatUpdatedDate(item.updatedAt)}</span>
           </div>
           <button type="button" className="is_danger" disabled={syncing}
             title={syncing ? 'Cannot delete while a sync is running' : undefined}
@@ -202,7 +230,12 @@ export function ManageConversations({ state, syncing, browse, deleteConversation
       <span>{total === 0 ? '0 of 0' : `${offset + 1}–${offset + items.length} of ${total}`}</span>
       <button type="button" disabled={offset + items.length >= total} onClick={() => { void browse(text, browseState?.provider, offset + PAGE_SIZE) }}>Next</button>
     </div>
-  </section>
+  </div>
+}
+
+function formatUpdatedDate(value: string): string {
+  const date = new Date(value)
+  return Number.isNaN(date.getTime()) ? 'unknown date' : date.toLocaleDateString()
 }
 
 function CheckRow({ label, detail, ready }: { label: string; detail: string; ready: boolean }) {

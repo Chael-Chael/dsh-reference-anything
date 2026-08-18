@@ -14,6 +14,7 @@ describe('provider prefix parsing', () => {
   it('scopes to a provider on the bare name', () => {
     expect(parseProviderQuery('claude')).toEqual({ provider: 'claude', query: '' })
     expect(parseProviderQuery('deepseek:')).toEqual({ provider: 'deepseek', query: '' })
+    expect(parseProviderQuery('kimi:世界模型')).toEqual({ provider: 'kimi', query: '世界模型' })
   })
 
   it('resolves the short forms worth typing', () => {

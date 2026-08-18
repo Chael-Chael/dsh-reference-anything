@@ -56,6 +56,7 @@ export const REFERENCE_ANYTHING_INVOCATIONS: readonly InvocationDescriptor[] = [
   descriptor('health', [], strict('Health', healthSchema), true),
   descriptor('profiles', [], strict('BrowserProfile[]', z.array(browserProfileSchema)), true),
   descriptor('installAdapter', [], strict('Boolean', z.boolean()), true),
+  descriptor('restartDaemon', [], strict('Boolean', z.boolean()), true),
   descriptor('stats', [], strict('ProviderStats[]', z.array(providerStatsSchema))),
   descriptor('syncStart', [{ name: 'input', wire: 'input', source: 'json', codec: strict('SyncStart', syncStartSchema) }], strict('JobId', z.string())),
   descriptor('syncStatus', [{ name: 'input', wire: 'input', source: 'json', codec: strict('JobInput', jobInputSchema) }], strict('SyncStatus?', syncStatusSchema.optional())),

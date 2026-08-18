@@ -46,4 +46,13 @@ describe('plugin-owned DSH presentation overrides', () => {
     expect(document.querySelector('[data-decoration="chip"]')?.getAttribute('title')).toBe('Claude · Design')
     dispose()
   })
+
+  it('projects the LobeHub Kimi mark', () => {
+    document.body.innerHTML = '<div role="listbox"><span>\uE105 Kimi · World model</span></div>'
+    const dispose = adoptReferenceIconProjection()
+    const projected = document.querySelector('[data-dsh-ref-provider-icon="kimi"]')
+    expect(projected?.textContent).toBe('Kimi · World model')
+    expect(projected?.getAttribute('style')).toContain('--dsh-ref-provider-icon')
+    dispose()
+  })
 })

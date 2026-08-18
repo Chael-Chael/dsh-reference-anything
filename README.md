@@ -1,8 +1,8 @@
 # dsh-reference-anything
 
-在 DeepSeek Harness（DSH）的统一 `@` 菜单里引用工作区文件/文件夹、DSH 会话，以及 ChatGPT、Claude、Gemini、DeepSeek 和 Grok 的历史对话。
+在 DeepSeek Harness（DSH）的统一 `@` 菜单里引用工作区文件/文件夹、DSH 会话，以及 ChatGPT、Claude、Gemini、DeepSeek、Grok 和 Kimi 的历史对话。
 
-插件把在线对话显式同步到 DSH 的本地镜像；输入 `@` 时只查询本地数据，不会在写提示词的过程中访问浏览器或 Provider。模型默认收到最近 10 个 turn，并可通过 `reference_read` 沿 revision 固定的 cursor 继续向前读取。
+插件把在线对话显式同步到 DSH 的本地镜像；输入 `@` 时只查询本地数据，不会在写提示词的过程中访问浏览器或 Provider。`@` 只把已授权的对话 URI 交给模型；模型判断确有需要时才调用 `reference_read` 拉取正文。
 
 ## 架构
 
@@ -13,10 +13,10 @@ DSH Host + reference_anything 本地镜像
         ↕ execFile(opencli, argv)
 opencli-plugin-dsh-chat-history
         ↕ OpenCLI daemon + 官方 Browser Bridge
-ChatGPT / Claude / Gemini / DeepSeek / Grok
+ChatGPT / Claude / Gemini / DeepSeek / Grok / Kimi
 ```
 
-这里不包含旧版的独立 DeepSeek CDP/`--remote-debugging-port` 采集器。五个平台统一走 OpenCLI Provider 适配器，避免维护两套重复的浏览器读取实现。
+这里不包含旧版的独立 DeepSeek CDP/`--remote-debugging-port` 采集器。六个平台统一走 OpenCLI Provider 适配器，避免维护两套重复的浏览器读取实现。
 
 ## 安装
 
@@ -60,7 +60,7 @@ DSH 插件安装阶段不会静默修改 `~/.opencli/plugins`。如果 OpenCLI �
 
 也可以使用 `类型:名称` 快速限定 `@` 面板，只显示对应分组：
 
-- `@chatgpt:标题`、`@claude:标题`、`@gemini:标题`、`@deepseek:标题`、`@grok:标题`
+- `@chatgpt:标题`、`@claude:标题`、`@gemini:标题`、`@deepseek:标题`、`@grok:标题`、`@kimi:标题`
 - `@files:名称`、`@sessions:名称`、`@skills:名称`、`@commands:名称`
 
 冒号后可以留空以浏览该类型的全部候选，例如 `@skills:`。没有类型前缀时仍同时搜索所有分组。
@@ -78,7 +78,7 @@ DSH 插件安装阶段不会静默修改 `~/.opencli/plugins`。如果 OpenCLI �
 
 ## 模型侧协议
 
-引用会生成一条不可信数据 envelope 和一条当前用户请求。核心结构如下：
+引用会生成一条不可信数据 envelope 和一条当前用户请求。初始 envelope 只包含指针，不包含对话正文：
 
 ```json
 {
@@ -89,12 +89,12 @@ DSH 插件安装阶段不会静默修改 `~/.opencli/plugins`。如果 OpenCLI �
       "uri": "dsh-ref:...",
       "provider": "chatgpt",
       "title": "Example",
-      "revision": "sha256:...",
-      "preview": { "turns": [], "attachments": [] },
+      "deferred": true,
+      "preview": null,
       "page": {
         "order": "newest_first",
-        "limit": 10,
-        "nextCursor": "...",
+        "limit": 0,
+        "nextCursor": null,
         "hasMore": true
       }
     }
@@ -102,8 +102,9 @@ DSH 插件安装阶段不会静默修改 `~/.opencli/plugins`。如果 OpenCLI �
 }
 ```
 
-- 同一页内部按时间正序展示，翻页方向从最新向更旧。
-- `reference_read({ uri, limit, cursor })` 读取同一 revision 的下一页。
+- agent 需要正文时才调用 `reference_read({ uri, limit, cursor })`；同一页内部按时间正序展示，翻页方向从最新向更旧。
+- 初始条目的 `deferred=true` 时，首次调用只传 `uri`，不要传空的 `nextCursor`。
+- offline-mirror 下 `reference_read` 沿 revision 固定的 cursor 翻页；metadata-only 下每次读取都会重新向 Provider 请求正文。
 - `before` 只作为一个版本的 deprecated 兼容参数；不能与 `cursor` 同时提供。
 - mention 或 `reference_list` 会授予当前 task 对 URI 的读取权限；未授权 URI 会被拒绝。
 - 每条 conversation 的旧 revision 至少保留 30 天，因此同步后旧 cursor 仍能重放原内容。
@@ -125,7 +126,7 @@ DSH 插件安装阶段不会静默修改 `~/.opencli/plugins`。如果 OpenCLI �
 
 ## OpenCLI 命令
 
-五个平台分别注册 `dsh-chatgpt`、`dsh-claude`、`dsh-gemini`、`dsh-deepseek`、`dsh-grok`，每个站点提供：
+六个平台分别注册 `dsh-chatgpt`、`dsh-claude`、`dsh-gemini`、`dsh-deepseek`、`dsh-grok`、`dsh-kimi`，每个站点提供：
 
 - `whoami`
 - `history-all`

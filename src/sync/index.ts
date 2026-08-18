@@ -284,6 +284,10 @@ export class ConversationSyncManager {
     runner: OpenCliRunner, provider: ChatProvider, accountScope: string,
     row: ProviderConversationRow, full: boolean, signal: AbortSignal,
   ): Promise<void> {
+    if (this.store.settings.historyMode === 'metadata-only') {
+      await this.store.putConversation(row, accountScope)
+      return
+    }
     const key = ConversationStore.conversationKey(provider, accountScope, row.id)
     const known = this.store.conversations.get(key)
     if (!this.store.needsDetail(key, row, full)) {
