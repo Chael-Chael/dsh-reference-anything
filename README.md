@@ -46,7 +46,17 @@ DSH 插件安装阶段不会静默修改 `~/.opencli/plugins`。如果 OpenCLI �
 2. 检查 OpenCLI CLI、daemon、Browser Bridge 和适配器状态。
 3. 选择 Chrome Profile，点击 `Sync all`，或单独同步一个 Provider。
 4. 在输入框键入 `@`，从 `Conversations` 分组选择对话。
-5. 可用 `@chatgpt 关键词`、`@claude 关键词` 等形式过滤候选。
+5. 键入关键词过滤候选，例如 `@缓存设计`。
+
+### 检索
+
+空查询下 `@` 只列出最近 5 条；开始键入后返回最多 8 条，按匹配质量排序、时间兜底。
+
+- **模糊匹配**：查询按子序列匹配标题，`@cachedes` 和 `@cache-design` 都能命中 “Cache design notes”。
+- **正文检索**：标题匹配填不满一页时，才会去搜已同步的会话正文，命中的条目在候选行里显示匹配片段。这样 `New chat` 这类自动生成的标题也找得到。片段只出现在界面上，不会进入模型上下文。
+- **按平台过滤**：`@chatgpt:缓存`、`@claude/重构`，也接受 `gpt:`、`ds:` 简写。单独输入 `@claude` 则列出该平台最近的会话。
+
+分隔符用 `:` 或 `/` 而不是空格：`@` 的候选 token 遇到空格即终止（DSH 输入触发器的规则，插件无法改变），所以 `@chatgpt 关键词` 会在按下空格时直接关闭菜单。同理，多词搜索请写成 `@cachedesign` 或 `@cache-design`。
 
 选中后草稿保存为规范的引用 mention：
 

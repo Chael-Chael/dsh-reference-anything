@@ -50,8 +50,18 @@ export class OpenCliRunner {
     return createHash('sha256').update(`${provider}\0${identity}`).digest('hex')
   }
 
-  async history(provider: ChatProvider, signal?: AbortSignal): Promise<ProviderConversationRow[]> {
-    const rows = await this.json(SITE[provider], 'history-all', [], signal)
+  /**
+   * List a provider's conversations.
+   * @param provider - which provider to list.
+   * @param signal - cancellation from the caller.
+   * @param since - ISO instant the adapter may stop paging at. Best-effort:
+   * adapters that page in an order they cannot vouch for ignore it, and one
+   * installed before the flag existed is retried without it rather than
+   * failing the pass.
+   * @returns the listed conversations.
+   */
+  async history(provider: ChatProvider, signal?: AbortSignal, since = ''): Promise<ProviderConversationRow[]> {
+    const rows = await this.historyRows(provider, since, signal)
     return rows.map((raw) => ({
       provider,
       accountScope: '',
@@ -89,6 +99,22 @@ export class OpenCliRunner {
     const daemon = (await this.raw(['daemon', 'status'], signal)).trim()
     const plugins = await this.raw(['plugin', 'list'], signal)
     return { version, daemon, pluginInstalled: /dsh-chat-history/i.test(plugins) }
+  }
+
+  private async historyRows(
+    provider: ChatProvider, since: string, signal?: AbortSignal,
+  ): Promise<Record<string, unknown>[]> {
+    if (!since) return this.json(SITE[provider], 'history-all', [], signal)
+    try {
+      return await this.json(SITE[provider], 'history-all', ['--since', since], signal)
+    } catch (error) {
+      // An adapter installed before `--since` existed rejects the flag as a
+      // configuration error. Walking the whole history is slower but correct,
+      // and beats failing every background pass until the user remembers to
+      // reinstall the OpenCLI plugin.
+      if (!(error instanceof OpenCliError) || error.code !== 'OPENCLI_CONFIGURATION') throw error
+      return this.json(SITE[provider], 'history-all', [], signal)
+    }
   }
 
   private async json(site: string, operation: string, args: string[], signal?: AbortSignal): Promise<Record<string, unknown>[]> {

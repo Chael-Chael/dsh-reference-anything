@@ -38,6 +38,8 @@ export type ReferenceErrorCode =
   | 'REFERENCE_BUDGET_EXCEEDED'
   /** A plugin config value was outside its documented domain. */
   | 'REFERENCE_INVALID_CONFIG'
+  /** A management action conflicts with a sync job currently in flight. */
+  | 'REFERENCE_SYNC_IN_PROGRESS'
 
 /**
  * Named distinctly from the global `ReferenceError` — these describe this

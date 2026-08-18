@@ -5,17 +5,36 @@ import { providerSchema, settingsRecordSchema } from './wire.ts'
 export const searchInputSchema = z.object({
   query: z.string(), provider: providerSchema.optional(), limit: z.number().int().min(1).max(100),
 }).readonly()
+export const matchedViaSchema = z.enum(['recent', 'title', 'content'])
 export const searchResultSchema = z.object({
   uriId: z.string(), provider: providerSchema, title: z.string(), url: z.string(), updatedAt: z.string(),
   turnCount: z.number().int().nonnegative(), partial: z.boolean(), syncedAt: z.string(),
+  matchedVia: matchedViaSchema, snippet: z.string().optional(),
 }).readonly()
 export const healthSchema = z.object({ version: z.string(), daemon: z.string(), pluginInstalled: z.boolean() }).readonly()
 export const syncStartSchema = z.object({ providers: z.array(providerSchema).min(1), mode: z.enum(['incremental', 'full']) }).readonly()
 export const syncStatusSchema = z.object({
-  jobId: z.string(), status: z.enum(['running', 'complete', 'cancelled', 'failed']),
+  jobId: z.string(), status: z.enum(['running', 'complete', 'partial', 'cancelled', 'failed']),
   providers: z.array(providerSchema), provider: providerSchema.optional(), completed: z.number(), total: z.number(), error: z.string().optional(),
 }).readonly()
 export const jobInputSchema = z.object({ jobId: z.string().min(1) }).readonly()
+
+export const browseInputSchema = z.object({
+  query: z.string(), provider: providerSchema.optional(),
+  limit: z.number().int().min(1).max(100), offset: z.number().int().nonnegative(),
+}).readonly()
+export const managedConversationSchema = z.object({
+  uriId: z.string(), provider: providerSchema, title: z.string(), url: z.string(), updatedAt: z.string(),
+  turnCount: z.number().int().nonnegative(), partial: z.boolean(), syncedAt: z.string(), remoteMissing: z.boolean(),
+}).readonly()
+export const browsePageSchema = z.object({
+  items: z.array(managedConversationSchema), total: z.number().int().nonnegative(),
+}).readonly()
+export const deleteInputSchema = z.object({ uriId: z.string().min(1) }).readonly()
+export const providerSyncStateSchema = z.object({
+  provider: providerSchema, status: z.enum(['idle', 'running', 'cancelled', 'failed']),
+  lastSyncAt: z.string(), lastCompleteScanAt: z.string(), error: z.string(),
+}).readonly()
 
 export const REFERENCE_ANYTHING_INVOCATIONS: readonly InvocationDescriptor[] = [
   descriptor('search', [{ name: 'input', wire: 'input', source: 'json', codec: strict('SearchInput', searchInputSchema) }], strict('SearchResult[]', z.array(searchResultSchema)), true),
@@ -25,6 +44,9 @@ export const REFERENCE_ANYTHING_INVOCATIONS: readonly InvocationDescriptor[] = [
   descriptor('syncCancel', [{ name: 'input', wire: 'input', source: 'json', codec: strict('JobInput', jobInputSchema) }], strict('Boolean', z.boolean())),
   descriptor('settingsGet', [], strict('Settings', settingsRecordSchema)),
   descriptor('settingsUpdate', [{ name: 'settings', wire: 'settings', source: 'json', codec: strict('Settings', settingsRecordSchema) }], strict('Settings', settingsRecordSchema)),
+  descriptor('browse', [{ name: 'input', wire: 'input', source: 'json', codec: strict('BrowseInput', browseInputSchema) }], strict('BrowsePage', browsePageSchema), true),
+  descriptor('deleteConversation', [{ name: 'input', wire: 'input', source: 'json', codec: strict('DeleteInput', deleteInputSchema) }], strict('Boolean', z.boolean()), true),
+  descriptor('syncStates', [], strict('ProviderSyncState[]', z.array(providerSyncStateSchema))),
 ]
 
 function strict(type: string, schema: z.ZodType): { mode: 'strict'; typeSymbol: string; schema: z.ZodType } {

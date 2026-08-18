@@ -1,4 +1,4 @@
-import { domFallbackScript, registerProvider } from './common.js'
+import { domFallbackScript, registerProvider, sinceGuardSource } from './common.js'
 // OpenCLI discovery marker: registerProvider below performs the cli() calls.
 
 const shared = String.raw`
@@ -14,8 +14,9 @@ const shared = String.raw`
   }
 `
 
-const historyScript = String.raw`async function () {
+const historyScript = String.raw`async function (args) {
   ${shared}
+  const stopEarly = (${sinceGuardSource})(args && args.since)
   const rows = []
   try {
     const org = await organization()
@@ -27,6 +28,7 @@ const historyScript = String.raw`async function () {
       if (!response.ok) throw new Error('history HTTP ' + response.status)
       const payload = await response.json()
       const items = Array.isArray(payload) ? payload : payload.items || payload.chat_conversations || []
+      const pageStart = rows.length
       for (const item of items) {
         const id = String(item.uuid || item.id || '')
         if (!id) continue
@@ -39,6 +41,7 @@ const historyScript = String.raw`async function () {
           cursor: String(offset + items.length), partial: false })
       }
       if (items.length < 100) break
+      if (stopEarly(rows.slice(pageStart))) break
       offset += items.length
     }
     return JSON.stringify({ ok: true, rows })

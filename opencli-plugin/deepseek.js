@@ -1,7 +1,8 @@
-import { domFallbackScript, registerProvider } from './common.js'
+import { domFallbackScript, registerProvider, sinceGuardSource } from './common.js'
 // OpenCLI discovery marker: registerProvider below performs the cli() calls.
 
-const historyScript = String.raw`async function () {
+const historyScript = String.raw`async function (args) {
+  const stopEarly = (${sinceGuardSource})(args && args.since)
   const normalize = value => Array.isArray(value) ? value : []
   const headers = (() => {
     try {
@@ -32,6 +33,7 @@ const historyScript = String.raw`async function () {
       }
       const data = payload.data && payload.data.biz_data || payload.biz_data || payload.data || payload
       const items = normalize(data.chat_sessions || data.sessions || data.items || data.conversations)
+      const pageStart = rows.length
       for (const item of items) {
         const id = String(item.id || item.chat_session_id || item.uuid || '')
         if (!id) continue
@@ -49,6 +51,7 @@ const historyScript = String.raw`async function () {
       const nextUpdatedAt = String(last && (last.updated_at || last.updatedAt) || '')
       const nextPinned = Boolean(last && last.pinned)
       if (!data.has_more || !nextUpdatedAt || (nextUpdatedAt === cursorUpdatedAt && nextPinned === cursorPinned)) break
+      if (stopEarly(rows.slice(pageStart))) break
       cursorUpdatedAt = nextUpdatedAt
       cursorPinned = nextPinned
     } while (++guard < 500)
