@@ -4,6 +4,8 @@ import type { ChatProvider } from '../wire.ts'
 import { encodeReferenceUri } from '../uri-codec.ts'
 import type { SearchResult, SessionCandidate, WorkspaceEntry } from './remote.ts'
 import { PROVIDER_ICON_MARKER } from './provider-icons.tsx'
+import type { TranslateNS } from '@deepseek-ai/dsh-client-locale/client'
+import type { REFERENCE_ANYTHING_NS } from './locale.ts'
 
 declare module '@deepseek-ai/dsh-client-ui-input-trigger/client' {
   interface InputTriggerCandidate {
@@ -18,11 +20,7 @@ declare module '@deepseek-ai/dsh-client-ui-input-trigger/client' {
 const LABEL: Record<ChatProvider, string> = {
   chatgpt: 'ChatGPT', claude: 'Claude', gemini: 'Gemini', deepseek: 'DeepSeek', grok: 'Grok',
 }
-const CONVERSATION_SOURCE = 'External conversations'
-const FILE_SOURCE = 'Files and folders'
-const SESSION_SOURCE = 'DSH sessions'
-const COMMAND_SOURCE = 'Commands'
-const SKILL_SOURCE = 'Skills'
+type T = TranslateNS<typeof REFERENCE_ANYTHING_NS>
 
 type SourceScope = 'commands' | 'skills' | 'files' | 'sessions' | 'conversations'
 const PREFIX_SCOPE: Readonly<Record<string, SourceScope>> = {
@@ -57,9 +55,9 @@ function formatConversationMention(reference: ConversationReference): string {
 
 export function createConversationSource(search: (
   query: string, provider: ChatProvider | undefined, signal: AbortSignal,
-) => Promise<readonly SearchResult[]>): InputTriggerSource {
+) => Promise<readonly SearchResult[]>, t: T = fallback): InputTriggerSource {
   return {
-    trigger: '@', name: CONVERSATION_SOURCE, order: 30,
+    trigger: '@', name: t('source.conversations'), order: 30,
     async candidates(_session, { query, signal }) {
       const scoped = scopedQuery(query, 'conversations')
       if (scoped === undefined) return []
@@ -68,7 +66,7 @@ export function createConversationSource(search: (
       const rows = await search(parsed.query, parsed.provider, signal)
       return rows.map((row): InputTriggerCandidate => ({
         name: row.title,
-        description: `${LABEL[row.provider]} · ${row.turnCount} turns · ${formatDate(row.updatedAt)}${row.partial ? ' · partial' : ''}`,
+        description: t('conversation.description', { provider: LABEL[row.provider], turns: row.turnCount, date: formatDate(row.updatedAt, t), partial: row.partial ? t('conversation.partial') : '' }),
         icon: PROVIDER_ICON_MARKER[row.provider], conversation: row,
       }))
     },
@@ -79,7 +77,7 @@ export function createConversationSource(search: (
       const reference = { uriId: row.uriId, label: title }
       return {
         insert: {
-          source: CONVERSATION_SOURCE,
+          source: t('source.conversations'),
           ref: encodeConversationReference(reference),
           // The input's object replacement chip keeps the transport URI out
           // of the textarea while retaining a compact, recognizable label.
@@ -95,10 +93,10 @@ export function createConversationSource(search: (
   }
 }
 
-export function createWorkspaceSource(load: (sessionId: string, signal: AbortSignal) => Promise<readonly WorkspaceEntry[]>): InputTriggerSource {
+export function createWorkspaceSource(load: (sessionId: string, signal: AbortSignal) => Promise<readonly WorkspaceEntry[]>, t: T = fallback): InputTriggerSource {
   const cache = new Map<string, readonly WorkspaceEntry[]>()
   return {
-    trigger: '@', name: FILE_SOURCE, order: 10,
+    trigger: '@', name: t('source.files'), order: 10,
     async candidates(session, { query, signal }) {
       const scoped = scopedQuery(query, 'files')
       if (scoped === undefined) return []
@@ -117,15 +115,15 @@ export function createWorkspaceSource(load: (sessionId: string, signal: AbortSig
       if (!row) return undefined
       const label = row.path.split('/').at(-1) ?? row.path
       const ref = JSON.stringify({ path: row.path, label })
-      return { insert: { source: FILE_SOURCE, ref, label: `${row.kind === 'directory' ? '📁' : '📄'} ${label}`, clipboardText: workspaceMention(ref) } }
+      return { insert: { source: t('source.files'), ref, label: `${row.kind === 'directory' ? '📁' : '📄'} ${label}`, clipboardText: workspaceMention(ref) } }
     },
     codec: { clipboardText: workspaceMention, serialize: ref => Promise.resolve(workspaceMention(ref)) },
   }
 }
 
-export function createSessionSource(search: (sessionId: string, query: string, signal: AbortSignal) => Promise<readonly SessionCandidate[]>): InputTriggerSource {
+export function createSessionSource(search: (sessionId: string, query: string, signal: AbortSignal) => Promise<readonly SessionCandidate[]>, t: T = fallback): InputTriggerSource {
   return {
-    trigger: '@', name: SESSION_SOURCE, order: 20,
+    trigger: '@', name: t('source.sessions'), order: 20,
     async candidates(session, { query, signal }) {
       const scoped = scopedQuery(query, 'sessions')
       if (scoped === undefined) return []
@@ -137,7 +135,7 @@ export function createSessionSource(search: (sessionId: string, query: string, s
       const row = candidate.sessionCandidate
       if (!row) return undefined
       const ref = JSON.stringify({ uri: row.sessionId, label: row.label })
-      return { insert: { source: SESSION_SOURCE, ref, label: `💬 ${row.label}`, clipboardText: sessionMention(ref) } }
+      return { insert: { source: t('source.sessions'), ref, label: `💬 ${row.label}`, clipboardText: sessionMention(ref) } }
     },
     codec: { clipboardText: sessionMention, serialize: ref => Promise.resolve(sessionMention(ref)) },
   }
@@ -146,9 +144,9 @@ export function createSessionSource(search: (sessionId: string, query: string, s
 interface CommandCandidate { name: string; description?: string; input?: { hint?: string } }
 interface SkillCandidate { name: string; description: string; modelInvocable?: boolean }
 
-export function createCommandSource(load: (sessionId: SessionId, signal: AbortSignal) => Promise<readonly CommandCandidate[]>): InputTriggerSource {
+export function createCommandSource(load: (sessionId: SessionId, signal: AbortSignal) => Promise<readonly CommandCandidate[]>, t: T = fallback): InputTriggerSource {
   return {
-    trigger: '@', name: COMMAND_SOURCE, order: 0,
+    trigger: '@', name: t('source.commands'), order: 0,
     async candidates(session, { query, position, signal }) {
       if (position !== 'leading') return []
       const scoped = scopedQuery(query, 'commands')
@@ -162,10 +160,10 @@ export function createCommandSource(load: (sessionId: SessionId, signal: AbortSi
   }
 }
 
-export function createSkillSource(load: (sessionId: SessionId, signal: AbortSignal) => Promise<readonly SkillCandidate[]>): InputTriggerSource {
+export function createSkillSource(load: (sessionId: SessionId, signal: AbortSignal) => Promise<readonly SkillCandidate[]>, t: T = fallback): InputTriggerSource {
   const cache = new Map<string, readonly SkillCandidate[]>()
   return {
-    trigger: '@', name: SKILL_SOURCE, order: 5,
+    trigger: '@', name: t('source.skills'), order: 5,
     async candidates(session, { query, position, signal }) {
       if (position !== 'leading') return []
       const scoped = scopedQuery(query, 'skills')
@@ -175,7 +173,7 @@ export function createSkillSource(load: (sessionId: SessionId, signal: AbortSign
       const needle = scoped.toLocaleLowerCase()
       return rows.filter(row => row.name.toLocaleLowerCase().includes(needle)).map(row => ({
         name: row.name,
-        description: `${row.modelInvocable === false ? 'user-only · ' : ''}${row.description}`,
+        description: `${row.modelInvocable === false ? t('skill.userOnly') : ''}${row.description}`,
         icon: '✦',
         skillName: row.name,
       }))
@@ -234,7 +232,15 @@ export function scopedQuery(value: string, scope: SourceScope): string | undefin
   return requested === scope ? (match[2] ?? '').trim() : undefined
 }
 
-function formatDate(value: string): string {
+function formatDate(value: string, t: T): string {
   const date = new Date(value)
-  return Number.isNaN(date.getTime()) ? 'unknown date' : date.toLocaleDateString()
+  return Number.isNaN(date.getTime()) ? t('conversation.unknownDate') : date.toLocaleDateString()
+}
+
+const fallback: T = (key, params) => {
+  const dictionary: Record<string, string> = {
+    'source.conversations': 'External conversations', 'source.files': 'Files and folders', 'source.sessions': 'DSH sessions', 'source.commands': 'Commands', 'source.skills': 'Skills',
+    'conversation.description': '{provider} · {turns} turns · {date}{partial}', 'conversation.partial': ' · partial', 'conversation.unknownDate': 'unknown date', 'skill.userOnly': 'user-only · ',
+  }
+  return (dictionary[key] ?? key).replace(/\{(\w+)\}/gu, (match, name: string) => name in (params ?? {}) ? String(params![name]) : match)
 }

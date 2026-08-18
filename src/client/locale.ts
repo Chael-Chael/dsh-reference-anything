@@ -1,0 +1,83 @@
+import type { LocaleNamespaceMap } from '@deepseek-ai/dsh-client-ui-slots'
+
+export const REFERENCE_ANYTHING_NS = 'reference-anything'
+
+export const zh = {
+  'source.conversations': '外部对话',
+  'source.files': '文件和文件夹',
+  'source.sessions': 'DSH 对话',
+  'source.commands': '命令',
+  'source.skills': '技能',
+  'conversation.description': '{provider} · {turns} 轮 · {date}{partial}',
+  'conversation.partial': ' · 不完整',
+  'conversation.unknownDate': '未知日期',
+  'skill.userOnly': '仅用户 · ',
+  'dock.remove': '移除 {label}',
+  'settings.title': '引用任意内容',
+  'settings.subtitle': '让外部 AI 对话可搜索、保存在本地，并随时可引用。',
+  'settings.recheck': '重新检查',
+  'settings.actionFailed': '操作失败',
+  'settings.viability': '可用性检查',
+  'settings.viabilityDetail': '同步浏览器对话所需的一切条件。',
+  'settings.ready': '已就绪',
+  'settings.needsAttention': '需要处理',
+  'settings.notDetected': '未检测到',
+  'settings.daemonUnavailable': '服务不可用',
+  'settings.adapterInstalled': '已安装且可发现',
+  'settings.adapterMissing': '未安装适配器',
+  'settings.adapterRequired': '需要对话适配器',
+  'settings.adapterRequiredDetail': '安装本地 OpenCLI 适配器，然后自动重新检查。',
+  'settings.installing': '正在安装…',
+  'settings.install': '安装适配器',
+  'settings.sources': '来源',
+  'settings.sourcesDetail': '按提供商划分的本地对话索引。',
+  'settings.syncing': '正在同步 {source} · {completed}/{total}',
+  'settings.empty': '尚未索引任何对话。请选择浏览器配置文件，然后进行首次同步。',
+  'settings.syncSettings': '同步设置',
+  'settings.syncSettingsDetail': '控制浏览器配置文件和刷新频率。',
+  'settings.autoSync': '自动同步',
+  'settings.opencli': 'OpenCLI 可执行文件',
+  'settings.chromeProfile': 'Chrome 配置文件',
+  'settings.defaultProfile': 'OpenCLI 默认配置文件',
+  'settings.default': '默认',
+  'settings.disconnected': '未连接',
+  'settings.detailConcurrency': '详情并发数',
+  'settings.interval': '自动同步间隔',
+  'settings.every30': '每 30 分钟',
+  'settings.everyHour': '每小时',
+  'settings.every3Hours': '每 3 小时',
+  'settings.every12Hours': '每 12 小时',
+  'settings.daily': '每天',
+  'settings.syncAll': '立即同步全部',
+  'settings.fullRescan': '完全重新扫描',
+  'settings.cancel': '取消同步',
+  'settings.autoNote': 'DSH 运行期间，每 {minutes} 分钟自动执行一次增量同步。',
+  'notice.settingsSaved': '设置已保存。',
+  'notice.adapterInstalled': '适配器已安装。',
+  'provider.error': '错误',
+  'provider.syncing': '正在同步',
+  'provider.connected': '已连接',
+  'provider.notSynced': '未同步',
+  'provider.localConversations': '本地对话',
+  'provider.lastUpdated': '最后更新 · {date}',
+  'provider.neverSynced': '从未同步',
+  'provider.autoSyncOn': '自动同步已开启',
+  'provider.manualSync': '手动同步',
+  'provider.syncNow': '立即同步',
+} as const
+
+export const en: Record<keyof typeof zh, string> = {
+  'source.conversations': 'External conversations', 'source.files': 'Files and folders', 'source.sessions': 'DSH sessions', 'source.commands': 'Commands', 'source.skills': 'Skills',
+  'conversation.description': '{provider} · {turns} turns · {date}{partial}', 'conversation.partial': ' · partial', 'conversation.unknownDate': 'unknown date', 'skill.userOnly': 'user-only · ',
+  'dock.remove': 'Remove {label}', 'settings.title': 'Reference Anything', 'settings.subtitle': 'Keep your external AI conversations searchable, local, and ready to cite.', 'settings.recheck': 'Recheck setup', 'settings.actionFailed': 'Action failed',
+  'settings.viability': 'Viability check', 'settings.viabilityDetail': 'Everything required to sync browser conversations.', 'settings.ready': 'Ready', 'settings.needsAttention': 'Needs attention', 'settings.notDetected': 'Not detected', 'settings.daemonUnavailable': 'Daemon unavailable', 'settings.adapterInstalled': 'Installed and discoverable', 'settings.adapterMissing': 'Adapter is not installed', 'settings.adapterRequired': 'Conversation adapter required', 'settings.adapterRequiredDetail': 'Install the local OpenCLI adapter, then recheck automatically.', 'settings.installing': 'Installing…', 'settings.install': 'Install adapter',
+  'settings.sources': 'Sources', 'settings.sourcesDetail': 'Local conversation index by provider.', 'settings.syncing': 'Syncing {source} · {completed}/{total}', 'settings.empty': 'No conversations indexed yet. Choose a browser profile, then run your first sync.',
+  'settings.syncSettings': 'Sync settings', 'settings.syncSettingsDetail': 'Control the browser profile and refresh cadence.', 'settings.autoSync': 'Auto sync', 'settings.opencli': 'OpenCLI executable', 'settings.chromeProfile': 'Chrome profile', 'settings.defaultProfile': 'OpenCLI default profile', 'settings.default': 'default', 'settings.disconnected': 'disconnected', 'settings.detailConcurrency': 'Detail concurrency', 'settings.interval': 'Auto-sync interval', 'settings.every30': 'Every 30 minutes', 'settings.everyHour': 'Every hour', 'settings.every3Hours': 'Every 3 hours', 'settings.every12Hours': 'Every 12 hours', 'settings.daily': 'Daily', 'settings.syncAll': 'Sync all now', 'settings.fullRescan': 'Full rescan', 'settings.cancel': 'Cancel sync', 'settings.autoNote': 'Automatic incremental sync runs every {minutes} minutes while DSH is running.',
+  'notice.settingsSaved': 'Settings saved.', 'notice.adapterInstalled': 'Adapter installed.', 'provider.error': 'Error', 'provider.syncing': 'Syncing', 'provider.connected': 'Connected', 'provider.notSynced': 'Not synced', 'provider.localConversations': 'local conversations', 'provider.lastUpdated': 'Last updated · {date}', 'provider.neverSynced': 'Never synced', 'provider.autoSyncOn': 'Auto sync on', 'provider.manualSync': 'Manual sync', 'provider.syncNow': 'Sync now',
+}
+
+declare module '@deepseek-ai/dsh-client-ui-slots' {
+  interface LocaleNamespaceMap {
+    [REFERENCE_ANYTHING_NS]: keyof typeof zh
+  }
+}

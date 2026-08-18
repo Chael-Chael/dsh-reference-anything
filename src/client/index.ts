@@ -1,6 +1,7 @@
 import type { ConnectionHandle } from '@deepseek-ai/dsh-api-remotes/client'
 import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
+import type {} from '@deepseek-ai/dsh-client-locale/client'
 import { createSnapshotStore, type ClientContext } from '@deepseek-ai/dsh-client-runtime/client'
 import type { InputTriggerServiceContract } from '@deepseek-ai/dsh-client-ui-input-trigger/client'
 import type { ChatProvider, SettingsRecord } from '../wire.ts'
@@ -8,8 +9,12 @@ import { REFERENCE_ANYTHING_REMOTE, type ReferenceAnythingRemoteFace, type SyncS
 import { conversationReferenceUri, createCommandSource, createConversationSource, createSessionSource, createSkillSource, createWorkspaceSource } from './source.ts'
 import { ConversationsDock, ConversationSettings, type SettingsSnapshot } from './components.tsx'
 import { adoptAdaptiveChipCaret, adoptConversationMentionProjection, adoptReferenceIconProjection, adoptStyles } from './styles.ts'
+import { en, REFERENCE_ANYTHING_NS, zh } from './locale.ts'
 
-export const inject = ['inputTriggers', 'remote', 'slots', 'connection']
+// `ctx.remote.commands` is a separately injected Remote face. Declaring only
+// `remote` lets the @ source register, but its candidate request can fail and
+// the input-trigger menu then removes the Commands group as a failed source.
+export const inject = ['inputTriggers', 'remote', 'remote.commands', 'slots', 'connection', 'locale']
 
 export function apply(ctx: ClientContext): void {
   adoptStyles()
@@ -22,6 +27,8 @@ export function apply(ctx: ClientContext): void {
   })
   let currentJob = ''
   let poll: ReturnType<typeof setInterval> | undefined
+  const t = ctx.locale.bind(REFERENCE_ANYTHING_NS)
+  ctx.effect(() => ctx.locale.register(REFERENCE_ANYTHING_NS, { zh, en }), 'reference-anything.client.dictionaries')
 
   const unwrap = <T>(result: { ok: true; value: T } | { ok: false; error: { code: string; message: string } }): T => {
     if (!result.ok) throw new Error(`${result.error.code}: ${result.error.message}`)
@@ -63,33 +70,40 @@ export function apply(ctx: ClientContext): void {
   const inputTriggers = ctx.get('inputTriggers') as InputTriggerServiceContract
   const connection = ctx.get('connection') as ConnectionHandle
   const urlByUri = new Map<string, string>()
-  const source = createConversationSource(async (query, provider, signal) => {
-    if (!remote) return []
-    const rows = unwrap(await remote.search({ query, ...(provider ? { provider } : {}), limit: 12 }, signal))
-    for (const row of rows) urlByUri.set(conversationReferenceUri(row.uriId), row.url)
-    return rows
-  })
-  ctx.effect(() => inputTriggers.registerSource(source), 'reference-anything.client.source')
-  ctx.effect(() => inputTriggers.registerSource(createCommandSource(async (sessionId, signal) => {
-    signal.throwIfAborted()
-    return unwrap(await ctx.remote.commands.list(sessionId))
-  })), 'reference-anything.client.command-source')
-  ctx.effect(() => inputTriggers.registerSource(createSkillSource(async (sessionId, signal) => {
-    const { result } = await connection.api.skills.list({ sessionId }, signal)
-    if (!result.ok) throw new Error(`${result.error.code}: ${result.error.message}`)
-    return result.value.skills
-  })), 'reference-anything.client.skill-source')
-  ctx.effect(() => inputTriggers.registerSource(createWorkspaceSource(async (sessionId, signal) => {
-    if (!remote) return []
-    return unwrap(await remote.workspaceSearch(sessionId, signal))
-  })), 'reference-anything.client.workspace-source')
-  ctx.effect(() => inputTriggers.registerSource(createSessionSource(async (sessionId, query, signal) => {
-    if (!remote) return []
-    return unwrap(await remote.sessionSearch(sessionId, { query, limit: 12 }, signal))
-  })), 'reference-anything.client.session-source')
+  const registerSources = () => {
+    const source = createConversationSource(async (query, provider, signal) => {
+      if (!remote) return []
+      const rows = unwrap(await remote.search({ query, ...(provider ? { provider } : {}), limit: 12 }, signal))
+      for (const row of rows) urlByUri.set(conversationReferenceUri(row.uriId), row.url)
+      return rows
+    }, t)
+    return [
+      inputTriggers.registerSource(source),
+      inputTriggers.registerSource(createCommandSource(async (sessionId, signal) => { signal.throwIfAborted(); return unwrap(await ctx.remote.commands.list(sessionId)) }, t)),
+      inputTriggers.registerSource(createSkillSource(async (sessionId, signal) => {
+        const { result } = await connection.api.skills.list({ sessionId }, signal)
+        if (!result.ok) throw new Error(`${result.error.code}: ${result.error.message}`)
+        return result.value.skills
+      }, t)),
+      inputTriggers.registerSource(createWorkspaceSource(async (sessionId, signal) => {
+        if (!remote) return []
+        return unwrap(await remote.workspaceSearch(sessionId, signal))
+      }, t)),
+      inputTriggers.registerSource(createSessionSource(async (sessionId, query, signal) => {
+        if (!remote) return []
+        return unwrap(await remote.sessionSearch(sessionId, { query, limit: 12 }, signal))
+      }, t)),
+    ]
+  }
+  let sourceDisposers = registerSources()
+  ctx.effect(() => {
+    const refreshSources = () => { for (const dispose of sourceDisposers) dispose(); sourceDisposers = registerSources() }
+    ctx.on('locale/change', refreshSources)
+    return () => { for (const dispose of sourceDisposers) dispose() }
+  }, 'reference-anything.client.locale-sources')
 
   ctx.slots.inject('conversation.input.dock', () => ctx.slots.register({
-    name: 'conversation.input.dock', id: 'reference-anything', order: 25,
+    name: 'conversation.input.dock', id: 'reference-anything', order: 25, locale: REFERENCE_ANYTHING_NS,
     inject: () => ({ open: (uri: string) => { const url = urlByUri.get(uri); if (url) window.open(url, '_blank', 'noopener,noreferrer') } }),
   }, ConversationsDock))
 
@@ -97,7 +111,7 @@ export function apply(ctx: ClientContext): void {
     if (!remote) return
     try {
       const value = unwrap(await remote.settingsUpdate(settings))
-      scope.set({ ...scope.getSnapshot(), settings: value, error: undefined, notice: 'Settings saved.' })
+      scope.set({ ...scope.getSnapshot(), settings: value, error: undefined, notice: t('notice.settingsSaved') })
     } catch (error) { scope.set({ ...scope.getSnapshot(), error: message(error), notice: undefined }) }
   }
   const startSync = async (providers: ChatProvider[], mode: 'incremental' | 'full'): Promise<void> => {
@@ -110,10 +124,10 @@ export function apply(ctx: ClientContext): void {
     } catch (error) { scope.set({ ...scope.getSnapshot(), error: message(error) }) }
   }
   ctx.slots.inject('settings.section', () => ctx.slots.register({
-    name: 'settings.section', id: 'reference-anything', order: 56, label: () => 'Reference Anything',
+    name: 'settings.section', id: 'reference-anything', order: 56, label: () => t('settings.title'), locale: REFERENCE_ANYTHING_NS,
     inject: () => ({
       hooks: { scope }, save, sync: startSync, refresh,
-      install: async () => { try { if (!remote) return; unwrap(await remote.installAdapter()); await refresh(); scope.set({ ...scope.getSnapshot(), notice: 'Adapter installed.' }) } catch (error) { scope.set({ ...scope.getSnapshot(), error: message(error) }) } },
+      install: async () => { try { if (!remote) return; unwrap(await remote.installAdapter()); await refresh(); scope.set({ ...scope.getSnapshot(), notice: t('notice.adapterInstalled') }) } catch (error) { scope.set({ ...scope.getSnapshot(), error: message(error) }) } },
       cancel: async () => { try { if (remote && currentJob) unwrap(await remote.syncCancel({ jobId: currentJob })); await pollJob() } catch (error) { scope.set({ ...scope.getSnapshot(), error: message(error) }) } },
     }),
   }, ConversationSettings))
