@@ -9,6 +9,11 @@ const healthy: Health = {
 }
 
 describe('settings source registration guard', () => {
+  it('defaults every @ source to six visible items', () => {
+    const picker = defaultPickerSettings()
+    expect(Object.values(picker).map(source => source.limit)).toEqual([6, 6, 6, 6, 6])
+  })
+
   it('migrates an older settings record to the new safe defaults', () => {
     const value = settingsRecordSchema.parse({
       opencliPath: 'opencli', profile: '', detailConcurrency: 2, autoSync: false,

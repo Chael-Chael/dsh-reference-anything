@@ -4,7 +4,7 @@ import type { ChatProvider } from '../wire.ts'
 import { parseProviderQuery } from '../search.ts'
 import { encodeReferenceUri } from '../uri-codec.ts'
 import type { SearchResult, SessionCandidate, WorkspaceEntry } from './remote.ts'
-import { PROVIDER_ICON_MARKER, SESSION_ICON_MARKER } from './provider-icons.tsx'
+import { PROVIDER_ICON_MARKER, SESSION_ICON_MARKER, SKILL_ICON_MARKER } from './provider-icons.tsx'
 import type { TranslateNS } from '@deepseek-ai/dsh-client-locale/client'
 import type { REFERENCE_ANYTHING_NS } from './locale.ts'
 
@@ -96,7 +96,7 @@ function formatConversationMention(reference: ConversationReference): string {
 
 export function createConversationSource(search: (
   query: string, provider: ChatProvider | undefined, signal: AbortSignal, limit: number,
-) => Promise<readonly SearchResult[]>, t: T = fallback, options: PickerSourceOptions = { order: 30, limit: 12 }): InputTriggerSource {
+) => Promise<readonly SearchResult[]>, t: T = fallback, options: PickerSourceOptions = { order: 30, limit: 6 }): InputTriggerSource {
   return {
     trigger: '@', name: CONVERSATION_SOURCE, order: options.order,
     async candidates(_session, { query, signal }) {
@@ -116,7 +116,10 @@ export function createConversationSource(search: (
     onPick({ candidate }) {
       const row = candidate.conversation
       if (!row) return undefined
-      const title = `${LABEL[row.provider]} · ${row.title}`.replace(/[\[\]]/g, '')
+      // Keep the provider separator adjacent and outside DSH's `@name`
+      // character class. A spaced label such as `@Grok · Title` is otherwise
+      // projected by the user-bubble renderer as a native `@Grok` pill.
+      const title = `${LABEL[row.provider]}·${row.title}`.replace(/[\[\]]/g, '')
       const reference = { uriId: row.uriId, label: title }
       return {
         insert: {
@@ -136,7 +139,7 @@ export function createConversationSource(search: (
   }
 }
 
-export function createWorkspaceSource(load: (sessionId: string, signal: AbortSignal) => Promise<readonly WorkspaceEntry[]>, t: T = fallback, options: PickerSourceOptions = { order: 10, limit: 12 }): InputTriggerSource {
+export function createWorkspaceSource(load: (sessionId: string, signal: AbortSignal) => Promise<readonly WorkspaceEntry[]>, t: T = fallback, options: PickerSourceOptions = { order: 10, limit: 6 }): InputTriggerSource {
   return {
     trigger: '@', name: FILE_SOURCE, order: options.order,
     async candidates(session, { query, signal }) {
@@ -165,7 +168,7 @@ export function createWorkspaceSource(load: (sessionId: string, signal: AbortSig
   }
 }
 
-export function createSessionSource(search: (sessionId: string, query: string, signal: AbortSignal) => Promise<readonly SessionCandidate[]>, t: T = fallback, options: PickerSourceOptions = { order: 20, limit: 12 }): InputTriggerSource {
+export function createSessionSource(search: (sessionId: string, query: string, signal: AbortSignal) => Promise<readonly SessionCandidate[]>, t: T = fallback, options: PickerSourceOptions = { order: 20, limit: 6 }): InputTriggerSource {
   return {
     trigger: '@', name: SESSION_SOURCE, order: options.order,
     async candidates(session, { query, signal }) {
@@ -188,11 +191,10 @@ export function createSessionSource(search: (sessionId: string, query: string, s
 interface CommandCandidate { name: string; description?: string; input?: { hint?: string } }
 interface SkillCandidate { name: string; description: string; modelInvocable?: boolean }
 
-export function createCommandSource(load: (sessionId: SessionId, signal: AbortSignal) => Promise<readonly CommandCandidate[]>, t: T = fallback, options: PickerSourceOptions = { order: 0, limit: 12 }): InputTriggerSource {
+export function createCommandSource(load: (sessionId: SessionId, signal: AbortSignal) => Promise<readonly CommandCandidate[]>, t: T = fallback, options: PickerSourceOptions = { order: 0, limit: 6 }): InputTriggerSource {
   return {
     trigger: '@', name: COMMAND_SOURCE, order: options.order,
-    async candidates(session, { query, position, signal }) {
-      if (position !== 'leading') return []
+    async candidates(session, { query, signal }) {
       const scoped = scopedQuery(query, 'commands')
       if (scoped === undefined) return []
       const needle = scoped.toLocaleLowerCase()
@@ -200,15 +202,14 @@ export function createCommandSource(load: (sessionId: SessionId, signal: AbortSi
         .filter(row => row.name.toLocaleLowerCase().includes(needle))
         .slice(0, 50).map(row => ({ name: row.name, description: row.description, hint: row.input?.hint, icon: '⌘', commandName: row.name }))
     },
-    onPick({ candidate }) { return candidate.commandName ? { text: `/${candidate.commandName} ` } : undefined },
+    onPick({ candidate }) { return candidate.commandName ? { text: `/${candidate.commandName}` } : undefined },
   }
 }
 
-export function createSkillSource(load: (sessionId: SessionId, signal: AbortSignal) => Promise<readonly SkillCandidate[]>, t: T = fallback, options: PickerSourceOptions = { order: 5, limit: 12 }): InputTriggerSource {
+export function createSkillSource(load: (sessionId: SessionId, signal: AbortSignal) => Promise<readonly SkillCandidate[]>, t: T = fallback, options: PickerSourceOptions = { order: 5, limit: 6 }): InputTriggerSource {
   return {
     trigger: '@', name: SKILL_SOURCE, order: options.order,
-    async candidates(session, { query, position, signal }) {
-      if (position !== 'leading') return []
+    async candidates(session, { query, signal }) {
       const scoped = scopedQuery(query, 'skills')
       if (scoped === undefined) return []
       const rows = await load(session.sessionId, signal)
@@ -216,7 +217,7 @@ export function createSkillSource(load: (sessionId: SessionId, signal: AbortSign
       return rows.filter(row => row.name.toLocaleLowerCase().includes(needle)).slice(0, 50).map(row => ({
         name: row.name,
         description: `${row.modelInvocable === false ? t('skill.userOnly') : ''}${row.description}`,
-        icon: '✦',
+        icon: SKILL_ICON_MARKER,
         skillName: row.name,
       }))
     },

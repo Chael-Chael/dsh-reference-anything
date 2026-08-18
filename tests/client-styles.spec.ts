@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it } from 'vitest'
-import { adoptConversationMentionProjection, adoptConversationSyncActionProjection, adoptMenuExpansionProjection, adoptMenuGroupTitleProjection, adoptReferenceIconProjection, adoptStyles, refreshActiveTriggerMenu } from '../src/client/styles.ts'
+import { adoptAdaptiveComposerHeight, adoptConversationMentionProjection, adoptConversationSyncActionProjection, adoptMenuExpansionProjection, adoptMenuGroupTitleProjection, adoptReferenceIconProjection, adoptStyles, refreshActiveTriggerMenu } from '../src/client/styles.ts'
 import type { SyncStatus } from '../src/client/remote.ts'
 
 afterEach(() => {
@@ -20,18 +20,19 @@ describe('plugin-owned DSH presentation overrides', () => {
     expect(text).toContain('var(--dsw-alias-state-business-primary)')
     expect(text).toContain('width:max-content!important')
     expect(text).toContain('[data-decoration="chip"]:before{display:none!important}')
-    expect(text).toContain('position:static!important')
+    expect(text).toContain('[data-decoration="chip"]>span{position:static!important')
     expect(text).toContain('font-size:inherit!important')
+    expect(text).toContain('font-weight:inherit!important;letter-spacing:inherit!important')
     expect(text).toContain('[data-composer-card] .dsh_ref_conversation_chip')
-    expect(text).toContain('.dsh_ref_conversation_chip>.dsh_ref_projected_icon{transform:translateY(.2em)!important}')
+    expect(text).toContain('[data-decoration="chip"]>.dsh_ref_session_icon:before{background:var(--dsw-alias-state-business-primary,#3b82f6)!important}')
+    expect(text).not.toContain('.dsh_ref_conversation_chip>.dsh_ref_projected_icon:before{transform:translateY(.2em)!important}')
+    expect(text).not.toContain('[data-decoration="chip"]>.dsh_ref_session_icon:before{transform:translateY(.2em)!important')
     expect(text).toContain('[role="listbox"] .dsh_ref_projected_icon:before{background:var(--dsw-alias-label-tertiary,#8b8f98)}')
     expect(text).toContain('[role="dialog"]:has(.dsh_ref_settings){overflow:clip!important}')
     expect(text).toContain('.dsh_ref_toggle{position:relative}')
     expect(text).not.toContain('.dsh_ref_conversation_chip,.dsh_ref_conversation_chip>span,.dsh_ref_projected_icon{color:')
     expect(text).toContain('.dsh_ref_adaptive_caret')
-    expect(text).toContain('width:1px')
-    expect(text).toContain('animation:dsh_ref_caret_blink 1.06s step-end infinite')
-    expect(text).toContain('.dsh_ref_adaptive_caret[hidden]')
+    expect(text).toContain('dsh_ref_caret_blink')
     expect(text).not.toContain('.dsh_ref_chip{')
     expect(text).toContain('.dsh_ref_menu_sync{position:relative')
     expect(text).toContain('border-radius:999px;background:rgba(59,130,246,.11)')
@@ -47,17 +48,17 @@ describe('plugin-owned DSH presentation overrides', () => {
   })
 
   it('projects the same provider logo marker in menu items and chips', () => {
-    document.body.innerHTML = '<div role="listbox"><span>\uE101</span></div><span data-decoration="chip"><span>\uE101 Claude · Design</span></span>'
+    document.body.innerHTML = '<div role="listbox"><span>\uE101</span></div><span data-decoration="chip"><span>\uE101 Claude·Design</span></span>'
     const dispose = adoptReferenceIconProjection()
     const projected = document.querySelectorAll('[data-dsh-ref-provider-icon="claude"]')
     expect(projected).toHaveLength(2)
     expect(projected[0]?.textContent).toBe('')
-    expect(projected[1]?.textContent).toBe('Claude · Design')
+    expect(projected[1]?.textContent).toBe('Claude·Design')
     const chip = document.querySelector('[data-decoration="chip"]')
-    expect(chip?.getAttribute('title')).toBe('Claude · Design')
+    expect(chip?.getAttribute('title')).toBe('Claude·Design')
     expect(chip?.classList.contains('dsh_ref_conversation_chip')).toBe(true)
     expect(chip?.getAttribute('data-dsh-ref-provider')).toBe('claude')
-    expect(chip?.querySelector('span')?.textContent).toBe('Claude · Design')
+    expect(chip?.querySelector('span')?.textContent).toBe('Claude·Design')
     expect(chip?.querySelector('span')?.classList.contains('dsh_ref_projected_icon')).toBe(true)
     dispose()
   })
@@ -71,11 +72,46 @@ describe('plugin-owned DSH presentation overrides', () => {
     dispose()
   })
 
+  it('extends the native mirror to the visual height of wrapped content-sized chips', async () => {
+    document.body.innerHTML = '<div data-composer-card><div data-input-backdrop><span data-decoration="chip"><span>Long reference title</span></span></div><div data-input-mirror></div></div>'
+    const backdrop = document.querySelector('[data-input-backdrop]') as HTMLElement
+    const mirror = document.querySelector('[data-input-mirror]') as HTMLElement
+    backdrop.getBoundingClientRect = () => ({ width: 320, height: 24, left: 0, right: 320, top: 0, bottom: 24, x: 0, y: 0, toJSON() {} })
+    const original = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'scrollHeight')
+    Object.defineProperty(HTMLElement.prototype, 'scrollHeight', {
+      configurable: true,
+      get() { return this.hasAttribute('data-dsh-ref-height-probe') ? 72 : 24 },
+    })
+    const dispose = adoptAdaptiveComposerHeight()
+    try {
+      await new Promise<void>(resolve => { requestAnimationFrame(() => { requestAnimationFrame(() => { resolve() }) }) })
+      expect(mirror.style.minHeight).toBe('72px')
+      backdrop.querySelector('[data-decoration="chip"]')?.remove()
+      await new Promise<void>(resolve => { requestAnimationFrame(() => { requestAnimationFrame(() => { resolve() }) }) })
+      expect(mirror.style.minHeight).toBe('')
+    } finally {
+      dispose()
+      if (original) Object.defineProperty(HTMLElement.prototype, 'scrollHeight', original)
+      else delete (HTMLElement.prototype as unknown as Record<string, unknown>).scrollHeight
+    }
+  })
+
   it('projects the DSH session marker as an outlined conversation icon', () => {
     document.body.innerHTML = '<div role="listbox"><span>\uE106 Session title</span></div>'
     const dispose = adoptReferenceIconProjection()
     const projected = document.querySelector('.dsh_ref_session_icon')
     expect(projected?.textContent).toBe('Session title')
+    expect(projected?.getAttribute('style')).toContain('stroke-width%3D%222%22')
+    dispose()
+  })
+
+  it('projects the Lucide ScrollText marker for skills', () => {
+    document.body.innerHTML = '<div role="listbox"><span>\uE107 review</span></div>'
+    const dispose = adoptReferenceIconProjection()
+    const projected = document.querySelector('[data-dsh-ref-picker-icon="skill"]')
+    expect(projected?.textContent).toBe('review')
+    expect(projected?.getAttribute('style')).toContain('--dsh-ref-picker-icon')
+    expect(projected?.getAttribute('style')).toContain('fill%3D%22none%22')
     dispose()
   })
 
@@ -128,6 +164,20 @@ describe('plugin-owned DSH presentation overrides', () => {
     expect(editor.value).toBe('compare @chatgpt:cache')
     expect(editor.selectionStart).toBe(editor.value.length)
     expect(document.activeElement).toBe(editor)
+  })
+
+  it('restores the open menu scroll position after a sync refresh', async () => {
+    const card = document.createElement('div'); card.dataset.composerCard = ''
+    const editor = document.createElement('textarea'); editor.value = '@chatgpt'
+    const listbox = document.createElement('div'); listbox.setAttribute('role', 'listbox')
+    const viewport = document.createElement('div'); listbox.append(viewport); card.append(editor, listbox); document.body.append(card)
+    viewport.scrollTop = 120
+    editor.addEventListener('input', () => { if (editor.value === '@chatgpt') viewport.scrollTop = 0 })
+    editor.focus(); editor.setSelectionRange(editor.value.length, editor.value.length)
+
+    expect(refreshActiveTriggerMenu()).toBe(true)
+    await new Promise<void>(resolve => { requestAnimationFrame(() => { requestAnimationFrame(() => { requestAnimationFrame(() => { resolve() }) }) }) })
+    expect(viewport.scrollTop).toBe(120)
   })
 
   it('reveals external conversation rows in batches of five on demand', () => {
@@ -186,6 +236,25 @@ describe('plugin-owned DSH presentation overrides', () => {
     const rows = Array.from(document.querySelectorAll('[role="option"]')) as HTMLElement[]
     expect(rows.filter(row => !row.classList.contains('dsh_ref_menu_collapsed'))).toHaveLength(5)
     expect(document.querySelector('[data-dsh-ref-menu-expand="External conversations"]')).not.toBeNull()
+    dispose()
+  })
+
+  it('skips collapsed rows during keyboard traversal', async () => {
+    document.body.innerHTML = '<textarea></textarea><div role="listbox" aria-activedescendant="row-0"><div role="presentation" data-source="External conversations">External conversations</div><button id="row-0" role="option">0</button><button id="row-1" role="option">1</button><button id="row-2" role="option">2</button><div role="presentation" data-source="Other">Other</div><button id="row-3" role="option">3</button></div>'
+    const editor = document.querySelector('textarea')!
+    const listbox = document.querySelector('[role="listbox"]')!
+    const dispose = adoptMenuExpansionProjection({ sources: ['External conversations'], label: '展开', getVisibleLimit: () => 1 })
+    let index = 0
+    editor.addEventListener('keydown', event => {
+      if (event.key === 'ArrowDown') index = Math.min(3, index + 1)
+      listbox.setAttribute('aria-activedescendant', `row-${index}`)
+    })
+
+    editor.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }))
+    await new Promise<void>(resolve => { requestAnimationFrame(() => { requestAnimationFrame(() => { resolve() }) }) })
+    expect(listbox.getAttribute('aria-activedescendant')).toBe('row-3')
+    expect(document.getElementById('row-1')?.classList.contains('dsh_ref_menu_collapsed')).toBe(true)
+    expect(document.getElementById('row-2')?.classList.contains('dsh_ref_menu_collapsed')).toBe(true)
     dispose()
   })
 

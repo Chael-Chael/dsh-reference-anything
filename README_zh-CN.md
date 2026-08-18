@@ -6,7 +6,7 @@
 
 One `@` to reference them all.
 
-[English](./README.md) · **简体中文** · [News](#news) · [Roadmap](#future-roadmap) · [安装](#安装) · [使用](#使用) · [报告问题][github-issues-link]
+[English](./README.md) · **简体中文** · [新闻](#新闻) · [Roadmap](#Roadmap) · [安装](#安装) · [使用](#使用) · [报告问题][github-issues-link]
 
 <!-- SHIELD GROUP -->
 
@@ -20,23 +20,22 @@ One `@` to reference them all.
 
 </div>
 
-在 DeepSeek Harness（DSH）的统一 `@` 菜单里引用工作区文件/文件夹、DSH 会话，以及 ChatGPT、Claude、Gemini、DeepSeek、Grok 和 Kimi 的历史对话。
+在 DeepSeek Harness（DSH）的统一 `@` 菜单里引用命令、Skills、工作区文件/文件夹、DSH 会话，以及来自 ChatGPT、Claude、Gemini、DeepSeek、Grok 和 Kimi 的历史对话。
 
-插件把在线对话显式同步到 DSH 的本地镜像；输入 `@` 时只查询本地数据，不会在写提示词的过程中访问浏览器或 Provider。`@` 只把已授权的对话 URI 交给模型；模型判断确有需要时才调用 `reference_read` 拉取正文。
+本插件通过OpenCLI复用用户已经登录的AI对话窗口获取历史对话，在本地仅保留对话标题，由Agent根据需求自主fetch远端对话内容
 
-## News
+## 新闻
 
 - **2026-08-18 · v0.2.0** — 全新 Conversations 设置页，支持本地会话统计、分页管理、Provider/Profile 选择与同步状态检查。
 - **2026-08-18** — 引入按需读取协议：引用默认只传递安全指针，正文与附件由 agent 在获得授权后按需读取。
 - **2026-08-17** — ChatGPT、Claude、Gemini、DeepSeek、Grok 和 Kimi 统一接入 DSH 的 `@` 菜单。
 
-## Future Roadmap
+## Roadmap
 
-- [ ] 支持更多 AI 对话平台与可插拔 Provider。
-- [ ] 增量同步、后台自动同步与更细粒度的同步策略。
-- [ ] 更强的跨平台全文检索、过滤与会话管理能力。
-- [ ] 对引用来源、权限与上下文用量提供更直观的可视化。
-- [ ] 完善安装体验、诊断工具和跨平台兼容性。
+- [ ] 支持引用本地其他 Agent 的历史对话
+- [ ] 支持引用更多 AI 对话平台消息（欢迎大家提意见！）
+- [ ] 支持引用电脑上打开的应用窗口、浏览器窗口
+- [ ] 更多 Idea 欢迎在 Issues 中提出！
 
 ## 架构
 
@@ -85,33 +84,65 @@ opencli plugin install file:///D:/dsh-reference-anything/opencli-plugin
 
 ### 检索
 
-`@` 上挂着五个分组：`Commands`、`Skills`、`Files and folders`、`DSH sessions`、`External conversations`（前两个只在 `@` 位于草稿开头时出现）。**每个分组**在查询为空时最多 5 条、键入后最多 8 条，会话分组按匹配质量排序、时间兜底。上限按分组算：五个不设限的分组会一起挤进同一个 320px 下拉框。用组名浏览（`@commands`）算空查询，走 5 条那档。
+`@` 菜单包含五个分组：`Commands`、`Skills`、`Files and folders`、`DSH sessions`、`External conversations`。前两个分组只在 `@` 位于草稿开头时出现。每个分组在查询为空时最多显示 5 条，输入查询后最多显示 8 条。
 
-需要完整浏览时用别的入口：会话看设置页的分页列表，命令和技能用原生 `/` 面板。
+#### @Commands — DSH 原生命令
 
-- **模糊匹配**：查询按子序列匹配标题，`@cachedes` 和 `@cache-design` 都能命中 “Cache design notes”。
-- **正文检索**：标题匹配填不满一页时，才会去搜已同步的会话正文，命中的条目在候选行里显示匹配片段。这样 `New chat` 这类自动生成的标题也找得到。片段只出现在界面上，不会进入模型上下文。
-- **按平台过滤**：`@chatgpt:缓存`、`@claude/重构`，也接受 `gpt:`、`ds:` 简写。单独输入 `@claude` 则列出该平台最近的会话。
+仅在草稿开头可用。浏览全部命令可用 `@commands` 或 DSH 原生 `/` 面板。
 
-分隔符用 `:` 或 `/` 而不是空格：`@` 的候选 token 遇到空格即终止（DSH 输入触发器的规则，插件无法改变），所以 `@chatgpt 关键词` 会在按下空格时直接关闭菜单。同理，多词搜索请写成 `@cachedesign` 或 `@cache-design`。
+#### @Skills — DSH 技能库
 
-也可以使用 `类型:名称` 快速限定 `@` 面板，只显示对应分组：
+仅在草稿开头可用。浏览全部技能可用 `@skills:` 或 DSH 原生 `/` 面板。
 
-- `@chatgpt:标题`、`@claude:标题`、`@gemini:标题`、`@deepseek:标题`、`@grok:标题`、`@kimi:标题`
-- `@files:名称`、`@sessions:名称`、`@skills:名称`、`@commands:名称`
+#### @Files and folders — 工作区文件与目录
 
-冒号后可以留空以浏览该类型的全部候选，例如 `@skills:`。没有类型前缀时仍同时搜索所有分组。
-也可直接输入组名浏览全部候选，例如 `@commands`、`@skills` 或 `@files`。
+在输入框键入 `@files:` 可浏览工作区的全部文件和文件夹。搜索时支持模糊匹配标题，例如 `@cachedes` 和 `@cache-design` 都能命中 "Cache design notes"。
 
-选中后草稿保存为规范的引用 mention：
+**功能**：
+- 快速引用工作区文件，自动校验工作区边界
+- 文件引用仅向模型写入经过校验的路径与类型标记，不会预加载文件内容
+- 模型如需文件内容，仍须通过现有、受权限约束的文件工具读取
 
+#### @DSH sessions — DSH 会话历史
+
+在输入框键入 `@sessions:` 可浏览本地已同步的 DSH 会话。会话按匹配质量排序，时间兜底。
+
+**搜索能力**：
+- **标题匹配**：模糊搜索会话标题
+- **正文检索**：标题匹配不足时，自动搜索已同步的会话正文；命中的条目会在候选行显示匹配片段（片段仅用于界面展示，不进入模型上下文）
+- 自动生成的通用标题（如 "New chat"）也能通过正文关键词找到
+
+完整浏览可到设置页的分页列表。会话引用沿用官方 `dsh-session:` 协议与不可变快照语义。
+
+#### @External conversations — 外部对话平台
+
+支持 ChatGPT、Claude、Gemini、DeepSeek、Grok 和 Kimi 的历史对话。
+
+**按平台过滤**：
+- 使用 `@chatgpt:缓存`、`@claude:重构` 的格式过滤特定平台
+- 也接受简写：`@gpt:`、`@ds:` 等
+- 单独输入 `@claude` 则列出该平台最近的会话
+
+**搜索能力**：
+- **标题匹配**：支持模糊搜索对话标题
+- **正文检索**：标题匹配不足时，搜索对话正文，在候选行显示匹配片段
+- **平台和账号隔离**：按 Provider 和账号作用域分别维护会话历史
+
+**引用展示**：选中后，草稿中显示为可删除的引用 chip：
 ```text
 @[ChatGPT · 对话标题](dsh-ref:<opaque-base64url>)
 ```
 
-界面把它显示为可删除的 conversation chip；打开来源 URL 只发生在 UI 中，URL 不会注入模型上下文。
+打开来源 URL 仅发生在 UI 中，URL 不会注入模型上下文。初始引用只包含安全指针，模型如需正文才调用 `reference_read` 按需读取。
 
-文件引用只向模型写入经过工作区边界校验的路径与类型标记，不会在自动补全或 pre-step 中读取文件内容；模型如需内容，仍须通过已有、受权限约束的文件工具读取。DSH 会话引用沿用官方 `dsh-session:` 协议与不可变快照语义。
+---
+
+**通用提示**：
+- 分隔符用 `:` 或 `/` 而不是空格：`@` 的候选 token 遇到空格即终止，所以 `@chatgpt 关键词` 会在按下空格时关闭菜单。多词搜索请写成 `@cachedesign` 或 `@cache-design`。
+- 没有类型前缀时，仍同时搜索所有分组
+- 完整浏览各分组：会话看设置页的分页列表，命令和技能用原生 `/` 面板
+
+
 
 ## 模型侧协议
 
@@ -161,35 +192,10 @@ opencli plugin install file:///D:/dsh-reference-anything/opencli-plugin
 
 只有完整枚举远端分页成功后，才会把远端消失的记录标记为 `remoteMissing`；本地历史不会被自动删除。API 请求失败后才启用 DOM fallback，且 fallback 数据始终标记为 `partial=true`。
 
-## OpenCLI 命令
-
-六个平台分别注册 `dsh-chatgpt`、`dsh-claude`、`dsh-gemini`、`dsh-deepseek`、`dsh-grok`、`dsh-kimi`，每个站点提供：
-
-- `whoami`
-- `history-all`
-- `detail`
-- `attachment`
-
-DSH 使用无 shell 的 `execFile` 传递 argv，并限制超时和 stdout 大小。OpenCLI 退出码 `69`、`75`、`77`、`78` 分别映射为扩展未连接、超时、未登录和配置错误。稳定账号标识只用于计算 SHA-256 `accountScope`；原始邮箱、Cookie 和 Token 不落盘、不写日志。
-
-## 开发与验证
-
-```powershell
-pnpm install --ignore-scripts
-pnpm run typecheck
-pnpm test
-pnpm run build
-npm pack --dry-run
-```
-
-测试覆盖同步中断、最新 revision 替换、旧 cursor 过期、分支过滤、参数注入、输出上限、超时、权限、附件和 UI 引用 URI。Windows 无创建 symlink 权限时只跳过该项平台前置条件；Linux CI 或具备权限的 Windows 仍执行越界 symlink 安全测试。
-
 ## Acknowledgements
 
 - 工作区文件/文件夹自动补全、路径排序和 existence-only 引用实现包含从 [omdsh-dev/dsh-at-file](https://github.com/omdsh-dev/dsh-at-file) 改编的部分。
 - DSH 跨会话候选、规范 `dsh-session:` 引用与不可变快照能力使用官方 `@deepseek-ai/dsh-session-reference` 包。
-
-这里的致谢不替代许可证声明。`dsh-at-file` 的原始版权声明、完整 MIT License 文本和固定上游 revision 均保留在 [NOTICE.md](./NOTICE.md)。
 
 ## 来源与许可
 

@@ -20,23 +20,22 @@ One `@` to reference them all.
 
 </div>
 
-Reference workspace files and folders, DSH sessions, and conversation history from ChatGPT, Claude, Gemini, DeepSeek, Grok, and Kimi through a unified `@` menu in DeepSeek Harness (DSH).
+Within the unified `@` menu of DeepSeek Harness (DSH), reference commands, Skills, workspace files/folders, DSH sessions, and historical conversations from ChatGPT, Claude, Gemini, DeepSeek, Grok, and Kimi.
 
-The plugin explicitly syncs online conversations to a local DSH mirror. Typing `@` searches local data only—it never accesses your browser or a provider while you are composing a prompt. The `@` mention gives the model only an authorized conversation URI; the model calls `reference_read` to retrieve content when it actually needs it.
+This plugin reuses already-logged-in AI conversation windows via OpenCLI and only keeps conversation titles locally. The agent decides whether and when to fetch the remote conversation content on demand.
 
 ## News
 
-- **2026-08-18 · v0.2.0** — A redesigned Conversations settings page with local conversation statistics, paginated management, Provider/Profile selection, and sync diagnostics.
-- **2026-08-18** — Introduced on-demand reads: references pass safe pointers by default, while agents retrieve conversation content and attachments only after authorization.
+- **2026-08-18 · v0.2.0** — A redesigned Conversations settings page with local session statistics, paginated management, Provider/Profile selection, and sync status checks.
+- **2026-08-18** — Introduced on-demand read protocol: references default to safe pointers, and the agent reads the body and attachments only after authorization.
 - **2026-08-17** — Unified ChatGPT, Claude, Gemini, DeepSeek, Grok, and Kimi under the DSH `@` menu.
 
-## Future Roadmap
+## Roadmap
 
-- [ ] More AI conversation platforms and pluggable providers.
-- [ ] Incremental sync, automatic background sync, and finer-grained sync policies.
-- [ ] More powerful cross-platform full-text search, filtering, and conversation management.
-- [ ] Clearer visualization of reference sources, permissions, and context usage.
-- [ ] A smoother installation experience, better diagnostics, and broader platform compatibility.
+- [ ] Support referencing historical conversations from other local agents
+- [ ] Support more AI conversation platforms (ideas welcome!)
+- [ ] Support referencing applications or browser windows currently open on the computer
+- [ ] More ideas are welcome in Issues
 
 ## Architecture
 
@@ -50,14 +49,14 @@ opencli-plugin-dsh-chat-history
 ChatGPT / Claude / Gemini / DeepSeek / Grok / Kimi
 ```
 
-This repository does not include the legacy standalone DeepSeek CDP/`--remote-debugging-port` collector. All six platforms use OpenCLI Provider adapters, avoiding two duplicate browser-reading implementations.
+This does not include the legacy standalone DeepSeek CDP / `--remote-debugging-port` collector. All six platforms use the OpenCLI Provider adapter path, avoiding duplicate browser-reading implementations.
 
 ## Installation
 
 Prerequisites:
 
-- Install `dsh` and `opencli` globally.
-- Sign in to the platforms you want to sync in the selected Chrome Profile.
+- `dsh` and `opencli` are installed globally.
+- The target platforms are already logged in under the selected Chrome Profile.
 
 Install the DSH plugin:
 
@@ -65,56 +64,87 @@ Install the DSH plugin:
 dsh plugin --profile web add D:\dsh-reference-anything
 ```
 
-After installing the DSH plugin, open `Settings → Conversations → Availability check` in DSH Web and click **Install all**. This installs the bundled OpenCLI adapters (equivalent to `opencli plugin install file:///D:/dsh-reference-anything/opencli-plugin`), starts the Browser Bridge daemon when necessary, and opens the OpenCLI Browser Bridge extension in the [Chrome Web Store](https://chromewebstore.google.com/detail/opencli/ildkmabpimmkaediidaifkhjpohdnifk). Click “Add to Chrome,” return to the settings page, and click **Check again**; the extension should then appear as connected.
+After installing the DSH plugin, open `Settings → Conversations → Availability check` in DSH Web and click **Install all**. This will automatically install the repository’s OpenCLI adapters (equivalent to `opencli plugin install file:///D:/dsh-reference-anything/opencli-plugin`), start the Browser Bridge daemon when needed, and open the OpenCLI Browser Bridge extension page in the [Chrome Web Store](https://chromewebstore.google.com/detail/opencli/ildkmabpimmkaediidaifkhjpohdnifk). After clicking “Add to Chrome” on the store page, return to the settings page and click **Check again**; the extension will then appear as connected.
 
-You can also install the adapter manually:
+You can also complete the steps manually:
 
 ```powershell
 opencli plugin install file:///D:/dsh-reference-anything/opencli-plugin
 ```
 
-A web page cannot silently install a browser extension. Install it through the Chrome Web Store or manually use “Load unpacked” with a package from [OpenCLI Releases](https://github.com/jackwener/opencli/releases). Installing the DSH plugin does not silently modify `~/.opencli/plugins`. If OpenCLI detects multiple browser profiles, select one on the DSH Conversations settings page before syncing.
+Browser extensions cannot be silently installed from a webpage; they must be added via the Chrome Web Store or manually via “Load unpacked” from [OpenCLI Releases](https://github.com/jackwener/opencli/releases). Installing the DSH plugin does not silently modify `~/.opencli/plugins`. If OpenCLI detects multiple browser profiles, select one in the DSH Conversations settings page before syncing.
 
 ## Usage
 
 1. Open `Settings → Conversations` in DSH Web.
 2. Check the status of the OpenCLI CLI, daemon, Browser Bridge, and adapters.
-3. Select a Chrome Profile and click `Sync all`, or sync an individual provider.
-4. Type `@` in the composer and choose from `Files and folders`, `DSH sessions`, or `External conversations`.
-5. Enter a keyword to filter candidates, for example `@cache-design`.
+3. Select a Chrome Profile and click `Sync all`, or sync a single Provider.
+4. Type `@` in the input box and choose from the `Files and folders`, `DSH sessions`, or `External conversations` groups.
+5. Type a keyword to filter candidates, for example `@cache-design`.
 
 ### Search
 
-The `@` menu contains five groups: `Commands`, `Skills`, `Files and folders`, `DSH sessions`, and `External conversations`. The first two appear only when `@` is at the beginning of the draft. **Each group** shows up to five results for an empty query and up to eight after typing. Conversation results are ranked by match quality, with recency as the fallback. Limits apply per group, so five unrestricted groups share the same 320px dropdown. Browsing by group name, such as `@commands`, counts as an empty query and uses the five-result limit.
+The `@` menu contains five groups: `Commands`, `Skills`, `Files and folders`, `DSH sessions`, and `External conversations`. The first two appear only when `@` is at the beginning of the draft. Each group shows up to five results when the query is empty, and up to eight after a query is entered.
 
-For complete browsing, use the paginated conversation list on the settings page or the native `/` panel for commands and skills.
+#### @Commands — DSH native commands
 
-- **Fuzzy matching:** Queries match title subsequences, so both `@cachedes` and `@cache-design` can find “Cache design notes.”
-- **Content search:** If title matches do not fill a page, the plugin searches synced conversation content and displays a matching excerpt. This makes generic titles such as “New chat” discoverable. Excerpts appear only in the UI and are never injected into model context.
-- **Provider filters:** Use `@chatgpt:cache` or `@claude/refactor`; the `gpt:` and `ds:` aliases also work. Entering `@claude` alone lists the latest Claude conversations.
+Available only at the start of the draft. To browse all commands, use `@commands` or the native DSH `/` panel.
 
-Use `:` or `/` as the separator, not a space. A space ends the current `@` candidate token according to the DSH input-trigger rules, so `@chatgpt keyword` closes the menu as soon as the space is entered. For multiword queries, use forms such as `@cachedesign` or `@cache-design`.
+#### @Skills — DSH skill library
 
-You can also use `type:name` to restrict the `@` panel to one group:
+Available only at the start of the draft. To browse all skills, use `@skills:` or the native DSH `/` panel.
 
-- `@chatgpt:title`, `@claude:title`, `@gemini:title`, `@deepseek:title`, `@grok:title`, `@kimi:title`
-- `@files:name`, `@sessions:name`, `@skills:name`, `@commands:name`
+#### @Files and folders — workspace files and directories
 
-Leave the part after the colon empty to browse all candidates of that type, such as `@skills:`. Without a type prefix, all groups are searched. You can also browse a group directly with `@commands`, `@skills`, or `@files`.
+Type `@files:` in the input box to browse all files and folders in the workspace. Search supports fuzzy matching on titles, so both `@cachedes` and `@cache-design` can match “Cache design notes.”
 
-After selection, the draft stores a canonical reference mention:
+Features:
+- Quick reference to workspace files with automatic workspace-boundary validation
+- File references only write a validated path and type marker into the model context; file content is not preloaded
+- If the model needs file content, it must use the existing permission-constrained file tools
 
+#### @DSH sessions — DSH session history
+
+Type `@sessions:` to browse locally synced DSH sessions. Sessions are ranked by match quality, with recency as fallback ordering.
+
+Search capabilities:
+- **Title match:** fuzzy search on session titles
+- **Content search:** when title matches are insufficient, the synced session body is searched; matching excerpts are shown in the candidate row for UI display only and are not injected into model context
+- Auto-generated generic titles such as “New chat” can also be found via body keywords
+
+Full browsing is available on the settings page’s paginated list. Session references follow the official `dsh-session:` protocol and immutable snapshot semantics.
+
+#### @External conversations — external conversation platforms
+
+Supports historical conversations from ChatGPT, Claude, Gemini, DeepSeek, Grok, and Kimi.
+
+**Platform filtering:**
+- Use `@chatgpt:cache` or `@claude:refactor` to filter a specific platform
+- Short aliases are also accepted, such as `@gpt:` and `@ds:`
+- Entering `@claude` alone lists recent conversations for that platform
+
+**Search capabilities:**
+- **Title match:** fuzzy search on conversation titles
+- **Content search:** if title matches are insufficient, the conversation body is searched and matching excerpts are shown in the candidate list
+- **Provider and account isolation:** history is maintained separately by Provider and account scope
+
+**Reference display:** after selection, the draft shows a removable reference chip:
 ```text
 @[ChatGPT · Conversation title](dsh-ref:<opaque-base64url>)
 ```
 
-The UI renders it as a removable conversation chip. Source URLs are opened only from the UI and are never injected into model context.
+Opening the source URL happens only in the UI; the URL is never injected into model context. The initial reference contains only a safe pointer; if the model needs the body, it calls `reference_read` on demand.
 
-File references expose only a workspace-boundary-validated path and type marker. They do not read file contents during autocomplete or pre-step processing; models must still use the existing permission-constrained file tools. DSH session references retain the official `dsh-session:` protocol and immutable snapshot semantics.
+---
+
+**General notes:**
+- Use `:` or `/` as the separator instead of a space: the `@` candidate token ends at a space, so `@chatgpt keyword` closes the menu as soon as you press the space. For multi-word searches, write `@cachedesign` or `@cache-design`.
+- Without a type prefix, all groups are searched at once.
+- For full browsing across groups: sessions are listed on the settings page, while commands and skills use the native `/` panel.
 
 ## Model-facing Protocol
 
-A reference produces an untrusted-data envelope followed by the current user request. The initial envelope contains pointers only, never the conversation body:
+A reference produces an untrusted-data envelope alongside the current user request. The initial envelope contains only pointers and never the conversation body:
 
 ```json
 {
@@ -138,57 +168,32 @@ A reference produces an untrusted-data envelope followed by the current user req
 }
 ```
 
-- When an agent needs content, it calls `reference_read({ uri, limit, cursor })`. Turns within each page are chronological, while pagination moves from newer pages toward older ones.
-- For an initial item with `deferred=true`, the first call passes only `uri`, not an empty `nextCursor`.
-- In offline-mirror mode, `reference_read` paginates over the current revision. In metadata-only mode, every read requests content from the provider again.
-- `before` is retained only as a deprecated compatibility parameter and cannot be combined with `cursor`.
-- A mention or `reference_list` grants the current task permission to read that URI. Unauthorized URIs are rejected.
-- Each conversation retains only its latest revision. Cursors for an older revision expire after its content changes.
-- `reference_attachment_read` separately validates conversation authorization and caps attachments at 25 MiB.
+- The agent calls `reference_read({ uri, limit, cursor })` only when it needs the body. Turns in each page are in chronological order, and pagination moves from newer pages toward older ones.
+- For the initial `deferred=true` item, the first call passes only `uri` and does not send an empty `nextCursor`.
+- In offline-mirror mode, `reference_read` paginates over the current revision. In metadata-only mode, each read requests content from the Provider again.
+- `before` is kept only as a deprecated compatibility parameter and cannot be combined with `cursor`.
+- A mention or `reference_list` grants the current task permission to read that URI; unauthorized URIs are rejected.
+- Each conversation keeps only the latest revision. Cursors for older revisions expire after content changes.
+- `reference_attachment_read` validates conversation authorization separately and caps attachments at 25 MiB.
 - Sync stores attachment metadata and same-origin locators, not temporary signed URLs. Attachments are classified as `image` or `file`; empty URLs and site-root paths are not marked as available.
-- Unreadable attachments add a model-facing notice such as `[User attached 1 image; image contents were not included]` without modifying the original conversation text.
+- Unreadable attachments add a model-facing notice such as `[User attached 1 image; image contents were not included]` without altering the original conversation text.
 
 ## Sync and Storage
 
 The `reference_anything` storage domain contains:
 
-- `conversations`: provider, account scope, remote ID, current revision, and integrity state.
-- `revisions`: content hash, turn count, active branch, and chunk manifest.
-- `turn_chunks`: immutable chunks of 50 turns.
-- `attachments`: stable locators and metadata without temporary signed URLs.
-- `sync_states`: provider cursor, profile, progress, and errors.
+- `conversations`: Provider, account scope, remote ID, current revision, and integrity state
+- `revisions`: content hash, turn count, active branch, and chunk manifest
+- `turn_chunks`: immutable chunks of 50 turns
+- `attachments`: stable locators and metadata without temporary signed URLs
+- `sync_states`: Provider cursor, profile, progress, and errors
 
-Remote records are marked `remoteMissing` only after a complete remote pagination pass succeeds. Local history is never deleted automatically. DOM fallback is enabled only after an API request fails, and fallback data is always marked `partial=true`.
-
-## OpenCLI Commands
-
-The six platforms register `dsh-chatgpt`, `dsh-claude`, `dsh-gemini`, `dsh-deepseek`, `dsh-grok`, and `dsh-kimi`. Each provides:
-
-- `whoami`
-- `history-all`
-- `detail`
-- `attachment`
-
-DSH passes arguments through shell-free `execFile` calls and limits both execution time and stdout size. OpenCLI exit codes `69`, `75`, `77`, and `78` map to extension disconnected, timeout, unauthenticated, and configuration error. Stable account identifiers are used only to compute the SHA-256 `accountScope`; raw email addresses, cookies, and tokens are never persisted or logged.
-
-## Development and Verification
-
-```powershell
-pnpm install --ignore-scripts
-pnpm run typecheck
-pnpm test
-pnpm run build
-npm pack --dry-run
-```
-
-Tests cover interrupted sync, latest-revision replacement, expired cursors, branch filtering, argument injection, output limits, timeouts, authorization, attachments, and UI reference URIs. On Windows without symlink creation privileges, only the symlink-platform prerequisite is skipped; Linux CI and privileged Windows environments still run the out-of-boundary symlink security test.
+Remote records are marked `remoteMissing` only after a full remote pagination pass succeeds. Local history is never auto-deleted. DOM fallback is used only after an API request fails, and fallback data is always marked `partial=true`.
 
 ## Acknowledgements
 
 - Workspace file/folder autocomplete, path ordering, and existence-only reference handling include portions adapted from [omdsh-dev/dsh-at-file](https://github.com/omdsh-dev/dsh-at-file).
 - Cross-session DSH candidates, canonical `dsh-session:` references, and immutable snapshot support use the official `@deepseek-ai/dsh-session-reference` package.
-
-These acknowledgements do not replace license notices. The original `dsh-at-file` copyright notice, complete MIT License text, and pinned upstream revision are preserved in [NOTICE.md](./NOTICE.md).
 
 ## Sources and License
 

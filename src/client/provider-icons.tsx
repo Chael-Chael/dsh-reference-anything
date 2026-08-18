@@ -16,6 +16,15 @@ export const PROVIDER_ICON_MARKER: Readonly<Record<ChatProvider, string>> = {
   chatgpt: '\uE100', claude: '\uE101', gemini: '\uE102', deepseek: '\uE103', grok: '\uE104', kimi: '\uE105',
 }
 export const SESSION_ICON_MARKER = '\uE106'
+export const SKILL_ICON_MARKER = '\uE107'
+
+/** Lucide paths used by the non-provider entries in the @ picker. */
+export const PICKER_ICON_PATH = {
+  // lucide-react ScrollText
+  skill: ['M15 12h-5', 'M15 8h-5', 'M19 17V5a2 2 0 0 0-2-2H4', 'M8 21h12a2 2 0 0 0 2-2v-1a1 1 0 0 0-1-1H11a1 1 0 0 0-1 1v1a2 2 0 1 1-4 0V5a2 2 0 1 0-4 0v2a1 1 0 0 0 1 1h3'],
+  // lucide-react MessageCircle
+  session: ['M7.9 20A9 9 0 1 0 4 16.1L2 22Z'],
+} as const
 
 export function ProviderLogo({ provider, size = 22 }: { provider: ChatProvider; size?: number }) {
   return <svg fill="currentColor" fillRule="evenodd" width={size} height={size} viewBox="0 0 24 24" aria-hidden><path d={PROVIDER_ICON_PATH[provider]} /></svg>

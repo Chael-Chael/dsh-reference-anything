@@ -1,6 +1,6 @@
 import type { ChatProvider } from '../wire.ts'
 import type { SyncStatus } from './remote.ts'
-import { PROVIDER_ICON_MARKER, PROVIDER_ICON_PATH, SESSION_ICON_MARKER } from './provider-icons.tsx'
+import { PICKER_ICON_PATH, PROVIDER_ICON_MARKER, PROVIDER_ICON_PATH, SESSION_ICON_MARKER, SKILL_ICON_MARKER } from './provider-icons.tsx'
 import type { TranslateNS } from '@deepseek-ai/dsh-client-locale/client'
 import type { REFERENCE_ANYTHING_NS } from './locale.ts'
 
@@ -13,15 +13,14 @@ const css = `
 .dsh_ref_menu_sync{position:relative;display:inline-grid;place-items:center;flex:none;min-width:96px;height:26px;padding:0 11px;overflow:hidden;border:1px solid rgba(59,130,246,.28);border-radius:999px;background:rgba(59,130,246,.11);color:var(--dsw-alias-state-business-primary,#3b82f6);font:650 11px/1 Geist,"Segoe UI",sans-serif;cursor:pointer;isolation:isolate;transition:background .16s ease,border-color .16s ease,transform .16s ease}.dsh_ref_menu_sync:hover:not(:disabled){border-color:rgba(59,130,246,.42);background:rgba(59,130,246,.16)}.dsh_ref_menu_sync:active:not(:disabled){transform:translateY(1px)}.dsh_ref_menu_sync:disabled{cursor:default;opacity:.86}.dsh_ref_menu_sync>span{position:relative;z-index:1;white-space:nowrap}.dsh_ref_menu_sync>i{position:absolute;inset:0;z-index:0;background:rgba(59,130,246,.14);transform:scaleX(var(--dsh-ref-sync-progress,0));transform-origin:left;transition:transform .2s ease}.dsh_ref_menu_sync.is_listing>i{width:35%;animation:dsh-ref-menu-listing 1.1s ease-in-out infinite;transform:translateX(-110%)}@keyframes dsh-ref-menu-listing{50%{transform:translateX(285%)}100%{transform:translateX(-110%)}}
 .dsh_ref_menu_expand{display:block;width:auto;min-height:30px;padding:4px 12px;border:0!important;border-radius:0!important;background:none!important;box-shadow:none!important;color:var(--dsw-alias-label-tertiary,#8b8f98);font:600 14px/22px Geist,"Segoe UI",sans-serif;cursor:pointer;text-align:left}.dsh_ref_menu_expand:hover{background:none!important;color:var(--dsw-alias-label-tertiary,#8b8f98);text-decoration:underline}
 .dsh_ref_menu_collapsed{display:none!important}
-/* Codex-like inline references: no filled rounded rectangle. The label uses
-   the same semantic blue as DSH's send button/caret and is allowed to show
-   its complete title instead of the core chip's ellipsis projection. */
+/* Codex-like inline references. The adaptive projection below mirrors their
+   visual width back into the host height ruler so native auto-grow survives. */
 [data-composer-card] [data-decoration="chip"]{display:inline-flex!important;align-items:center!important;width:max-content!important;min-width:4em;border-radius:0!important;background:transparent!important;overflow:visible!important;vertical-align:baseline}
 [data-composer-card] [data-decoration="chip"]:before{display:none!important}
 [data-composer-card] [data-decoration="chip"]>span{position:static!important;width:max-content!important;max-width:none!important;justify-content:flex-start!important;overflow:visible!important;color:var(--dsw-alias-state-business-primary)!important;font-family:inherit!important;font-size:inherit!important;line-height:inherit!important;font-weight:600;transform:none!important;z-index:2}
-.dsh_ref_projected_icon{display:inline-flex!important;align-items:center;gap:.35em}.dsh_ref_projected_icon:before{content:"";display:inline-block;flex:none;width:1em;height:1em;background:currentColor;mask:var(--dsh-ref-provider-icon) center/contain no-repeat;-webkit-mask:var(--dsh-ref-provider-icon) center/contain no-repeat}[data-composer-card] .dsh_ref_conversation_chip,[data-composer-card] .dsh_ref_conversation_chip>span,[data-composer-card] .dsh_ref_projected_icon{color:var(--dsw-alias-state-business-primary,#3b82f6)!important}[data-composer-card] [role="listbox"] .dsh_ref_projected_icon:before{background:var(--dsw-alias-label-tertiary,#8b8f98)}[data-composer-card] .dsh_ref_conversation_chip>.dsh_ref_projected_icon{transform:translateY(.2em)!important}
-.dsh_ref_session_icon{display:inline-flex!important;align-items:center;gap:.45em}.dsh_ref_session_icon:before{content:"";display:inline-block;flex:none;width:1.05em;height:1.05em;background:var(--dsw-alias-label-secondary,#5f636b);mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='none' stroke='black' stroke-width='1.65' stroke-linecap='round' stroke-linejoin='round' d='M21 11.5a8.4 8.4 0 0 1-9 8.4 9.3 9.3 0 0 1-4-1L3.5 20l1.45-3.85A8.4 8.4 0 1 1 21 11.5Z'/%3E%3C/svg%3E") center/contain no-repeat;-webkit-mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='none' stroke='black' stroke-width='1.65' stroke-linecap='round' stroke-linejoin='round' d='M21 11.5a8.4 8.4 0 0 1-9 8.4 9.3 9.3 0 0 1-4-1L3.5 20l1.45-3.85A8.4 8.4 0 1 1 21 11.5Z'/%3E%3C/svg%3E") center/contain no-repeat}
-[data-composer-card] [data-decoration="text-ref"]{border-radius:0!important;background:transparent!important;color:var(--dsw-alias-state-business-primary)!important;font-family:inherit!important;font-size:inherit!important;line-height:inherit!important;font-weight:600;box-shadow:none!important}
+.dsh_ref_projected_icon{display:inline-flex!important;align-items:center;gap:.35em}.dsh_ref_projected_icon:before{content:"";display:inline-block;flex:none;width:1em;height:1em;background:currentColor;mask:var(--dsh-ref-provider-icon) center/contain no-repeat;-webkit-mask:var(--dsh-ref-provider-icon) center/contain no-repeat}[data-composer-card] .dsh_ref_conversation_chip,[data-composer-card] .dsh_ref_conversation_chip>span,[data-composer-card] .dsh_ref_projected_icon{color:var(--dsw-alias-state-business-primary,#3b82f6)!important}[data-composer-card] [role="listbox"] .dsh_ref_projected_icon:before{background:var(--dsw-alias-label-tertiary,#8b8f98)}
+.dsh_ref_session_icon,.dsh_ref_skill_icon{display:inline-flex!important;align-items:center;gap:.45em}.dsh_ref_session_icon:before,.dsh_ref_skill_icon:before{content:"";display:inline-block;flex:none;width:1.05em;height:1.05em;background:var(--dsw-alias-label-secondary,#5f636b);mask:var(--dsh-ref-picker-icon) center/contain no-repeat;-webkit-mask:var(--dsh-ref-picker-icon) center/contain no-repeat}[data-composer-card] [data-decoration="chip"]>.dsh_ref_session_icon:before{background:var(--dsw-alias-state-business-primary,#3b82f6)!important}
+[data-composer-card] [data-decoration="text-ref"]{border-radius:0!important;background:transparent!important;color:var(--dsw-alias-state-business-primary)!important;font-family:inherit!important;font-size:inherit!important;line-height:inherit!important;font-weight:inherit!important;letter-spacing:inherit!important;box-shadow:none!important}
 [data-composer-card] [data-decoration="text-ref"]:before,[data-composer-card] [data-decoration="text-ref"]:after{display:none!important}
 .dsh_ref_native_caret_hidden{caret-color:transparent!important}.dsh_ref_adaptive_caret{position:fixed;z-index:9999;box-sizing:border-box;width:1px;margin:0;padding:0;border:0;border-radius:0;pointer-events:none;background:var(--dsw-alias-state-business-primary);opacity:1;animation:dsh_ref_caret_blink 1.06s step-end infinite;transform:translateZ(0)}.dsh_ref_adaptive_caret[hidden]{display:none!important}@keyframes dsh_ref_caret_blink{0%,49.99%{opacity:1}50%,100%{opacity:0}}
 .dsh_ref_message_reference{display:inline-flex;align-items:center;gap:6px;max-width:100%;color:#82b1e4;font-weight:600;white-space:nowrap;vertical-align:baseline}.dsh_ref_message_reference:before{content:"";display:inline-block;flex:none;width:20px;height:20px;background:currentColor;mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round' d='M20 11.5a8 8 0 0 1-8.5 8A8.9 8.9 0 0 1 7.7 18.6L3.5 20l1.4-3.7A8 8 0 1 1 20 11.5Z'/%3E%3C/svg%3E") center/contain no-repeat}
@@ -29,7 +28,7 @@ const css = `
 .dsh_ref_workspace{display:flex;flex-direction:column;border:1px solid var(--dsw-alias-label-primary);border-radius:0;background:transparent;overflow:hidden}.dsh_ref_workspace>.dsh_ref_panel,.dsh_ref_workspace>.dsh_ref_sources{margin:0;padding:24px;border:0;border-bottom:1px solid var(--dsw-alias-label-primary);border-radius:0;background:transparent}.dsh_ref_workspace>.dsh_ref_panel:last-child{border-bottom:0}.dsh_ref_workspace>.dsh_ref_error{margin:20px 24px 0}.dsh_ref_section_head{display:flex;align-items:flex-start;justify-content:space-between;gap:18px}.dsh_ref_section_head h3{margin:0 0 4px;font-size:17px;letter-spacing:-.02em}.dsh_ref_section_head p{margin:0;color:var(--dsw-alias-label-primary);font-size:12px;line-height:1.45}.dsh_ref_health,.dsh_ref_syncing{display:inline-flex;align-items:center;min-height:25px;padding:0 9px;border:1px solid var(--dsw-alias-label-primary);border-radius:4px;background:transparent;color:var(--dsw-alias-label-primary);font-size:10px;font-weight:700}
 .dsh_ref_checklist{display:grid;gap:14px;margin-top:20px}.dsh_ref_check{display:flex;align-items:flex-start;gap:11px;min-height:40px}.dsh_ref_check>span{display:grid;place-items:center;flex:none;width:22px;height:22px;margin-top:2px;border:1px solid var(--dsw-alias-label-primary);border-radius:50%;background:transparent;color:var(--dsw-alias-label-primary);font-size:11px;font-weight:800}.dsh_ref_check div{display:grid;min-width:0;gap:2px}.dsh_ref_check strong{font-size:13px}.dsh_ref_check small{overflow-wrap:anywhere;color:var(--dsw-alias-label-primary);font-size:11px;opacity:.7}.dsh_ref_install{display:flex;align-items:center;justify-content:space-between;gap:18px;margin-top:20px;padding:14px;border:1px solid var(--dsw-alias-label-primary);background:transparent}.dsh_ref_install>div{display:grid;gap:3px}.dsh_ref_install strong{font-size:12px}.dsh_ref_install span{color:var(--dsw-alias-label-primary);font-size:11px;opacity:.7}.dsh_ref_service_actions{display:flex!important;flex:none;gap:8px}.dsh_ref_error{display:grid;gap:4px;padding:13px;border:1px solid var(--dsw-alias-label-primary);background:transparent;color:var(--dsw-alias-label-primary);font-size:11px}.dsh_ref_skeleton{display:grid;gap:12px;margin-top:20px}.dsh_ref_skeleton i{height:40px;border:1px solid var(--dsw-alias-label-primary);opacity:.25}
 .dsh_ref_sources{display:grid;gap:17px}.dsh_ref_provider_grid{display:grid;grid-template-columns:1fr;gap:0;border:1px solid var(--dsw-alias-label-primary)}.dsh_ref_provider{display:grid;grid-template-columns:34px minmax(96px,1fr) minmax(110px,.8fr) minmax(150px,1.3fr) auto;align-items:center;min-width:0;padding:12px 14px;border:0;border-bottom:1px solid var(--dsw-alias-label-primary);border-radius:0;background:transparent}.dsh_ref_provider:last-child{border-bottom:0}.dsh_ref_provider_top{display:contents}.dsh_ref_provider_mark{display:grid;grid-column:1;place-items:center;width:30px;height:30px;border:1px solid var(--dsw-alias-label-primary);color:var(--dsw-alias-label-primary)}.dsh_ref_provider_top>span:not(.dsh_ref_provider_mark):not(.dsh_ref_status_dot){display:none}.dsh_ref_status_dot{display:none}.dsh_ref_provider h4{grid-column:2;margin:0;font-size:13px}.dsh_ref_provider>strong{display:inline-flex;grid-column:3;align-items:baseline;justify-self:start;gap:3px;font-family:"Geist Mono",Consolas,monospace;font-size:18px;white-space:nowrap}.dsh_ref_provider>strong span{font-family:Geist,"Segoe UI",sans-serif;font-size:11px;font-weight:600}.dsh_ref_provider>small{grid-column:4;margin:0;color:var(--dsw-alias-label-primary);font-size:10px;opacity:.7}.dsh_ref_provider>em{display:none}.dsh_ref_provider_foot{display:contents}.dsh_ref_provider_foot>span{display:none}.dsh_ref_provider_actions{grid-column:5;display:flex;gap:6px}.dsh_ref_provider_foot button{min-height:29px;padding:0 10px;font-size:10px}.dsh_ref_empty{padding:20px;border:1px dashed var(--dsw-alias-label-primary);color:var(--dsw-alias-label-primary);font-size:11px;text-align:center}
-.dsh_ref_general_settings{display:grid;gap:16px}.dsh_ref_picker_list{border:1px solid var(--dsw-alias-label-primary)}.dsh_ref_picker_row{display:grid;grid-template-columns:minmax(170px,1fr) auto auto;align-items:center;gap:14px;padding:10px 12px;border-bottom:1px solid var(--dsw-alias-label-primary)}.dsh_ref_picker_row:last-child{border-bottom:0}.dsh_ref_picker_row>label:first-child{display:flex;align-items:center;gap:9px;font-size:12px;font-weight:650}.dsh_ref_picker_row input{width:16px;height:16px;margin:0;accent-color:var(--dsw-alias-label-primary)}.dsh_ref_picker_limit{display:flex;align-items:center;gap:7px;color:var(--dsw-alias-label-primary);font-size:10px}.dsh_ref_picker_limit input{height:30px;width:58px;padding:0 6px;border:1px solid var(--dsw-alias-label-primary);border-radius:0;background:transparent;color:var(--dsw-alias-label-primary);font:11px Geist,"Segoe UI",sans-serif}.dsh_ref_picker_order{display:flex;gap:5px}.dsh_ref_picker_order button{min-width:30px;min-height:30px;padding:0;font-size:15px;line-height:1}
+.dsh_ref_general_settings{display:grid;gap:16px}.dsh_ref_picker_list{border:1px solid var(--dsw-alias-label-primary)}.dsh_ref_picker_row{display:grid;grid-template-columns:minmax(170px,1fr) auto auto;align-items:center;gap:14px;padding:10px 12px;border-bottom:1px solid var(--dsw-alias-label-primary)}.dsh_ref_picker_row:last-child{border-bottom:0}.dsh_ref_picker_row>label:first-child{display:flex;align-items:center;gap:9px;font-size:12px;font-weight:650}.dsh_ref_picker_row>.dsh_ref_picker_toggle b{font-size:12px}.dsh_ref_picker_row input{width:16px;height:16px;margin:0;accent-color:var(--dsw-alias-label-primary)}.dsh_ref_picker_limit{display:flex;align-items:center;gap:7px;color:var(--dsw-alias-label-primary);font-size:10px}.dsh_ref_picker_limit input{height:30px;width:58px;padding:0 6px;border:1px solid var(--dsw-alias-label-primary);border-radius:0;background:transparent;color:var(--dsw-alias-label-primary);font:11px Geist,"Segoe UI",sans-serif}.dsh_ref_picker_order{display:flex;gap:5px}.dsh_ref_picker_order button{min-width:30px;min-height:30px;padding:0;font-size:15px;line-height:1}
 .dsh_ref_sync_settings{display:grid;gap:20px}.dsh_ref_form_grid{display:grid;grid-template-columns:1fr 1fr;gap:15px}.dsh_ref_form_grid label{display:grid;gap:6px}.dsh_ref_form_grid label>span{font-size:11px;font-weight:650}.dsh_ref_form_grid input,.dsh_ref_form_grid select{width:100%;height:36px;padding:0 10px;border:1px solid var(--dsw-alias-label-primary);border-radius:0;outline:0;background:transparent;color:var(--dsw-alias-label-primary);font:12px Geist,"Segoe UI",sans-serif}.dsh_ref_form_grid input:focus,.dsh_ref_form_grid select:focus{outline:2px solid var(--dsw-alias-label-primary);outline-offset:2px}.dsh_ref_form_grid input[aria-invalid=true]{border-style:dashed}.dsh_ref_form_grid select:disabled{opacity:.42}.dsh_ref_toggle{display:flex!important;flex-direction:row!important;align-items:center;gap:8px;cursor:pointer}.dsh_ref_toggle input{position:absolute;opacity:0}.dsh_ref_toggle>span{position:relative;width:32px;height:18px;border:1px solid var(--dsw-alias-label-primary);border-radius:9px;background:transparent}.dsh_ref_toggle>span:after{content:"";position:absolute;top:3px;left:3px;width:10px;height:10px;border-radius:50%;background:var(--dsw-alias-label-primary);transition:transform .18s}.dsh_ref_toggle input:checked+span:after{transform:translateX(14px)}.dsh_ref_toggle b{font-size:11px}.dsh_ref_actions{display:flex;flex-wrap:wrap;gap:8px}.dsh_ref_actions .is_primary{background:var(--dsw-alias-label-primary);color:var(--dsw-alias-bg-layer-1)}.dsh_ref_actions .is_danger{border-style:dashed}.dsh_ref_inline_error,.dsh_ref_auto_note{margin:0;color:var(--dsw-alias-label-primary);font-size:11px}.dsh_ref_auto_note{opacity:.7}.dsh_ref_notice{padding:10px 0;border-bottom:1px solid var(--dsw-alias-label-primary);font-size:11px}
 .dsh_ref_progress_wrap{display:grid;gap:6px;margin-top:4px}.dsh_ref_progress_track{height:6px;border:1px solid var(--dsw-alias-label-primary);background:transparent;overflow:hidden}.dsh_ref_progress_fill{height:100%;background:var(--dsw-alias-label-primary);transition:width .2s ease}.dsh_ref_progress_track.is_listing .dsh_ref_progress_fill{min-width:8%;animation:dsh-ref-listing 1.2s ease-in-out infinite}.dsh_ref_progress_fill.is_failed,.dsh_ref_progress_fill.is_cancelled{opacity:.4}.dsh_ref_progress_fill.is_partial{opacity:.7}.dsh_ref_progress_label{margin:0;color:var(--dsw-alias-label-primary);font-size:10px;text-transform:lowercase;opacity:.7}.dsh_ref_progress_sources{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:4px 12px}.dsh_ref_progress_sources span{display:flex;justify-content:space-between;gap:8px;font-size:10px}.dsh_ref_progress_sources i{font-style:normal;opacity:.65}@keyframes dsh-ref-listing{0%,100%{transform:translateX(-20%);opacity:.45}50%{transform:translateX(20%);opacity:1}}
 .dsh_ref_manage{display:grid;gap:15px}.dsh_ref_manage_filters{display:grid;grid-template-columns:1fr 180px;gap:12px}.dsh_ref_manage_filters input,.dsh_ref_manage_filters select{width:100%;height:36px;padding:0 10px;border:1px solid var(--dsw-alias-label-primary);border-radius:0;outline:0;background:transparent;color:var(--dsw-alias-label-primary);font:12px Geist,"Segoe UI",sans-serif}.dsh_ref_manage_filters input:focus,.dsh_ref_manage_filters select:focus{outline:2px solid var(--dsw-alias-label-primary);outline-offset:2px}.dsh_ref_manage_empty{margin:0;padding:20px;border:1px dashed var(--dsw-alias-label-primary);color:var(--dsw-alias-label-primary);font-size:11px;text-align:center}
@@ -56,7 +55,7 @@ body[data-ds-dark-theme] .dsh_ref_settings{--dsh-ref-card-surface:var(--dsw-alia
 .dsh_ref_general_settings{gap:15px}.dsh_ref_picker_list{overflow:hidden;border-color:var(--dsh-ref-line);border-radius:11px;background:var(--dsh-ref-card-surface)}.dsh_ref_picker_row{grid-template-columns:minmax(150px,1fr) auto auto;gap:12px;padding:10px 12px;border-color:var(--dsh-ref-line)}.dsh_ref_picker_row>label:first-child{color:var(--dsw-alias-label-primary)}.dsh_ref_picker_row input{accent-color:var(--dsh-ref-blue)}.dsh_ref_picker_limit{color:var(--dsw-alias-label-dimmed,var(--dsw-alias-label-primary))}.dsh_ref_picker_limit select{border-color:var(--dsh-ref-line);border-radius:7px;background:transparent}.dsh_ref_picker_limit select:focus{outline:2px solid var(--dsh-ref-blue-line);outline-offset:1px}.dsh_ref_picker_order button{min-width:29px;border-color:transparent;background:transparent;color:var(--dsw-alias-label-dimmed,var(--dsw-alias-label-primary))}.dsh_ref_picker_order button:hover:not(:disabled){border-color:transparent;background:var(--dsh-ref-blue-soft);color:var(--dsh-ref-blue)}
 .dsh_ref_provider_grid{overflow:hidden;border-color:var(--dsh-ref-line);border-radius:11px;background:var(--dsh-ref-card-surface)}.dsh_ref_provider{border-color:var(--dsh-ref-line);transition:background .16s ease}.dsh_ref_provider:hover{background:var(--dsh-ref-blue-soft)}.dsh_ref_provider_mark{border-color:var(--dsh-ref-blue-line);border-radius:8px;color:var(--dsh-ref-blue)}.dsh_ref_provider>small{color:var(--dsw-alias-label-dimmed,var(--dsw-alias-label-primary));opacity:1}.dsh_ref_provider_foot button{border-color:var(--dsh-ref-blue-line);border-radius:7px;color:var(--dsh-ref-blue)}
 .dsh_ref_sync_settings{gap:18px}.dsh_ref_form_grid input,.dsh_ref_form_grid select,.dsh_ref_manage_filters input,.dsh_ref_manage_filters select{border-color:var(--dsh-ref-line);border-radius:8px;background:var(--dsh-ref-control-surface)}.dsh_ref_form_grid input:focus,.dsh_ref_form_grid select:focus,.dsh_ref_manage_filters input:focus,.dsh_ref_manage_filters select:focus{outline-color:var(--dsh-ref-blue-line)}.dsh_ref_field_note{margin:0;color:var(--dsw-alias-label-dimmed,var(--dsw-alias-label-primary));font-size:11px;font-weight:400;line-height:1.45}.dsh_ref_toggle>span{border-color:var(--dsh-ref-blue-line);background:var(--dsh-ref-blue-soft)}.dsh_ref_toggle>span:after{background:var(--dsh-ref-blue)}.dsh_ref_actions .is_primary{border-color:var(--dsh-ref-blue);background:var(--dsh-ref-blue);color:#fff}.dsh_ref_actions .is_primary:hover:not(:disabled){background:var(--dsh-ref-blue);color:#fff;filter:brightness(.94)}.dsh_ref_progress_track{border:0;border-radius:999px;background:var(--dsh-ref-blue-soft)}.dsh_ref_progress_fill{border-radius:999px;background:var(--dsh-ref-blue)}
-.dsh_ref_viability_actions{display:flex;align-items:center;flex-wrap:wrap;justify-content:flex-end;gap:8px}.dsh_ref_picker_limit input{border-color:var(--dsh-ref-line);border-radius:7px;background:transparent}.dsh_ref_picker_limit input:focus{outline:2px solid var(--dsh-ref-blue-line);outline-offset:1px}.dsh_ref_picker_order button{color:var(--dsw-alias-label-primary)}body[data-ds-dark-theme] .dsh_ref_picker_order button{color:var(--dsw-alias-label-tertiary,#cbd5e1)}.dsh_ref_provider{grid-template-columns:34px minmax(130px,1fr) minmax(185px,1.1fr) max-content;grid-template-rows:auto auto;row-gap:2px;padding-inline:14px}.dsh_ref_provider_mark{grid-row:1 / span 2}.dsh_ref_provider h4{grid-row:1 / span 2;align-self:center}.dsh_ref_provider>strong{grid-row:1}.dsh_ref_provider>small{grid-column:3;grid-row:2;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.dsh_ref_provider_actions{grid-column:4;grid-row:1 / span 2;min-width:0;flex-wrap:nowrap;justify-content:flex-end}.dsh_ref_provider_actions button{flex:0 0 auto;width:auto;white-space:nowrap}.dsh_ref_toggle>span{background:transparent}.dsh_ref_toggle input:checked+span{border-color:var(--dsh-ref-blue);background:var(--dsh-ref-blue)}.dsh_ref_toggle input:checked+span:after{background:#fff}.dsh_ref_settings button.is_danger{border-color:rgba(220,38,38,.45);color:#dc2626}.dsh_ref_settings button.is_danger:hover:not(:disabled){border-color:#dc2626;background:rgba(220,38,38,.08);color:#dc2626}body[data-ds-dark-theme] .dsh_ref_settings button.is_danger{border-color:rgba(248,113,113,.55);color:#f87171}body[data-ds-dark-theme] .dsh_ref_settings button.is_danger:hover:not(:disabled){border-color:#f87171;background:rgba(248,113,113,.12);color:#f87171}.dsh_ref_manage_list{max-height:340px;overflow-y:auto;overscroll-behavior:contain;border-color:var(--dsh-ref-line);border-radius:11px;background:var(--dsh-ref-card-surface)}.dsh_ref_manage_row{border-color:var(--dsh-ref-line)}.dsh_ref_manage_row:hover{background:var(--dsh-ref-blue-soft)}.dsh_ref_badge{border-color:var(--dsh-ref-blue-line);border-radius:999px;color:var(--dsh-ref-blue)}.dsh_ref_pagination button{border-radius:8px}
+.dsh_ref_viability{display:grid;gap:0;margin-top:12px}.dsh_ref_viability_actions{display:flex;align-items:center;flex-wrap:wrap;justify-content:flex-end;gap:8px}.dsh_ref_picker_limit input{border-color:var(--dsh-ref-line);border-radius:7px;background:transparent}.dsh_ref_picker_limit input:focus{outline:2px solid var(--dsh-ref-blue-line);outline-offset:1px}.dsh_ref_picker_order button{color:var(--dsw-alias-label-primary)}body[data-ds-dark-theme] .dsh_ref_picker_order button{color:var(--dsw-alias-label-tertiary,#cbd5e1)}.dsh_ref_provider{grid-template-columns:34px minmax(130px,1fr) minmax(185px,1.1fr) max-content;grid-template-rows:auto auto;row-gap:2px;padding-inline:14px}.dsh_ref_provider_mark{grid-row:1 / span 2}.dsh_ref_provider h4{grid-row:1 / span 2;align-self:center}.dsh_ref_provider>strong{grid-row:1}.dsh_ref_provider>small{grid-column:3;grid-row:2;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.dsh_ref_provider_actions{grid-column:4;grid-row:1 / span 2;min-width:0;flex-wrap:nowrap;justify-content:flex-end}.dsh_ref_provider_actions button{flex:0 0 auto;width:auto;white-space:nowrap}.dsh_ref_toggle>span{background:transparent}.dsh_ref_toggle input:checked+span{border-color:var(--dsh-ref-blue);background:var(--dsh-ref-blue)}.dsh_ref_toggle input:checked+span:after{background:#fff}.dsh_ref_settings button.is_danger{border-color:rgba(220,38,38,.45);color:#dc2626}.dsh_ref_settings button.is_danger:hover:not(:disabled){border-color:#dc2626;background:rgba(220,38,38,.08);color:#dc2626}body[data-ds-dark-theme] .dsh_ref_settings button.is_danger{border-color:rgba(248,113,113,.55);color:#f87171}body[data-ds-dark-theme] .dsh_ref_settings button.is_danger:hover:not(:disabled){border-color:#f87171;background:rgba(248,113,113,.12);color:#f87171}.dsh_ref_manage_list{max-height:340px;overflow-y:auto;overscroll-behavior:contain;border-color:var(--dsh-ref-line);border-radius:11px;background:var(--dsh-ref-card-surface)}.dsh_ref_manage_row{border-color:var(--dsh-ref-line)}.dsh_ref_manage_row:hover{background:var(--dsh-ref-blue-soft)}.dsh_ref_badge{border-color:var(--dsh-ref-blue-line);border-radius:999px;color:var(--dsh-ref-blue)}.dsh_ref_pagination button{border-radius:8px}
 @media(max-width:720px){.dsh_ref_picker_row{grid-template-columns:minmax(0,1fr) auto}.dsh_ref_picker_order{grid-column:2}.dsh_ref_picker_limit{justify-content:flex-end}.dsh_ref_workspace>.dsh_ref_panel,.dsh_ref_workspace>.dsh_ref_sources{padding:18px;border-radius:12px}}
 @media(max-width:520px){.dsh_ref_picker_row{grid-template-columns:1fr}.dsh_ref_picker_limit{justify-content:space-between}.dsh_ref_picker_order{grid-column:auto}.dsh_ref_provider{grid-template-columns:34px minmax(0,1fr) auto;grid-template-rows:auto auto auto}.dsh_ref_provider_mark{grid-row:1 / span 3}.dsh_ref_provider h4{grid-column:2;grid-row:1}.dsh_ref_provider>strong{grid-column:2;grid-row:2}.dsh_ref_provider>small{grid-column:2;grid-row:3}.dsh_ref_provider_actions{grid-column:3;grid-row:1 / span 3;flex-direction:column}.dsh_ref_progress_sources{grid-template-columns:1fr 1fr}}
 /* Keep explanatory copy readable against DSH's light settings surface. */
@@ -70,7 +69,7 @@ body[data-ds-dark-theme] .dsh_ref_storage_header p{color:var(--dsw-alias-label-t
 /* General is a layout group, not a card. Keep only the actual picker list framed. */
 .dsh_ref_workspace>.dsh_ref_panel.dsh_ref_general_settings{padding:0;border:0;border-radius:0;background:transparent}
 /* The remaining sections keep their structural outline, but not a filled grey card. */
-.dsh_ref_workspace>.dsh_ref_panel,.dsh_ref_workspace>.dsh_ref_sources{background:transparent}.dsh_ref_check small.is_warning,.dsh_ref_provider>em,.dsh_ref_error{color:#dc2626}
+.dsh_ref_workspace>.dsh_ref_panel,.dsh_ref_workspace>.dsh_ref_sources{background:transparent}.dsh_ref_check>span.is_ready{border-color:rgba(22,163,74,.35);background:rgba(22,163,74,.1);color:#16a34a}.dsh_ref_check>span.is_error{border-color:rgba(220,38,38,.35);background:rgba(220,38,38,.08);color:#dc2626}.dsh_ref_check small.is_warning,.dsh_ref_provider>em,.dsh_ref_error{color:#dc2626}
 .dsh_ref_chat{gap:0}.dsh_ref_chat_divider{height:0;margin:20px 0;border-top:1px solid var(--dsh-ref-line)}
 @media(prefers-reduced-motion:reduce){.dsh_ref_settings *{transition:none!important}}
 `
@@ -153,6 +152,9 @@ export function refreshActiveTriggerMenu(): boolean {
   if (trigger < whitespace) return false
 
   const original = editor.value
+  const listbox = editor.closest('[data-composer-card]')?.querySelector('[role="listbox"]')
+  const viewport = listbox?.firstElementChild instanceof HTMLElement ? listbox.firstElementChild : undefined
+  const menuScrollTop = viewport?.scrollTop
   const changed = `${original.slice(0, start)}\u200B${original.slice(end)}`
   const descriptor = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(editor), 'value')
   const setValue = (value: string): void => {
@@ -165,7 +167,22 @@ export function refreshActiveTriggerMenu(): boolean {
   setValue(original)
   editor.setSelectionRange(start, end)
   editor.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'deleteContentBackward' }))
+  if (menuScrollTop !== undefined) restoreTriggerMenuScroll(menuScrollTop)
   return true
+}
+
+/** Restore the menu viewport after the host replaces it for a refreshed query. */
+function restoreTriggerMenuScroll(scrollTop: number): void {
+  let frames = 0
+  const restore = (): void => {
+    const listbox = document.querySelector('[role="listbox"]')
+    const viewport = listbox?.firstElementChild
+    if (viewport instanceof HTMLElement) viewport.scrollTop = scrollTop
+    // The menu store update and its scrollIntoView effect can land on adjacent
+    // frames. Restore after both without retaining stale DOM references.
+    if (++frames < 3) requestAnimationFrame(restore)
+  }
+  requestAnimationFrame(restore)
 }
 
 /**
@@ -176,15 +193,17 @@ export function refreshActiveTriggerMenu(): boolean {
 export function adoptMenuExpansionProjection(options: MenuExpansionOptions): () => void {
   const selector = '[role="listbox"] [role="presentation"][data-source]'
   const batchSize = options.batchSize ?? 5
-  const revealed = new WeakMap<HTMLElement, number>()
+  // Key by stable source identity, not the transient React header element, so
+  // a candidate refresh preserves how far the user expanded each group.
+  const revealed = new Map<string, number>()
   const project = (root: ParentNode): void => {
     const headers = (root instanceof Element && root.matches(selector) ? [root] : Array.from(root.querySelectorAll(selector)))
       .filter(header => options.sources.includes((header as HTMLElement).dataset.source ?? '')) as HTMLElement[]
     for (const header of headers) {
       const source = header.dataset.source ?? ''
       const configuredLimit = Math.max(1, options.getVisibleLimit(source))
-      const visibleLimit = revealed.get(header) ?? configuredLimit
-      revealed.set(header, visibleLimit)
+      const visibleLimit = revealed.get(source) ?? configuredLimit
+      revealed.set(source, visibleLimit)
       const rows: HTMLElement[] = []
       for (let node = header.nextElementSibling; node !== null; node = node.nextElementSibling) {
         if (node.getAttribute('role') === 'presentation') break
@@ -193,7 +212,7 @@ export function adoptMenuExpansionProjection(options: MenuExpansionOptions): () 
       const existing = Array.from(header.parentElement?.querySelectorAll(':scope > [data-dsh-ref-menu-expand]') ?? [])
         .find(node => (node as HTMLElement).dataset.dshRefMenuExpand === source) as HTMLButtonElement | undefined
       if (rows.length <= configuredLimit) {
-        revealed.set(header, configuredLimit)
+        revealed.set(source, Math.max(revealed.get(source) ?? configuredLimit, configuredLimit))
         rows.forEach(row => { row.classList.remove('dsh_ref_menu_collapsed') })
         existing?.remove()
         continue
@@ -208,7 +227,7 @@ export function adoptMenuExpansionProjection(options: MenuExpansionOptions): () 
         button.addEventListener('mousedown', event => {
           event.preventDefault()
           event.stopPropagation()
-          revealed.set(header, (revealed.get(header) ?? configuredLimit) + batchSize)
+          revealed.set(source, (revealed.get(source) ?? configuredLimit) + batchSize)
           project(header.parentElement ?? document)
         })
       }
@@ -219,7 +238,33 @@ export function adoptMenuExpansionProjection(options: MenuExpansionOptions): () 
   project(document)
   const observer = new MutationObserver(() => { project(document) })
   observer.observe(document.body, { childList: true, subtree: true })
-  return () => { observer.disconnect(); for (const button of Array.from(document.querySelectorAll('[data-dsh-ref-menu-expand]'))) button.remove() }
+  let keyboardSkip = false
+  const skipCollapsed = (editor: HTMLElement, key: 'ArrowDown' | 'ArrowUp', remaining = 100): void => {
+    if (remaining <= 0) { keyboardSkip = false; return }
+    const listbox = document.querySelector('[role="listbox"]')
+    const activeId = listbox?.getAttribute('aria-activedescendant')
+    const active = activeId ? document.getElementById(activeId) : null
+    if (!(active instanceof HTMLElement) || !active.classList.contains('dsh_ref_menu_collapsed')) {
+      keyboardSkip = false
+      return
+    }
+    editor.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true }))
+    requestAnimationFrame(() => { skipCollapsed(editor, key, remaining - 1) })
+  }
+  const onKeyDown = (event: KeyboardEvent): void => {
+    if (keyboardSkip || (event.key !== 'ArrowDown' && event.key !== 'ArrowUp')) return
+    if (!(event.target instanceof HTMLElement) || document.querySelector('[role="listbox"]') === null) return
+    const key = event.key
+    const editor = event.target
+    keyboardSkip = true
+    requestAnimationFrame(() => { skipCollapsed(editor, key, 100) })
+  }
+  document.addEventListener('keydown', onKeyDown)
+  return () => {
+    observer.disconnect()
+    document.removeEventListener('keydown', onKeyDown)
+    for (const button of Array.from(document.querySelectorAll('[data-dsh-ref-menu-expand]'))) button.remove()
+  }
 }
 
 /** Add the plugin-owned sync action to the public header contract of its @ source group. */
@@ -340,8 +385,67 @@ export function adoptConversationMentionProjection(): () => void {
   return () => { observer.disconnect() }
 }
 
+/**
+ * Preserve the host mirror's auto-grow contract for content-sized chips.
+ *
+ * DSH's native mirror sees every structured reference as one fixed-width
+ * U+FFFC. Our visual chip can be wider and therefore wrap onto more lines.
+ * Measure an off-screen copy of the real backdrop and raise (never replace)
+ * the native mirror's minimum height to the visual content height.
+ */
+export function adoptAdaptiveComposerHeight(): () => void {
+  let frame = 0
+  const schedule = (): void => {
+    cancelAnimationFrame(frame)
+    frame = requestAnimationFrame(update)
+  }
+  const update = (): void => {
+    for (const backdrop of Array.from(document.querySelectorAll('[data-composer-card] [data-input-backdrop]'))) {
+      if (!(backdrop instanceof HTMLElement)) continue
+      const card = backdrop.closest('[data-composer-card]')
+      const mirror = card?.querySelector('[data-input-mirror]')
+      if (!(mirror instanceof HTMLElement)) continue
+      if (backdrop.querySelector('[data-decoration="chip"]') === null) {
+        mirror.style.removeProperty('min-height')
+        continue
+      }
+      const width = backdrop.getBoundingClientRect().width || backdrop.clientWidth
+      if (!(width > 0)) continue
+      const probe = backdrop.cloneNode(true) as HTMLElement
+      probe.dataset.dshRefHeightProbe = ''
+      probe.style.cssText = `position:fixed;inset:auto;left:-100000px;top:0;width:${width}px;height:auto;min-height:0;overflow:visible;visibility:hidden;pointer-events:none;`
+      document.body.append(probe)
+      const height = probe.scrollHeight
+      probe.remove()
+      if (height > 0) mirror.style.minHeight = `${height}px`
+    }
+  }
+  const observer = new MutationObserver(records => {
+    const meaningful = records.some(record => record.type === 'characterData' || [...Array.from(record.addedNodes), ...Array.from(record.removedNodes)]
+      .some(node => !(node instanceof Element && node.hasAttribute('data-dsh-ref-height-probe'))))
+    if (meaningful) schedule()
+  })
+  observer.observe(document.body, { childList: true, subtree: true, characterData: true })
+  const onLayout = (): void => { schedule() }
+  document.addEventListener('input', onLayout, true)
+  window.addEventListener('resize', onLayout)
+  schedule()
+  return () => {
+    cancelAnimationFrame(frame)
+    observer.disconnect()
+    document.removeEventListener('input', onLayout, true)
+    window.removeEventListener('resize', onLayout)
+    document.querySelectorAll<HTMLElement>('[data-input-mirror]').forEach(mirror => { mirror.style.removeProperty('min-height') })
+    document.querySelectorAll('[data-dsh-ref-height-probe]').forEach(node => node.remove())
+  }
+}
+
 /** Keep the visible caret aligned with content-sized reference labels. */
 export function adoptAdaptiveChipCaret(): () => void {
+  // Effects can be remounted during client hot reload. Never leave an older
+  // painted caret behind competing with the new instance.
+  document.querySelectorAll('.dsh_ref_adaptive_caret').forEach(node => node.remove())
+  document.querySelectorAll('.dsh_ref_native_caret_hidden').forEach(node => node.classList.remove('dsh_ref_native_caret_hidden'))
   const caret = document.createElement('i')
   caret.className = 'dsh_ref_adaptive_caret'
   caret.hidden = true
@@ -363,34 +467,46 @@ export function adoptAdaptiveChipCaret(): () => void {
     const range = rangeAtLogicalOffset(backdrop, input.selectionEnd)
     if (range === undefined) return hide()
     const measured = range.getBoundingClientRect()
-    const rect = usableCaretRect(measured) ? measured : caretBoundaryRectAtLogicalOffset(backdrop, input.selectionEnd)
-    if (rect === undefined) return hide()
-    // Read the host caret colour without our own transparent override. On a
-    // later update the class is already present; reading first would copy
-    // `transparent` onto the painted caret and make it disappear.
+    const boundary = caretBoundaryRectAtLogicalOffset(backdrop, input.selectionEnd)
+    // Chromium's collapsed Range has a dependable inline position, but its
+    // vertical origin may sit on the baseline (visibly too low). A neighbouring
+    // glyph/chip rectangle supplies the actual painted line top.
+    const rect = usableCaretRect(measured)
+      ? { left: measured.left, top: boundary?.top ?? measured.top, source: boundary?.source ?? 'range', height: boundary?.height }
+      : boundary
+    if (rect === undefined || !Number.isFinite(rect.left) || !Number.isFinite(rect.top)) return hide()
+    // Read metrics without our transparent-caret override. The painted caret
+    // deliberately keeps its semantic CSS colour: embedded Chromium can
+    // transiently report a transparent computed caretColor while the host is
+    // reconciling the selected reference, which used to make this caret vanish.
     input.classList.remove('dsh_ref_native_caret_hidden')
     const style = getComputedStyle(input)
     const lineHeight = Number.parseFloat(style.lineHeight)
     const fontSize = Number.parseFloat(style.fontSize)
-    const resolvedLineHeight = Number.isFinite(lineHeight) ? lineHeight : fontSize * 1.2
-    const resolvedFontSize = Number.isFinite(fontSize) ? fontSize : resolvedLineHeight
+    const resolvedFontSize = Number.isFinite(fontSize) && fontSize > 0 ? fontSize : 16
+    const resolvedLineHeight = Number.isFinite(lineHeight) && lineHeight > 0 ? lineHeight : resolvedFontSize * 1.2
     // Chromium paints a textarea caret against the font's em box, centred in
     // the line box. Snap to physical pixels so a scaled/DPI display does not
     // turn the nominal one-pixel stem into a blurred 1.5px line.
     const ratio = window.devicePixelRatio || 1
     const snap = (value: number): number => Math.round(value * ratio) / ratio
     const caretHeight = snap(Math.min(resolvedLineHeight, resolvedFontSize))
-    input.classList.add('dsh_ref_native_caret_hidden')
-    caret.hidden = false
+    const caretTop = rect.source === 'chip' && rect.height !== undefined
+      ? rect.top + Math.max(0, (rect.height - caretHeight) / 2)
+      : rect.top
     caret.style.left = `${snap(rect.left)}px`
-    caret.style.top = `${snap(rect.top + Math.max(0, (resolvedLineHeight - caretHeight) / 2))}px`
+    // A collapsed DOM Range already reports the caret's line-relative paint
+    // origin. Centring it in line-height a second time shifts the stem down by
+    // 1-3 px in Chromium, especially beside transformed reference labels.
+    caret.style.top = `${snap(caretTop)}px`
     caret.style.width = '1px'
     caret.style.height = `${caretHeight}px`
-    // Some embedded Chromium builds expose the computed value as `auto`.
-    // Keep the semantic CSS fallback in that case instead of assigning an
-    // invalid background colour and making the caret disappear.
-    if (style.caretColor !== '' && style.caretColor !== 'auto') caret.style.backgroundColor = style.caretColor
-    else caret.style.removeProperty('background-color')
+    caret.style.removeProperty('background-color')
+    caret.hidden = false
+    // Hide the native caret only after the replacement has complete geometry
+    // and is paintable. Every early return above therefore retains the native
+    // fallback instead of leaving the editor with no caret at all.
+    input.classList.add('dsh_ref_native_caret_hidden')
     if (restartBlink && !composing) {
       // Restart from the visible phase without depending on Web Animations,
       // which is missing in some WebView builds used by desktop shells.
@@ -406,8 +522,12 @@ export function adoptAdaptiveChipCaret(): () => void {
   }
   const observer = new MutationObserver(() => schedule())
   observer.observe(document.body, { childList: true, subtree: true, characterData: true })
-  const passiveEvents = ['selectionchange', 'focusout', 'scroll'] as const
-  const activeEvents = ['input', 'keyup', 'pointerup', 'focusin'] as const
+  const passiveEvents = ['focusout', 'scroll'] as const
+  // Native carets restart their visible phase as soon as editing/navigation
+  // begins. Include keydown (for held Backspace/Delete) and selectionchange so
+  // a caret parked at a chip boundary cannot remain in the hidden blink phase
+  // until keyup or the next ordinary text input.
+  const activeEvents = ['input', 'keydown', 'keyup', 'pointerup', 'focusin', 'selectionchange'] as const
   const onPassive = (): void => { schedule() }
   const onActive = (): void => { schedule(true) }
   const onCompositionStart = (): void => { composing = true; schedule(true) }
@@ -441,8 +561,11 @@ export function adoptReferenceIconProjection(): () => void {
     for (const node of nodes) {
       const text = node.textContent ?? ''
       if (text.startsWith(SESSION_ICON_MARKER)) {
-        node.textContent = text.slice(SESSION_ICON_MARKER.length).trimStart()
-        node.classList.add('dsh_ref_session_icon')
+        projectPickerIcon(node, text, SESSION_ICON_MARKER, 'session')
+        continue
+      }
+      if (text.startsWith(SKILL_ICON_MARKER)) {
+        projectPickerIcon(node, text, SKILL_ICON_MARKER, 'skill')
         continue
       }
       const provider = providers.find(key => text.startsWith(PROVIDER_ICON_MARKER[key]))
@@ -474,6 +597,15 @@ export function adoptReferenceIconProjection(): () => void {
   return () => { observer.disconnect() }
 }
 
+function projectPickerIcon(node: Element, text: string, marker: string, kind: keyof typeof PICKER_ICON_PATH): void {
+  node.textContent = text.slice(marker.length).trimStart()
+  node.classList.add(`dsh_ref_${kind}_icon`)
+  node.setAttribute('data-dsh-ref-picker-icon', kind)
+  const paths = PICKER_ICON_PATH[kind].map(d => `<path d="${d}"/>`).join('')
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="black" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${paths}</svg>`
+  node.setAttribute('style', `${node.getAttribute('style') ?? ''};--dsh-ref-picker-icon:url("data:image/svg+xml,${encodeURIComponent(svg)}")`)
+}
+
 function usableCaretRect(rect: DOMRect): boolean {
   return rect.height > 0 || rect.top !== 0 || rect.left !== 0
 }
@@ -483,15 +615,23 @@ function usableCaretRect(rect: DOMRect): boolean {
  * boundaries. This notably happens after the trailing space DSH inserts with
  * a reference chip, so both chip edges and ordinary text edges are measured.
  */
-function caretBoundaryRectAtLogicalOffset(root: HTMLElement, target: number): Pick<DOMRect, 'left' | 'top'> | undefined {
+interface CaretBoundaryRect {
+  left: number
+  top: number
+  height?: number
+  source: 'chip' | 'text'
+}
+
+function caretBoundaryRectAtLogicalOffset(root: HTMLElement, target: number): CaretBoundaryRect | undefined {
   let logical = 0
-  const visit = (parent: Node): Pick<DOMRect, 'left' | 'top'> | undefined => {
+  let trailingChip: CaretBoundaryRect | undefined
+  const visit = (parent: Node): CaretBoundaryRect | undefined => {
     for (const child of Array.from(parent.childNodes)) {
       if (child instanceof Element && child.matches('[data-decoration="chip"]')) {
         const chip = child.getBoundingClientRect()
-        if (target === logical) return { left: chip.left, top: chip.top }
+        if (target === logical) return { left: chip.left, top: chip.top, height: chip.height, source: 'chip' }
         logical += 1
-        if (target === logical) return { left: chip.right, top: chip.top }
+        if (target === logical) trailingChip = { left: chip.right, top: chip.top, height: chip.height, source: 'chip' }
         continue
       }
       if (child instanceof Text) {
@@ -504,14 +644,14 @@ function caretBoundaryRectAtLogicalOffset(root: HTMLElement, target: number): Pi
             range.setStart(child, at - 1)
             range.setEnd(child, at)
             const rect = range.getBoundingClientRect()
-            if (usableCaretRect(rect)) return { left: rect.right, top: rect.top }
+            if (usableCaretRect(rect)) return { left: rect.right, top: rect.top, height: rect.height, source: 'text' }
           }
           if (target < end) {
             const at = Math.max(0, target - start)
             range.setStart(child, at)
             range.setEnd(child, at + 1)
             const rect = range.getBoundingClientRect()
-            if (usableCaretRect(rect)) return { left: rect.left, top: rect.top }
+            if (usableCaretRect(rect)) return { left: rect.left, top: rect.top, height: rect.height, source: 'text' }
           }
         }
         logical = end
@@ -520,7 +660,7 @@ function caretBoundaryRectAtLogicalOffset(root: HTMLElement, target: number): Pi
       const found = visit(child)
       if (found !== undefined) return found
     }
-    return undefined
+    return trailingChip
   }
   return visit(root)
 }

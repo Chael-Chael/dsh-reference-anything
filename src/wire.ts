@@ -24,14 +24,14 @@ export const pickerSettingsSchema = z.object({
 })
 export type PickerSettings = z.infer<typeof pickerSettingsSchema>
 
-/** Defaults preserve the pre-settings @ menu ordering and result counts. */
+/** Defaults used before the user saves the General section. */
 export function defaultPickerSettings(): PickerSettings {
   return {
-    commands: { enabled: true, order: 0, limit: 12 },
-    skills: { enabled: true, order: 5, limit: 12 },
-    files: { enabled: true, order: 10, limit: 12 },
-    sessions: { enabled: true, order: 20, limit: 12 },
-    conversations: { enabled: true, order: 30, limit: 12 },
+    commands: { enabled: true, order: 0, limit: 6 },
+    skills: { enabled: true, order: 5, limit: 6 },
+    files: { enabled: true, order: 10, limit: 6 },
+    sessions: { enabled: true, order: 20, limit: 6 },
+    conversations: { enabled: true, order: 30, limit: 6 },
   }
 }
 

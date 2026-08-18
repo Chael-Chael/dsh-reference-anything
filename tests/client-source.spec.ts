@@ -107,10 +107,10 @@ describe('conversation client references', () => {
       candidate: { name: row.title, conversation: row }, session: { sessionId: 'session-1' as never },
       position: 'inline', via: 'menu', span: { start: 0, end: 1, draftRev: 1 },
     })
-    expect(outcome).toMatchObject({ insert: { source: 'External conversations', label: '\uE100 ChatGPT · BiWM SFT Loss 解释' } })
+    expect(outcome).toMatchObject({ insert: { source: 'External conversations', label: '\uE100 ChatGPT·BiWM SFT Loss 解释' } })
     if (outcome === undefined || outcome === 'handled' || !('insert' in outcome)) throw new Error('expected reference insert')
     await expect(source.codec?.serialize(outcome.insert.ref, new AbortController().signal))
-      .resolves.toBe(`@[ChatGPT · BiWM SFT Loss 解释](${conversationReferenceUri(row.uriId)})`)
+      .resolves.toBe(`@[ChatGPT·BiWM SFT Loss 解释](${conversationReferenceUri(row.uriId)})`)
   })
 
   it('groups workspace paths and serializes a relative-path dsh-file chip', async () => {
@@ -125,7 +125,7 @@ describe('conversation client references', () => {
 
   it('uses the official dsh-session URI returned by the host', async () => {
     const uri = 'dsh-session:InNvdXJjZSI'
-    const source = createSessionSource(async () => [{ sessionId: uri, label: '项目聊天导出', cwd: 'D:\\repo', createdAt: 1 }])
+    const source = createSessionSource(async () => [{ sessionId: uri, label: '项目聊天导出', cwd: 'fixture-repo', createdAt: 1 }])
     const candidates = await source.candidates({ sessionId: 'session-1' as never }, { query: '', position: 'inline', signal: new AbortController().signal })
     expect(source.name).toBe('DSH sessions')
     expect(candidates[0]?.icon).toBe('\uE106')
@@ -135,21 +135,24 @@ describe('conversation client references', () => {
     await expect(source.codec?.serialize(outcome.insert.ref, new AbortController().signal)).resolves.toBe(`@[项目聊天导出](${uri})`)
   })
 
-  it('exposes host commands in the leading @ panel and hands execution back to the native slash pipeline', async () => {
+  it('exposes host commands from every @ panel and hands execution back to the native slash pipeline', async () => {
     const source = createCommandSource(async () => [{ name: 'plan', description: 'Plan mode' }])
     await expect(source.candidates({ sessionId: 'session-1' as never }, { query: 'commands', position: 'leading', signal: new AbortController().signal }))
       .resolves.toEqual([expect.objectContaining({ name: 'plan', commandName: 'plan' })])
     const candidates = await source.candidates({ sessionId: 'session-1' as never }, { query: 'pla', position: 'leading', signal: new AbortController().signal })
     expect(candidates).toEqual([expect.objectContaining({ name: 'plan', commandName: 'plan' })])
-    expect(source.onPick({ candidate: candidates[0]!, session: { sessionId: 'session-1' as never }, position: 'leading', via: 'menu', span: { start: 0, end: 4, draftRev: 1 } })).toEqual({ text: '/plan ' })
-    await expect(source.candidates({ sessionId: 'session-1' as never }, { query: '', position: 'inline', signal: new AbortController().signal })).resolves.toEqual([])
+    expect(source.onPick({ candidate: candidates[0]!, session: { sessionId: 'session-1' as never }, position: 'leading', via: 'menu', span: { start: 0, end: 4, draftRev: 1 } })).toEqual({ text: '/plan' })
+    await expect(source.candidates({ sessionId: 'session-1' as never }, { query: 'pla', position: 'inline', signal: new AbortController().signal }))
+      .resolves.toEqual([expect.objectContaining({ name: 'plan', commandName: 'plan' })])
   })
 
-  it('exposes filesystem-backed skills in the leading @ panel', async () => {
+  it('exposes filesystem-backed skills from every @ panel', async () => {
     const source = createSkillSource(async () => [{ name: 'review', description: 'Review code', modelInvocable: false }])
     const candidates = await source.candidates({ sessionId: 'session-1' as never }, { query: 'rev', position: 'leading', signal: new AbortController().signal })
-    expect(candidates).toEqual([expect.objectContaining({ name: 'review', description: 'user-only · Review code', skillName: 'review' })])
+    expect(candidates).toEqual([expect.objectContaining({ name: 'review', description: 'user-only · Review code', icon: '\uE107', skillName: 'review' })])
     expect(source.onPick({ candidate: candidates[0]!, session: { sessionId: 'session-1' as never }, position: 'leading', via: 'menu', span: { start: 0, end: 4, draftRev: 1 } })).toEqual({ text: '/review ' })
+    await expect(source.candidates({ sessionId: 'session-1' as never }, { query: 'rev', position: 'inline', signal: new AbortController().signal }))
+      .resolves.toEqual([expect.objectContaining({ name: 'review', skillName: 'review' })])
   })
 
   it('declares search cancellation so the input-trigger AbortSignal is accepted by the Remote API', () => {
