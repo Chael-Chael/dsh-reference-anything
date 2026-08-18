@@ -119,6 +119,24 @@ describe('conversation mirror', () => {
     expect(db.conversations.get(key)?.currentRevision).toMatch(/^sha256:/)
   })
 
+  it('uses local detail metadata instead of later directory metadata', async () => {
+    const db = store()
+    const row = { ...history, provider: 'gemini' as const, updatedAt: '', messageCount: 0 }
+    const key = await db.putConversation(row, 'account-hash')
+    await db.commitRevision(key, turns(2).map((turn, ordinal) => ({ ...turn, createdAt: String((ordinal + 1) * 1_000) })))
+    await db.putConversation({ ...row, updatedAt: '2026-08-18T00:00:00.000Z', messageCount: 999 }, 'account-hash')
+
+    expect(db.conversations.get(key)).toMatchObject({ messageCount: 2, updatedAt: '2000' })
+  })
+
+  it('re-reads an existing local revision when the provider reports a newer timestamp', async () => {
+    const db = store()
+    const key = await db.putConversation(history, 'account-hash')
+    await db.commitRevision(key, turns(2))
+    expect(db.needsDetail(key, { ...history, updatedAt: '2026-08-18', messageCount: 999 }, false)).toBe(true)
+    expect(db.needsDetail(key, history, true)).toBe(true)
+  })
+
   it('stops sibling workers and persists a non-retryable provider failure', async () => {
     const db = store()
     const manager = new ConversationSyncManager(db, () => fakeRunner({

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { conversationMentions } from '../src/client/components.tsx'
-import { conversationReferenceUri, createCommandSource, createConversationSource, createSessionSource, createSkillSource, createWorkspaceSource, describeRow, disambiguate, parseQuery } from '../src/client/source.ts'
+import { conversationReferenceUri, createCommandSource, createConversationSource, createSessionSource, createSkillSource, createWorkspaceSource, describeRow, disambiguate, parseQuery, scopedQuery } from '../src/client/source.ts'
 import type { SearchResult } from '../src/client/remote.ts'
 import { REFERENCE_ANYTHING_INVOCATIONS } from '../src/contract.ts'
 import { decodeReferenceUri } from '../src/uri.ts'
@@ -22,6 +22,7 @@ describe('conversation client references', () => {
 
   it('parses a provider prefix without treating ordinary search text as one', () => {
     expect(parseQuery('chatgpt cache design')).toEqual({ provider: 'chatgpt', query: 'cache design' })
+    expect(parseQuery('chatgpt:cache design')).toEqual({ provider: 'chatgpt', query: 'cache design' })
     expect(parseQuery('cache design')).toEqual({ query: 'cache design' })
   })
 
@@ -59,6 +60,16 @@ describe('conversation client references', () => {
     expect(new Set(numbered.map(item => item.name)).size).toBe(numbered.length)
   })
 
+  it('routes type:name prefixes to one @ group while keeping unprefixed search global', () => {
+    expect(scopedQuery('commands', 'commands')).toBe('')
+    expect(scopedQuery('commands', 'files')).toBeUndefined()
+    expect(scopedQuery('skills:creator', 'skills')).toBe('creator')
+    expect(scopedQuery('skills:creator', 'files')).toBeUndefined()
+    expect(scopedQuery('chatgpt:loss', 'conversations')).toBe('loss')
+    expect(scopedQuery('ordinary search', 'files')).toBe('ordinary search')
+    expect(scopedQuery('unknown:value', 'files')).toBe('unknown:value')
+  })
+
   it('inserts a visual composer chip while serializing the canonical mention on send', async () => {
     const source = createConversationSource(async () => [])
     const row = {
@@ -70,7 +81,7 @@ describe('conversation client references', () => {
       candidate: { name: row.title, conversation: row }, session: { sessionId: 'session-1' as never },
       position: 'inline', via: 'menu', span: { start: 0, end: 1, draftRev: 1 },
     })
-    expect(outcome).toMatchObject({ insert: { source: 'External conversations', label: '💬 ChatGPT · BiWM SFT Loss 解释' } })
+    expect(outcome).toMatchObject({ insert: { source: 'External conversations', label: '\uE100 ChatGPT · BiWM SFT Loss 解释' } })
     if (outcome === undefined || outcome === 'handled' || !('insert' in outcome)) throw new Error('expected reference insert')
     await expect(source.codec?.serialize(outcome.insert.ref, new AbortController().signal))
       .resolves.toBe(`@[ChatGPT · BiWM SFT Loss 解释](${conversationReferenceUri(row.uriId)})`)
@@ -98,6 +109,8 @@ describe('conversation client references', () => {
 
   it('exposes host commands in the leading @ panel and hands execution back to the native slash pipeline', async () => {
     const source = createCommandSource(async () => [{ name: 'plan', description: 'Plan mode' }])
+    await expect(source.candidates({ sessionId: 'session-1' as never }, { query: 'commands', position: 'leading', signal: new AbortController().signal }))
+      .resolves.toEqual([expect.objectContaining({ name: 'plan', commandName: 'plan' })])
     const candidates = await source.candidates({ sessionId: 'session-1' as never }, { query: 'pla', position: 'leading', signal: new AbortController().signal })
     expect(candidates).toEqual([expect.objectContaining({ name: 'plan', commandName: 'plan' })])
     expect(source.onPick({ candidate: candidates[0]!, session: { sessionId: 'session-1' as never }, position: 'leading', via: 'menu', span: { start: 0, end: 4, draftRev: 1 } })).toEqual({ text: '/plan ' })

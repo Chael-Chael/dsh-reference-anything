@@ -290,11 +290,17 @@ export class ConversationStore {
   async putConversation(row: ProviderConversationRow, accountScope: string): Promise<string> {
     const key = ConversationStore.conversationKey(row.provider, accountScope, row.id)
     const current = this.conversations.get(key)
+    // Directory rows only discover conversations. Once a detail snapshot is
+    // mirrored, its metadata stays authoritative until the matching detail
+    // fetch succeeds and commitRevision atomically publishes the provider's
+    // listing timestamp.
+    const hasMirroredTurns = current?.currentRevision !== undefined
     const next: ConversationRecord = {
       provider: row.provider, accountScope, externalId: row.id,
       title: row.title.trim() || row.id, url: row.url,
       ...(current?.currentRevision ? { currentRevision: current.currentRevision } : {}),
-      createdAt: row.createdAt, updatedAt: row.updatedAt,
+      createdAt: row.createdAt || current?.createdAt || '',
+      updatedAt: hasMirroredTurns ? current.updatedAt : row.updatedAt.trim(),
       // Once a revision exists its turn count is the honest one: the provider
       // counts turns this mirror drops (empty ones), so letting its number
       // back in would flip the value on every metadata refresh.
@@ -340,12 +346,20 @@ export class ConversationStore {
     const revision = `sha256:${digest}`
     const revisionKey = `${conversationKey}:${revision}`
     const now = Date.now()
+    // Direct callers without a provider listing row retain the best timestamp
+    // embedded in the transcript. The sync path supplies `next`, whose
+    // provider timestamp is the authoritative update watermark.
+    const newestTurnAt = next ? '' : turns.reduce<string>((latest, turn) => {
+      const latestAt = parseTimestamp(latest)
+      const candidateAt = parseTimestamp(turn.createdAt)
+      return candidateAt !== undefined && (latestAt === undefined || candidateAt > latestAt) ? turn.createdAt : latest
+    }, '')
     const merged: ConversationRecord = {
       ...conversation,
       ...(next ? {
         title: next.title.trim() || next.id, url: next.url, createdAt: next.createdAt,
         updatedAt: next.updatedAt, partial: next.partial, remoteMissing: false,
-      } : {}),
+      } : newestTurnAt ? { updatedAt: newestTurnAt } : {}),
       currentRevision: revision, messageCount: turns.length, syncedAt: new Date(now).toISOString(),
     }
     // The revision id IS the content hash, so an unchanged transcript commits
