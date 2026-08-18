@@ -28,13 +28,55 @@ export interface OpenCliRunnerOptions {
   maxStdoutBytes?: number
 }
 
+/** Connection state of the Browser Bridge browser extension, mirroring `opencli daemon status`. */
+export type ExtensionState = 'connected' | 'disconnected' | 'profile-required' | 'profile-disconnected' | 'daemon-offline'
+
 export interface OpenCliHealth {
   version: string
+  /** Raw `opencli daemon status` output, kept for display and debugging. */
   daemon: string
   pluginInstalled: boolean
+  daemonRunning: boolean
+  extensionConnected: boolean
+  extensionState: ExtensionState
+  extensionVersion?: string
+  profileCount?: number
   versionError?: string
   daemonError?: string
   pluginError?: string
+}
+
+export interface DaemonStatus {
+  daemonRunning: boolean
+  extensionState: ExtensionState
+  extensionConnected: boolean
+  extensionVersion?: string
+  profileCount?: number
+}
+
+/**
+ * Parse the human-readable `opencli daemon status` output into structured
+ * bridge state. Empty output — including a probe failure — degrades to
+ * `daemon-offline` rather than throwing, so one broken probe never hides the
+ * rest of the viability panel.
+ */
+export function parseDaemonStatus(output: string): DaemonStatus {
+  const daemonRunning = /^Daemon:\s+(?:running|stale)\b/m.test(output)
+  const connected = /^Extension:\s+connected\b/m.test(output)
+  const version = connected ? output.match(/^Extension:\s+connected \((v)?([^)\s]+)\)/m)?.[2] : undefined
+  const profileRequired = output.match(/^Extension:\s+(\d+) profiles? connected, none selected/m)
+  const profileDisconnected = /^Extension:\s+requested profile not connected/m.test(output)
+  const extensionState: ExtensionState = !daemonRunning ? 'daemon-offline'
+    : connected ? 'connected'
+    : profileRequired ? 'profile-required'
+    : profileDisconnected ? 'profile-disconnected'
+    : 'disconnected'
+  const profileCount = profileRequired ? Number(profileRequired[1]) : undefined
+  return {
+    daemonRunning, extensionState, extensionConnected: extensionState === 'connected',
+    ...(version ? { extensionVersion: version } : {}),
+    ...(profileCount !== undefined ? { profileCount } : {}),
+  }
 }
 
 export interface BrowserProfile { id: string; alias?: string; connected: boolean; isDefault: boolean }
@@ -117,8 +159,12 @@ export class OpenCliRunner {
     const [version, daemon, plugins] = await Promise.all([
       this.probe(['--version'], signal), this.probe(['daemon', 'status'], signal), this.probe(['plugin', 'list'], signal),
     ])
+    const status = parseDaemonStatus(daemon.value)
     return {
       version: version.value.trim(), daemon: daemon.value.trim(), pluginInstalled: /dsh-chat-history/i.test(plugins.value),
+      daemonRunning: status.daemonRunning, extensionConnected: status.extensionConnected, extensionState: status.extensionState,
+      ...(status.extensionVersion ? { extensionVersion: status.extensionVersion } : {}),
+      ...(status.profileCount !== undefined ? { profileCount: status.profileCount } : {}),
       ...(version.error ? { versionError: version.error } : {}),
       ...(daemon.error ? { daemonError: daemon.error } : {}),
       ...(plugins.error ? { pluginError: plugins.error } : {}),

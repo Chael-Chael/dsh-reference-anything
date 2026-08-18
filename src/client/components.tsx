@@ -3,6 +3,7 @@ import type { ObservableSnapshot } from '@deepseek-ai/dsh-client-runtime/client'
 import { useEffect, useRef, useState, type CSSProperties } from 'react'
 import { defaultPickerSettings, type ChatProvider, type PickerSettings, type PickerSource, type SettingsRecord } from '../wire.ts'
 import type { BrowsePage, BrowserProfile, Health, ProviderStats, StorageStats, SyncStatus } from './remote.ts'
+import { setupReady } from './health.ts'
 import { ProviderLogo } from './provider-icons.tsx'
 import { type REFERENCE_ANYTHING_NS } from './locale.ts'
 import type { TranslateNS } from '@deepseek-ai/dsh-client-locale/client'
@@ -17,6 +18,7 @@ export interface SettingsInjected {
   sync(providers: ChatProvider[], mode: 'incremental' | 'full'): Promise<void>
   cancel(): Promise<void>
   refresh(): Promise<void>
+  setupAll(): Promise<void>
   install(): Promise<void>
   restartDaemon(): Promise<void>
   browse(query: string, provider: ChatProvider | undefined, offset: number): Promise<void>
@@ -51,10 +53,11 @@ const PICKER_SOURCES: ReadonlyArray<{ id: PickerSource; label: keyof typeof SOUR
   { id: 'conversations', label: 'conversations' },
 ]
 const SOURCE_KEYS = { commands: 'source.commands', skills: 'source.skills', files: 'source.files', sessions: 'source.sessions', conversations: 'source.conversations' } as const
-export function ConversationSettings({ useScope, save, sync, cancel, refresh, install, restartDaemon, browse, deleteConversation, clearProvider, clearOlder, refreshStats, t }: SettingsProps) {
+export function ConversationSettings({ useScope, save, sync, cancel, refresh, setupAll, install, restartDaemon, browse, deleteConversation, clearProvider, clearOlder, refreshStats, t }: SettingsProps) {
   const state = useScope(value => value)
   const settings = state.settings
   const [installing, setInstalling] = useState(false)
+  const [settingUp, setSettingUp] = useState(false)
   const [opencliPath, setOpencliPath] = useState(settings.opencliPath)
   const [profile, setProfile] = useState(settings.profile)
   const [detailConcurrency, setDetailConcurrency] = useState(String(settings.detailConcurrency))
@@ -73,7 +76,7 @@ export function ConversationSettings({ useScope, save, sync, cancel, refresh, in
     const timer = setInterval(() => { void pollStats.current() }, STATS_POLL_MS)
     return () => { clearInterval(timer) }
   }, [])
-  const ready = Boolean(state.health?.version && state.health?.daemon && state.health?.pluginInstalled)
+  const ready = setupReady(state.health)
   const saveConcurrency = () => {
     const value = Number(detailConcurrency)
     if (Number.isInteger(value) && value >= 1 && value <= 8) void save({ ...settings, detailConcurrency: value })
@@ -116,10 +119,11 @@ export function ConversationSettings({ useScope, save, sync, cancel, refresh, in
     <section className="dsh_ref_panel"><div className="dsh_ref_section_head"><div><h3>{t('settings.viability')}</h3><p>{t('settings.viabilityDetail')}</p></div><div className="dsh_ref_viability_actions"><span className={`dsh_ref_health ${ready ? 'is_ready' : ''}`}>{ready ? t('settings.ready') : t('settings.needsAttention')}</span><button className="dsh_ref_recheck" type="button" onClick={() => { void refresh() }}>{t('settings.recheck')}</button></div></div>
       {state.loading ? <div className="dsh_ref_skeleton"><i/><i/><i/></div> : <div className="dsh_ref_checklist">
         <CheckRow label="OpenCLI" detail={state.health?.version || state.health?.versionError || t('settings.notDetected')} ready={Boolean(state.health?.version)} />
-        <CheckRow label={t('check.browserBridge')} detail={state.health?.daemon || state.health?.daemonError || t('settings.daemonUnavailable')} ready={Boolean(state.health?.daemon)} />
+        <CheckRow label={t('check.browserBridge')} detail={state.health?.daemonRunning ? t('settings.daemonRunning') : state.health?.daemonError || t('settings.daemonNotRunning')} ready={Boolean(state.health?.daemonRunning)} />
+        <CheckRow label={t('check.browserExtension')} detail={extensionStateDetail(state.health, t)} ready={Boolean(state.health?.extensionConnected)} />
         <CheckRow label={t('check.conversationAdapter')} detail={state.health?.pluginInstalled ? t('settings.adapterInstalled') : state.health?.pluginError || t('settings.adapterMissing')} ready={Boolean(state.health?.pluginInstalled)} />
       </div>}
-      <div className="dsh_ref_install"><div><strong>{t('settings.serviceActions')}</strong><span>{t('settings.serviceActionsDetail')}</span></div><div className="dsh_ref_service_actions"><button type="button" disabled={installing} onClick={() => { setInstalling(true); void install().finally(() => { setInstalling(false) }) }}>{installing ? t('settings.installing') : state.health?.pluginInstalled ? t('settings.reinstall') : t('settings.install')}</button><button type="button" onClick={() => { void restartDaemon() }}>{t('settings.restartDaemon')}</button></div></div>
+      <div className="dsh_ref_install"><div><strong>{t('settings.serviceActions')}</strong><span>{t('settings.serviceActionsDetail')}</span></div><div className="dsh_ref_service_actions"><button className="is_primary" type="button" disabled={settingUp} onClick={() => { setSettingUp(true); void setupAll().finally(() => { setSettingUp(false) }) }}>{settingUp ? t('settings.settingUp') : t('settings.oneClickSetup')}</button><button type="button" disabled={installing} onClick={() => { setInstalling(true); void install().finally(() => { setInstalling(false) }) }}>{installing ? t('settings.installing') : state.health?.pluginInstalled ? t('settings.reinstall') : t('settings.install')}</button><button type="button" onClick={() => { void restartDaemon() }}>{t('settings.restartDaemon')}</button></div></div>
     </section>
     <section className="dsh_ref_sources dsh_ref_chat"><div className="dsh_ref_section_head"><div><h3>{t('settings.sources')}</h3><p>{t('settings.sourcesDetail')}</p></div>{state.sync?.status === 'running' && <span className="dsh_ref_syncing">{t('settings.syncing', { source: t('settings.sources'), completed: state.sync.completed, total: state.sync.total })}</span>}</div>
       <div className="dsh_ref_provider_grid">{PROVIDERS.map((provider, index) => <ProviderCard key={provider} provider={provider} index={index} stats={state.stats?.find(row => row.provider === provider)} busy={state.sync?.status === 'running'} autoSync={settings.autoSync} enabled={enabled.has(provider)} onEnabled={value => { setProviderEnabled(provider, value) }} onSync={(mode) => { void sync([provider], mode) }} onClear={() => { if (window.confirm(t('storage.clearProviderConfirm', { provider: PROVIDER_LABEL[provider] }))) void clearProvider(provider) }} t={t} />)}</div>
@@ -251,6 +255,17 @@ function formatUpdatedDate(value: string, t: T): string {
 
 function CheckRow({ label, detail, ready }: { label: string; detail: string; ready: boolean }) {
   return <div className="dsh_ref_check"><span className={ready ? 'is_ready' : ''}>{ready ? '✓' : '!'}</span><div><strong>{label}</strong><small className={ready ? undefined : 'is_warning'}>{detail}</small></div></div>
+}
+
+function extensionStateDetail(health: Health | undefined, t: T): string {
+  if (!health) return t('settings.extensionDisconnected')
+  switch (health.extensionState) {
+    case 'connected': return health.extensionVersion ? t('settings.extensionConnected', { version: health.extensionVersion }) : t('settings.extensionConnectedUnknown')
+    case 'profile-required': return t('settings.extensionProfileRequired', { count: health.profileCount ?? 0 })
+    case 'profile-disconnected': return t('settings.extensionProfileDisconnected')
+    case 'daemon-offline': return t('settings.daemonNotRunning')
+    default: return t('settings.extensionDisconnected')
+  }
 }
 
 function ProviderCard({ provider, stats, busy, autoSync, enabled, onEnabled, onSync, onClear, index, t }: { provider: ChatProvider; stats?: ProviderStats; busy: boolean; autoSync: boolean; enabled: boolean; onEnabled(value: boolean): void; onSync(mode: 'incremental' | 'full'): void; onClear(): void; index: number; t: T }) {

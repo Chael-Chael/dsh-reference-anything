@@ -15,8 +15,11 @@ export interface SearchResult extends ConversationRow {
 }
 export interface WorkspaceEntry { path: string; kind: 'file' | 'directory' }
 export interface SessionCandidate { sessionId: string; label: string; cwd?: string; createdAt: number }
+export type ExtensionState = 'connected' | 'disconnected' | 'profile-required' | 'profile-disconnected' | 'daemon-offline'
 export interface Health {
   version: string; daemon: string; pluginInstalled: boolean
+  daemonRunning: boolean; extensionConnected: boolean; extensionState: ExtensionState
+  extensionVersion?: string; profileCount?: number
   versionError?: string; daemonError?: string; pluginError?: string
 }
 export interface BrowserProfile { id: string; alias?: string; connected: boolean; isDefault: boolean }

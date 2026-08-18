@@ -16,8 +16,11 @@ export const searchResultSchema = z.object({
   turnCount: z.number().int().nonnegative(), partial: z.boolean(), syncedAt: z.string(),
   matchedVia: matchedViaSchema, snippet: z.string().optional(),
 }).readonly()
+export const extensionStateSchema = z.enum(['connected', 'disconnected', 'profile-required', 'profile-disconnected', 'daemon-offline'])
 export const healthSchema = z.object({
   version: z.string(), daemon: z.string(), pluginInstalled: z.boolean(),
+  daemonRunning: z.boolean(), extensionConnected: z.boolean(), extensionState: extensionStateSchema,
+  extensionVersion: z.string().optional(), profileCount: z.number().int().nonnegative().optional(),
   versionError: z.string().optional(), daemonError: z.string().optional(), pluginError: z.string().optional(),
 }).readonly()
 export const browserProfileSchema = z.object({ id: z.string(), alias: z.string().optional(), connected: z.boolean(), isDefault: z.boolean() }).readonly()
