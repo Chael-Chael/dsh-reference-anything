@@ -142,12 +142,8 @@ export function apply(ctx: ClientContext): void {
         }), t)),
     ]
   }
-  let sourceDisposers = registerSources()
-  ctx.effect(() => {
-    const refreshSources = () => { for (const dispose of sourceDisposers) dispose(); sourceDisposers = registerSources() }
-    ctx.on('locale/change', refreshSources)
-    return () => { for (const dispose of sourceDisposers) dispose() }
-  }, 'reference-anything.client.locale-sources')
+  const sourceDisposers = registerSources()
+  ctx.effect(() => () => { for (const dispose of sourceDisposers) dispose() }, 'reference-anything.client.sources')
 
   ctx.slots.inject('conversation.input.dock', () => ctx.slots.register({
     name: 'conversation.input.dock', id: 'reference-anything', order: 25, locale: REFERENCE_ANYTHING_NS,

@@ -24,6 +24,14 @@ const LABEL: Record<ChatProvider, string> = {
 }
 type T = TranslateNS<typeof REFERENCE_ANYTHING_NS>
 
+// DSH persists this name on every selected chip and resolves its codec by the
+// same value later. It is therefore an identifier, not a translatable label.
+export const CONVERSATION_SOURCE = 'External conversations'
+export const FILE_SOURCE = 'Files and folders'
+export const SESSION_SOURCE = 'DSH sessions'
+export const COMMAND_SOURCE = 'Commands'
+export const SKILL_SOURCE = 'Skills'
+
 type SourceScope = 'commands' | 'skills' | 'files' | 'sessions' | 'conversations'
 const PREFIX_SCOPE: Readonly<Record<string, SourceScope>> = {
   command: 'commands', commands: 'commands', cmd: 'commands',
@@ -31,6 +39,7 @@ const PREFIX_SCOPE: Readonly<Record<string, SourceScope>> = {
   file: 'files', files: 'files', folder: 'files', folders: 'files', path: 'files',
   session: 'sessions', sessions: 'sessions', dsh: 'sessions',
   chat: 'conversations', conversation: 'conversations', conversations: 'conversations',
+  '外部对话': 'conversations', '外部对话记录': 'conversations',
   chatgpt: 'conversations', claude: 'conversations', gemini: 'conversations', deepseek: 'conversations', grok: 'conversations',
 }
 
@@ -144,7 +153,7 @@ export function createConversationSource(search: (
   query: string, provider: ChatProvider | undefined, limit: number, signal: AbortSignal,
 ) => Promise<readonly SearchResult[]>, t: T = fallback): InputTriggerSource {
   return {
-    trigger: '@', name: t('source.conversations'), order: 30,
+    trigger: '@', name: CONVERSATION_SOURCE, order: 30,
     async candidates(_session, { query, signal }) {
       const scoped = scopedQuery(query, 'conversations')
       if (scoped === undefined) return []
@@ -167,7 +176,7 @@ export function createConversationSource(search: (
       const reference = { uriId: row.uriId, label: title }
       return {
         insert: {
-          source: t('source.conversations'),
+          source: CONVERSATION_SOURCE,
           ref: encodeConversationReference(reference),
           // The input's object replacement chip keeps the transport URI out
           // of the textarea while retaining a compact, recognizable label.
@@ -186,7 +195,7 @@ export function createConversationSource(search: (
 export function createWorkspaceSource(load: (sessionId: string, signal: AbortSignal) => Promise<readonly WorkspaceEntry[]>, t: T = fallback): InputTriggerSource {
   const cache = new Map<string, readonly WorkspaceEntry[]>()
   return {
-    trigger: '@', name: t('source.files'), order: 10,
+    trigger: '@', name: FILE_SOURCE, order: 10,
     async candidates(session, { query, signal }) {
       const scoped = scopedQuery(query, 'files')
       if (scoped === undefined) return []
@@ -205,7 +214,7 @@ export function createWorkspaceSource(load: (sessionId: string, signal: AbortSig
       if (!row) return undefined
       const label = row.path.split('/').at(-1) ?? row.path
       const ref = JSON.stringify({ path: row.path, label })
-      return { insert: { source: t('source.files'), ref, label: `${row.kind === 'directory' ? '📁' : '📄'} ${label}`, clipboardText: workspaceMention(ref) } }
+      return { insert: { source: FILE_SOURCE, ref, label: `${row.kind === 'directory' ? '📁' : '📄'} ${label}`, clipboardText: workspaceMention(ref) } }
     },
     codec: { clipboardText: workspaceMention, serialize: ref => Promise.resolve(workspaceMention(ref)) },
   }
@@ -213,7 +222,7 @@ export function createWorkspaceSource(load: (sessionId: string, signal: AbortSig
 
 export function createSessionSource(search: (sessionId: string, query: string, limit: number, signal: AbortSignal) => Promise<readonly SessionCandidate[]>, t: T = fallback): InputTriggerSource {
   return {
-    trigger: '@', name: t('source.sessions'), order: 20,
+    trigger: '@', name: SESSION_SOURCE, order: 20,
     async candidates(session, { query, signal }) {
       const scoped = scopedQuery(query, 'sessions')
       if (scoped === undefined) return []
@@ -226,7 +235,7 @@ export function createSessionSource(search: (sessionId: string, query: string, l
       const row = candidate.sessionCandidate
       if (!row) return undefined
       const ref = JSON.stringify({ uri: row.sessionId, label: row.label })
-      return { insert: { source: t('source.sessions'), ref, label: `💬 ${row.label}`, clipboardText: sessionMention(ref) } }
+      return { insert: { source: SESSION_SOURCE, ref, label: `💬 ${row.label}`, clipboardText: sessionMention(ref) } }
     },
     codec: { clipboardText: sessionMention, serialize: ref => Promise.resolve(sessionMention(ref)) },
   }
@@ -238,7 +247,7 @@ interface SkillCandidate { name: string; description: string; modelInvocable?: b
 export function createCommandSource(load: (sessionId: SessionId, signal: AbortSignal) => Promise<readonly CommandCandidate[]>, t: T = fallback): InputTriggerSource {
   const cache = new Map<string, readonly CommandCandidate[]>()
   return {
-    trigger: '@', name: t('source.commands'), order: 0,
+    trigger: '@', name: COMMAND_SOURCE, order: 0,
     async candidates(session, { query, position, signal }) {
       if (position !== 'leading') return []
       const scoped = scopedQuery(query, 'commands')
@@ -260,7 +269,7 @@ export function createCommandSource(load: (sessionId: SessionId, signal: AbortSi
 export function createSkillSource(load: (sessionId: SessionId, signal: AbortSignal) => Promise<readonly SkillCandidate[]>, t: T = fallback): InputTriggerSource {
   const cache = new Map<string, readonly SkillCandidate[]>()
   return {
-    trigger: '@', name: t('source.skills'), order: 5,
+    trigger: '@', name: SKILL_SOURCE, order: 5,
     async candidates(session, { query, position, signal }) {
       if (position !== 'leading') return []
       const scoped = scopedQuery(query, 'skills')
