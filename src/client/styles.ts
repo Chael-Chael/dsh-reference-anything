@@ -52,6 +52,7 @@ const css = `
 .dsh_ref_workspace>.dsh_ref_panel.dsh_ref_general_settings{padding:0;border:0;border-radius:0;background:transparent}
 /* The remaining sections keep their structural outline, but not a filled grey card. */
 .dsh_ref_workspace>.dsh_ref_panel,.dsh_ref_workspace>.dsh_ref_sources{background:transparent}
+.dsh_ref_chat{gap:0}.dsh_ref_chat_divider{height:0;margin:20px 0;border-top:1px solid var(--dsh-ref-line)}
 @media(prefers-reduced-motion:reduce){.dsh_ref_settings *{transition:none!important}}
 `
 export function adoptStyles(): void {

@@ -123,11 +123,11 @@ export function ConversationSettings({ useScope, save, sync, cancel, refresh, in
       </div>}
       <div className="dsh_ref_install"><div><strong>{t('settings.serviceActions')}</strong><span>{t('settings.serviceActionsDetail')}</span></div><div className="dsh_ref_service_actions"><button type="button" disabled={installing} onClick={() => { setInstalling(true); void install().finally(() => { setInstalling(false) }) }}>{installing ? t('settings.installing') : state.health?.pluginInstalled ? t('settings.reinstall') : t('settings.install')}</button><button type="button" onClick={() => { void restartDaemon() }}>{t('settings.restartDaemon')}</button></div></div>
     </section>
-    <section className="dsh_ref_sources"><div className="dsh_ref_section_head"><div><h3>{t('settings.sources')}</h3><p>{t('settings.sourcesDetail')}</p></div>{state.sync?.status === 'running' && <span className="dsh_ref_syncing">{t('settings.syncing', { source: state.sync.provider ? PROVIDER_LABEL[state.sync.provider] : t('settings.sources'), completed: state.sync.completed, total: state.sync.total })}</span>}</div>
+    <section className="dsh_ref_sources dsh_ref_chat"><div className="dsh_ref_section_head"><div><h3>{t('settings.sources')}</h3><p>{t('settings.sourcesDetail')}</p></div>{state.sync?.status === 'running' && <span className="dsh_ref_syncing">{t('settings.syncing', { source: state.sync.provider ? PROVIDER_LABEL[state.sync.provider] : t('settings.sources'), completed: state.sync.completed, total: state.sync.total })}</span>}</div>
       <div className="dsh_ref_provider_grid">{PROVIDERS.map((provider, index) => <ProviderCard key={provider} provider={provider} index={index} stats={state.stats?.find(row => row.provider === provider)} busy={state.sync?.status === 'running'} autoSync={settings.autoSync} onSync={() => { void sync([provider], 'incremental') }} t={t} />)}</div>
       {!state.loading && state.stats?.every(item => item.conversations === 0) && <div className="dsh_ref_empty">{t('settings.empty')}</div>}
-    </section>
-    <section className="dsh_ref_panel dsh_ref_sync_settings"><div className="dsh_ref_section_head"><div><h3>{t('settings.syncSettings')}</h3><p>{t('settings.syncSettingsDetail')}</p></div><label className="dsh_ref_toggle"><input type="checkbox" checked={settings.autoSync} onChange={event => { void save({ ...settings, autoSync: event.target.checked }) }} /><span/><b>{t('settings.autoSync')}</b></label></div>
+      <div className="dsh_ref_chat_divider" />
+      <div className="dsh_ref_sync_settings"><div className="dsh_ref_section_head"><div><h3>{t('settings.syncSettings')}</h3><p>{t('settings.syncSettingsDetail')}</p></div><label className="dsh_ref_toggle"><input type="checkbox" checked={settings.autoSync} onChange={event => { void save({ ...settings, autoSync: event.target.checked }) }} /><span/><b>{t('settings.autoSync')}</b></label></div>
       <div className="dsh_ref_form_grid">
         <label><span>{t('settings.historyMode')}</span><select value={settings.historyMode} onChange={event => { void save({ ...settings, historyMode: event.target.value as SettingsRecord['historyMode'] }) }}><option value="metadata-only">{t('settings.metadataOnly')}</option><option value="offline-mirror">{t('settings.offlineMirror')}</option></select></label>
         <label><span>{t('settings.opencli')}</span><input value={opencliPath} onChange={event => { setOpencliPath(event.target.value) }} onBlur={() => { if (opencliPath.trim()) void save({ ...settings, opencliPath: opencliPath.trim() }) }} /></label>
@@ -140,8 +140,10 @@ export function ConversationSettings({ useScope, save, sync, cancel, refresh, in
       {state.sync && <SyncProgress sync={state.sync} />}
       {state.sync?.error && <p className="dsh_ref_inline_error">{state.sync.error}</p>}
       {settings.autoSync && <p className="dsh_ref_auto_note">{t('settings.autoNote', { minutes: settings.autoSyncMinutes })}</p>}
+      </div>
+      <div className="dsh_ref_chat_divider" />
+      <ManageConversations state={state} syncing={state.sync?.status === 'running'} browse={browse} deleteConversation={deleteConversation} />
     </section>
-    <ManageConversations state={state} syncing={state.sync?.status === 'running'} browse={browse} deleteConversation={deleteConversation} />
     </div>
   </section>
 }
@@ -193,7 +195,7 @@ export function ManageConversations({ state, syncing, browse, deleteConversation
   const total = page?.total ?? 0
   const offset = browseState?.offset ?? 0
 
-  return <section className="dsh_ref_panel dsh_ref_manage">
+  return <div className="dsh_ref_manage">
     <div className="dsh_ref_section_head"><div><h3>Manage synced conversations</h3><p>Everything mirrored locally, including conversations the provider no longer lists.</p></div></div>
     <div className="dsh_ref_manage_filters">
       <input placeholder="Search titles…" value={text} onChange={event => { setText(event.target.value) }} />
@@ -228,7 +230,7 @@ export function ManageConversations({ state, syncing, browse, deleteConversation
       <span>{total === 0 ? '0 of 0' : `${offset + 1}–${offset + items.length} of ${total}`}</span>
       <button type="button" disabled={offset + items.length >= total} onClick={() => { void browse(text, browseState?.provider, offset + PAGE_SIZE) }}>Next</button>
     </div>
-  </section>
+  </div>
 }
 
 function formatUpdatedDate(value: string): string {
