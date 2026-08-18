@@ -47,6 +47,7 @@ export interface ReferenceAnythingRemoteFace {
   health(signal?: AbortSignal): Promise<RemoteResult<Health>>
   profiles(signal?: AbortSignal): Promise<RemoteResult<readonly BrowserProfile[]>>
   installAdapter(signal?: AbortSignal): Promise<RemoteResult<boolean>>
+  restartDaemon(signal?: AbortSignal): Promise<RemoteResult<boolean>>
   stats(): Promise<RemoteResult<readonly ProviderStats[]>>
   syncStart(input: { providers: ChatProvider[]; mode: 'incremental' | 'full' }): Promise<RemoteResult<string>>
   syncStatus(input: { jobId: string }): Promise<RemoteResult<SyncStatus | undefined>>

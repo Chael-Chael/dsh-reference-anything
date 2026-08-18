@@ -1,11 +1,12 @@
 import { Context, Service } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
-import type { ReferenceSnapshot, ReferenceSource, ReferenceSummary, ReferenceWindow } from '../../types.ts'
+import type { ConversationAttachment, ConversationItem, ReferenceSnapshot, ReferenceSource, ReferenceSummary, ReferenceWindow } from '../../types.ts'
 import type { ChatProvider, SettingsRecord } from '../../store/spec.ts'
 import { providerSchema, referenceAnythingDomainSpec, settingsRecordSchema } from '../../store/spec.ts'
 import { ConversationStore, type MatchedVia } from '../../store/store.ts'
 import { ConversationSyncManager } from '../../sync/index.ts'
 import { OpenCliRunner } from '../../opencli.ts'
+import type { ProviderTurnRow } from '../../store/store.ts'
 import { ReferenceAnythingError } from '../../errors.ts'
 import { parseProviderQuery } from '../../search.ts'
 import type {} from '../../index.ts'
@@ -43,7 +44,7 @@ export interface ConversationRow {
   partial: boolean
   syncedAt: string
 }
-const PROVIDERS: ChatProvider[] = ['chatgpt', 'claude', 'gemini', 'deepseek', 'grok']
+const PROVIDERS: ChatProvider[] = ['chatgpt', 'claude', 'gemini', 'deepseek', 'grok', 'kimi']
 
 /** One ranked hit from the mention/search surface. */
 export interface ConversationSearchResult extends ConversationRow {
@@ -68,6 +69,7 @@ export default class WebChatHistoryService extends Service implements ReferenceS
   private syncValue?: ConversationSyncManager
   private autoSyncInterval?: ReturnType<typeof setInterval>
   private autoSyncCatchUp?: ReturnType<typeof setTimeout>
+  private readonly liveAttachments = new Map<string, { attachment: ConversationAttachment & { locator?: string }; expiresAt: number }>()
 
   constructor(ctx: Context, private readonly config: Config = {}) { super(ctx, 'referenceChatHistory') }
 
@@ -75,6 +77,13 @@ export default class WebChatHistoryService extends Service implements ReferenceS
     const domain = await this.ctx.storageDomain.open(referenceAnythingDomainSpec)
     this.ctx.effect(() => () => domain.close(), 'reference-web-chat.domainClose')
     this.storeValue = new ConversationStore(domain)
+    // The schema default also applies to installations created before modes
+    // existed. Enforce that default immediately so legacy mirrored bodies do
+    // not survive silently under a metadata-only setting.
+    if (this.store.settings.historyMode === 'metadata-only') {
+      await this.store.setSettings(this.store.settings)
+      await this.store.clearMirrorContent()
+    }
     this.syncValue = new ConversationSyncManager(this.storeValue, () => new OpenCliRunner({
       executable: this.store.settings.opencliPath, profile: this.store.settings.profile,
       timeoutMs: this.config.timeoutMs, maxStdoutBytes: this.config.maxStdoutBytes,
@@ -106,9 +115,43 @@ export default class WebChatHistoryService extends Service implements ReferenceS
     }))
   }
 
-  async read(ref: { source: string; id: string }, window: ReferenceWindow): Promise<ReferenceSnapshot> {
+  async read(ref: { source: string; id: string }, window: ReferenceWindow, signal?: AbortSignal): Promise<ReferenceSnapshot> {
     if (ref.source !== this.id) throw new Error(`web-chat cannot read source ${ref.source}`)
+    if (this.store.settings.historyMode === 'metadata-only') return this.readRemote(ref.id, window, signal)
     return this.store.read(ref.id, window)
+  }
+
+  /** Resolve an attachment locator captured by a recent metadata-only read. Never persisted. */
+  liveAttachment(conversationKey: string, attachmentId: string) {
+    const key = `${conversationKey}\0${attachmentId}`
+    const hit = this.liveAttachments.get(key)
+    if (!hit || hit.expiresAt <= Date.now()) { this.liveAttachments.delete(key); return undefined }
+    return hit.attachment
+  }
+
+  private async readRemote(conversationKey: string, window: ReferenceWindow, signal?: AbortSignal): Promise<ReferenceSnapshot> {
+    const conversation = this.store.conversations.get(conversationKey)
+    if (!conversation || conversation.remoteMissing) throw new ReferenceAnythingError('conversation is not in the local title index', 'REFERENCE_NOT_FOUND')
+    let end: number | undefined = window.before
+    if (window.cursor !== undefined) end = decodeLiveCursor(window.cursor, conversationKey)
+    const rows = await this.runner().detail(conversation.provider, conversation.externalId, signal)
+    const turns = projectRemoteTurns(rows)
+    const boundedEnd = Math.max(0, Math.min(end ?? turns.length, turns.length))
+    const start = Math.max(0, boundedEnd - Math.max(1, Math.trunc(window.limit)))
+    const expiresAt = Date.now() + 60 * 60_000
+    for (const turn of turns.slice(start, boundedEnd)) for (const attachment of turn.attachments ?? []) {
+      this.liveAttachments.set(`${conversationKey}\0${attachment.attachmentId}`, { attachment, expiresAt })
+    }
+    const nextCursor = start > 0 ? encodeLiveCursor(conversationKey, start) : undefined
+    return {
+      ref: { source: this.id, id: conversationKey }, label: conversation.title, origin: conversation.url,
+      updatedAt: timestamp(conversation.updatedAt), provider: conversation.provider,
+      partial: conversation.partial || rows.some(row => row.partial), capturedAt: Date.now(),
+      body: {
+        kind: 'conversation', items: turns.slice(start, boundedEnd), startIndex: start,
+        totalTurns: turns.length, hasOlder: start > 0, ...(nextCursor ? { nextCursor } : {}),
+      },
+    }
   }
 
   search(query: string, provider: ChatProvider | undefined, limit: number): ConversationSearchResult[] {
@@ -150,9 +193,12 @@ export default class WebChatHistoryService extends Service implements ReferenceS
   syncStates() { return this.store.syncStateSummary() }
 
   getSettings(): SettingsRecord { return this.store.settings }
+  async restartDaemon(signal?: AbortSignal): Promise<boolean> { await this.runner().restartDaemon(signal); return true }
   async updateSettings(value: unknown): Promise<SettingsRecord> {
     const settings = settingsRecordSchema.parse(value)
+    const enteringMetadataOnly = settings.historyMode === 'metadata-only' && this.store.settings.historyMode !== 'metadata-only'
     await this.store.setSettings(settings)
+    if (enteringMetadataOnly) await this.store.clearMirrorContent()
     this.armAutoSync()
     return settings
   }
@@ -167,6 +213,12 @@ export default class WebChatHistoryService extends Service implements ReferenceS
     const settings = this.store.settings
     return new OpenCliRunner({ executable: settings.opencliPath, profile: '',
       timeoutMs: this.config.timeoutMs, maxStdoutBytes: this.config.maxStdoutBytes }).profiles(signal)
+  }
+
+  private runner(): OpenCliRunner {
+    const settings = this.store.settings
+    return new OpenCliRunner({ executable: settings.opencliPath, profile: settings.profile,
+      timeoutMs: this.config.timeoutMs, maxStdoutBytes: this.config.maxStdoutBytes })
   }
 
   async installAdapter(signal?: AbortSignal): Promise<boolean> {
@@ -259,4 +311,47 @@ function timestamp(value: string): number | undefined {
   if (Number.isFinite(numeric) && value.trim()) return numeric < 10_000_000_000 ? numeric * 1_000 : numeric
   const parsed = Date.parse(value)
   return Number.isNaN(parsed) ? undefined : parsed
+}
+
+function projectRemoteTurns(rows: readonly ProviderTurnRow[]): ConversationItem[] {
+  return rows.filter(row => row.activeBranch !== false).sort((a, b) => a.ordinal - b.ordinal).flatMap(row => {
+    const attachments = parseLiveAttachments(row.attachmentsJson)
+    const text = String(row.text || '')
+    if (!text.trim() && attachments.length === 0) return []
+    return [{ role: row.role, text, ...(attachments.length ? { attachments } : {}) }]
+  })
+}
+
+function parseLiveAttachments(raw: string): Array<ConversationAttachment & { locator?: string }> {
+  try {
+    const parsed: unknown = JSON.parse(raw || '[]')
+    if (!Array.isArray(parsed)) return []
+    return parsed.map((value, index) => {
+      const row = value && typeof value === 'object' ? value as Record<string, unknown> : {}
+      const name = String(row.name ?? 'attachment')
+      const mimeType = String(row.mimeType ?? '')
+      const locator = typeof row.locator === 'string' && row.locator ? row.locator : undefined
+      const status = row.status === 'available' || row.status === 'expired' ? row.status : 'unavailable'
+      return {
+        attachmentId: String(row.attachmentId ?? row.id ?? index),
+        kind: row.kind === 'image' || row.type === 'image' || mimeType.startsWith('image/') ? 'image' as const : 'file' as const,
+        name, mimeType, size: Math.max(0, Number(row.size ?? 0) || 0), status,
+        ...(locator ? { locator } : {}),
+      }
+    })
+  } catch { return [] }
+}
+
+function encodeLiveCursor(ref: string, nextOrdinal: number): string {
+  return Buffer.from(JSON.stringify({ v: 2, ref, nextOrdinal })).toString('base64url')
+}
+
+function decodeLiveCursor(value: string, expectedRef: string): number {
+  try {
+    const row = JSON.parse(Buffer.from(value, 'base64url').toString('utf8')) as Record<string, unknown>
+    if (row.v !== 2 || row.ref !== expectedRef || !Number.isInteger(row.nextOrdinal) || Number(row.nextOrdinal) < 0) throw new Error()
+    return Number(row.nextOrdinal)
+  } catch {
+    throw new ReferenceAnythingError('live reference cursor is malformed or belongs to another conversation', 'REFERENCE_INVALID_CURSOR')
+  }
 }

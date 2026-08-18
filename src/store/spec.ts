@@ -100,7 +100,7 @@ export const referenceAnythingDomainSpec = defineDomain({
   version: 1,
   global: {
     schema: settingsRecordSchema,
-    initial: { opencliPath: 'opencli', profile: '', detailConcurrency: 2, autoSync: false, autoSyncMinutes: 60 },
+    initial: { opencliPath: 'opencli', profile: '', detailConcurrency: 2, autoSync: false, autoSyncMinutes: 60, historyMode: 'metadata-only' as const },
   },
   tables: {
     conversations: domainTable<string, ConversationRecord>(conversationRecordSchema),

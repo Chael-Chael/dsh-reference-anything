@@ -307,8 +307,10 @@ export function apply(ctx: Context, config: Config = {}): void {
       if (!service) throw new Error('Web conversation history service is not mounted')
       const conversation = service.store.conversations.get(ref.id)
       const revision = conversation?.currentRevision
-      if (!conversation || !revision) throw new Error('conversation has no synchronized revision')
-      const attachment = service.store.attachment(ref.id, revision, args.attachmentId)
+      if (!conversation) throw new Error('conversation is not in the local title index')
+      const attachment = service.store.settings.historyMode === 'metadata-only'
+        ? service.liveAttachment(ref.id, args.attachmentId)
+        : revision ? service.store.attachment(ref.id, revision, args.attachmentId) : undefined
       if (!attachment?.locator || attachment.status !== 'available') {
         throw new Error('ATTACHMENT_UNAVAILABLE: provider supplied no stable attachment locator')
       }

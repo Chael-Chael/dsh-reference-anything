@@ -18,15 +18,13 @@
         listLimit: 20
 
     # Expands `@[label](dsh-ref:…)` and `dsh-session:` mentions in a user's
-    # prompt into untrusted background, on every surface. Each reference
-    # contributes a bounded preview of its most recent turns; the rest stay
-    # reachable through reference_read.
+    # prompt into untrusted background, on every surface. It grants the agent
+    # the exact reference URI but does not fetch a transcript; the agent calls
+    # reference_read only when the current task needs one.
     - id: reference-mention
       name: 'dsh-reference-anything/reference'
       config:
         maxReferences: 3
-        maxReferenceBytes: 65536
-        previewTurns: 10
         serveSessionScheme: true
 
     # Lets the model go looking on its own, and page backwards through a

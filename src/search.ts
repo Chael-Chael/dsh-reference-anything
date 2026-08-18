@@ -11,7 +11,7 @@
  * subsequence pass rather than demanding a contiguous substring.
  */
 
-export type SearchProvider = 'chatgpt' | 'claude' | 'gemini' | 'deepseek' | 'grok'
+export type SearchProvider = 'chatgpt' | 'claude' | 'gemini' | 'deepseek' | 'grok' | 'kimi'
 
 /** Spellings accepted in a provider prefix, including short forms worth typing. */
 const PROVIDER_ALIASES: Record<string, SearchProvider> = {
@@ -20,6 +20,7 @@ const PROVIDER_ALIASES: Record<string, SearchProvider> = {
   gemini: 'gemini',
   deepseek: 'deepseek', ds: 'deepseek',
   grok: 'grok',
+  kimi: 'kimi',
 }
 
 /** Provider prefix followed by a separator that survives `@` token detection, or by nothing. */

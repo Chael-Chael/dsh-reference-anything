@@ -36,14 +36,15 @@ describe('conversation client references', () => {
     expect(parseQuery('caching')).toEqual({ query: 'caching' })
   })
 
-  it('describes a title hit with its provider, age, and size', () => {
-    expect(describeRow(searchRow())).toBe('ChatGPT · 3d ago · 24 turns')
-    expect(describeRow(searchRow({ partial: true }))).toBe('ChatGPT · 3d ago · 24 turns · partial')
+  it('describes a title hit with its provider and updated date', () => {
+    const updatedAt = '2026-08-17T00:00:00.000Z'
+    expect(describeRow(searchRow({ updatedAt }))).toBe(`ChatGPT · ${new Date(updatedAt).toLocaleDateString()}`)
   })
 
-  it('shows the matched excerpt instead of the turn count when the title did not match', () => {
+  it('shows the matched excerpt after the updated date when the title did not match', () => {
     const described = describeRow(searchRow({ title: 'New chat', matchedVia: 'content', snippet: '…used pgvector for…' }))
-    expect(described).toBe('ChatGPT · 3d ago · …used pgvector for…')
+    expect(described).toContain('ChatGPT · ')
+    expect(described).toContain('…used pgvector for…')
     expect(described).not.toContain('turns')
   })
 
@@ -81,6 +82,17 @@ describe('conversation client references', () => {
     })
     expect(source.name).toBe(CONVERSATION_SOURCE)
     expect(outcome).toMatchObject({ insert: { source: CONVERSATION_SOURCE } })
+  })
+
+  it('honors the configured @ group order and maximum item count', async () => {
+    const requested: number[] = []
+    const source = createConversationSource(async (_query, _provider, _signal, limit) => {
+      requested.push(limit)
+      return [searchRow({ uriId: '1' }), searchRow({ uriId: '2' })]
+    }, undefined, { order: 77, limit: 5 })
+    await source.candidates({ sessionId: 'session-1' as never }, { query: '', position: 'inline', signal: new AbortController().signal })
+    expect(source.order).toBe(77)
+    expect(requested).toEqual([5])
   })
 
   it('inserts a visual composer chip while serializing the canonical mention on send', async () => {

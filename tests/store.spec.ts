@@ -18,7 +18,7 @@ class Table<V> implements KvTable<string, V> {
 
 function store() {
   const tables = new Map<string, Table<never>>()
-  let settings: SettingsRecord = { opencliPath: 'opencli', profile: '', detailConcurrency: 2, autoSync: false, autoSyncMinutes: 60 }
+  let settings: SettingsRecord = { opencliPath: 'opencli', profile: '', detailConcurrency: 2, autoSync: false, autoSyncMinutes: 60, historyMode: 'offline-mirror' }
   const domain = {
     name: 'reference_anything',
     global: { get: () => settings, set: async (value: SettingsRecord) => { settings = value } },
@@ -58,6 +58,19 @@ async function waitFor(predicate: () => boolean): Promise<void> {
 }
 
 describe('conversation mirror', () => {
+  it('purges persisted bodies without deleting the title index', async () => {
+    const db = store()
+    const key = await db.putConversation(history, 'scope')
+    await db.commitRevision(key, turns(2))
+    expect(db.revisions.size).toBe(1)
+    await db.clearMirrorContent()
+    expect(db.conversations.get(key)?.title).toBe(history.title)
+    expect(db.conversations.get(key)?.currentRevision).toBeUndefined()
+    expect(db.revisions.size).toBe(0)
+    expect(db.chunks.size).toBe(0)
+    expect(db.attachments.size).toBe(0)
+  })
+
   it('writes immutable chunks and keeps an old cursor pinned across a new revision', async () => {
     const db = store()
     const key = await db.putConversation(history, 'account-hash')

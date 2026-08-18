@@ -46,7 +46,32 @@ function assertResult(result, domain, operation) {
   return result.rows
 }
 
+/**
+ * OpenCLI's `close-window` relinquishes an automation lease but deliberately
+ * leaves its reusable container window alive.  For a one-shot sync that
+ * container becomes a visible `about:blank` window.  The adapter session is
+ * ephemeral and owns its active tab, so close that tab explicitly instead.
+ */
+async function inTemporaryTab(page, task) {
+  try {
+    return await task()
+  } finally {
+    try {
+      await page.closeTab?.()
+    } catch {
+      // Preserve the provider result/error if the browser closed first.
+    }
+  }
+}
+
 export function registerProvider(config) {
+  // Synchronization is a background, read-only operation.  Use a distinct
+  // session for each command and keep its temporary window out of focus.
+  const browserSession = {
+    siteSession: 'ephemeral',
+    defaultWindowMode: 'background',
+  }
+
   cli({
     site: config.site,
     name: 'whoami',
@@ -55,11 +80,11 @@ export function registerProvider(config) {
     domain: config.domain,
     strategy: Strategy.COOKIE,
     browser: true,
-    siteSession: 'persistent',
+    ...browserSession,
     navigateBefore: false,
     args: [],
     columns: ['identity'],
-    func: async (page) => {
+    func: async (page) => inTemporaryTab(page, async () => {
       await page.goto(config.home, { settleMs: 500 })
       const result = await evaluate(page, config.whoamiScript, {}, `${config.site} whoami`)
       if (result?.code === 'AUTH') throw new AuthRequiredError(config.domain)
@@ -67,7 +92,7 @@ export function registerProvider(config) {
         throw new CommandExecutionError(`${config.site} whoami: ${result?.message || 'stable account identity unavailable'}`)
       }
       return [{ identity: result.identity }]
-    },
+    }),
   })
 
   cli({
@@ -78,14 +103,14 @@ export function registerProvider(config) {
     domain: config.domain,
     strategy: Strategy.COOKIE,
     browser: true,
-    siteSession: 'persistent',
+    ...browserSession,
     navigateBefore: false,
     args: [{
       name: 'since',
       help: 'ISO 8601 instant; stop paging once the listing predates it. Honoured only while the provider pages newest-first',
     }],
     columns: HISTORY_COLUMNS,
-    func: async (page, kwargs) => {
+    func: async (page, kwargs) => inTemporaryTab(page, async () => {
       const since = String(kwargs.since || '').trim()
       if (since && Number.isNaN(Date.parse(since))) throw new ArgumentError('since must be an ISO 8601 instant')
       await page.goto(config.home, { settleMs: 1200 })
@@ -100,7 +125,7 @@ export function registerProvider(config) {
         throw new EmptyResultError(`${config.site} history-all`, 'No conversations found')
       }
       return rows
-    },
+    }),
   })
 
   cli({
@@ -111,11 +136,11 @@ export function registerProvider(config) {
     domain: config.domain,
     strategy: Strategy.COOKIE,
     browser: true,
-    siteSession: 'persistent',
+    ...browserSession,
     navigateBefore: false,
     args: [{ name: 'id', positional: true, required: true, help: 'Provider conversation id' }],
     columns: DETAIL_COLUMNS,
-    func: async (page, kwargs) => {
+    func: async (page, kwargs) => inTemporaryTab(page, async () => {
       const id = String(kwargs.id || '').trim()
       if (!id) throw new ArgumentError('id must be a non-empty conversation id')
       await page.goto(config.home, { settleMs: 600 })
@@ -127,7 +152,7 @@ export function registerProvider(config) {
       const rows = assertResult(result, config.domain, `${config.site} detail`)
       if (rows.length === 0) throw new EmptyResultError(`${config.site} detail`, `No messages found for ${id}`)
       return rows
-    },
+    }),
   })
 
   cli({
@@ -138,7 +163,7 @@ export function registerProvider(config) {
     domain: config.domain,
     strategy: Strategy.COOKIE,
     browser: true,
-    siteSession: 'persistent',
+    ...browserSession,
     navigateBefore: false,
     args: [
       { name: 'locator', positional: true, required: true, help: 'Stable same-origin attachment locator' },
@@ -146,7 +171,7 @@ export function registerProvider(config) {
       { name: 'maxBytes', type: 'int', default: 26214400, help: 'Maximum decoded bytes' },
     ],
     columns: ['attachmentId', 'name', 'mimeType', 'size', 'status', 'localPath'],
-    func: async (page, kwargs) => {
+    func: async (page, kwargs) => inTemporaryTab(page, async () => {
       const locator = String(kwargs.locator || '').trim()
       const output = resolve(String(kwargs.output || ''))
       const maxBytes = Number(kwargs.maxBytes ?? 26_214_400)
@@ -176,7 +201,7 @@ export function registerProvider(config) {
         status: 'available',
         localPath: output,
       }]
-    },
+    }),
   })
 }
 

@@ -21,7 +21,7 @@ class Table<V> implements KvTable<string, V> {
 function store(overrides: Partial<SettingsRecord> = {}) {
   const tables = new Map<string, Table<never>>()
   let settings: SettingsRecord = {
-    opencliPath: 'opencli', profile: '', detailConcurrency: 2, autoSync: false, autoSyncMinutes: 60, ...overrides,
+    opencliPath: 'opencli', profile: '', detailConcurrency: 2, autoSync: false, autoSyncMinutes: 60, historyMode: 'offline-mirror', ...overrides,
   }
   const domain = {
     name: 'reference_anything',
@@ -68,6 +68,20 @@ const settled = (manager: ConversationSyncManager, jobId: string) =>
   waitFor(() => manager.status(jobId)?.status !== 'running')
 
 describe('auto-sync resilience', () => {
+  it('stores only listing metadata in metadata-only mode', async () => {
+    const db = store({ historyMode: 'metadata-only' })
+    let detailCalls = 0
+    const manager = new ConversationSyncManager(db, () => fakeRunner({
+      detail: async () => { detailCalls++; return turns(2) },
+    }))
+    const jobId = manager.start(['chatgpt'], 'full')
+    await settled(manager, jobId)
+    expect(detailCalls).toBe(0)
+    expect(db.conversations.size).toBe(1)
+    expect(db.revisions.size).toBe(0)
+    expect([...db.conversations.entries()][0]?.[1].currentRevision).toBeUndefined()
+  })
+
   it('keeps syncing later providers after one of them cannot log in', async () => {
     const db = store()
     const attempted: ChatProvider[] = []

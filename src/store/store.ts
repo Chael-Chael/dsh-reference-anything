@@ -105,6 +105,18 @@ export class ConversationStore {
   get settings(): SettingsRecord { return this.domain.global.get() }
   setSettings(settings: SettingsRecord): Promise<void> { return this.domain.global.set(settings) }
 
+  /** Remove every persisted transcript while retaining the title directory. */
+  async clearMirrorContent(): Promise<void> {
+    for (const [key] of this.attachments.entries()) await retryWindowsReplace(() => this.attachments.delete(key))
+    for (const [key] of this.chunks.entries()) await retryWindowsReplace(() => this.chunks.delete(key))
+    for (const [key] of this.revisions.entries()) await retryWindowsReplace(() => this.revisions.delete(key))
+    for (const [key, row] of this.conversations.entries()) {
+      if (row.currentRevision === undefined) continue
+      const { currentRevision: _revision, ...metadata } = row
+      await retryWindowsReplace(() => this.conversations.put(key, metadata))
+    }
+  }
+
   static conversationKey(provider: ChatProvider, accountScope: string, externalId: string): string {
     return Buffer.from(JSON.stringify([provider, accountScope, externalId])).toString('base64url')
   }
@@ -470,6 +482,17 @@ export class ConversationStore {
         await this.attachments.delete(attachmentKey)
       }
       await this.revisions.delete(key)
+    }
+  }
+}
+
+/** Antivirus/indexers may briefly hold the JSON target across its atomic rename on Windows. */
+async function retryWindowsReplace<T>(operation: () => Promise<T>): Promise<T> {
+  for (let attempt = 0; ; attempt++) {
+    try { return await operation() } catch (error) {
+      const code = (error as NodeJS.ErrnoException).code
+      if (process.platform !== 'win32' || (code !== 'EPERM' && code !== 'EBUSY') || attempt >= 7) throw error
+      await new Promise(resolve => setTimeout(resolve, 25 * 2 ** attempt))
     }
   }
 }
