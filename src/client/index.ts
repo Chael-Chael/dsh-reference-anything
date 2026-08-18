@@ -5,8 +5,8 @@ import type {} from '@deepseek-ai/dsh-client-locale/client'
 import { createSnapshotStore, type ClientContext } from '@deepseek-ai/dsh-client-runtime/client'
 import type { InputTriggerServiceContract } from '@deepseek-ai/dsh-client-ui-input-trigger/client'
 import { defaultPickerSettings, type ChatProvider, type PickerSettings, type SettingsRecord } from '../wire.ts'
-import { REFERENCE_ANYTHING_REMOTE, type ReferenceAnythingRemoteFace, type SyncStatus } from './remote.ts'
-import { conversationReferenceUri, createCommandSource, createConversationSource, createSessionSource, createSkillSource, createWorkspaceSource } from './source.ts'
+import { REFERENCE_ANYTHING_REMOTE, type ReferenceAnythingRemoteFace, type SearchResult, type SessionCandidate, type SyncStatus } from './remote.ts'
+import { conversationReferenceUri, createCommandSource, createConversationSource, createSearchDebounce, createSessionSource, createSkillSource, createWorkspaceSource } from './source.ts'
 import { ConversationsDock, ConversationSettings, PAGE_SIZE, type SettingsSnapshot } from './components.tsx'
 import { adoptAdaptiveChipCaret, adoptConversationMentionProjection, adoptReferenceIconProjection, adoptStyles } from './styles.ts'
 import { en, REFERENCE_ANYTHING_NS, zh } from './locale.ts'
@@ -59,6 +59,9 @@ export function apply(ctx: ClientContext): void {
    * with an error — the next tick tries again.
    */
   const urlByUri = new Map<string, string>()
+  // These defer rapid typing but deliberately retain no prior search rows.
+  const conversationSearch = createSearchDebounce<SearchResult>()
+  const sessionSearch = createSearchDebounce<SessionCandidate>()
   const refreshStats = async (): Promise<void> => {
     if (!remote) return
     try {
@@ -112,12 +115,14 @@ export function apply(ctx: ClientContext): void {
   const connection = ctx.get('connection') as ConnectionHandle
   let sourceDisposers: Array<() => void> = []
   const registerSources = (picker: PickerSettings) => {
-    const source = createConversationSource(async (query, provider, signal, limit) => {
-      if (!remote) return []
-      const rows = unwrap(await remote.search({ query, ...(provider ? { provider } : {}), limit }, signal))
-      for (const row of rows) urlByUri.set(conversationReferenceUri(row.uriId), row.url)
-      return rows
-    }, t, picker.conversations)
+    const source = createConversationSource((query, provider, signal, limit) =>
+      conversationSearch.run(query, signal, async () => {
+        // Re-read after the debounce: the Remote can unmount with its scope.
+        if (!remote) return []
+        const rows = unwrap(await remote.search({ query, ...(provider ? { provider } : {}), limit }, signal))
+        for (const row of rows) urlByUri.set(conversationReferenceUri(row.uriId), row.url)
+        return rows
+      }), t, picker.conversations)
     const disposers: Array<() => void> = []
     if (picker.conversations.enabled) disposers.push(inputTriggers.registerSource(source))
     if (picker.commands.enabled) disposers.push(inputTriggers.registerSource(createCommandSource(async (sessionId, signal) => { signal.throwIfAborted(); return unwrap(await ctx.remote.commands.list(sessionId)) }, t, picker.commands)))
@@ -130,10 +135,11 @@ export function apply(ctx: ClientContext): void {
         if (!remote) return []
         return unwrap(await remote.workspaceSearch(sessionId, signal))
       }, t, picker.files)))
-    if (picker.sessions.enabled) disposers.push(inputTriggers.registerSource(createSessionSource(async (sessionId, query, signal) => {
+    if (picker.sessions.enabled) disposers.push(inputTriggers.registerSource(createSessionSource((sessionId, query, signal) =>
+      sessionSearch.run(query, signal, async () => {
         if (!remote) return []
         return unwrap(await remote.sessionSearch(sessionId, { query, limit: picker.sessions.limit }, signal))
-      }, t, picker.sessions)))
+      }), t, picker.sessions)))
     return disposers
   }
   applySources = (picker) => {

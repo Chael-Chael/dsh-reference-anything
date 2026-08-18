@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import { conversationMentions } from '../src/client/components.tsx'
-import { CONVERSATION_SOURCE, conversationReferenceUri, createCommandSource, createConversationSource, createSessionSource, createSkillSource, createWorkspaceSource, describeRow, disambiguate, parseQuery, scopedQuery } from '../src/client/source.ts'
+import {
+  CONVERSATION_SOURCE, conversationReferenceUri, createCommandSource,
+  createConversationSource, createSearchDebounce, createSessionSource, createSkillSource, createWorkspaceSource,
+  describeRow, disambiguate, parseQuery, scopedQuery,
+} from '../src/client/source.ts'
 import type { SearchResult } from '../src/client/remote.ts'
 import { REFERENCE_ANYTHING_INVOCATIONS } from '../src/contract.ts'
 import { decodeReferenceUri } from '../src/uri.ts'
@@ -154,6 +158,31 @@ describe('conversation client references', () => {
     expect(search?.cancellation).toEqual({ parameter: 'signal' })
     expect(REFERENCE_ANYTHING_INVOCATIONS.find(descriptor => descriptor.method === 'workspaceSearch')?.cancellation).toEqual({ parameter: 'signal' })
     expect(REFERENCE_ANYTHING_INVOCATIONS.find(descriptor => descriptor.method === 'sessionSearch')?.cancellation).toEqual({ parameter: 'signal' })
+  })
+})
+
+describe('search debounce', () => {
+  it('answers an empty query without waiting, because that is the menu opening', async () => {
+    const debounce = createSearchDebounce<string>()
+    const started = Date.now()
+    await expect(debounce.run('', new AbortController().signal, async () => ['row'])).resolves.toEqual(['row'])
+    expect(Date.now() - started).toBeLessThan(50)
+  })
+
+  it('drops out when a later keystroke supersedes the wait', async () => {
+    const debounce = createSearchDebounce<string>()
+    const controller = new AbortController()
+    const pending = debounce.run('cache', controller.signal, async () => ['row'])
+    controller.abort()
+    await expect(pending).resolves.toEqual([])
+  })
+
+  it('always fetches fresh rows for a repeated query', async () => {
+    const debounce = createSearchDebounce<string>()
+    let fetches = 0
+    const run = () => debounce.run('', new AbortController().signal, async () => { fetches++; return ['row'] })
+    await run(); await run()
+    expect(fetches).toBe(2)
   })
 })
 

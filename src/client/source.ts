@@ -33,6 +33,8 @@ export const SKILL_SOURCE = 'Skills'
 
 type SourceScope = 'commands' | 'skills' | 'files' | 'sessions' | 'conversations'
 export interface PickerSourceOptions { order: number; limit: number }
+/** Wait briefly for a pause in typing before issuing a live search. */
+const SEARCH_DEBOUNCE_MS = 120
 const PREFIX_SCOPE: Readonly<Record<string, SourceScope>> = {
   command: 'commands', commands: 'commands', cmd: 'commands',
   skill: 'skills', skills: 'skills',
@@ -41,6 +43,34 @@ const PREFIX_SCOPE: Readonly<Record<string, SourceScope>> = {
   chat: 'conversations', conversation: 'conversations', conversations: 'conversations',
   '外部对话': 'conversations', '外部对话记录': 'conversations',
   chatgpt: 'conversations', claude: 'conversations', gemini: 'conversations', deepseek: 'conversations', grok: 'conversations', kimi: 'conversations',
+}
+
+/**
+ * Debounce a query-driven fetch without retaining any previous results.
+ *
+ * A new keystroke aborts the caller's signal, so the superseded fetch never
+ * starts. Every completed search always reaches the Host for live results.
+ */
+export interface SearchDebounce<V> {
+  run(query: string, signal: AbortSignal, fetch: () => Promise<readonly V[]>): Promise<readonly V[]>
+}
+
+export function createSearchDebounce<V>(): SearchDebounce<V> {
+  return {
+    async run(query, signal, fetch) {
+      if (query.trim() && !await settle(SEARCH_DEBOUNCE_MS, signal)) return []
+      return fetch()
+    },
+  }
+}
+
+function settle(ms: number, signal: AbortSignal): Promise<boolean> {
+  return new Promise((resolve) => {
+    if (signal.aborted) return resolve(false)
+    const onAbort = (): void => { clearTimeout(timer); resolve(false) }
+    const timer = setTimeout(() => { signal.removeEventListener('abort', onAbort); resolve(true) }, ms)
+    signal.addEventListener('abort', onAbort, { once: true })
+  })
 }
 
 interface ConversationReference {
@@ -107,14 +137,12 @@ export function createConversationSource(search: (
 }
 
 export function createWorkspaceSource(load: (sessionId: string, signal: AbortSignal) => Promise<readonly WorkspaceEntry[]>, t: T = fallback, options: PickerSourceOptions = { order: 10, limit: 12 }): InputTriggerSource {
-  const cache = new Map<string, readonly WorkspaceEntry[]>()
   return {
     trigger: '@', name: FILE_SOURCE, order: options.order,
     async candidates(session, { query, signal }) {
       const scoped = scopedQuery(query, 'files')
       if (scoped === undefined) return []
-      let entries = cache.get(session.sessionId)
-      if (!entries) { entries = await load(session.sessionId, signal); cache.set(session.sessionId, entries) }
+      const entries = await load(session.sessionId, signal)
       const needle = scoped.toLocaleLowerCase()
       return entries.filter(row => row.path.toLocaleLowerCase().includes(needle)).sort((a, b) => rankPath(a.path, needle) - rankPath(b.path, needle) || a.path.localeCompare(b.path)).slice(0, options.limit).map(row => ({
         name: row.path.split('/').at(-1) ?? row.path,
@@ -177,15 +205,13 @@ export function createCommandSource(load: (sessionId: SessionId, signal: AbortSi
 }
 
 export function createSkillSource(load: (sessionId: SessionId, signal: AbortSignal) => Promise<readonly SkillCandidate[]>, t: T = fallback, options: PickerSourceOptions = { order: 5, limit: 12 }): InputTriggerSource {
-  const cache = new Map<string, readonly SkillCandidate[]>()
   return {
     trigger: '@', name: SKILL_SOURCE, order: options.order,
     async candidates(session, { query, position, signal }) {
       if (position !== 'leading') return []
       const scoped = scopedQuery(query, 'skills')
       if (scoped === undefined) return []
-      let rows = cache.get(session.sessionId)
-      if (!rows) { rows = await load(session.sessionId, signal); cache.set(session.sessionId, rows) }
+      const rows = await load(session.sessionId, signal)
       const needle = scoped.toLocaleLowerCase()
       return rows.filter(row => row.name.toLocaleLowerCase().includes(needle)).slice(0, options.limit).map(row => ({
         name: row.name,
