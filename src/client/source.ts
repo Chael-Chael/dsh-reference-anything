@@ -34,6 +34,91 @@ const PREFIX_SCOPE: Readonly<Record<string, SourceScope>> = {
   chatgpt: 'conversations', claude: 'conversations', gemini: 'conversations', deepseek: 'conversations', grok: 'conversations',
 }
 
+/**
+ * Rows one group offers when its scoped query is empty.
+ *
+ * Per group, not per menu: five sources answer this trigger, so one uncapped
+ * group is five uncapped groups stacked inside a 320px dropdown. Small on
+ * purpose — the menu is a peek at what is close at hand, and the full browse
+ * surfaces live elsewhere (the settings panel's paginated list, the native
+ * `/` palette).
+ */
+export const GROUP_RECENT_LIMIT = 5
+/** Rows one group offers once there is a query to rank against. */
+export const GROUP_QUERY_LIMIT = 8
+
+/**
+ * How many rows one group may contribute.
+ * @param scoped - the query after {@link scopedQuery} has stripped any
+ * `type:` prefix, so browsing a group by name counts as empty rather than as
+ * a search for that name.
+ * @returns the row cap for this keystroke.
+ */
+export function groupLimit(scoped: string): number {
+  return scoped.trim() ? GROUP_QUERY_LIMIT : GROUP_RECENT_LIMIT
+}
+
+/** Keystrokes to ride out before a typed query reaches the Host. */
+const SEARCH_DEBOUNCE_MS = 120
+/** How long fetched rows stay reusable, so backspacing does not round-trip. */
+const SEARCH_CACHE_TTL_MS = 10_000
+/** Distinct queries remembered before the oldest is dropped. */
+const SEARCH_CACHE_MAX = 64
+
+/** A debounced, briefly-cached runner around one source's Host fetch. */
+export interface SearchThrottle<V> {
+  /**
+   * @param key - identifies the request; equal keys share a cache entry.
+   * @param query - the live scoped query; an empty one skips the debounce.
+   * @param signal - superseded when the next keystroke arrives.
+   * @param fetch - the actual Host round-trip.
+   */
+  run(key: string, query: string, signal: AbortSignal, fetch: () => Promise<readonly V[]>): Promise<readonly V[]>
+  /** Drop cached rows because the data behind them moved. */
+  clear(): void
+}
+
+/**
+ * Debounce a query-driven fetch and briefly reuse what it returned.
+ *
+ * The trigger controller re-fetches on every keystroke and has no debounce of
+ * its own — it only aborts the attempt in flight — so a source that reaches
+ * the Host round-trips once per character without this.
+ */
+export function createSearchThrottle<V>(): SearchThrottle<V> {
+  const cache = new Map<string, { at: number; rows: readonly V[] }>()
+  return {
+    async run(key, query, signal, fetch) {
+      const cached = cache.get(key)
+      if (cached && Date.now() - cached.at < SEARCH_CACHE_TTL_MS) return cached.rows
+      // An empty query is the menu opening, so it stays instant; a typed one
+      // rides out the next few characters first.
+      if (query.trim() && !await settle(SEARCH_DEBOUNCE_MS, signal)) return []
+      const rows = await fetch()
+      if (cache.size >= SEARCH_CACHE_MAX) {
+        const oldest = cache.keys().next()
+        if (!oldest.done) cache.delete(oldest.value)
+      }
+      cache.set(key, { at: Date.now(), rows })
+      return rows
+    },
+    clear() { cache.clear() },
+  }
+}
+
+/**
+ * Wait out a delay that a superseding keystroke can cancel.
+ * @returns false when the wait was aborted and the caller should drop out.
+ */
+function settle(ms: number, signal: AbortSignal): Promise<boolean> {
+  return new Promise((resolve) => {
+    if (signal.aborted) return resolve(false)
+    const timer = setTimeout(() => { signal.removeEventListener('abort', onAbort); resolve(true) }, ms)
+    const onAbort = (): void => { clearTimeout(timer); resolve(false) }
+    signal.addEventListener('abort', onAbort, { once: true })
+  })
+}
+
 interface ConversationReference {
   uriId: string
   label: string
@@ -56,7 +141,7 @@ function formatConversationMention(reference: ConversationReference): string {
 }
 
 export function createConversationSource(search: (
-  query: string, provider: ChatProvider | undefined, signal: AbortSignal,
+  query: string, provider: ChatProvider | undefined, limit: number, signal: AbortSignal,
 ) => Promise<readonly SearchResult[]>, t: T = fallback): InputTriggerSource {
   return {
     trigger: '@', name: t('source.conversations'), order: 30,
@@ -65,8 +150,9 @@ export function createConversationSource(search: (
       if (scoped === undefined) return []
       const parsed = parseQuery(query)
       if (parsed.provider === undefined && scoped !== query.trim()) parsed.query = scoped
-      const rows = await search(parsed.query, parsed.provider, signal)
-      return disambiguate(rows.map((row): InputTriggerCandidate => ({
+      const limit = groupLimit(parsed.query)
+      const rows = await search(parsed.query, parsed.provider, limit, signal)
+      return disambiguate(rows.slice(0, limit).map((row): InputTriggerCandidate => ({
         name: row.title.trim() || 'Untitled',
         description: row.matchedVia === 'content' && row.snippet
           ? row.snippet
@@ -107,7 +193,7 @@ export function createWorkspaceSource(load: (sessionId: string, signal: AbortSig
       let entries = cache.get(session.sessionId)
       if (!entries) { entries = await load(session.sessionId, signal); cache.set(session.sessionId, entries) }
       const needle = scoped.toLocaleLowerCase()
-      return entries.filter(row => row.path.toLocaleLowerCase().includes(needle)).sort((a, b) => rankPath(a.path, needle) - rankPath(b.path, needle) || a.path.localeCompare(b.path)).slice(0, 12).map(row => ({
+      return entries.filter(row => row.path.toLocaleLowerCase().includes(needle)).sort((a, b) => rankPath(a.path, needle) - rankPath(b.path, needle) || a.path.localeCompare(b.path)).slice(0, groupLimit(scoped)).map(row => ({
         name: row.path.split('/').at(-1) ?? row.path,
         description: row.path,
         icon: row.kind === 'directory' ? '📁' : '📄',
@@ -125,13 +211,14 @@ export function createWorkspaceSource(load: (sessionId: string, signal: AbortSig
   }
 }
 
-export function createSessionSource(search: (sessionId: string, query: string, signal: AbortSignal) => Promise<readonly SessionCandidate[]>, t: T = fallback): InputTriggerSource {
+export function createSessionSource(search: (sessionId: string, query: string, limit: number, signal: AbortSignal) => Promise<readonly SessionCandidate[]>, t: T = fallback): InputTriggerSource {
   return {
     trigger: '@', name: t('source.sessions'), order: 20,
     async candidates(session, { query, signal }) {
       const scoped = scopedQuery(query, 'sessions')
       if (scoped === undefined) return []
-      return (await search(session.sessionId, scoped, signal)).map(row => ({
+      const limit = groupLimit(scoped)
+      return (await search(session.sessionId, scoped, limit, signal)).slice(0, limit).map(row => ({
         name: row.label, description: row.cwd ?? new Date(row.createdAt).toLocaleString(), icon: '💬', sessionCandidate: row,
       }))
     },
@@ -149,15 +236,21 @@ interface CommandCandidate { name: string; description?: string; input?: { hint?
 interface SkillCandidate { name: string; description: string; modelInvocable?: boolean }
 
 export function createCommandSource(load: (sessionId: SessionId, signal: AbortSignal) => Promise<readonly CommandCandidate[]>, t: T = fallback): InputTriggerSource {
+  const cache = new Map<string, readonly CommandCandidate[]>()
   return {
     trigger: '@', name: t('source.commands'), order: 0,
     async candidates(session, { query, position, signal }) {
       if (position !== 'leading') return []
       const scoped = scopedQuery(query, 'commands')
       if (scoped === undefined) return []
+      // Cached like the skill roster: the filter below is local, so refetching
+      // the whole roster on every keystroke buys nothing.
+      let entries = cache.get(session.sessionId)
+      if (!entries) { entries = await load(session.sessionId, signal); cache.set(session.sessionId, entries) }
       const needle = scoped.toLocaleLowerCase()
-      return (await load(session.sessionId, signal))
+      return entries
         .filter(row => row.name.toLocaleLowerCase().includes(needle))
+        .slice(0, groupLimit(scoped))
         .map(row => ({ name: row.name, description: row.description, hint: row.input?.hint, icon: '⌘', commandName: row.name }))
     },
     onPick({ candidate }) { return candidate.commandName ? { text: `/${candidate.commandName} ` } : undefined },
@@ -175,7 +268,7 @@ export function createSkillSource(load: (sessionId: SessionId, signal: AbortSign
       let rows = cache.get(session.sessionId)
       if (!rows) { rows = await load(session.sessionId, signal); cache.set(session.sessionId, rows) }
       const needle = scoped.toLocaleLowerCase()
-      return rows.filter(row => row.name.toLocaleLowerCase().includes(needle)).map(row => ({
+      return rows.filter(row => row.name.toLocaleLowerCase().includes(needle)).slice(0, groupLimit(scoped)).map(row => ({
         name: row.name,
         description: `${row.modelInvocable === false ? t('skill.userOnly') : ''}${row.description}`,
         icon: '✦',

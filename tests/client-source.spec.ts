@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import { conversationMentions } from '../src/client/components.tsx'
-import { conversationReferenceUri, createCommandSource, createConversationSource, createSessionSource, createSkillSource, createWorkspaceSource, describeRow, disambiguate, parseQuery, scopedQuery } from '../src/client/source.ts'
+import {
+  GROUP_QUERY_LIMIT, GROUP_RECENT_LIMIT, conversationReferenceUri, createCommandSource, createConversationSource,
+  createSearchThrottle, createSessionSource, createSkillSource, createWorkspaceSource, describeRow, disambiguate,
+  groupLimit, parseQuery, scopedQuery,
+} from '../src/client/source.ts'
 import type { SearchResult } from '../src/client/remote.ts'
 import { REFERENCE_ANYTHING_INVOCATIONS } from '../src/contract.ts'
 import { decodeReferenceUri } from '../src/uri.ts'
@@ -129,6 +133,84 @@ describe('conversation client references', () => {
     expect(search?.cancellation).toEqual({ parameter: 'signal' })
     expect(REFERENCE_ANYTHING_INVOCATIONS.find(descriptor => descriptor.method === 'workspaceSearch')?.cancellation).toEqual({ parameter: 'signal' })
     expect(REFERENCE_ANYTHING_INVOCATIONS.find(descriptor => descriptor.method === 'sessionSearch')?.cancellation).toEqual({ parameter: 'signal' })
+  })
+})
+
+describe('@ menu row budget', () => {
+  const session = { sessionId: 'session-1' as never }
+  const request = (query: string) => ({ query, position: 'leading' as const, signal: new AbortController().signal })
+  const many = (make: (index: number) => unknown) => Array.from({ length: 40 }, (_, index) => make(index))
+
+  /** One of each source, all answering with 40 rows sharing an `item` infix. */
+  const everySource = () => [
+    createConversationSource(async () => many(i => searchRow({ uriId: `c${i}`, title: `item${i}` })) as never),
+    createWorkspaceSource(async () => many(i => ({ path: `src/item${i}.ts`, kind: 'file' })) as never),
+    createSessionSource(async () => many(i => ({ sessionId: `dsh-session:s${i}`, label: `item${i}`, createdAt: 1 })) as never),
+    createCommandSource(async () => many(i => ({ name: `item${i}` })) as never),
+    createSkillSource(async () => many(i => ({ name: `item${i}`, description: 'x' })) as never),
+  ]
+
+  it('caps every group, because five sources share one dropdown', async () => {
+    expect(groupLimit('')).toBe(GROUP_RECENT_LIMIT)
+    expect(groupLimit('   ')).toBe(GROUP_RECENT_LIMIT)
+    expect(groupLimit('cache')).toBe(GROUP_QUERY_LIMIT)
+
+    for (const source of everySource()) {
+      expect(await source.candidates(session, request(''))).toHaveLength(GROUP_RECENT_LIMIT)
+      expect(await source.candidates(session, request('item'))).toHaveLength(GROUP_QUERY_LIMIT)
+    }
+  })
+
+  it('treats browsing a group by name as an empty query, not a search for that name', async () => {
+    // `@commands` is the documented shortcut into the group — it must open at
+    // the browse budget rather than the narrower typed-query one.
+    const [, files, , commands] = everySource()
+    expect(await commands!.candidates(session, request('commands'))).toHaveLength(GROUP_RECENT_LIMIT)
+    expect(await files!.candidates(session, request('files'))).toHaveLength(GROUP_RECENT_LIMIT)
+    expect(await files!.candidates(session, request('file:item'))).toHaveLength(GROUP_QUERY_LIMIT)
+  })
+
+  it('passes the group cap down to the Host rather than over-fetching', async () => {
+    const limits: number[] = []
+    const source = createConversationSource(async (_query, _provider, limit) => { limits.push(limit); return [] })
+    await source.candidates(session, { query: '', position: 'inline', signal: new AbortController().signal })
+    await source.candidates(session, { query: 'cache', position: 'inline', signal: new AbortController().signal })
+    expect(limits).toEqual([GROUP_RECENT_LIMIT, GROUP_QUERY_LIMIT])
+  })
+
+  it('fetches the command roster once per session instead of on every keystroke', async () => {
+    let loads = 0
+    const source = createCommandSource(async () => { loads++; return [{ name: 'plan' }, { name: 'review' }] })
+    for (const query of ['p', 'pl', 'pla']) await source.candidates(session, request(query))
+    expect(loads).toBe(1)
+  })
+})
+
+describe('search throttle', () => {
+  it('answers an empty query without waiting, because that is the menu opening', async () => {
+    const throttle = createSearchThrottle<string>()
+    const started = Date.now()
+    await expect(throttle.run('k', '', new AbortController().signal, async () => ['row'])).resolves.toEqual(['row'])
+    expect(Date.now() - started).toBeLessThan(50)
+  })
+
+  it('drops out when a later keystroke supersedes the wait', async () => {
+    const throttle = createSearchThrottle<string>()
+    const controller = new AbortController()
+    const pending = throttle.run('k', 'cache', controller.signal, async () => ['row'])
+    controller.abort()
+    await expect(pending).resolves.toEqual([])
+  })
+
+  it('reuses rows for a repeated query and forgets them on clear', async () => {
+    const throttle = createSearchThrottle<string>()
+    let fetches = 0
+    const run = () => throttle.run('k', '', new AbortController().signal, async () => { fetches++; return ['row'] })
+    await run(); await run()
+    expect(fetches).toBe(1)
+    throttle.clear()
+    await run()
+    expect(fetches).toBe(2)
   })
 })
 

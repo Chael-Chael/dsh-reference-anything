@@ -5,8 +5,8 @@ import type {} from '@deepseek-ai/dsh-client-locale/client'
 import { createSnapshotStore, type ClientContext } from '@deepseek-ai/dsh-client-runtime/client'
 import type { InputTriggerServiceContract } from '@deepseek-ai/dsh-client-ui-input-trigger/client'
 import type { ChatProvider, SettingsRecord } from '../wire.ts'
-import { REFERENCE_ANYTHING_REMOTE, type ReferenceAnythingRemoteFace, type SyncStatus } from './remote.ts'
-import { conversationReferenceUri, createCommandSource, createConversationSource, createSessionSource, createSkillSource, createWorkspaceSource } from './source.ts'
+import { REFERENCE_ANYTHING_REMOTE, type ReferenceAnythingRemoteFace, type SearchResult, type SessionCandidate, type SyncStatus } from './remote.ts'
+import { conversationReferenceUri, createCommandSource, createConversationSource, createSearchThrottle, createSessionSource, createSkillSource, createWorkspaceSource } from './source.ts'
 import { ConversationsDock, ConversationSettings, PAGE_SIZE, type SettingsSnapshot } from './components.tsx'
 import { adoptAdaptiveChipCaret, adoptConversationMentionProjection, adoptReferenceIconProjection, adoptStyles } from './styles.ts'
 import { en, REFERENCE_ANYTHING_NS, zh } from './locale.ts'
@@ -56,6 +56,10 @@ export function apply(ctx: ClientContext): void {
    * with an error — the next tick tries again.
    */
   const urlByUri = new Map<string, string>()
+  // Outside registerSources() on purpose: a locale change re-registers every
+  // source, and these cached rows do not depend on the locale.
+  const conversationSearch = createSearchThrottle<SearchResult>()
+  const sessionSearch = createSearchThrottle<SessionCandidate>()
   const refreshStats = async (): Promise<void> => {
     if (!remote) return
     try {
@@ -74,6 +78,7 @@ export function apply(ctx: ClientContext): void {
     try {
       unwrap(await remote.deleteConversation({ uriId }))
       urlByUri.delete(conversationReferenceUri(uriId))
+      conversationSearch.clear()
       const current = scope.getSnapshot().browse
       await browse(current?.query ?? '', current?.provider, current?.offset ?? 0)
       await refreshStats()
@@ -87,6 +92,8 @@ export function apply(ctx: ClientContext): void {
       if (!status || status.status !== 'running') {
         if (poll) clearInterval(poll)
         poll = undefined
+        // A finished sync moves the conversations the mention menu cached.
+        conversationSearch.clear()
         await refresh()
         const current = scope.getSnapshot().browse
         if (current) await browse(current.query, current.provider, current.offset)
@@ -108,12 +115,14 @@ export function apply(ctx: ClientContext): void {
   const inputTriggers = ctx.get('inputTriggers') as InputTriggerServiceContract
   const connection = ctx.get('connection') as ConnectionHandle
   const registerSources = () => {
-    const source = createConversationSource(async (query, provider, signal) => {
-      if (!remote) return []
-      const rows = unwrap(await remote.search({ query, ...(provider ? { provider } : {}), limit: 12 }, signal))
-      for (const row of rows) urlByUri.set(conversationReferenceUri(row.uriId), row.url)
-      return rows
-    }, t)
+    const source = createConversationSource((query, provider, limit, signal) =>
+      conversationSearch.run(`${provider ?? ''}\u0000${query}\u0000${limit}`, query, signal, async () => {
+        // Re-read after the throttle's wait: the Remote unmounts with its scope.
+        if (!remote) return []
+        const rows = unwrap(await remote.search({ query, ...(provider ? { provider } : {}), limit }, signal))
+        for (const row of rows) urlByUri.set(conversationReferenceUri(row.uriId), row.url)
+        return rows
+      }), t)
     return [
       inputTriggers.registerSource(source),
       inputTriggers.registerSource(createCommandSource(async (sessionId, signal) => { signal.throwIfAborted(); return unwrap(await ctx.remote.commands.list(sessionId)) }, t)),
@@ -126,10 +135,11 @@ export function apply(ctx: ClientContext): void {
         if (!remote) return []
         return unwrap(await remote.workspaceSearch(sessionId, signal))
       }, t)),
-      inputTriggers.registerSource(createSessionSource(async (sessionId, query, signal) => {
-        if (!remote) return []
-        return unwrap(await remote.sessionSearch(sessionId, { query, limit: 12 }, signal))
-      }, t)),
+      inputTriggers.registerSource(createSessionSource((sessionId, query, limit, signal) =>
+        sessionSearch.run(`${sessionId}\u0000${query}\u0000${limit}`, query, signal, async () => {
+          if (!remote) return []
+          return unwrap(await remote.sessionSearch(sessionId, { query, limit }, signal))
+        }), t)),
     ]
   }
   let sourceDisposers = registerSources()
