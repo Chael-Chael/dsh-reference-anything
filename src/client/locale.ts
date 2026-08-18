@@ -11,7 +11,11 @@ export const zh = {
   'conversation.description': '{provider} · {date}',
   'conversation.unknownDate': '未知日期',
   'skill.userOnly': '仅用户 · ',
+  'dock.aria': '已引用的对话',
   'dock.remove': '移除 {label}',
+  'menu.syncAll': '立即全部同步',
+  'menu.syncListing': '正在查询来源…',
+  'menu.syncProgress': '同步 {completed}/{total}',
   'settings.title': 'Reference Anything',
   'settings.subtitle': '在 @ 面板引用文件和文件夹、DSH 对话、外部 AI 对话、命令与技能。',
   'settings.recheck': '重新检查',
@@ -62,7 +66,9 @@ export const zh = {
   'settings.every12Hours': '每 12 小时',
   'settings.daily': '每天',
   'settings.syncAll': '立即同步全部',
-  'settings.fullRescan': '完全重新扫描',
+  'settings.fullRescan': '重新全量同步',
+  'settings.fullRescanAll': '全部重新全量同步',
+  'settings.fullConfirmAll': '重新全量同步全部来源并以远端内容覆盖本地当前版本？',
   'settings.cancel': '取消同步',
   'settings.autoNote': 'DSH 运行期间，每 {minutes} 分钟自动执行一次增量同步。',
   'notice.settingsSaved': '设置已保存。',
@@ -78,6 +84,8 @@ export const zh = {
   'provider.autoSyncOn': '自动同步已开启',
   'provider.manualSync': '手动同步',
   'provider.syncNow': '立即同步',
+  'provider.fullResync': '重新全量同步',
+  'provider.fullConfirm': '重新全量同步 {provider} 并以远端内容覆盖本地当前版本？',
 } as const
 
 export const en: Record<keyof typeof zh, string> = {
@@ -87,11 +95,11 @@ export const en: Record<keyof typeof zh, string> = {
   'notice.daemonRestarted': 'Browser Bridge restarted.',
   'source.conversations': 'External conversations', 'source.files': 'Files and folders', 'source.sessions': 'DSH sessions', 'source.commands': 'Commands', 'source.skills': 'Skills',
   'conversation.description': '{provider} · {date}', 'conversation.unknownDate': 'unknown date', 'skill.userOnly': 'user-only · ',
-  'dock.remove': 'Remove {label}', 'settings.title': 'Reference Anything', 'settings.subtitle': 'Keep your external AI conversations searchable, local, and ready to cite.', 'settings.recheck': 'Recheck setup', 'settings.actionFailed': 'Action failed',
+  'dock.aria': 'Referenced conversations', 'dock.remove': 'Remove {label}', 'menu.syncAll': 'Sync all now', 'menu.syncListing': 'Checking sources…', 'menu.syncProgress': 'Sync {completed}/{total}', 'settings.title': 'Reference Anything', 'settings.subtitle': 'Keep your external AI conversations searchable, local, and ready to cite.', 'settings.recheck': 'Recheck setup', 'settings.actionFailed': 'Action failed',
   'settings.viability': 'Viability check', 'settings.viabilityDetail': 'Everything required to sync browser conversations.', 'settings.ready': 'Ready', 'settings.needsAttention': 'Needs attention', 'settings.notDetected': 'Not detected', 'settings.daemonUnavailable': 'Daemon unavailable', 'settings.adapterInstalled': 'Installed and discoverable', 'settings.adapterMissing': 'Adapter is not installed', 'settings.adapterRequired': 'Conversation adapter required', 'settings.adapterRequiredDetail': 'Install the local OpenCLI adapter, then recheck automatically.', 'settings.installing': 'Installing…', 'settings.install': 'Install adapter',
   'settings.sources': '@ Chat', 'settings.sourcesDetail': 'Local browser-chat index and sync status by provider.', 'settings.syncing': 'Syncing {source} · {completed}/{total}', 'settings.empty': 'No conversations indexed yet. Choose a browser profile, then run your first sync.',
-  'settings.syncSettings': '@ Chat sync settings', 'settings.syncSettingsDetail': 'Control the browser profile and refresh cadence.', 'settings.autoSync': 'Auto sync', 'settings.historyMode': 'History mode', 'settings.metadataOnly': 'Metadata only (recommended)', 'settings.offlineMirror': 'Offline mirror', 'settings.metadataOnlyDetail': 'Only the title index is stored locally. Bodies are fetched temporarily when referenced. Switching to this mode removes existing local bodies.', 'settings.offlineMirrorDetail': 'Store complete bodies locally for offline reading, full-text search, and stable revision replay.', 'settings.opencli': 'OpenCLI executable', 'settings.chromeProfile': 'Chrome profile', 'settings.defaultProfile': 'OpenCLI default profile', 'settings.default': 'default', 'settings.disconnected': 'disconnected', 'settings.detailConcurrency': 'Detail concurrency', 'settings.interval': 'Auto-sync interval', 'settings.every30': 'Every 30 minutes', 'settings.everyHour': 'Every hour', 'settings.every3Hours': 'Every 3 hours', 'settings.every12Hours': 'Every 12 hours', 'settings.daily': 'Daily', 'settings.syncAll': 'Sync all now', 'settings.fullRescan': 'Full rescan', 'settings.cancel': 'Cancel sync', 'settings.autoNote': 'Automatic incremental sync runs every {minutes} minutes while DSH is running.',
-  'notice.settingsSaved': 'Settings saved.', 'notice.adapterInstalled': 'Adapter installed.', 'provider.error': 'Error', 'provider.syncing': 'Syncing', 'provider.connected': 'Connected', 'provider.notSynced': 'Not synced', 'provider.localConversations': 'local conversations', 'provider.lastUpdated': 'Last updated · {date}', 'provider.neverSynced': 'Never synced', 'provider.autoSyncOn': 'Auto sync on', 'provider.manualSync': 'Manual sync', 'provider.syncNow': 'Sync now',
+  'settings.syncSettings': '@ Chat sync settings', 'settings.syncSettingsDetail': 'Control the browser profile and refresh cadence.', 'settings.autoSync': 'Auto sync', 'settings.historyMode': 'History mode', 'settings.metadataOnly': 'Metadata only (recommended)', 'settings.offlineMirror': 'Offline mirror', 'settings.metadataOnlyDetail': 'Only the title index is stored locally. Bodies are fetched temporarily when referenced. Switching to this mode removes existing local bodies.', 'settings.offlineMirrorDetail': 'Store complete bodies locally for offline reading, full-text search, and stable revision replay.', 'settings.opencli': 'OpenCLI executable', 'settings.chromeProfile': 'Chrome profile', 'settings.defaultProfile': 'OpenCLI default profile', 'settings.default': 'default', 'settings.disconnected': 'disconnected', 'settings.detailConcurrency': 'Detail concurrency', 'settings.interval': 'Auto-sync interval', 'settings.every30': 'Every 30 minutes', 'settings.everyHour': 'Every hour', 'settings.every3Hours': 'Every 3 hours', 'settings.every12Hours': 'Every 12 hours', 'settings.daily': 'Daily', 'settings.syncAll': 'Sync all now', 'settings.fullRescan': 'Full resync', 'settings.fullRescanAll': 'Full resync all', 'settings.fullConfirmAll': 'Full-resync every source and replace each current local version with remote content?', 'settings.cancel': 'Cancel sync', 'settings.autoNote': 'Automatic incremental sync runs every {minutes} minutes while DSH is running.',
+  'notice.settingsSaved': 'Settings saved.', 'notice.adapterInstalled': 'Adapter installed.', 'provider.error': 'Error', 'provider.syncing': 'Syncing', 'provider.connected': 'Connected', 'provider.notSynced': 'Not synced', 'provider.localConversations': 'local conversations', 'provider.lastUpdated': 'Last updated · {date}', 'provider.neverSynced': 'Never synced', 'provider.autoSyncOn': 'Auto sync on', 'provider.manualSync': 'Manual sync', 'provider.syncNow': 'Sync now', 'provider.fullResync': 'Full resync', 'provider.fullConfirm': 'Full-resync {provider} and replace its current local versions with remote content?',
 }
 
 declare module '@deepseek-ai/dsh-client-ui-slots' {

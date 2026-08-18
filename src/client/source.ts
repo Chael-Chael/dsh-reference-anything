@@ -34,7 +34,7 @@ export const SKILL_SOURCE = 'Skills'
 type SourceScope = 'commands' | 'skills' | 'files' | 'sessions' | 'conversations'
 export interface PickerSourceOptions { order: number; limit: number }
 /** Wait briefly for a pause in typing before issuing a live search. */
-const SEARCH_DEBOUNCE_MS = 120
+const SEARCH_DEBOUNCE_MS = 100
 const PREFIX_SCOPE: Readonly<Record<string, SourceScope>> = {
   command: 'commands', commands: 'commands', cmd: 'commands',
   skill: 'skills', skills: 'skills',

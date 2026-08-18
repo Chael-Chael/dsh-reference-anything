@@ -34,6 +34,14 @@ export function defaultPickerSettings(): PickerSettings {
   }
 }
 
+/** Picker settings have a fixed schema, so explicit comparison is cheap and stable. */
+export function samePickerSettings(left: PickerSettings, right: PickerSettings): boolean {
+  return (Object.keys(left) as Array<keyof PickerSettings>).every(key =>
+    left[key].enabled === right[key].enabled &&
+    left[key].order === right[key].order &&
+    left[key].limit === right[key].limit)
+}
+
 export const settingsRecordSchema = z.object({
   opencliPath: z.string(),
   profile: z.string(),

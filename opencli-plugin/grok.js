@@ -103,17 +103,21 @@ const detailScript = String.raw`async function (args) {
   }
 }`
 
+export const whoamiScript = String.raw`async function () {
+  for (const url of ['/api/auth/session', '/rest/app-chat/users/me', '/rest/auth/me']) {
+    const response = await fetch(url, { credentials: 'include', headers: { Accept: 'application/json' } })
+    if (!response.ok) continue
+    const payload = await response.json()
+    const user = payload.session || payload.user || payload
+    const identity = String(user.userId || user.id || user.xUserId || user.email || '')
+    if (identity) return JSON.stringify({ ok: true, identity })
+  }
+  return JSON.stringify({ ok: false, code: 'AUTH' })
+}`
+
 registerProvider({
   site: 'dsh-grok', provider: 'Grok', domain: 'grok.com', home: 'https://grok.com/',
   conversationUrl: id => `https://grok.com/c/${encodeURIComponent(id)}`,
-  whoamiScript: String.raw`async function () {
-    for (const url of ['/rest/app-chat/users/me', '/rest/auth/me']) {
-      const response = await fetch(url, { credentials: 'include' }); if (!response.ok) continue
-      const payload = await response.json(); const user = payload.user || payload
-      const identity = String(user.id || user.userId || user.xUserId || user.email || '')
-      if (identity) return JSON.stringify({ ok: true, identity })
-    }
-    return JSON.stringify({ ok: false, code: 'AUTH' })
-  }`,
+  whoamiScript,
   historyScript, detailScript, fallbackScript: domFallbackScript,
 })

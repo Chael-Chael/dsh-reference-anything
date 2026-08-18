@@ -4,11 +4,11 @@ import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
 import type {} from '@deepseek-ai/dsh-client-locale/client'
 import { createSnapshotStore, type ClientContext } from '@deepseek-ai/dsh-client-runtime/client'
 import type { InputTriggerServiceContract } from '@deepseek-ai/dsh-client-ui-input-trigger/client'
-import { defaultPickerSettings, type ChatProvider, type PickerSettings, type SettingsRecord } from '../wire.ts'
+import { defaultPickerSettings, samePickerSettings, type ChatProvider, type PickerSettings, type SettingsRecord } from '../wire.ts'
 import { REFERENCE_ANYTHING_REMOTE, type ReferenceAnythingRemoteFace, type SearchResult, type SessionCandidate, type SyncStatus } from './remote.ts'
-import { conversationReferenceUri, createCommandSource, createConversationSource, createSearchDebounce, createSessionSource, createSkillSource, createWorkspaceSource } from './source.ts'
+import { CONVERSATION_SOURCE, conversationReferenceUri, createCommandSource, createConversationSource, createSearchDebounce, createSessionSource, createSkillSource, createWorkspaceSource } from './source.ts'
 import { ConversationsDock, ConversationSettings, PAGE_SIZE, type SettingsSnapshot } from './components.tsx'
-import { adoptAdaptiveChipCaret, adoptConversationMentionProjection, adoptReferenceIconProjection, adoptStyles } from './styles.ts'
+import { adoptAdaptiveChipCaret, adoptConversationMentionProjection, adoptConversationSyncActionProjection, adoptReferenceIconProjection, adoptStyles } from './styles.ts'
 import { en, REFERENCE_ANYTHING_NS, zh } from './locale.ts'
 
 // `ctx.remote.commands` is a separately injected Remote face. Declaring only
@@ -114,6 +114,7 @@ export function apply(ctx: ClientContext): void {
   const inputTriggers = ctx.get('inputTriggers') as InputTriggerServiceContract
   const connection = ctx.get('connection') as ConnectionHandle
   let sourceDisposers: Array<() => void> = []
+  let appliedPicker: PickerSettings | undefined
   const registerSources = (picker: PickerSettings) => {
     const source = createConversationSource((query, provider, signal, limit) =>
       conversationSearch.run(query, signal, async () => {
@@ -143,8 +144,16 @@ export function apply(ctx: ClientContext): void {
     return disposers
   }
   applySources = (picker) => {
+    const next = picker ?? defaultPickerSettings()
+    // Settings unrelated to the @ picker (for example Auto sync) use the
+    // same save endpoint. Re-registering every input source for those saves
+    // can dispose UI-owned registrations while the settings panel is still
+    // rendering, leaving the panel blank. Only rebuild when picker behavior
+    // actually changed.
+    if (appliedPicker !== undefined && samePickerSettings(appliedPicker, next)) return
     for (const dispose of sourceDisposers) dispose()
-    sourceDisposers = registerSources(picker ?? defaultPickerSettings())
+    sourceDisposers = registerSources(next)
+    appliedPicker = next
   }
   applySources(undefined)
   ctx.effect(() => () => { for (const dispose of sourceDisposers) dispose() }, 'reference-anything.client.sources')
@@ -166,11 +175,22 @@ export function apply(ctx: ClientContext): void {
     if (!remote) return
     try {
       currentJob = unwrap(await remote.syncStart({ providers, mode }))
-      const initial: SyncStatus = { jobId: currentJob, status: 'running', providers, completed: 0, total: 0 }
+      const initial: SyncStatus = {
+        jobId: currentJob, status: 'running', providers, completed: 0, total: 0,
+        providerProgress: providers.map(provider => ({ provider, phase: 'listing', completed: 0, total: 0 })),
+      }
       scope.set({ ...scope.getSnapshot(), sync: initial, error: undefined, notice: undefined })
       if (poll) clearInterval(poll); poll = setInterval(() => { void pollJob() }, 1_000); await pollJob()
     } catch (error) { scope.set({ ...scope.getSnapshot(), error: message(error) }) }
   }
+  ctx.effect(() => adoptConversationSyncActionProjection({
+    source: CONVERSATION_SOURCE,
+    idleLabel: t('menu.syncAll'), listingLabel: t('menu.syncListing'),
+    progressLabel: (completed, total) => t('menu.syncProgress', { completed, total }),
+    start: () => startSync(['chatgpt', 'claude', 'gemini', 'deepseek', 'grok', 'kimi'], 'incremental'),
+    getStatus: () => scope.getSnapshot().sync,
+    subscribe: listener => scope.subscribe(listener),
+  }), 'reference-anything.client.conversation-sync-action')
   ctx.slots.inject('settings.section', () => ctx.slots.register({
     name: 'settings.section', id: 'reference-anything', order: 56, label: () => t('settings.title'), locale: REFERENCE_ANYTHING_NS,
     inject: () => ({

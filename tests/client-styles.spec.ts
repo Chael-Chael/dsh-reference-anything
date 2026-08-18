@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it } from 'vitest'
-import { adoptConversationMentionProjection, adoptReferenceIconProjection, adoptStyles } from '../src/client/styles.ts'
+import { adoptConversationMentionProjection, adoptConversationSyncActionProjection, adoptReferenceIconProjection, adoptStyles } from '../src/client/styles.ts'
+import type { SyncStatus } from '../src/client/remote.ts'
 
 afterEach(() => {
   document.body.replaceChildren()
@@ -25,6 +26,10 @@ describe('plugin-owned DSH presentation overrides', () => {
     expect(text).toContain('width:1px')
     expect(text).toContain('animation:dsh_ref_caret_blink 1.06s step-end infinite')
     expect(text).toContain('.dsh_ref_adaptive_caret[hidden]')
+    expect(text).toContain('.dsh_ref_chip{display:inline-flex')
+    expect(text).toContain('border-radius:14px')
+    expect(text).toContain('background:var(--dsw-alias-bg-layer-1)')
+    expect(text).toContain('.dsh_ref_remove:hover{background:var(--dsw-alias-interactive-bg-hover)')
   })
 
   it('projects a logged dsh-ref mention without exposing its opaque URI', () => {
@@ -53,6 +58,33 @@ describe('plugin-owned DSH presentation overrides', () => {
     const projected = document.querySelector('[data-dsh-ref-provider-icon="kimi"]')
     expect(projected?.textContent).toBe('Kimi · World model')
     expect(projected?.getAttribute('style')).toContain('--dsh-ref-provider-icon')
+    dispose()
+  })
+
+  it('adds a live sync-all action to the external conversation group header', () => {
+    let status: SyncStatus | undefined
+    let listener = (): void => {}
+    let starts = 0
+    document.body.innerHTML = '<div role="listbox"><div role="presentation" data-source="External conversations">External conversations</div></div>'
+    const dispose = adoptConversationSyncActionProjection({
+      source: 'External conversations', idleLabel: '立即全部同步', listingLabel: '正在查询来源…',
+      progressLabel: (completed, total) => `同步 ${String(completed)}/${String(total)}`,
+      start: async () => { starts++ }, getStatus: () => status,
+      subscribe: next => { listener = next; return () => {} },
+    })
+    const button = document.querySelector('[data-dsh-ref-sync-all]') as HTMLButtonElement
+    expect(button.textContent).toContain('立即全部同步')
+
+    button.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }))
+    expect(starts).toBe(1)
+    status = {
+      jobId: 'job', status: 'running', providers: ['chatgpt'], completed: 2, total: 5,
+      providerProgress: [{ provider: 'chatgpt', phase: 'syncing', completed: 2, total: 5 }],
+    }
+    listener()
+    expect(button.disabled).toBe(true)
+    expect(button.textContent).toContain('同步 2/5')
+    expect(button.style.getPropertyValue('--dsh-ref-sync-progress')).toBe('0.4')
     dispose()
   })
 })

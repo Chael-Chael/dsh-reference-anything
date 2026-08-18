@@ -259,7 +259,6 @@ export default class WebChatHistoryService extends Service implements ReferenceS
         // The tick's own gate is `isRunning`, so a job that never finishes
         // would silently cancel every later tick.
         deadlineMs: period * 2,
-        incrementalListing: true,
       })
     }
 

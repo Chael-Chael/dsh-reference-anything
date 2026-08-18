@@ -68,6 +68,70 @@ const settled = (manager: ConversationSyncManager, jobId: string) =>
   waitFor(() => manager.status(jobId)?.status !== 'running')
 
 describe('auto-sync resilience', () => {
+  it('starts every selected provider concurrently', async () => {
+    const db = store()
+    let active = 0
+    let peak = 0
+    const manager = new ConversationSyncManager(db, () => fakeRunner({
+      whoami: async (provider: ChatProvider) => {
+        active++
+        peak = Math.max(peak, active)
+        await new Promise(resolve => setTimeout(resolve, 20))
+        active--
+        return `scope-${provider}`
+      },
+    }))
+
+    await settled(manager, manager.start(['chatgpt', 'claude', 'gemini'], 'incremental'))
+    expect(peak).toBe(3)
+  })
+
+  it('reports live per-provider listing and conversation progress', async () => {
+    const db = store({ detailConcurrency: 1 })
+    let release = (): void => {}
+    const blocked = new Promise<void>(resolve => { release = resolve })
+    const manager = new ConversationSyncManager(db, () => fakeRunner({
+      history: async () => [row('chatgpt', 'c1'), row('chatgpt', 'c2'), row('chatgpt', 'c3')],
+      detail: async () => { await blocked; return turns(2) },
+    }))
+    const jobId = manager.start(['chatgpt'], 'incremental')
+    await waitFor(() => manager.status(jobId)?.total === 3)
+
+    expect(manager.status(jobId)).toMatchObject({
+      completed: 0, total: 3,
+      providerProgress: [{ provider: 'chatgpt', phase: 'syncing', completed: 0, total: 3 }],
+    })
+    release()
+    await settled(manager, jobId)
+    expect(manager.status(jobId)).toMatchObject({
+      completed: 3, total: 3,
+      providerProgress: [{ provider: 'chatgpt', phase: 'complete', completed: 3, total: 3 }],
+    })
+  })
+
+  it('uses a recent listing watermark for incremental sync but not full resync', async () => {
+    const db = store()
+    const since: string[] = []
+    let detailCalls = 0
+    const manager = new ConversationSyncManager(db, () => fakeRunner({
+      history: async (provider: ChatProvider, _signal?: AbortSignal, watermark?: string) => {
+        since.push(watermark ?? '')
+        return [row(provider, 'c1')]
+      },
+      detail: async () => { detailCalls++; return turns(2) },
+    }))
+
+    await settled(manager, manager.start(['chatgpt'], 'full'))
+    await settled(manager, manager.start(['chatgpt'], 'incremental'))
+    await settled(manager, manager.start(['chatgpt'], 'full'))
+
+    expect(since[0]).toBe('')
+    expect(since[1]).not.toBe('')
+    expect(since[2]).toBe('')
+    // Initial full + final full; unchanged incremental skips the body.
+    expect(detailCalls).toBe(2)
+  })
+
   it('stores only listing metadata in metadata-only mode', async () => {
     const db = store({ historyMode: 'metadata-only' })
     let detailCalls = 0

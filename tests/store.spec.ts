@@ -121,6 +121,33 @@ describe('conversation mirror', () => {
     expect(stats?.lastSyncedAt).not.toBe('')
   })
 
+  it('uses a valid local conversation timestamp when another timestamp field is malformed', async () => {
+    const db = store()
+    await db.conversations.put('chatgpt:scope:legacy', {
+      provider: 'chatgpt', accountScope: 'scope', externalId: 'legacy', title: 'Legacy chat', url: '',
+      createdAt: '', updatedAt: '2026-08-18T08:30:00.000Z', messageCount: 1, partial: true,
+      remoteMissing: false, syncedAt: 'not-a-date',
+    })
+
+    expect(db.stats(['chatgpt'])[0]?.lastSyncedAt).toBe('2026-08-18T08:30:00.000Z')
+  })
+
+  it('chooses the newest valid successful sync state regardless of insertion order', async () => {
+    const db = store()
+    await db.syncStates.put('chatgpt:broken', {
+      provider: 'chatgpt', profile: '', accountScope: 'broken', cursor: '', status: 'idle',
+      lastSyncAt: 'not-a-date', lastCompleteScanAt: '', error: '', completed: 0, total: 0,
+      consecutiveFailures: 0, nextEligibleAt: '',
+    })
+    await db.syncStates.put('chatgpt:valid', {
+      provider: 'chatgpt', profile: '', accountScope: 'valid', cursor: '', status: 'idle',
+      lastSyncAt: '2026-08-18T09:00:00.000Z', lastCompleteScanAt: '', error: '', completed: 1, total: 1,
+      consecutiveFailures: 0, nextEligibleAt: '',
+    })
+
+    expect(db.stats(['chatgpt'])[0]?.lastSyncedAt).toBe('2026-08-18T09:00:00.000Z')
+  })
+
   it('persists a completed incremental sync and its atomic revision', async () => {
     const db = store()
     const manager = new ConversationSyncManager(db, () => fakeRunner())
@@ -140,6 +167,17 @@ describe('conversation mirror', () => {
     await db.putConversation({ ...row, updatedAt: '2026-08-18T00:00:00.000Z', messageCount: 999 }, 'account-hash')
 
     expect(db.conversations.get(key)).toMatchObject({ messageCount: 2, updatedAt: '2000' })
+  })
+
+  it('falls back to the newest turn date when a provider listing omits its date', async () => {
+    const db = store()
+    const row = { ...history, provider: 'chatgpt' as const, updatedAt: '', messageCount: 0 }
+    const key = await db.putConversation(row, 'account-hash')
+    const datedTurns = turns(2).map((turn, ordinal) => ({ ...turn, createdAt: String((ordinal + 1) * 1_000) }))
+
+    await db.commitRevision(key, datedTurns, row)
+
+    expect(db.conversations.get(key)?.updatedAt).toBe('2000')
   })
 
   it('re-reads an existing local revision when the provider reports a newer timestamp', async () => {
@@ -208,8 +246,9 @@ describe('discovery: ranking and body search', () => {
   /** Seed one conversation, optionally with turns of its own. */
   async function seed(
     db: ConversationStore, id: string, title: string, updatedAt: string, texts: string[] = [],
+    provider: ProviderConversationRow['provider'] = 'chatgpt',
   ): Promise<string> {
-    const key = await db.putConversation({ ...history, id, title, updatedAt }, 'scope')
+    const key = await db.putConversation({ ...history, provider, id, title, updatedAt }, 'scope')
     if (texts.length) {
       await db.commitRevision(key, texts.map((text, ordinal) => ({ ...turns(1)[0]!, ordinal, text })))
     }
@@ -225,11 +264,29 @@ describe('discovery: ranking and body search', () => {
     expect(rows[0]!.via).toBe('recent')
   })
 
+  it('uses provider order only when empty-query recency is tied', async () => {
+    const db = store()
+    const kimi = await seed(db, 'kimi', 'Kimi chat', '2026-08-17', [], 'kimi')
+    const claude = await seed(db, 'claude', 'Claude chat', '2026-08-17', [], 'claude')
+    const chatgpt = await seed(db, 'chatgpt', 'ChatGPT chat', '2026-08-17', [], 'chatgpt')
+
+    expect(db.list('', undefined, 10).map(match => match.key)).toEqual([chatgpt, claude, kimi])
+  })
+
   it('ranks by match quality first and recency only within a band', async () => {
     const db = store()
     const buried = await seed(db, 'c1', 'Redesign the cache', '2026-08-17')
     const prefix = await seed(db, 'c2', 'Design docs', '2026-08-01')
     expect(db.list('design', undefined, 10).map(match => match.key)).toEqual([prefix, buried])
+  })
+
+  it('ranks equal matches by recency and then provider order', async () => {
+    const db = store()
+    const older = await seed(db, 'older', 'Design notes', '2026-08-01', [], 'chatgpt')
+    const kimi = await seed(db, 'kimi', 'Design notes', '2026-08-17', [], 'kimi')
+    const claude = await seed(db, 'claude', 'Design notes', '2026-08-17', [], 'claude')
+
+    expect(db.list('design', undefined, 10).map(match => match.key)).toEqual([claude, kimi, older])
   })
 
   it('finds a title through a space-free fuzzy query, which is all the @ token allows', async () => {

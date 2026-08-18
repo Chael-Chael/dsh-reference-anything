@@ -5,6 +5,13 @@ import { ConversationStore } from '../store/store.ts'
 import { OpenCliError, OpenCliRunner } from '../opencli.ts'
 
 export type SyncMode = 'incremental' | 'full'
+export interface ProviderSyncProgress {
+  provider: ChatProvider
+  phase: 'listing' | 'syncing' | 'complete' | 'failed' | 'cancelled'
+  completed: number
+  total: number
+  error?: string
+}
 export interface SyncJobStatus {
   jobId: string
   /** `partial` means at least one provider succeeded and at least one did not. */
@@ -13,6 +20,7 @@ export interface SyncJobStatus {
   provider?: ChatProvider
   completed: number
   total: number
+  providerProgress: readonly ProviderSyncProgress[]
   error?: string
 }
 
@@ -24,12 +32,6 @@ export interface SyncStartOptions {
    * forever would otherwise silently stop every later tick.
    */
   deadlineMs?: number
-  /**
-   * Let each provider list only what changed since its last pass, when the
-   * installed adapter supports it. Trades tombstoning for speed, so a full
-   * enumeration is forced back on every {@link FULL_SCAN_INTERVAL_MS}.
-   */
-  incrementalListing?: boolean
 }
 
 /** The slice of cordis's logger this manager uses, kept structural so tests need no context. */
@@ -87,7 +89,9 @@ export class ConversationSyncManager {
     const jobId = randomUUID()
     const job: SyncJob = {
       jobId, status: 'running', providers: [...new Set(providers)],
-      completed: 0, total: 0, active: true, controller: new AbortController(),
+      completed: 0, total: 0,
+      providerProgress: [...new Set(providers)].map(provider => ({ provider, phase: 'listing', completed: 0, total: 0 })),
+      active: true, controller: new AbortController(),
     }
     this.jobs.set(jobId, job)
     void this.run(job, mode, options)
@@ -98,7 +102,7 @@ export class ConversationSyncManager {
     const job = this.jobs.get(jobId)
     if (!job) return undefined
     const { controller: _controller, completedAt: _completedAt, active: _active, ...status } = job
-    return { ...status }
+    return { ...status, providerProgress: status.providerProgress.map(progress => ({ ...progress })) }
   }
 
   cancel(jobId: string): boolean {
@@ -155,9 +159,8 @@ export class ConversationSyncManager {
     const failures = new Map<ChatProvider, string>()
     let succeeded = 0
     try {
-      for (const provider of job.providers) {
-        if (job.controller.signal.aborted) break
-        job.provider = provider
+      await Promise.all(job.providers.map(async (provider) => {
+        if (job.controller.signal.aborted) return
         const started = Date.now()
         try {
           await this.syncProvider(job, provider, mode, options)
@@ -167,11 +170,11 @@ export class ConversationSyncManager {
           // One provider must not decide the fate of the others: a single
           // logged-out account would otherwise permanently starve every
           // provider after it in this list.
-          if (job.controller.signal.aborted) break
+          if (job.controller.signal.aborted) return
           failures.set(provider, describe(error))
           this.logger?.warn(`reference sync: ${provider} failed: ${describe(error)}`)
         }
-      }
+      }))
       job.status = job.controller.signal.aborted ? 'cancelled'
         : failures.size === 0 ? 'complete'
           : succeeded === 0 ? 'failed' : 'partial'
@@ -183,6 +186,11 @@ export class ConversationSyncManager {
       job.status = job.controller.signal.aborted ? 'cancelled' : 'failed'
       job.error = describe(error)
     } finally {
+      if (job.controller.signal.aborted) {
+        for (const progress of job.providerProgress) {
+          if (progress.phase === 'listing' || progress.phase === 'syncing') progress.phase = 'cancelled'
+        }
+      }
       if (watchdog !== undefined) clearTimeout(watchdog)
       job.active = false
       job.completedAt = Date.now()
@@ -213,10 +221,17 @@ export class ConversationSyncManager {
     try {
       accountScope = await retry(() => runner.whoami(provider, signal), signal)
       await this.store.syncStates.delete(`${provider}:pending`)
-      const since = options.incrementalListing === true ? this.listingSince(provider, accountScope) : ''
+      // Incremental means incremental at both levels: list only recently
+      // changed rows when a trustworthy watermark exists, then fetch detail
+      // only for rows whose provider timestamp changed. Full always enumerates
+      // and re-fetches everything, replacing each current local revision.
+      const since = mode === 'incremental' ? this.listingSince(provider, accountScope) : ''
       const rows = await retry(() => runner.history(provider, signal, since), signal)
       const seen = new Set(rows.map(row => row.id))
       job.total += rows.length
+      const providerProgress = this.providerProgress(job, provider)
+      providerProgress.phase = 'syncing'
+      providerProgress.total = rows.length
       progress = this.progressWriter(provider, accountScope, job, rows.length)
       await progress.save('running')
 
@@ -259,8 +274,12 @@ export class ConversationSyncManager {
         complete: enumerated,
         ...(failures.length > 0 ? { error: `${String(failures.length)} conversations failed; ${summarize(failures)}` } : {}),
       })
+      providerProgress.phase = 'complete'
     } catch (error) {
       const cancelled = signal.aborted
+      const providerProgress = this.providerProgress(job, provider)
+      providerProgress.phase = cancelled ? 'cancelled' : 'failed'
+      providerProgress.error = describe(error)
       await this.saveSyncState(
         provider, accountScope, cancelled ? 'cancelled' : 'failed',
         { completed: progress?.completed ?? 0, total: progress?.total ?? 0 },
@@ -329,13 +348,23 @@ export class ConversationSyncManager {
     return {
       get completed() { return completed },
       get total() { return total },
-      advance(): void { completed++; job.completed++ },
+      advance: (): void => {
+        completed++
+        job.completed++
+        this.providerProgress(job, provider).completed = completed
+      },
       save,
       async tick(): Promise<void> {
         if (Date.now() - lastWriteAt < PROGRESS_WRITE_INTERVAL_MS) return
         await save('running')
       },
     }
+  }
+
+  private providerProgress(job: SyncJob, provider: ChatProvider): ProviderSyncProgress {
+    const progress = job.providerProgress.find(row => row.provider === provider)
+    if (!progress) throw new Error(`missing sync progress for ${provider}`)
+    return progress
   }
 
   private async saveSyncState(

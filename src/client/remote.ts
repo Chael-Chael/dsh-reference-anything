@@ -26,7 +26,9 @@ export interface ProviderStats {
 }
 export interface SyncStatus {
   jobId: string; status: 'running' | 'complete' | 'partial' | 'cancelled' | 'failed'; providers: ChatProvider[]
-  provider?: ChatProvider; completed: number; total: number; error?: string
+  provider?: ChatProvider; completed: number; total: number
+  providerProgress: Array<{ provider: ChatProvider; phase: 'listing' | 'syncing' | 'complete' | 'failed' | 'cancelled'; completed: number; total: number; error?: string }>
+  error?: string
 }
 
 export interface ManagedConversation extends ConversationRow { remoteMissing: boolean }

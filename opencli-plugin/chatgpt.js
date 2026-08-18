@@ -1,8 +1,23 @@
 import { domFallbackScript, registerProvider, sinceGuardSource } from './common.js'
 // OpenCLI discovery marker: registerProvider below performs the cli() calls.
 
-const historyScript = String.raw`async function (args) {
+export const timestampSource = String.raw`value => {
+  if (value === undefined || value === null || value === '') return ''
+  if (typeof value === 'string' && Number.isNaN(Number(value))) {
+    const parsed = Date.parse(value)
+    return Number.isNaN(parsed) ? '' : new Date(parsed).toISOString()
+  }
+  const numeric = Number(value)
+  if (!Number.isFinite(numeric) || numeric <= 0) return ''
+  const milliseconds = numeric < 1e11 ? numeric * 1000
+    : numeric < 1e14 ? numeric : numeric < 1e17 ? numeric / 1000 : numeric / 1e6
+  const date = new Date(milliseconds)
+  return Number.isNaN(date.getTime()) ? '' : date.toISOString()
+}`
+
+export const historyScript = String.raw`async function (args) {
   const stopEarly = (${sinceGuardSource})(args && args.since)
+  const toIso = (${timestampSource})
   const fallback = () => Array.from(document.querySelectorAll('a[href*="/c/"]')).map((a, i) => {
     const match = a.href.match(/\/c\/([^/?#]+)/)
     return match ? { provider: 'chatgpt', accountScope: '', id: match[1], title: (a.innerText || a.textContent || 'Untitled').trim(), url: a.href, createdAt: '', updatedAt: '', messageCount: '', cursor: '', partial: true } : null
@@ -25,8 +40,8 @@ const historyScript = String.raw`async function (args) {
       for (const item of items) rows.push({
         provider: 'chatgpt', accountScope: '', id: String(item.id), title: item.title || 'Untitled Conversation',
         url: location.origin + '/c/' + item.id,
-        createdAt: item.create_time ? new Date(item.create_time * 1000).toISOString() : '',
-        updatedAt: item.update_time ? new Date(item.update_time * 1000).toISOString() : '',
+        createdAt: toIso(item.create_time),
+        updatedAt: toIso(item.update_time),
         messageCount: item.message_count || item.messageCount || '', cursor: '', partial: false,
       })
       if (items.length < 100) return JSON.stringify({ ok: true, rows })

@@ -51,7 +51,7 @@ const historyScript = String.raw`async function (args) {
   }
 }`
 
-const detailScript = String.raw`async function (args) {
+export const detailScript = String.raw`async function (args) {
   const headers = (${authHeaders})()
   const textOf = value => typeof value === 'string' ? value
     : Array.isArray(value) ? value.map(textOf).filter(Boolean).join('\n')
@@ -69,16 +69,27 @@ const detailScript = String.raw`async function (args) {
       status: locator ? 'available' : 'unavailable' }
   }
   try {
-    let response = await fetch('/apiv2/kimi.chat.v1.ChatService/ListMessages', { method: 'POST', credentials: 'include', headers,
-      body: JSON.stringify({ chat_id: args.id }) })
-    if (response.status === 404 || response.status === 405) {
-      response = await fetch('/api/chat/' + encodeURIComponent(args.id) + '/messages', { credentials: 'include', headers })
+    const messages = []
+    let pageToken = ''
+    for (let page = 0; page < 500; page++) {
+      let response = await fetch('/apiv2/kimi.chat.v1.ChatService/ListMessages', { method: 'POST', credentials: 'include', headers,
+        body: JSON.stringify({ chat_id: args.id, ...(pageToken ? { pageToken } : {}) }) })
+      if ((response.status === 404 || response.status === 405) && page === 0) {
+        response = await fetch('/api/chat/' + encodeURIComponent(args.id) + '/messages', { credentials: 'include', headers })
+      }
+      if (response.status === 401 || response.status === 403) return JSON.stringify({ ok: false, code: 'AUTH' })
+      if (response.status === 429) return JSON.stringify({ ok: false, code: 'RATE_LIMIT' })
+      if (!response.ok) throw new Error('detail HTTP ' + response.status)
+      const payload = await response.json()
+      const items = payload.messages || payload.items || payload.data && (payload.data.messages || payload.data.items) || []
+      messages.push(...items)
+      const next = String(payload.nextPageToken || payload.next_page_token || payload.data && (payload.data.nextPageToken || payload.data.next_page_token) || '')
+      if (!next || next === pageToken || items.length === 0) break
+      pageToken = next
     }
-    if (response.status === 401 || response.status === 403) return JSON.stringify({ ok: false, code: 'AUTH' })
-    if (response.status === 429) return JSON.stringify({ ok: false, code: 'RATE_LIMIT' })
-    if (!response.ok) throw new Error('detail HTTP ' + response.status)
-    const payload = await response.json()
-    const messages = payload.messages || payload.items || payload.data && (payload.data.messages || payload.data.items) || []
+    // Kimi lists newest messages first. The local mirror and every other
+    // adapter use chronological ordinals, so reverse only after all pages land.
+    messages.reverse()
     const rows = messages.map((message, ordinal) => {
       const roleRaw = String(message.role || message.sender || message.message_role || message.type || '').toLowerCase()
       const role = /assistant|bot|model|kimi/.test(roleRaw) ? 'assistant' : 'user'
@@ -87,7 +98,7 @@ const detailScript = String.raw`async function (args) {
       return { conversationId: args.id, ordinal,
         messageId: String(message.id || message.message_id || ordinal),
         parentId: String(message.parent_id || message.parentId || ''), branchId: '', activeBranch: true,
-        role, text: textOf(message.contents || message.content || message.text || message.fragments || ''),
+        role, text: textOf(message.blocks || message.contents || message.content || message.text || message.fragments || ''),
         createdAt: String(message.created_at || message.createdAt || message.timestamp || ''),
         attachmentsJson: JSON.stringify(attachments), partial: false }
     }).filter(row => row.text || row.attachmentsJson !== '[]')

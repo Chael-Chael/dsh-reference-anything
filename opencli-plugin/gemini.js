@@ -1,7 +1,32 @@
 import { domFallbackScript, registerProvider, sinceGuardSource } from './common.js'
 // OpenCLI discovery marker: registerProvider below performs the cli() calls.
 
+export const timestampSource = String.raw`value => {
+  if (Array.isArray(value)) {
+    if (value.length === 0) return ''
+    const seconds = Number(value[0])
+    const nanos = Number(value[1] || 0)
+    if (Number.isFinite(seconds) && seconds > 0 && seconds < 1e11) {
+      const date = new Date(seconds * 1000 + (Number.isFinite(nanos) ? nanos / 1e6 : 0))
+      return Number.isNaN(date.getTime()) ? '' : date.toISOString()
+    }
+    value = value[0]
+  }
+  if (value === undefined || value === null || value === '') return ''
+  if (typeof value === 'string' && Number.isNaN(Number(value))) {
+    const parsed = Date.parse(value)
+    return Number.isNaN(parsed) ? '' : new Date(parsed).toISOString()
+  }
+  const numeric = Number(value)
+  if (!Number.isFinite(numeric) || numeric <= 0) return ''
+  const milliseconds = numeric < 1e11 ? numeric * 1000
+    : numeric < 1e14 ? numeric : numeric < 1e17 ? numeric / 1000 : numeric / 1e6
+  const date = new Date(milliseconds)
+  return Number.isNaN(date.getTime()) ? '' : date.toISOString()
+}`
+
 const helpers = String.raw`
+  const toIso = (${timestampSource})
   const auth = () => {
     const wiz = window.__WIZ_global_data || window.WIZ_global_data || {}
     if (wiz.SNlM0e) return String(wiz.SNlM0e)
@@ -68,7 +93,7 @@ const historyScript = String.raw`async function (args) {
             if (!byId.has(id)) {
               const row = { provider: 'gemini', accountScope: '', id,
                 title: String(value[1] || value[2]), url: location.origin + '/app/' + encodeURIComponent(id),
-                createdAt: '', updatedAt: String(value[5] || ''), messageCount: 0, cursor: '', partial: false }
+                createdAt: '', updatedAt: toIso(value[5]), messageCount: 0, cursor: '', partial: false }
               byId.set(id, row)
               pageRows.push(row)
             }
@@ -110,8 +135,8 @@ const detailScript = String.raw`async function (args) {
     const rows = []
     for (const turn of turns.slice().reverse()) {
       if (!Array.isArray(turn)) continue
-      const stamp = turn && turn[4] && turn[4][0]
-      const createdAt = typeof stamp === 'number' ? String(stamp * 1000) : ''
+      const stamp = turn && turn[4]
+      const createdAt = toIso(stamp)
       const responseId = turn && turn[0] && typeof turn[0][1] === 'string' ? turn[0][1] : String(rows.length)
       const user = turn && turn[2] && turn[2][0] && turn[2][0][0]
       const assistant = turn && turn[3] && turn[3][0] && turn[3][0][0] && turn[3][0][0][1] && turn[3][0][0][1][0]

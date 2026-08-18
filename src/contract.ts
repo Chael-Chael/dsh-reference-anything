@@ -26,9 +26,15 @@ export const providerStatsSchema = z.object({
   status: z.enum(['ready', 'syncing', 'error', 'empty']), error: z.string().optional(),
 }).readonly()
 export const syncStartSchema = z.object({ providers: z.array(providerSchema).min(1), mode: z.enum(['incremental', 'full']) }).readonly()
+export const providerSyncProgressSchema = z.object({
+  provider: providerSchema,
+  phase: z.enum(['listing', 'syncing', 'complete', 'failed', 'cancelled']),
+  completed: z.number().int().nonnegative(), total: z.number().int().nonnegative(), error: z.string().optional(),
+}).readonly()
 export const syncStatusSchema = z.object({
   jobId: z.string(), status: z.enum(['running', 'complete', 'partial', 'cancelled', 'failed']),
-  providers: z.array(providerSchema), provider: providerSchema.optional(), completed: z.number(), total: z.number(), error: z.string().optional(),
+  providers: z.array(providerSchema), provider: providerSchema.optional(), completed: z.number(), total: z.number(),
+  providerProgress: z.array(providerSyncProgressSchema), error: z.string().optional(),
 }).readonly()
 export const jobInputSchema = z.object({ jobId: z.string().min(1) }).readonly()
 

@@ -21,6 +21,10 @@ export const CONTENT_MIN_QUERY = 2
 export const CONTENT_SCAN_LIMIT = 300
 /** Characters of one conversation a body scan reads before giving up on it. */
 export const CONTENT_SCAN_CHARS = 200_000
+/** Stable final tie-breaker for equally relevant, equally recent conversations. */
+const PROVIDER_ORDER: Readonly<Record<ChatProvider, number>> = {
+  chatgpt: 0, claude: 1, gemini: 2, deepseek: 3, grok: 4, kimi: 5,
+}
 
 export interface ProviderConversationRow {
   provider: ChatProvider
@@ -148,7 +152,7 @@ export class ConversationStore {
     const needle = query.trim()
     const candidates = [...this.conversations.entries()]
       .filter(([, row]) => !row.remoteMissing && (!provider || row.provider === provider))
-      .sort((a, b) => recency(b[1]) - recency(a[1]))
+      .sort(compareConversationRows)
     if (needle === '') {
       return candidates.slice(0, limit).map(([key, row]) => ({ key, row, via: 'recent' as const }))
     }
@@ -160,9 +164,8 @@ export class ConversationStore {
       if (match) titled.push({ key, row, match })
       else unmatched.push([key, row])
     }
-    // `candidates` is already newest-first and sort is stable, so equal
-    // matches keep that order without re-comparing timestamps.
-    titled.sort((a, b) => compareMatches(a.match, b.match))
+    titled.sort((a, b) => compareMatches(a.match, b.match)
+      || compareConversationRows([a.key, a.row], [b.key, b.row]))
 
     const results: ConversationMatch[] = titled.slice(0, limit)
       .map(({ key, row }) => ({ key, row, via: 'title' as const }))
@@ -182,12 +185,13 @@ export class ConversationStore {
     return providers.map((provider) => {
       const conversations = [...this.conversations.entries()].filter(([, row]) => row.provider === provider && !row.remoteMissing)
       const states = [...this.syncStates.entries()].map(([, row]) => row).filter(row => row.provider === provider)
-      const latest = states.sort((a, b) => Date.parse(b.lastSyncAt || '') - Date.parse(a.lastSyncAt || ''))[0]
-      const latestSuccessful = states.find(row => row.status === 'idle')
-      const latestLocalUpdate = conversations.reduce((latestAt, [, row]) => {
-        const candidate = row.syncedAt || row.updatedAt
-        return !latestAt || Date.parse(candidate) > Date.parse(latestAt) ? candidate : latestAt
-      }, '')
+      const latest = newestByTimestamp(states, row => row.lastSyncAt)
+      const latestSuccessful = newestByTimestamp(states.filter(row => row.status === 'idle'), row => row.lastSyncAt)
+      // Old/imported records can have a blank or malformed `syncedAt` while
+      // still carrying a usable provider `updatedAt`. Consider both fields
+      // independently: `syncedAt || updatedAt` lets a truthy malformed value
+      // mask the valid fallback and leaves the provider card without a date.
+      const latestLocalUpdate = newestTimestamp(conversations.flatMap(([, row]) => [row.syncedAt, row.updatedAt]))
       return {
         provider, conversations: conversations.length, lastSyncedAt: latestSuccessful?.lastSyncAt || latestLocalUpdate,
         status: latest?.status === 'running' ? 'syncing' : latest?.status === 'failed' ? 'error' : conversations.length ? 'ready' : 'empty',
@@ -358,10 +362,10 @@ export class ConversationStore {
     const revision = `sha256:${digest}`
     const revisionKey = `${conversationKey}:${revision}`
     const now = Date.now()
-    // Direct callers without a provider listing row retain the best timestamp
-    // embedded in the transcript. The sync path supplies `next`, whose
-    // provider timestamp is the authoritative update watermark.
-    const newestTurnAt = next ? '' : turns.reduce<string>((latest, turn) => {
+    // A provider listing timestamp is authoritative when present. DOM-backed
+    // or partially compatible listings can omit it, so retain the newest
+    // message timestamp as a fallback instead of publishing an unknown date.
+    const newestTurnAt = turns.reduce<string>((latest, turn) => {
       const latestAt = parseTimestamp(latest)
       const candidateAt = parseTimestamp(turn.createdAt)
       return candidateAt !== undefined && (latestAt === undefined || candidateAt > latestAt) ? turn.createdAt : latest
@@ -370,7 +374,7 @@ export class ConversationStore {
       ...conversation,
       ...(next ? {
         title: next.title.trim() || next.id, url: next.url, createdAt: next.createdAt,
-        updatedAt: next.updatedAt, partial: next.partial, remoteMissing: false,
+        updatedAt: next.updatedAt || newestTurnAt || conversation.updatedAt, partial: next.partial, remoteMissing: false,
       } : newestTurnAt ? { updatedAt: newestTurnAt } : {}),
       currentRevision: revision, messageCount: turns.length, syncedAt: new Date(now).toISOString(),
     }
@@ -507,8 +511,16 @@ function sameConversation(a: ConversationRecord, b: ConversationRecord): boolean
 
 /** Sort key for "most recently active", falling back to when we last saw it. */
 function recency(row: ConversationRecord): number {
-  const parsed = Date.parse(row.updatedAt || row.syncedAt)
-  return Number.isNaN(parsed) ? 0 : parsed
+  return parseTimestamp(row.updatedAt) ?? parseTimestamp(row.syncedAt) ?? 0
+}
+
+/** Recency first, then the canonical provider order, then identity for determinism. */
+function compareConversationRows(
+  a: [string, ConversationRecord], b: [string, ConversationRecord],
+): number {
+  return recency(b[1]) - recency(a[1])
+    || PROVIDER_ORDER[a[1].provider] - PROVIDER_ORDER[b[1].provider]
+    || a[0].localeCompare(b[0])
 }
 
 function parseAttachments(raw: string): StoredAttachment[] {
@@ -559,4 +571,32 @@ function parseTimestamp(value: string): number | undefined {
   if (Number.isFinite(number)) return number < 10_000_000_000 ? number * 1000 : number
   const date = Date.parse(value)
   return Number.isNaN(date) ? undefined : date
+}
+
+/** Return the original representation of the newest valid timestamp. */
+function newestTimestamp(values: readonly string[]): string {
+  let newest = ''
+  let newestAt: number | undefined
+  for (const value of values) {
+    const at = parseTimestamp(value)
+    if (at !== undefined && (newestAt === undefined || at > newestAt)) {
+      newest = value
+      newestAt = at
+    }
+  }
+  return newest
+}
+
+/** Select the newest row while ignoring blank or malformed timestamps. */
+function newestByTimestamp<T>(rows: readonly T[], timestamp: (row: T) => string): T | undefined {
+  let newest: T | undefined
+  let newestAt: number | undefined
+  for (const row of rows) {
+    const at = parseTimestamp(timestamp(row))
+    if (at !== undefined && (newestAt === undefined || at > newestAt)) {
+      newest = row
+      newestAt = at
+    }
+  }
+  return newest
 }
