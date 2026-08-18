@@ -1,4 +1,4 @@
-import { domFallbackScript, registerProvider } from './common.js'
+import { domFallbackScript, registerProvider, sinceGuardSource } from './common.js'
 // OpenCLI discovery marker: registerProvider below performs the cli() calls.
 
 const helpers = String.raw`
@@ -46,8 +46,9 @@ const helpers = String.raw`
   }
 `
 
-const historyScript = String.raw`async function () {
+const historyScript = String.raw`async function (args) {
   ${helpers}
+  const stopEarly = (${sinceGuardSource})(args && args.since)
   const rows = []
   const byId = new Map()
   let complete = true
@@ -59,13 +60,18 @@ const historyScript = String.raw`async function () {
         const result = await rpc('MaZiqc', '/app', [100, cursor, [mode, null, 1]])
         if (result.code) return JSON.stringify({ ok: false, code: result.code })
         if (!Array.isArray(result.payload)) { complete = false; break }
+        const pageRows = []
         const walk = value => {
           if (!Array.isArray(value)) return
           if (typeof value[0] === 'string' && /^c_[A-Za-z0-9_-]+$/.test(value[0]) && typeof (value[1] || value[2]) === 'string') {
             const id = value[0].slice(2)
-            if (!byId.has(id)) byId.set(id, { provider: 'gemini', accountScope: '', id,
-              title: String(value[1] || value[2]), url: location.origin + '/app/' + encodeURIComponent(id),
-              createdAt: '', updatedAt: String(value[5] || ''), messageCount: 0, cursor: '', partial: false })
+            if (!byId.has(id)) {
+              const row = { provider: 'gemini', accountScope: '', id,
+                title: String(value[1] || value[2]), url: location.origin + '/app/' + encodeURIComponent(id),
+                createdAt: '', updatedAt: String(value[5] || ''), messageCount: 0, cursor: '', partial: false }
+              byId.set(id, row)
+              pageRows.push(row)
+            }
           }
           for (const child of value) walk(child)
         }
@@ -73,6 +79,7 @@ const historyScript = String.raw`async function () {
         const nested = Array.isArray(result.payload[0]) ? result.payload[0] : []
         const next = typeof result.payload[1] === 'string' ? result.payload[1] : typeof nested[1] === 'string' ? nested[1] : ''
         if (!next) break
+        if (stopEarly(pageRows)) break
         if (seen.has(next)) { complete = false; break }
         seen.add(next); cursor = next
       }

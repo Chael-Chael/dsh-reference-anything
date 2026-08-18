@@ -1,12 +1,15 @@
 import { mkdir, writeFile } from 'node:fs/promises'
 import { dirname, resolve } from 'node:path'
 import { cli, Strategy } from '@jackwener/opencli/registry'
+import { sinceGuardSource } from './since-guard.js'
 import {
   ArgumentError,
   AuthRequiredError,
   CommandExecutionError,
   EmptyResultError,
 } from '@jackwener/opencli/errors'
+
+export { sinceGuardSource }
 
 const HISTORY_COLUMNS = [
   'provider', 'accountScope', 'id', 'title', 'url', 'createdAt', 'updatedAt',
@@ -71,22 +74,31 @@ export function registerProvider(config) {
     site: config.site,
     name: 'history-all',
     access: 'read',
-    description: `List the complete ${config.provider} web conversation history`,
+    description: `List the ${config.provider} web conversation history, whole or since an instant`,
     domain: config.domain,
     strategy: Strategy.COOKIE,
     browser: true,
     siteSession: 'persistent',
     navigateBefore: false,
-    args: [],
+    args: [{
+      name: 'since',
+      help: 'ISO 8601 instant; stop paging once the listing predates it. Honoured only while the provider pages newest-first',
+    }],
     columns: HISTORY_COLUMNS,
-    func: async (page) => {
+    func: async (page, kwargs) => {
+      const since = String(kwargs.since || '').trim()
+      if (since && Number.isNaN(Date.parse(since))) throw new ArgumentError('since must be an ISO 8601 instant')
       await page.goto(config.home, { settleMs: 1200 })
       const rows = assertResult(
-        await evaluate(page, config.historyScript, {}, `${config.site} history-all`),
+        await evaluate(page, config.historyScript, { since }, `${config.site} history-all`),
         config.domain,
         `${config.site} history-all`,
       )
-      if (rows.length === 0) throw new EmptyResultError(`${config.site} history-all`, 'No conversations found')
+      // Under `since`, "nothing new" is the expected answer on a quiet
+      // account — only a full listing that comes back empty is a problem.
+      if (rows.length === 0 && !since) {
+        throw new EmptyResultError(`${config.site} history-all`, 'No conversations found')
+      }
       return rows
     },
   })

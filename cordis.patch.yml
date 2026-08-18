@@ -41,7 +41,8 @@
         timeoutMs: 30000
 
     # Durable, local-only mirror of ChatGPT/Claude/Gemini/DeepSeek/Grok.
-    # Browser requests happen only during an explicit sync operation.
+    # Browser requests happen during an explicit sync, or — only when the user
+    # opts in via the Conversations settings panel — on a background interval.
     - id: reference-web-chat
       name: 'dsh-reference-anything/web-chat'
       config:

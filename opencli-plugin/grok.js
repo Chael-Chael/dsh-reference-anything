@@ -1,7 +1,8 @@
-import { domFallbackScript, registerProvider } from './common.js'
+import { domFallbackScript, registerProvider, sinceGuardSource } from './common.js'
 // OpenCLI discovery marker: registerProvider below performs the cli() calls.
 
-const historyScript = String.raw`async function () {
+const historyScript = String.raw`async function (args) {
+  const stopEarly = (${sinceGuardSource})(args && args.since)
   const rows = []
   const seen = new Set()
   let token = ''
@@ -14,6 +15,7 @@ const historyScript = String.raw`async function () {
       if (!response.ok) throw new Error('history HTTP ' + response.status)
       const payload = await response.json()
       const arrays = Object.values(payload || {}).filter(Array.isArray)
+      const pageStart = rows.length
       for (const record of arrays.flat()) {
         if (!record || typeof record !== 'object') continue
         const id = String(record.conversationId || record.id || '')
@@ -29,6 +31,7 @@ const historyScript = String.raw`async function () {
       }
       const next = String(payload.nextPageToken || '')
       if (!next) break
+      if (stopEarly(rows.slice(pageStart))) break
       if (next === token) throw new Error('repeated Grok cursor')
       token = next
     }

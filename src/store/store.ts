@@ -1,15 +1,26 @@
 import { createHash } from 'node:crypto'
 import type { Domain, KvTable } from '@deepseek-ai/dsh-storage-domain'
 import { ReferenceAnythingError } from '../errors.ts'
+import { compareMatches, scoreTitle, snippet, type TitleMatch } from '../search.ts'
 import type { ConversationItem, ReferenceSnapshot, ReferenceWindow } from '../types.ts'
 import type {
   AttachmentRecord, ChatProvider, ConversationRecord, RevisionRecord, SettingsRecord,
   StoredAttachment, StoredTurn, SyncStateRecord, TurnChunkRecord,
 } from './spec.ts'
-import { referenceAnythingDomainSpec } from './spec.ts'
+import type { referenceAnythingDomainSpec } from './spec.ts'
 
 export const REVISION_RETENTION_MS = 30 * 24 * 60 * 60 * 1000
 export const TURNS_PER_CHUNK = 50
+
+/**
+ * Shortest query that may trigger a body scan. One character matches almost
+ * every conversation, which is neither useful nor worth the scan.
+ */
+export const CONTENT_MIN_QUERY = 2
+/** Conversations a single body scan may examine, newest first. */
+export const CONTENT_SCAN_LIMIT = 300
+/** Characters of one conversation a body scan reads before giving up on it. */
+export const CONTENT_SCAN_CHARS = 200_000
 
 export interface ProviderConversationRow {
   provider: ChatProvider
@@ -53,6 +64,27 @@ interface CursorPayload {
   nextOrdinal: number
 }
 
+/** Durable, per-provider sync status — survives page reloads, unlike any one in-flight job's status. */
+export interface ProviderSyncState {
+  provider: ChatProvider
+  status: 'idle' | 'running' | 'cancelled' | 'failed'
+  lastSyncAt: string
+  lastCompleteScanAt: string
+  error: string
+}
+
+/** How a conversation earned its place in a result list. */
+export type MatchedVia = 'recent' | 'title' | 'content'
+
+/** One scored discovery result. */
+export interface ConversationMatch {
+  readonly key: string
+  readonly row: ConversationRecord
+  readonly via: MatchedVia
+  /** Excerpt around the body hit; UI-only, and present only when `via` is `content`. */
+  readonly snippet?: string
+}
+
 type RefDomain = Domain<typeof referenceAnythingDomainSpec>
 
 export class ConversationStore {
@@ -87,13 +119,51 @@ export class ConversationStore {
     }
   }
 
-  list(query: string, provider: ChatProvider | undefined, limit: number): Array<[string, ConversationRecord]> {
-    const needle = query.trim().toLocaleLowerCase()
-    return [...this.conversations.entries()]
+  /**
+   * Rank conversations for a discovery surface, best match first.
+   *
+   * Three passes, each only reached when the one before it left room. Titles
+   * are matched loosely (see {@link scoreTitle}) because the `@` mention
+   * query can never contain a space; bodies are searched only when titles
+   * came up short, which is what makes the auto-generated "New chat" titles
+   * findable at all without paying for a scan on every keystroke.
+   * @param query - user query, provider prefix already stripped.
+   * @param provider - restrict to one provider.
+   * @param limit - maximum results.
+   * @returns matches, best first, capped at `limit`.
+   */
+  list(query: string, provider: ChatProvider | undefined, limit: number): ConversationMatch[] {
+    const needle = query.trim()
+    const candidates = [...this.conversations.entries()]
       .filter(([, row]) => !row.remoteMissing && (!provider || row.provider === provider))
-      .filter(([, row]) => needle === '' || row.title.toLocaleLowerCase().includes(needle))
-      .sort((a, b) => Date.parse(b[1].updatedAt || b[1].syncedAt) - Date.parse(a[1].updatedAt || a[1].syncedAt))
-      .slice(0, limit)
+      .sort((a, b) => recency(b[1]) - recency(a[1]))
+    if (needle === '') {
+      return candidates.slice(0, limit).map(([key, row]) => ({ key, row, via: 'recent' as const }))
+    }
+
+    const titled: Array<{ key: string; row: ConversationRecord; match: TitleMatch }> = []
+    const unmatched: Array<[string, ConversationRecord]> = []
+    for (const [key, row] of candidates) {
+      const match = scoreTitle(row.title, needle)
+      if (match) titled.push({ key, row, match })
+      else unmatched.push([key, row])
+    }
+    // `candidates` is already newest-first and sort is stable, so equal
+    // matches keep that order without re-comparing timestamps.
+    titled.sort((a, b) => compareMatches(a.match, b.match))
+
+    const results: ConversationMatch[] = titled.slice(0, limit)
+      .map(({ key, row }) => ({ key, row, via: 'title' as const }))
+    if (results.length >= limit || needle.length < CONTENT_MIN_QUERY) return results
+
+    const pattern = new RegExp(needle.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&'), 'iu')
+    for (const [key, row] of unmatched.slice(0, CONTENT_SCAN_LIMIT)) {
+      const hit = this.findInBody(key, row, pattern)
+      if (!hit) continue
+      results.push({ key, row, via: 'content', snippet: hit })
+      if (results.length >= limit) break
+    }
+    return results
   }
 
   stats(providers: readonly ChatProvider[]): ProviderStats[] {
@@ -114,17 +184,125 @@ export class ConversationStore {
     })
   }
 
+  /**
+   * Search one conversation's stored turns for `pattern`.
+   *
+   * Reads chunks by key off the current revision rather than iterating the
+   * chunk table, whose `entries()` copies every record in the domain. Matching
+   * runs against the turn text in place — no lowercased copy is built, so the
+   * excerpt keeps its original casing and nothing is cached beside the
+   * records the domain already holds in memory.
+   * @returns the excerpt around the first hit, or undefined when there is none.
+   */
+  private findInBody(conversationKey: string, row: ConversationRecord, pattern: RegExp): string | undefined {
+    if (!row.currentRevision) return undefined
+    const revision = this.revisions.get(`${conversationKey}:${row.currentRevision}`)
+    if (!revision) return undefined
+    let budget = CONTENT_SCAN_CHARS
+    for (const chunkKey of revision.chunkKeys) {
+      for (const turn of this.chunks.get(chunkKey)?.turns ?? []) {
+        const at = turn.text.search(pattern)
+        if (at >= 0) return snippet(turn.text, at)
+        budget -= turn.text.length
+        if (budget <= 0) return undefined
+      }
+    }
+    return undefined
+  }
+
+  /**
+   * Page through every stored conversation, including ones the provider no
+   * longer lists — a management view needs to surface `remoteMissing` rows
+   * so they can be cleaned up, unlike {@link list}'s mention/search surface.
+   */
+  page(
+    query: string, provider: ChatProvider | undefined, limit: number, offset: number,
+  ): { items: Array<[string, ConversationRecord]>; total: number } {
+    const needle = query.trim().toLocaleLowerCase()
+    const filtered = [...this.conversations.entries()]
+      .filter(([, row]) => !provider || row.provider === provider)
+      .filter(([, row]) => needle === '' || row.title.toLocaleLowerCase().includes(needle))
+      .sort((a, b) => recency(b[1]) - recency(a[1]))
+    return { items: filtered.slice(offset, offset + limit), total: filtered.length }
+  }
+
+  /**
+   * Permanently purge one conversation and everything derived from it.
+   *
+   * A sync job racing this call can resurrect a broken row (see
+   * {@link WebChatHistoryService.remove}, which guards against that at the
+   * service layer) — this method itself makes no atomicity promise beyond
+   * "delete whatever currently references this key."
+   * @returns whether a conversation with this key existed.
+   */
+  async remove(conversationKey: string): Promise<boolean> {
+    if (!this.conversations.get(conversationKey)) return false
+    for (const [key, revision] of this.revisions.entries()) {
+      if (revision.conversationKey !== conversationKey) continue
+      for (const chunkKey of revision.chunkKeys) await this.chunks.delete(chunkKey)
+      await this.revisions.delete(key)
+    }
+    for (const [key, row] of this.attachments.entries()) {
+      if (row.conversationKey === conversationKey) await this.attachments.delete(key)
+    }
+    await this.conversations.delete(conversationKey)
+    return true
+  }
+
+  /**
+   * One row per provider, aggregated across every account scope it has ever
+   * synced under. `status`/`error`/`lastSyncAt` come from whichever attempt is
+   * most recent — success or failure — so a background failure is never
+   * hidden behind an older successful scope's row. `lastCompleteScanAt` is
+   * the max across all of that provider's rows, so it never regresses just
+   * because the latest attempt failed before finishing.
+   */
+  syncStateSummary(): ProviderSyncState[] {
+    const freshest = new Map<ChatProvider, ProviderSyncState>()
+    const lastCompleteScan = new Map<ChatProvider, string>()
+    for (const [, row] of this.syncStates.entries()) {
+      const current = freshest.get(row.provider)
+      if (!current || Date.parse(row.lastSyncAt || '') > Date.parse(current.lastSyncAt || '')) {
+        freshest.set(row.provider, {
+          provider: row.provider, status: row.status, lastSyncAt: row.lastSyncAt,
+          lastCompleteScanAt: row.lastCompleteScanAt, error: row.error,
+        })
+      }
+      // `!seen` short-circuits the first real value in — `Date.parse('') > Date.parse(x)` is always
+      // false (NaN comparisons never succeed), so comparing straight through would silently drop it.
+      if (row.lastCompleteScanAt) {
+        const seen = lastCompleteScan.get(row.provider)
+        if (!seen || Date.parse(row.lastCompleteScanAt) > Date.parse(seen)) lastCompleteScan.set(row.provider, row.lastCompleteScanAt)
+      }
+    }
+    return [...freshest.values()].map(state => ({ ...state, lastCompleteScanAt: lastCompleteScan.get(state.provider) || state.lastCompleteScanAt }))
+  }
+
+  /**
+   * Record what the provider's listing says about one conversation.
+   *
+   * Skips the write when nothing but `syncedAt` would change: under the JSON
+   * storage backend a single record write re-serializes and fsyncs the entire
+   * domain, so an unchanged history would otherwise cost one whole-mirror
+   * rewrite per conversation on every pass.
+   * @returns the conversation key, written or not.
+   */
   async putConversation(row: ProviderConversationRow, accountScope: string): Promise<string> {
     const key = ConversationStore.conversationKey(row.provider, accountScope, row.id)
     const current = this.conversations.get(key)
-    await this.conversations.put(key, {
+    const next: ConversationRecord = {
       provider: row.provider, accountScope, externalId: row.id,
       title: row.title.trim() || row.id, url: row.url,
       ...(current?.currentRevision ? { currentRevision: current.currentRevision } : {}),
       createdAt: row.createdAt, updatedAt: row.updatedAt,
-      messageCount: Math.max(0, Math.trunc(row.messageCount || 0)),
+      // Once a revision exists its turn count is the honest one: the provider
+      // counts turns this mirror drops (empty ones), so letting its number
+      // back in would flip the value on every metadata refresh.
+      messageCount: current?.currentRevision ? current.messageCount : Math.max(0, Math.trunc(row.messageCount || 0)),
       partial: row.partial, remoteMissing: false, syncedAt: new Date().toISOString(),
-    })
+    }
+    if (current && sameConversation(current, next)) return key
+    await this.conversations.put(key, next)
     return key
   }
 
@@ -134,7 +312,20 @@ export class ConversationStore {
     return !current?.currentRevision || current.updatedAt !== row.updatedAt || current.partial !== row.partial
   }
 
-  async commitRevision(conversationKey: string, rows: readonly ProviderTurnRow[]): Promise<string> {
+  /**
+   * Store one fetched transcript as an immutable revision and make it current.
+   *
+   * @param conversationKey - the conversation being updated; it must already exist.
+   * @param rows - the provider's turns, in any order.
+   * @param next - the listing row this transcript was fetched for. Supplying
+   * it folds the metadata update into the same write that publishes the
+   * revision, which is what keeps `updatedAt` — the only change signal
+   * {@link needsDetail} has — from advancing ahead of the content it describes.
+   * @returns the revision id, `sha256:<hex>` over the normalized turns.
+   */
+  async commitRevision(
+    conversationKey: string, rows: readonly ProviderTurnRow[], next?: ProviderConversationRow,
+  ): Promise<string> {
     const conversation = this.conversations.get(conversationKey)
     if (!conversation) throw new ReferenceAnythingError('conversation disappeared before its revision commit', 'REFERENCE_NOT_FOUND')
     const activeRows = rows.filter(row => row.activeBranch !== false)
@@ -149,6 +340,23 @@ export class ConversationStore {
     const revision = `sha256:${digest}`
     const revisionKey = `${conversationKey}:${revision}`
     const now = Date.now()
+    const merged: ConversationRecord = {
+      ...conversation,
+      ...(next ? {
+        title: next.title.trim() || next.id, url: next.url, createdAt: next.createdAt,
+        updatedAt: next.updatedAt, partial: next.partial, remoteMissing: false,
+      } : {}),
+      currentRevision: revision, messageCount: turns.length, syncedAt: new Date(now).toISOString(),
+    }
+    // The revision id IS the content hash, so an unchanged transcript commits
+    // back to the key it already occupies. Rewriting its chunks and
+    // attachments would cost one whole-domain rewrite each (JSON backend) to
+    // store bytes that are already there — the common case for a full rescan,
+    // and for any conversation whose `updatedAt` moved without its content.
+    if (conversation.currentRevision === revision && this.revisions.get(revisionKey)) {
+      await this.conversations.put(conversationKey, merged)
+      return revision
+    }
     const chunkKeys: string[] = []
     for (let index = 0; index * TURNS_PER_CHUNK < turns.length; index++) {
       const chunkKey = `${revisionKey}:${index}`
@@ -161,7 +369,7 @@ export class ConversationStore {
     await this.revisions.put(revisionKey, {
       conversationKey, revision, contentHash: digest, turnCount: turns.length,
       activeBranch: activeRows.find(row => row.branchId)?.branchId || '', chunkKeys,
-      partial: conversation.partial || activeRows.some(row => row.partial),
+      partial: merged.partial || activeRows.some(row => row.partial),
       syncedAt: new Date(now).toISOString(), expiresAt: new Date(now + REVISION_RETENTION_MS).toISOString(),
     })
     for (const turn of turns) for (const attachment of turn.attachments) {
@@ -169,9 +377,7 @@ export class ConversationStore {
         ...attachment, conversationKey, revision, ordinal: turn.ordinal,
       })
     }
-    await this.conversations.put(conversationKey, {
-      ...conversation, currentRevision: revision, messageCount: turns.length, syncedAt: new Date(now).toISOString(),
-    })
+    await this.conversations.put(conversationKey, merged)
     return revision
   }
 
@@ -227,16 +433,45 @@ export class ConversationStore {
   }
 
   async collectExpired(now = Date.now()): Promise<void> {
+    const expired: Array<[string, RevisionRecord]> = []
     for (const [key, revision] of this.revisions.entries()) {
       const current = this.conversations.get(revision.conversationKey)?.currentRevision
       if (revision.revision === current || Date.parse(revision.expiresAt) > now) continue
+      expired.push([key, revision])
+    }
+    if (expired.length === 0) return
+    // One pass over the attachments table for the whole sweep. Re-scanning it
+    // per expired revision was quadratic, and `entries()` copies every record
+    // each time it is called.
+    const byRevision = new Map<string, string[]>()
+    for (const [key, row] of this.attachments.entries()) {
+      const group = `${row.conversationKey}\u0000${row.revision}`
+      const bucket = byRevision.get(group)
+      if (bucket) bucket.push(key)
+      else byRevision.set(group, [key])
+    }
+    for (const [key, revision] of expired) {
       for (const chunkKey of revision.chunkKeys) await this.chunks.delete(chunkKey)
-      for (const [attachmentKey, row] of this.attachments.entries()) {
-        if (row.conversationKey === revision.conversationKey && row.revision === revision.revision) await this.attachments.delete(attachmentKey)
+      for (const attachmentKey of byRevision.get(`${revision.conversationKey}\u0000${revision.revision}`) ?? []) {
+        await this.attachments.delete(attachmentKey)
       }
       await this.revisions.delete(key)
     }
   }
+}
+
+/** Whether two conversation records differ in anything but `syncedAt`, which always does. */
+function sameConversation(a: ConversationRecord, b: ConversationRecord): boolean {
+  return a.provider === b.provider && a.accountScope === b.accountScope && a.externalId === b.externalId
+    && a.title === b.title && a.url === b.url && a.currentRevision === b.currentRevision
+    && a.createdAt === b.createdAt && a.updatedAt === b.updatedAt && a.messageCount === b.messageCount
+    && a.partial === b.partial && a.remoteMissing === b.remoteMissing
+}
+
+/** Sort key for "most recently active", falling back to when we last saw it. */
+function recency(row: ConversationRecord): number {
+  const parsed = Date.parse(row.updatedAt || row.syncedAt)
+  return Number.isNaN(parsed) ? 0 : parsed
 }
 
 function parseAttachments(raw: string): StoredAttachment[] {

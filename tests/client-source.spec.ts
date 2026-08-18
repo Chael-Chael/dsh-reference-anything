@@ -29,6 +29,7 @@ describe('conversation client references', () => {
     const row = {
       uriId: 'chatgpt\0scope\0conversation-3', provider: 'chatgpt' as const,
       title: 'BiWM SFT Loss 解释', turnCount: 4, updatedAt: '2026-08-17T00:00:00.000Z', syncedAt: '2026-08-17T00:00:00.000Z', partial: false, url: 'https://example.test',
+      matchedVia: 'recent' as const,
     }
     const outcome = source.onPick({
       candidate: { name: row.title, conversation: row }, session: { sessionId: 'session-1' as never },

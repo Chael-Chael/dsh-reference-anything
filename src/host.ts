@@ -31,4 +31,13 @@ export class ReferenceAnythingRemote extends TypertRemoteService {
   syncCancel(input: { jobId: string }): boolean { return this.ctx.referenceChatHistory.sync.cancel(input.jobId) }
   settingsGet(): SettingsRecord { return this.ctx.referenceChatHistory.getSettings() }
   settingsUpdate(settings: SettingsRecord) { return this.ctx.referenceChatHistory.updateSettings(settings) }
+  browse(input: { query: string; provider?: ChatProvider; limit: number; offset: number }, signal: AbortSignal) {
+    signal.throwIfAborted()
+    return this.ctx.referenceChatHistory.browse(input.query, input.provider, input.limit, input.offset)
+  }
+  deleteConversation(input: { uriId: string }, signal: AbortSignal) {
+    signal.throwIfAborted()
+    return this.ctx.referenceChatHistory.remove(input.uriId)
+  }
+  syncStates() { return this.ctx.referenceChatHistory.syncStates() }
 }

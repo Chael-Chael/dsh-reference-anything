@@ -1,7 +1,8 @@
-import { domFallbackScript, registerProvider } from './common.js'
+import { domFallbackScript, registerProvider, sinceGuardSource } from './common.js'
 // OpenCLI discovery marker: registerProvider below performs the cli() calls.
 
-const historyScript = String.raw`async function () {
+const historyScript = String.raw`async function (args) {
+  const stopEarly = (${sinceGuardSource})(args && args.since)
   const fallback = () => Array.from(document.querySelectorAll('a[href*="/c/"]')).map((a, i) => {
     const match = a.href.match(/\/c\/([^/?#]+)/)
     return match ? { provider: 'chatgpt', accountScope: '', id: match[1], title: (a.innerText || a.textContent || 'Untitled').trim(), url: a.href, createdAt: '', updatedAt: '', messageCount: '', cursor: '', partial: true } : null
@@ -20,6 +21,7 @@ const historyScript = String.raw`async function () {
       if (!response.ok) throw new Error('history HTTP ' + response.status)
       const data = await response.json()
       const items = data.items || data.conversations || []
+      const pageStart = rows.length
       for (const item of items) rows.push({
         provider: 'chatgpt', accountScope: '', id: String(item.id), title: item.title || 'Untitled Conversation',
         url: location.origin + '/c/' + item.id,
@@ -28,6 +30,7 @@ const historyScript = String.raw`async function () {
         messageCount: item.message_count || item.messageCount || '', cursor: '', partial: false,
       })
       if (items.length < 100) return JSON.stringify({ ok: true, rows })
+      if (stopEarly(rows.slice(pageStart))) return JSON.stringify({ ok: true, rows })
     }
     return JSON.stringify({ ok: false, message: 'pagination exceeded 200 pages' })
   } catch (error) {

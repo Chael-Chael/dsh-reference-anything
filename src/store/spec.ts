@@ -84,6 +84,14 @@ export const syncStateRecordSchema = z.object({
   error: z.string(),
   completed: z.number().int().nonnegative(),
   total: z.number().int().nonnegative(),
+  // Both carry `.default()` so rows written before background sync existed
+  // still parse at the durable read boundary — the domain validates with
+  // `schema.parse`, so the default lands in memory and no version bump (which
+  // would reject the whole medium) is needed.
+  /** Provider-level failures in a row; drives how long auto-sync skips this provider. */
+  consecutiveFailures: z.number().int().nonnegative().default(0),
+  /** ISO instant before which auto-sync leaves this provider alone. Manual syncs ignore it. */
+  nextEligibleAt: z.string().default(''),
 })
 export type SyncStateRecord = z.infer<typeof syncStateRecordSchema>
 
