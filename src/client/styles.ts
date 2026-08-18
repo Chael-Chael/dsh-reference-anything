@@ -1,4 +1,9 @@
 const css = `
+/* The unified @ trigger menu is owned by DSH, but the plugin can style its
+   public ARIA/data contract without depending on generated CSS-module names. */
+[data-composer-card] [role="listbox"]:has([role="presentation"][data-source]){width:100%!important;min-width:0!important;max-width:100%!important;border-radius:22px!important}
+[data-composer-card] [role="listbox"] [role="presentation"][data-source]:not(:first-child){margin-top:4px;padding-top:12px;border-top:1px solid var(--dsw-alias-border-inverted)}
+.dsh_ref_message_reference{display:inline-flex;align-items:center;gap:6px;max-width:100%;color:#82b1e4;font-weight:600;white-space:nowrap;vertical-align:baseline}.dsh_ref_message_reference:before{content:"";display:inline-block;flex:none;width:20px;height:20px;background:currentColor;mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round' d='M20 11.5a8 8 0 0 1-8.5 8A8.9 8.9 0 0 1 7.7 18.6L3.5 20l1.4-3.7A8 8 0 1 1 20 11.5Z'/%3E%3C/svg%3E") center/contain no-repeat}
 .dsh_ref_rail{display:flex;flex-wrap:wrap;gap:8px;width:calc(100% - var(--dsh-composer-side-clearance)*2);max-width:var(--dsh-composer-card-max-width);margin:0 auto}.dsh_ref_chip{display:inline-flex;align-items:center;min-height:28px}.dsh_ref_open,.dsh_ref_remove{border:0;background:none;font:inherit;cursor:pointer}.dsh_ref_open{display:flex;align-items:center;gap:6px;padding:0;max-width:420px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#82b1e4;font-size:18px;font-weight:600;line-height:28px}.dsh_ref_chip_mark{display:inline-flex;flex:none;width:20px;height:20px}.dsh_ref_chip_mark svg{width:100%;height:100%}.dsh_ref_remove{width:20px;padding:0;color:var(--dsw-alias-label-dimmed);font-size:17px;line-height:1}
 .dsh_ref_settings{display:flex;flex-direction:column;gap:18px;width:min(100%,1060px);padding:0 0 36px;color:var(--dsw-alias-label-primary);font-family:Geist,"Segoe UI",sans-serif}.dsh_ref_settings *{box-sizing:border-box}.dsh_ref_header{display:flex;align-items:flex-start;justify-content:space-between;gap:24px;padding:0 0 10px}.dsh_ref_header h2{margin:0 0 7px;font-size:28px;line-height:1.1;letter-spacing:-.035em}.dsh_ref_header p{margin:0;max-width:620px;color:var(--dsw-alias-label-primary);font-size:13px;line-height:1.5}.dsh_ref_settings button{min-height:34px;padding:0 13px;border:1px solid var(--dsw-alias-label-primary);border-radius:5px;background:transparent;color:var(--dsw-alias-label-primary);font:inherit;font-size:12px;font-weight:650;cursor:pointer}.dsh_ref_settings button:hover:not(:disabled){background:var(--dsw-alias-label-primary);color:var(--dsw-alias-bg-layer-1)}.dsh_ref_settings button:active:not(:disabled){transform:translateY(1px)}.dsh_ref_settings button:disabled{cursor:not-allowed;opacity:.42}
 .dsh_ref_workspace{display:flex;flex-direction:column;border:1px solid var(--dsw-alias-label-primary);border-radius:0;background:transparent;overflow:hidden}.dsh_ref_workspace>.dsh_ref_panel,.dsh_ref_workspace>.dsh_ref_sources{margin:0;padding:24px;border:0;border-bottom:1px solid var(--dsw-alias-label-primary);border-radius:0;background:transparent}.dsh_ref_workspace>.dsh_ref_panel:last-child{border-bottom:0}.dsh_ref_workspace>.dsh_ref_error{margin:20px 24px 0}.dsh_ref_section_head{display:flex;align-items:flex-start;justify-content:space-between;gap:18px}.dsh_ref_section_head h3{margin:0 0 4px;font-size:17px;letter-spacing:-.02em}.dsh_ref_section_head p{margin:0;color:var(--dsw-alias-label-primary);font-size:12px;line-height:1.45}.dsh_ref_health,.dsh_ref_syncing{display:inline-flex;align-items:center;min-height:25px;padding:0 9px;border:1px solid var(--dsw-alias-label-primary);border-radius:4px;background:transparent;color:var(--dsw-alias-label-primary);font-size:10px;font-weight:700}
@@ -11,4 +16,47 @@ const css = `
 export function adoptStyles(): void {
   if (document.getElementById('dsh-reference-anything-style')) return
   const style = document.createElement('style'); style.id = 'dsh-reference-anything-style'; style.textContent = css; document.head.appendChild(style)
+}
+
+/** Project opaque dsh-ref mentions in user bubbles without changing logged text. */
+export function adoptConversationMentionProjection(): () => void {
+  const mention = /@\[([^\n\r]+?)\]\(dsh-ref:[A-Za-z0-9_-]+\)/gu
+  const project = (root: ParentNode): void => {
+    const rows = root instanceof Element && root.matches('[data-time-hover-root]')
+      ? [root]
+      : Array.from(root.querySelectorAll('[data-time-hover-root]'))
+    for (const row of rows) {
+      const walker = document.createTreeWalker(row, NodeFilter.SHOW_TEXT)
+      const nodes: Text[] = []
+      let current: Node | null
+      while ((current = walker.nextNode()) !== null) {
+        if (current.parentElement?.closest('[data-dsh-ref-projection]') === null && mention.test(current.textContent ?? '')) nodes.push(current as Text)
+        mention.lastIndex = 0
+      }
+      for (const node of nodes) {
+        const value = node.data
+        const fragment = document.createDocumentFragment()
+        let cursor = 0
+        for (const match of value.matchAll(mention)) {
+          fragment.append(value.slice(cursor, match.index))
+          const span = document.createElement('span')
+          span.className = 'dsh_ref_message_reference'
+          span.dataset.dshRefProjection = 'conversation'
+          span.textContent = match[1] ?? ''
+          fragment.append(span)
+          cursor = match.index + match[0].length
+        }
+        fragment.append(value.slice(cursor))
+        node.replaceWith(fragment)
+      }
+    }
+  }
+  project(document)
+  const observer = new MutationObserver(records => {
+    for (const record of records) for (const node of Array.from(record.addedNodes)) {
+      if (node instanceof Element) project(node)
+    }
+  })
+  observer.observe(document.body, { childList: true, subtree: true })
+  return () => { observer.disconnect() }
 }
