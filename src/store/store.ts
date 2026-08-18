@@ -9,7 +9,6 @@ import type {
 } from './spec.ts'
 import type { referenceAnythingDomainSpec } from './spec.ts'
 
-export const REVISION_RETENTION_MS = 30 * 24 * 60 * 60 * 1000
 export const TURNS_PER_CHUNK = 50
 
 /**
@@ -60,6 +59,8 @@ export interface ProviderStats {
   status: 'ready' | 'syncing' | 'error' | 'empty'
   error?: string
 }
+
+export interface StorageStats { bytes: number; conversations: number }
 
 interface CursorPayload {
   v: 1
@@ -265,6 +266,30 @@ export class ConversationStore {
     return true
   }
 
+  /** Approximate payload bytes held by this domain; filesystem overhead is excluded. */
+  storageStats(): StorageStats {
+    const tables = [this.conversations, this.revisions, this.chunks, this.attachments, this.syncStates]
+    let bytes = 0
+    for (const table of tables) for (const [key, value] of table.entries()) {
+      bytes += Buffer.byteLength(JSON.stringify([key, value]), 'utf8')
+    }
+    return { bytes, conversations: this.conversations.size }
+  }
+
+  async removeProvider(provider: ChatProvider): Promise<number> {
+    const keys = [...this.conversations.entries()].filter(([, row]) => row.provider === provider).map(([key]) => key)
+    for (const key of keys) await this.remove(key)
+    for (const [key, row] of this.syncStates.entries()) if (row.provider === provider) await this.syncStates.delete(key)
+    return keys.length
+  }
+
+  async removeOlderThan(days: number, now = Date.now()): Promise<number> {
+    const cutoff = now - Math.max(1, Math.trunc(days)) * 24 * 60 * 60 * 1000
+    const keys = [...this.conversations.entries()].filter(([, row]) => recency(row) < cutoff).map(([key]) => key)
+    for (const key of keys) await this.remove(key)
+    return keys.length
+  }
+
   /**
    * One row per provider, aggregated across every account scope it has ever
    * synced under. `status`/`error`/`lastSyncAt` come from whichever attempt is
@@ -400,7 +425,7 @@ export class ConversationStore {
       conversationKey, revision, contentHash: digest, turnCount: turns.length,
       activeBranch: activeRows.find(row => row.branchId)?.branchId || '', chunkKeys,
       partial: merged.partial || activeRows.some(row => row.partial),
-      syncedAt: new Date(now).toISOString(), expiresAt: new Date(now + REVISION_RETENTION_MS).toISOString(),
+      syncedAt: new Date(now).toISOString(), expiresAt: new Date(now).toISOString(),
     })
     for (const turn of turns) for (const attachment of turn.attachments) {
       await this.attachments.put(`${revisionKey}:${turn.ordinal}:${attachment.attachmentId}`, {
@@ -408,7 +433,20 @@ export class ConversationStore {
       })
     }
     await this.conversations.put(conversationKey, merged)
+    await this.removeSupersededRevisions(conversationKey, revision)
     return revision
+  }
+
+  /** Keep exactly the latest transcript revision for a conversation. */
+  private async removeSupersededRevisions(conversationKey: string, keep: string): Promise<void> {
+    for (const [key, row] of this.revisions.entries()) {
+      if (row.conversationKey !== conversationKey || row.revision === keep) continue
+      for (const chunkKey of row.chunkKeys) await this.chunks.delete(chunkKey)
+      for (const [attachmentKey, attachment] of this.attachments.entries()) {
+        if (attachment.conversationKey === conversationKey && attachment.revision === row.revision) await this.attachments.delete(attachmentKey)
+      }
+      await this.revisions.delete(key)
+    }
   }
 
   read(conversationKey: string, window: ReferenceWindow): ReferenceSnapshot {
@@ -424,9 +462,7 @@ export class ConversationStore {
     }
     const revisionRecord = this.revisions.get(`${conversationKey}:${revision}`)
     if (!revisionRecord) throw new ReferenceAnythingError('reference cursor revision has expired', 'REFERENCE_CURSOR_EXPIRED')
-    if (revision !== conversation.currentRevision && Date.parse(revisionRecord.expiresAt) <= Date.now()) {
-      throw new ReferenceAnythingError('reference cursor revision has expired', 'REFERENCE_CURSOR_EXPIRED')
-    }
+    if (revision !== conversation.currentRevision) throw new ReferenceAnythingError('reference cursor revision has expired', 'REFERENCE_CURSOR_EXPIRED')
     const all = revisionRecord.chunkKeys.flatMap(key => this.chunks.get(key)?.turns ?? [])
     const boundedEnd = Math.max(0, Math.min(end ?? all.length, all.length))
     const start = Math.max(0, boundedEnd - Math.max(1, Math.trunc(window.limit)))
@@ -466,7 +502,7 @@ export class ConversationStore {
     const expired: Array<[string, RevisionRecord]> = []
     for (const [key, revision] of this.revisions.entries()) {
       const current = this.conversations.get(revision.conversationKey)?.currentRevision
-      if (revision.revision === current || Date.parse(revision.expiresAt) > now) continue
+      if (revision.revision === current) continue
       expired.push([key, revision])
     }
     if (expired.length === 0) return

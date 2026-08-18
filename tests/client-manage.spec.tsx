@@ -10,7 +10,7 @@ import { en } from '../src/client/locale.ts'
 // in a test environment; without this every act() call warns and defers.
 ;(globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
-const settings = { opencliPath: 'opencli', profile: '', detailConcurrency: 2, autoSync: false, autoSyncMinutes: 60, historyMode: 'metadata-only' as const }
+const settings = { opencliPath: 'opencli', profile: '', detailConcurrency: 8, autoSync: false, syncOnStartup: false, autoSyncMinutes: 60, historyMode: 'metadata-only' as const, enabledProviders: ['chatgpt', 'claude', 'gemini', 'deepseek', 'grok', 'kimi'] as Array<'chatgpt' | 'claude' | 'gemini' | 'deepseek' | 'grok' | 'kimi'>, maxReadTurns: 10 }
 const t = ((key: keyof typeof en, values?: Record<string, string | number>) => Object.entries(values ?? {}).reduce((text, [name, value]) => text.replace(`{${name}}`, String(value)), en[key])) as never
 
 function conversation(overrides: Partial<ManagedConversation> = {}): ManagedConversation {

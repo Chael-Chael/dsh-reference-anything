@@ -4,7 +4,7 @@ import type { ChatProvider } from '../wire.ts'
 import { parseProviderQuery } from '../search.ts'
 import { encodeReferenceUri } from '../uri-codec.ts'
 import type { SearchResult, SessionCandidate, WorkspaceEntry } from './remote.ts'
-import { PROVIDER_ICON_MARKER } from './provider-icons.tsx'
+import { PROVIDER_ICON_MARKER, SESSION_ICON_MARKER } from './provider-icons.tsx'
 import type { TranslateNS } from '@deepseek-ai/dsh-client-locale/client'
 import type { REFERENCE_ANYTHING_NS } from './locale.ts'
 
@@ -172,14 +172,14 @@ export function createSessionSource(search: (sessionId: string, query: string, s
       const scoped = scopedQuery(query, 'sessions')
       if (scoped === undefined) return []
       return (await search(session.sessionId, scoped, signal)).slice(0, 50).map(row => ({
-        name: row.label, description: row.cwd ?? new Date(row.createdAt).toLocaleString(), icon: '💬', sessionCandidate: row,
+        name: row.label, description: row.cwd ?? new Date(row.createdAt).toLocaleString(), icon: SESSION_ICON_MARKER, sessionCandidate: row,
       }))
     },
     onPick({ candidate }) {
       const row = candidate.sessionCandidate
       if (!row) return undefined
       const ref = JSON.stringify({ uri: row.sessionId, label: row.label })
-      return { insert: { source: SESSION_SOURCE, ref, label: `💬 ${row.label}`, clipboardText: sessionMention(ref) } }
+      return { insert: { source: SESSION_SOURCE, ref, label: `${SESSION_ICON_MARKER} ${row.label}`, clipboardText: sessionMention(ref) } }
     },
     codec: { clipboardText: sessionMention, serialize: ref => Promise.resolve(sessionMention(ref)) },
   }

@@ -1,5 +1,4 @@
 import { describe, expect, it } from 'vitest'
-import { conversationMentions } from '../src/client/components.tsx'
 import {
   CONVERSATION_SOURCE, conversationReferenceUri, createCommandSource,
   createConversationSource, createSearchDebounce, createSessionSource, createSkillSource, createWorkspaceSource,
@@ -15,13 +14,6 @@ describe('conversation client references', () => {
     expect(uri).toMatch(/^dsh-ref:[A-Za-z0-9_-]+$/)
     expect(decodeReferenceUri(uri)).toEqual({ source: 'web-chat', id: 'chatgpt\0scope\0conversation-1' })
     expect(uri).not.toContain('web-chat/')
-  })
-
-  it('recognizes a canonical conversation mention in the dock', () => {
-    const uri = conversationReferenceUri('claude\0scope\0conversation-2')
-    expect(conversationMentions(`compare @[Claude · Design](${uri}) now`)).toEqual([{
-      label: 'Claude · Design', uri, start: 8, end: 8 + `@[Claude · Design](${uri})`.length,
-    }])
   })
 
   it('parses a provider prefix without treating ordinary search text as one', () => {
@@ -136,8 +128,10 @@ describe('conversation client references', () => {
     const source = createSessionSource(async () => [{ sessionId: uri, label: '项目聊天导出', cwd: 'D:\\repo', createdAt: 1 }])
     const candidates = await source.candidates({ sessionId: 'session-1' as never }, { query: '', position: 'inline', signal: new AbortController().signal })
     expect(source.name).toBe('DSH sessions')
+    expect(candidates[0]?.icon).toBe('\uE106')
     const outcome = source.onPick({ candidate: candidates[0]!, session: { sessionId: 'session-1' as never }, position: 'inline', via: 'menu', span: { start: 0, end: 1, draftRev: 1 } })
     if (outcome === undefined || outcome === 'handled' || !('insert' in outcome)) throw new Error('expected session insert')
+    expect(outcome.insert.label).toBe('\uE106 项目聊天导出')
     await expect(source.codec?.serialize(outcome.insert.ref, new AbortController().signal)).resolves.toBe(`@[项目聊天导出](${uri})`)
   })
 

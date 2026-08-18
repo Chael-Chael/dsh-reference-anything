@@ -32,6 +32,22 @@ describe('OpenCLI execFile boundary', () => {
     expect(index.rows).toEqual([expect.objectContaining({ provider: 'chatgpt', id: 'c1', title: 'One' })])
   })
 
+  it('pins browser commands to background even when the environment requests foreground', async () => {
+    const script = await fake(`
+      const args=process.argv.slice(2)
+      if(args[0]!=='dsh-chatgpt'||args[1]!=='history-all'||args[2]!=='--window'||args[3]!=='background') process.exit(78)
+      process.stdout.write('[]')
+    `)
+    const previous = process.env.OPENCLI_WINDOW
+    process.env.OPENCLI_WINDOW = 'foreground'
+    try {
+      await expect(new OpenCliRunner({ executable: process.execPath, prefixArgs: [script] }).history('chatgpt')).resolves.toEqual([])
+    } finally {
+      if (previous === undefined) delete process.env.OPENCLI_WINDOW
+      else process.env.OPENCLI_WINDOW = previous
+    }
+  })
+
   it('enforces the stdout cap', async () => {
     const script = await fake(`process.stdout.write('['+' '.repeat(10000)+']')`)
     const runner = new OpenCliRunner({ executable: process.execPath, prefixArgs: [script], maxStdoutBytes: 1000 })

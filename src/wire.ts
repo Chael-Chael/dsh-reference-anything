@@ -3,6 +3,7 @@ import { z } from 'zod'
 
 export const providerSchema = z.enum(['chatgpt', 'claude', 'gemini', 'deepseek', 'grok', 'kimi'])
 export type ChatProvider = z.infer<typeof providerSchema>
+export const ALL_PROVIDERS: readonly ChatProvider[] = providerSchema.options
 
 export const pickerSourceSchema = z.enum(['commands', 'skills', 'files', 'sessions', 'conversations'])
 export type PickerSource = z.infer<typeof pickerSourceSchema>
@@ -47,8 +48,11 @@ export const settingsRecordSchema = z.object({
   profile: z.string(),
   detailConcurrency: z.number().int().min(1).max(8),
   autoSync: z.boolean().default(false),
+  syncOnStartup: z.boolean().default(false),
   autoSyncMinutes: z.number().int().min(15).max(1440).default(60),
   historyMode: z.enum(['metadata-only', 'offline-mirror']).default('metadata-only'),
+  enabledProviders: z.array(providerSchema).default([...ALL_PROVIDERS]),
+  maxReadTurns: z.number().int().min(1).max(100).default(10),
   // Optional keeps existing on-disk settings forward-compatible. The client
   // uses defaultPickerSettings() until the user saves the General section.
   picker: pickerSettingsSchema.optional(),

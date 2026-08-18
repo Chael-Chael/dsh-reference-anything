@@ -40,5 +40,12 @@ export class ReferenceAnythingRemote extends TypertRemoteService {
     signal.throwIfAborted()
     return this.ctx.referenceChatHistory.remove(input.uriId)
   }
+  storageStats() { return this.ctx.referenceChatHistory.storageStats() }
+  clearProvider(input: { provider: ChatProvider }, signal: AbortSignal) {
+    signal.throwIfAborted(); return this.ctx.referenceChatHistory.removeProvider(input.provider)
+  }
+  clearOlder(input: { days: number }, signal: AbortSignal) {
+    signal.throwIfAborted(); return this.ctx.referenceChatHistory.removeOlderThan(input.days)
+  }
   syncStates() { return this.ctx.referenceChatHistory.syncStates() }
 }

@@ -88,6 +88,7 @@ export default class WebChatHistoryService extends Service implements ReferenceS
       executable: this.store.settings.opencliPath, profile: this.store.settings.profile,
       timeoutMs: this.config.timeoutMs, maxStdoutBytes: this.config.maxStdoutBytes,
     }), this.ctx.logger)
+    await this.store.collectExpired()
     this.ctx.references.registerSource(this)
     this.ctx.effect(() => () => { this.clearAutoSync() }, 'reference-web-chat.autoSyncCleanup')
     this.armAutoSync()
@@ -166,6 +167,7 @@ export default class WebChatHistoryService extends Service implements ReferenceS
   }
 
   stats() { return this.store.stats(PROVIDERS) }
+  storageStats() { return this.store.storageStats() }
 
   /** Paginated browse for the management list — unlike {@link search}, includes `remoteMissing` rows. */
   browse(
@@ -187,6 +189,16 @@ export default class WebChatHistoryService extends Service implements ReferenceS
       throw new ReferenceAnythingError('cannot delete a conversation while a sync is in progress', 'REFERENCE_SYNC_IN_PROGRESS')
     }
     return this.store.remove(uriId)
+  }
+
+  async removeProvider(provider: ChatProvider): Promise<number> {
+    if (this.sync.isRunning()) throw new ReferenceAnythingError('cannot clear provider data while a sync is in progress', 'REFERENCE_SYNC_IN_PROGRESS')
+    return this.store.removeProvider(provider)
+  }
+
+  async removeOlderThan(days: number): Promise<number> {
+    if (this.sync.isRunning()) throw new ReferenceAnythingError('cannot clear old data while a sync is in progress', 'REFERENCE_SYNC_IN_PROGRESS')
+    return this.store.removeOlderThan(days)
   }
 
   /** Durable per-provider sync status, independent of any single in-flight job. */
@@ -241,7 +253,7 @@ export default class WebChatHistoryService extends Service implements ReferenceS
   private armAutoSync(): void {
     this.clearAutoSync()
     const settings = this.store.settings
-    if (!settings.autoSync) return
+    if (!settings.autoSync && !settings.syncOnStartup) return
     const period = settings.autoSyncMinutes * 60_000
 
     const tick = (): void => {
@@ -249,7 +261,7 @@ export default class WebChatHistoryService extends Service implements ReferenceS
         this.ctx.logger.info('reference sync: skipping the auto-sync tick, a sync is still running')
         return
       }
-      const providers = this.sync.eligibleProviders(providerSchema.options)
+      const providers = this.sync.eligibleProviders(settings.enabledProviders)
       if (providers.length === 0) {
         this.ctx.logger.info('reference sync: no provider is eligible for auto-sync right now')
         return
@@ -264,8 +276,10 @@ export default class WebChatHistoryService extends Service implements ReferenceS
 
     // Jitter keeps every provider — and every dsh instance sharing a default
     // interval — off the same instant.
-    this.autoSyncInterval = setInterval(tick, jitter(period))
-    this.autoSyncInterval.unref?.()
+    if (settings.autoSync) {
+      this.autoSyncInterval = setInterval(tick, jitter(period))
+      this.autoSyncInterval.unref?.()
+    }
     const delay = this.catchUpDelay(period)
     if (delay !== undefined) {
       this.autoSyncCatchUp = setTimeout(tick, delay)

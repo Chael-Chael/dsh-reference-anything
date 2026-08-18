@@ -22,16 +22,19 @@ describe('plugin-owned DSH presentation overrides', () => {
     expect(text).toContain('[data-decoration="chip"]:before{display:none!important}')
     expect(text).toContain('position:static!important')
     expect(text).toContain('font-size:inherit!important')
+    expect(text).toContain('[data-composer-card] .dsh_ref_conversation_chip')
+    expect(text).toContain('.dsh_ref_conversation_chip>.dsh_ref_projected_icon{transform:translateY(.2em)!important}')
+    expect(text).toContain('[role="listbox"] .dsh_ref_projected_icon:before{background:var(--dsw-alias-label-tertiary,#8b8f98)}')
+    expect(text).toContain('[role="dialog"]:has(.dsh_ref_settings){overflow:clip!important}')
+    expect(text).toContain('.dsh_ref_toggle{position:relative}')
+    expect(text).not.toContain('.dsh_ref_conversation_chip,.dsh_ref_conversation_chip>span,.dsh_ref_projected_icon{color:')
     expect(text).toContain('.dsh_ref_adaptive_caret')
     expect(text).toContain('width:1px')
     expect(text).toContain('animation:dsh_ref_caret_blink 1.06s step-end infinite')
     expect(text).toContain('.dsh_ref_adaptive_caret[hidden]')
-    expect(text).toContain('.dsh_ref_chip{display:inline-flex')
-    expect(text).toContain('border-radius:14px')
-    expect(text).toContain('background:var(--dsw-alias-bg-layer-1)')
+    expect(text).not.toContain('.dsh_ref_chip{')
     expect(text).toContain('.dsh_ref_menu_sync{position:relative')
     expect(text).toContain('border-radius:999px;background:rgba(59,130,246,.11)')
-    expect(text).toContain('.dsh_ref_remove:hover{background:var(--dsw-alias-interactive-bg-hover)')
   })
 
   it('projects a logged dsh-ref mention without exposing its opaque URI', () => {
@@ -54,6 +57,8 @@ describe('plugin-owned DSH presentation overrides', () => {
     expect(chip?.getAttribute('title')).toBe('Claude · Design')
     expect(chip?.classList.contains('dsh_ref_conversation_chip')).toBe(true)
     expect(chip?.getAttribute('data-dsh-ref-provider')).toBe('claude')
+    expect(chip?.querySelector('span')?.textContent).toBe('Claude · Design')
+    expect(chip?.querySelector('span')?.classList.contains('dsh_ref_projected_icon')).toBe(true)
     dispose()
   })
 
@@ -63,6 +68,14 @@ describe('plugin-owned DSH presentation overrides', () => {
     const projected = document.querySelector('[data-dsh-ref-provider-icon="kimi"]')
     expect(projected?.textContent).toBe('Kimi · World model')
     expect(projected?.getAttribute('style')).toContain('--dsh-ref-provider-icon')
+    dispose()
+  })
+
+  it('projects the DSH session marker as an outlined conversation icon', () => {
+    document.body.innerHTML = '<div role="listbox"><span>\uE106 Session title</span></div>'
+    const dispose = adoptReferenceIconProjection()
+    const projected = document.querySelector('.dsh_ref_session_icon')
+    expect(projected?.textContent).toBe('Session title')
     dispose()
   })
 

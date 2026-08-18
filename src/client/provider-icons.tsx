@@ -15,6 +15,7 @@ export const PROVIDER_ICON_PATH: Readonly<Record<ChatProvider, string>> = {
 export const PROVIDER_ICON_MARKER: Readonly<Record<ChatProvider, string>> = {
   chatgpt: '\uE100', claude: '\uE101', gemini: '\uE102', deepseek: '\uE103', grok: '\uE104', kimi: '\uE105',
 }
+export const SESSION_ICON_MARKER = '\uE106'
 
 export function ProviderLogo({ provider, size = 22 }: { provider: ChatProvider; size?: number }) {
   return <svg fill="currentColor" fillRule="evenodd" width={size} height={size} viewBox="0 0 24 24" aria-hidden><path d={PROVIDER_ICON_PATH[provider]} /></svg>

@@ -4,10 +4,10 @@ import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
 import type {} from '@deepseek-ai/dsh-client-locale/client'
 import { createSnapshotStore, type ClientContext } from '@deepseek-ai/dsh-client-runtime/client'
 import type { InputTriggerServiceContract } from '@deepseek-ai/dsh-client-ui-input-trigger/client'
-import { defaultPickerSettings, samePickerSettings, type ChatProvider, type PickerSettings, type SettingsRecord } from '../wire.ts'
+import { ALL_PROVIDERS, defaultPickerSettings, samePickerSettings, type ChatProvider, type PickerSettings, type SettingsRecord } from '../wire.ts'
 import { REFERENCE_ANYTHING_REMOTE, type ReferenceAnythingRemoteFace, type SearchResult, type SessionCandidate, type SyncStatus } from './remote.ts'
-import { COMMAND_SOURCE, CONVERSATION_SOURCE, FILE_SOURCE, SESSION_SOURCE, SKILL_SOURCE, conversationReferenceUri, createCommandSource, createConversationSource, createSearchDebounce, createSessionSource, createSkillSource, createWorkspaceSource } from './source.ts'
-import { ConversationsDock, ConversationSettings, PAGE_SIZE, type SettingsSnapshot } from './components.tsx'
+import { COMMAND_SOURCE, CONVERSATION_SOURCE, FILE_SOURCE, SESSION_SOURCE, SKILL_SOURCE, createCommandSource, createConversationSource, createSearchDebounce, createSessionSource, createSkillSource, createWorkspaceSource } from './source.ts'
+import { ConversationSettings, PAGE_SIZE, type SettingsSnapshot } from './components.tsx'
 import { adoptAdaptiveChipCaret, adoptConversationMentionProjection, adoptConversationSyncActionProjection, adoptMenuExpansionProjection, adoptMenuGroupTitleProjection, adoptReferenceIconProjection, adoptStyles } from './styles.ts'
 import { en, REFERENCE_ANYTHING_NS, zh } from './locale.ts'
 
@@ -23,7 +23,7 @@ export function apply(ctx: ClientContext): void {
   ctx.effect(() => adoptAdaptiveChipCaret(), 'reference-anything.client.adaptive-chip-caret')
   let remote: ReferenceAnythingRemoteFace | undefined
   const scope = createSnapshotStore<SettingsSnapshot>({
-    settings: { opencliPath: 'opencli', profile: '', detailConcurrency: 2, autoSync: false, autoSyncMinutes: 60, historyMode: 'metadata-only' }, loading: true,
+    settings: { opencliPath: 'opencli', profile: '', detailConcurrency: 8, autoSync: false, syncOnStartup: false, autoSyncMinutes: 60, historyMode: 'metadata-only', enabledProviders: [...ALL_PROVIDERS], maxReadTurns: 10 }, loading: true,
   })
   let currentJob = ''
   let poll: ReturnType<typeof setInterval> | undefined
@@ -39,7 +39,7 @@ export function apply(ctx: ClientContext): void {
   const refresh = async (): Promise<void> => {
     if (!remote) return
     try {
-      const [settings, health] = await Promise.all([remote.settingsGet(), remote.health()])
+      const [settings, health, storageResult] = await Promise.all([remote.settingsGet(), remote.health(), remote.storageStats()])
       let profiles = scope.getSnapshot().profiles
       try { profiles = unwrap(await remote.profiles()) } catch { /* Profile discovery failure is represented by bridge health. */ }
       let stats = scope.getSnapshot().stats
@@ -47,7 +47,7 @@ export function apply(ctx: ClientContext): void {
       try { stats = unwrap(await remote.stats()) } catch { statsUnavailable = true }
       const currentSettings = unwrap(settings)
       applySources?.(currentSettings.picker)
-      scope.set({ ...scope.getSnapshot(), settings: currentSettings, health: unwrap(health), profiles, stats,
+      scope.set({ ...scope.getSnapshot(), settings: currentSettings, health: unwrap(health), profiles, stats, storage: unwrap(storageResult),
         error: statsUnavailable && !stats ? 'Local conversation statistics are unavailable until the DSH host is restarted.' : undefined, loading: false })
     } catch (error) { scope.set({ ...scope.getSnapshot(), error: error instanceof Error ? error.message : String(error), loading: false }) }
   }
@@ -59,14 +59,20 @@ export function apply(ctx: ClientContext): void {
    * A failure leaves the last known figures rather than replacing the panel
    * with an error — the next tick tries again.
    */
-  const urlByUri = new Map<string, string>()
   // These defer rapid typing but deliberately retain no prior search rows.
   const conversationSearch = createSearchDebounce<SearchResult>()
   const sessionSearch = createSearchDebounce<SessionCandidate>()
   const refreshStats = async (): Promise<void> => {
     if (!remote) return
     try {
-      scope.set({ ...scope.getSnapshot(), stats: unwrap(await remote.stats()) })
+      const previous = scope.getSnapshot().stats
+      const stats = unwrap(await remote.stats())
+      const changed = !previous || stats.length !== previous.length || stats.some((row, index) => {
+        const before = previous[index]
+        return !before || row.provider !== before.provider || row.conversations !== before.conversations || row.lastSyncedAt !== before.lastSyncedAt
+      })
+      const storage = changed ? unwrap(await remote.storageStats()) : scope.getSnapshot().storage
+      scope.set({ ...scope.getSnapshot(), stats, storage })
     } catch { /* keep showing the last known statistics */ }
   }
   const browse = async (query: string, provider: ChatProvider | undefined, offset: number): Promise<void> => {
@@ -80,7 +86,6 @@ export function apply(ctx: ClientContext): void {
     if (!remote) return
     try {
       unwrap(await remote.deleteConversation({ uriId }))
-      urlByUri.delete(conversationReferenceUri(uriId))
       const current = scope.getSnapshot().browse
       await browse(current?.query ?? '', current?.provider, current?.offset ?? 0)
       await refreshStats()
@@ -123,9 +128,7 @@ export function apply(ctx: ClientContext): void {
       conversationSearch.run(query, signal, async () => {
         // Re-read after the debounce: the Remote can unmount with its scope.
         if (!remote) return []
-        const rows = unwrap(await remote.search({ query, ...(provider ? { provider } : {}), limit }, signal))
-        for (const row of rows) urlByUri.set(conversationReferenceUri(row.uriId), row.url)
-        return rows
+        return unwrap(await remote.search({ query, ...(provider ? { provider } : {}), limit }, signal))
       }), t, picker.conversations)
     const disposers: Array<() => void> = []
     if (picker.conversations.enabled) disposers.push(inputTriggers.registerSource(source))
@@ -146,6 +149,30 @@ export function apply(ctx: ClientContext): void {
       }), t, picker.sessions)))
     return disposers
   }
+  const refreshStorage = async (): Promise<void> => {
+    if (!remote) return
+    scope.set({ ...scope.getSnapshot(), storage: unwrap(await remote.storageStats()) })
+  }
+  const clearProvider = async (provider: ChatProvider): Promise<void> => {
+    if (!remote) return
+    try {
+      const count = unwrap(await remote.clearProvider({ provider }))
+      await Promise.all([refreshStats(), refreshStorage()])
+      const current = scope.getSnapshot().browse
+      if (current) await browse(current.query, current.provider, 0)
+      scope.set({ ...scope.getSnapshot(), notice: t('notice.cleared', { count }), error: undefined })
+    } catch (error) { scope.set({ ...scope.getSnapshot(), error: message(error) }) }
+  }
+  const clearOlder = async (days: number): Promise<void> => {
+    if (!remote) return
+    try {
+      const count = unwrap(await remote.clearOlder({ days }))
+      await Promise.all([refreshStats(), refreshStorage()])
+      const current = scope.getSnapshot().browse
+      if (current) await browse(current.query, current.provider, 0)
+      scope.set({ ...scope.getSnapshot(), notice: t('notice.cleared', { count }), error: undefined })
+    } catch (error) { scope.set({ ...scope.getSnapshot(), error: message(error) }) }
+  }
   applySources = (picker) => {
     const next = picker ?? defaultPickerSettings()
     // Settings unrelated to the @ picker (for example Auto sync) use the
@@ -160,11 +187,6 @@ export function apply(ctx: ClientContext): void {
   }
   applySources(undefined)
   ctx.effect(() => () => { for (const dispose of sourceDisposers) dispose() }, 'reference-anything.client.sources')
-
-  ctx.slots.inject('conversation.input.dock', () => ctx.slots.register({
-    name: 'conversation.input.dock', id: 'reference-anything', order: 25, locale: REFERENCE_ANYTHING_NS,
-    inject: () => ({ open: (uri: string) => { const url = urlByUri.get(uri); if (url) window.open(url, '_blank', 'noopener,noreferrer') } }),
-  }, ConversationsDock))
 
   const save = async (settings: SettingsRecord): Promise<void> => {
     if (!remote) return
@@ -192,7 +214,7 @@ export function apply(ctx: ClientContext): void {
     progressLabel: (completed, total) => t('menu.syncProgress', { completed, total }),
     completeLabel: t('sync.complete'), partialLabel: t('sync.partial'),
     failedLabel: t('sync.failed'), cancelledLabel: t('sync.cancelled'),
-    start: () => startSync(['chatgpt', 'claude', 'gemini', 'deepseek', 'grok', 'kimi'], 'incremental'),
+    start: () => startSync(scope.getSnapshot().settings.enabledProviders, 'incremental'),
     getStatus: () => scope.getSnapshot().sync,
     subscribe: listener => scope.subscribe(listener),
   }), 'reference-anything.client.conversation-sync-action')
@@ -207,7 +229,7 @@ export function apply(ctx: ClientContext): void {
   ctx.slots.inject('settings.section', () => ctx.slots.register({
     name: 'settings.section', id: 'reference-anything', order: 56, label: () => t('settings.title'), locale: REFERENCE_ANYTHING_NS,
     inject: () => ({
-      hooks: { scope }, save, sync: startSync, refresh, browse, deleteConversation, refreshStats,
+      hooks: { scope }, save, sync: startSync, refresh, browse, deleteConversation, clearProvider, clearOlder, refreshStats,
       install: async () => { try { if (!remote) return; unwrap(await remote.installAdapter()); await refresh(); scope.set({ ...scope.getSnapshot(), notice: t('notice.adapterInstalled') }) } catch (error) { scope.set({ ...scope.getSnapshot(), error: message(error) }) } },
       restartDaemon: async () => { try { if (!remote) return; unwrap(await remote.restartDaemon()); await refresh(); scope.set({ ...scope.getSnapshot(), notice: t('notice.daemonRestarted') }) } catch (error) { scope.set({ ...scope.getSnapshot(), error: message(error) }) } },
       cancel: async () => { try { if (remote && currentJob) unwrap(await remote.syncCancel({ jobId: currentJob })); await pollJob() } catch (error) { scope.set({ ...scope.getSnapshot(), error: message(error) }) } },

@@ -39,7 +39,7 @@ export const DEFAULT_TIMEOUT_MS = 30_000
 export const DEFAULT_READ_TURNS = 10
 
 /** Ceiling on the model-supplied turn limit when none is configured. */
-export const DEFAULT_MAX_READ_TURNS = 50
+export const DEFAULT_MAX_READ_TURNS = 100
 
 /** Deployment settings for the model-facing tools. */
 export interface Config {
@@ -222,7 +222,11 @@ export function apply(ctx: Context, config: Config = {}): void {
     async execute(args, exec) {
       const ref = decodeReferenceUri(args.uri)
       ctx.references.assertGranted(exec.agent ? String(exec.agent.session.id) : undefined, ref)
-      const window = parseWindow(args, readTurns, maxReadTurns)
+      const chatHistory = ctx.get('referenceChatHistory')
+      const userMaximum = ref.source === 'web-chat' && chatHistory
+        ? Math.min(maxReadTurns, chatHistory.store.settings.maxReadTurns)
+        : maxReadTurns
+      const window = parseWindow(args, Math.min(readTurns, userMaximum), userMaximum)
       const snapshot = await ctx.references.read(ref, window, exec.signal)
       const slice = snapshot.body
       // The turn window is the model's bound; this byte budget is only a

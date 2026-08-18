@@ -18,7 +18,7 @@ class Table<V> implements KvTable<string, V> {
 
 function store() {
   const tables = new Map<string, Table<never>>()
-  let settings: SettingsRecord = { opencliPath: 'opencli', profile: '', detailConcurrency: 2, autoSync: false, autoSyncMinutes: 60, historyMode: 'offline-mirror' }
+  let settings: SettingsRecord = { opencliPath: 'opencli', profile: '', detailConcurrency: 8, autoSync: false, syncOnStartup: false, autoSyncMinutes: 60, historyMode: 'offline-mirror', enabledProviders: ['chatgpt', 'claude', 'gemini', 'deepseek', 'grok', 'kimi'], maxReadTurns: 10 }
   const domain = {
     name: 'reference_anything',
     global: { get: () => settings, set: async (value: SettingsRecord) => { settings = value } },
@@ -71,19 +71,18 @@ describe('conversation mirror', () => {
     expect(db.attachments.size).toBe(0)
   })
 
-  it('writes immutable chunks and keeps an old cursor pinned across a new revision', async () => {
+  it('keeps only the newest revision and expires cursors into the replaced body', async () => {
     const db = store()
     const key = await db.putConversation(history, 'account-hash')
-    const oldRevision = await db.commitRevision(key, turns(61))
+    await db.commitRevision(key, turns(61))
     expect(db.chunks.size).toBe(2)
     const newest = db.read(key, { limit: 10 })
     expect(newest.body.items.map(item => item.text)).toEqual(turns(61).slice(51).map(row => row.text))
     const cursor = newest.body.nextCursor!
 
     await db.commitRevision(key, turns(70, 'new'))
-    const olderOldRevision = db.read(key, { limit: 10, cursor })
-    expect(olderOldRevision.revision).toBe(oldRevision)
-    expect(olderOldRevision.body.items[0]?.text).toBe('old-41')
+    expect(db.revisions.size).toBe(1)
+    expect(() => db.read(key, { limit: 10, cursor })).toThrow(/expired/u)
   })
 
   it('does not mix sibling ChatGPT branches into the readable transcript', async () => {
@@ -386,6 +385,33 @@ describe('management: browse and delete', () => {
     expect(db.attachments.size).toBe(0)
 
     expect(await db.remove(key)).toBe(false)
+  })
+
+  it('reports approximate storage and clears one provider including its sync state', async () => {
+    const db = store()
+    const chatgpt = await db.putConversation(history, 'scope')
+    await db.commitRevision(chatgpt, turns(2))
+    await db.putConversation({ ...history, provider: 'claude', id: 'claude-1' }, 'scope')
+    await db.syncStates.put('chatgpt:scope', {
+      provider: 'chatgpt', profile: '', accountScope: 'scope', cursor: '', status: 'idle',
+      lastSyncAt: '2026-08-17T00:00:00.000Z', lastCompleteScanAt: '2026-08-17T00:00:00.000Z',
+      error: '', completed: 1, total: 1, consecutiveFailures: 0, nextEligibleAt: '',
+    })
+    expect(db.storageStats()).toMatchObject({ conversations: 2 })
+    expect(db.storageStats().bytes).toBeGreaterThan(0)
+    expect(await db.removeProvider('chatgpt')).toBe(1)
+    expect([...db.conversations.entries()].map(([, row]) => row.provider)).toEqual(['claude'])
+    expect(db.revisions.size).toBe(0)
+    expect(db.syncStates.size).toBe(0)
+  })
+
+  it('clears conversations whose last update is older than the requested age', async () => {
+    const db = store()
+    await db.putConversation({ ...history, id: 'old', updatedAt: '2026-01-01T00:00:00.000Z' }, 'scope')
+    await db.putConversation({ ...history, id: 'recent', updatedAt: '2026-08-17T00:00:00.000Z' }, 'scope')
+    const now = Date.parse('2026-08-18T00:00:00.000Z')
+    expect(await db.removeOlderThan(30, now)).toBe(1)
+    expect([...db.conversations.entries()].map(([, row]) => row.externalId)).toEqual(['recent'])
   })
 
   it('summarizes per-provider sync state from the freshest attempt, without losing an older complete-scan time', async () => {

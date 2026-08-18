@@ -33,6 +33,7 @@ export interface SyncStatus {
 
 export interface ManagedConversation extends ConversationRow { remoteMissing: boolean }
 export interface BrowsePage { items: readonly ManagedConversation[]; total: number }
+export interface StorageStats { bytes: number; conversations: number }
 export interface ProviderSyncState {
   provider: ChatProvider; status: 'idle' | 'running' | 'cancelled' | 'failed'
   lastSyncAt: string; lastCompleteScanAt: string; error: string
@@ -58,5 +59,8 @@ export interface ReferenceAnythingRemoteFace {
   settingsUpdate(settings: SettingsRecord): Promise<RemoteResult<SettingsRecord>>
   browse(input: { query: string; provider?: ChatProvider; limit: number; offset: number }, signal?: AbortSignal): Promise<RemoteResult<BrowsePage>>
   deleteConversation(input: { uriId: string }, signal?: AbortSignal): Promise<RemoteResult<boolean>>
+  storageStats(): Promise<RemoteResult<StorageStats>>
+  clearProvider(input: { provider: ChatProvider }, signal?: AbortSignal): Promise<RemoteResult<number>>
+  clearOlder(input: { days: number }, signal?: AbortSignal): Promise<RemoteResult<number>>
   syncStates(): Promise<RemoteResult<readonly ProviderSyncState[]>>
 }

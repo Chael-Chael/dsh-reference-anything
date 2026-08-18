@@ -21,7 +21,7 @@ class Table<V> implements KvTable<string, V> {
 function store(overrides: Partial<SettingsRecord> = {}) {
   const tables = new Map<string, Table<never>>()
   let settings: SettingsRecord = {
-    opencliPath: 'opencli', profile: '', detailConcurrency: 2, autoSync: false, autoSyncMinutes: 60, historyMode: 'offline-mirror', ...overrides,
+    opencliPath: 'opencli', profile: '', detailConcurrency: 8, autoSync: false, syncOnStartup: false, autoSyncMinutes: 60, historyMode: 'offline-mirror', enabledProviders: ['chatgpt', 'claude', 'gemini', 'deepseek', 'grok', 'kimi'], maxReadTurns: 10, ...overrides,
   }
   const domain = {
     name: 'reference_anything',

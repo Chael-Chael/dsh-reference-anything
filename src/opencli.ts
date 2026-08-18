@@ -165,7 +165,10 @@ export class OpenCliRunner {
   }
 
   private async json(site: string, operation: string, args: string[], signal?: AbortSignal): Promise<Record<string, unknown>[]> {
-    const stdout = await this.raw([site, operation, ...args, '-f', 'json'], signal)
+    // Pin adapter traffic to a background tab. OpenCLI otherwise lets the
+    // process-wide OPENCLI_WINDOW environment variable override the adapter's
+    // defaultWindowMode, which could make an unattended sync steal focus.
+    const stdout = await this.raw([site, operation, ...args, '--window', 'background', '-f', 'json'], signal)
     try {
       const parsed: unknown = JSON.parse(stdout)
       if (!Array.isArray(parsed) || parsed.some(row => !row || typeof row !== 'object' || Array.isArray(row))) throw new Error('expected object array')

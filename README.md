@@ -1,8 +1,42 @@
-# dsh-reference-anything
+<a name="readme-top"></a>
+
+<div align="center">
+
+<h1>dsh-reference-anything</h1>
+
+One `@` to reference them all.
+
+[News](#news) · [Roadmap](#future-roadmap) · [安装](#安装) · [使用](#使用) · [报告问题][github-issues-link]
+
+<!-- SHIELD GROUP -->
+
+[![][github-version-shield]][github-releases-link]
+[![][typescript-shield]][typescript-link]
+[![][dsh-plugin-shield]][repository-link]<br/>
+[![][github-stars-shield]][github-stars-link]
+[![][github-forks-shield]][github-forks-link]
+[![][github-issues-shield]][github-issues-link]
+[![][github-license-shield]][github-license-link]
+
+</div>
 
 在 DeepSeek Harness（DSH）的统一 `@` 菜单里引用工作区文件/文件夹、DSH 会话，以及 ChatGPT、Claude、Gemini、DeepSeek、Grok 和 Kimi 的历史对话。
 
 插件把在线对话显式同步到 DSH 的本地镜像；输入 `@` 时只查询本地数据，不会在写提示词的过程中访问浏览器或 Provider。`@` 只把已授权的对话 URI 交给模型；模型判断确有需要时才调用 `reference_read` 拉取正文。
+
+## News
+
+- **2026-08-18 · v0.2.0** — 全新 Conversations 设置页，支持本地会话统计、分页管理、Provider/Profile 选择与同步状态检查。
+- **2026-08-18** — 引入按需读取协议：引用默认只传递安全指针，正文与附件由 agent 在获得授权后按需读取。
+- **2026-08-17** — ChatGPT、Claude、Gemini、DeepSeek、Grok 和 Kimi 统一接入 DSH 的 `@` 菜单。
+
+## Future Roadmap
+
+- [ ] 支持更多 AI 对话平台与可插拔 Provider。
+- [ ] 增量同步、后台自动同步与更细粒度的同步策略。
+- [ ] 更强的跨平台全文检索、过滤与会话管理能力。
+- [ ] 对引用来源、权限与上下文用量提供更直观的可视化。
+- [ ] 完善安装体验、诊断工具和跨平台兼容性。
 
 ## 架构
 
@@ -106,10 +140,10 @@ DSH 插件安装阶段不会静默修改 `~/.opencli/plugins`。如果 OpenCLI �
 
 - agent 需要正文时才调用 `reference_read({ uri, limit, cursor })`；同一页内部按时间正序展示，翻页方向从最新向更旧。
 - 初始条目的 `deferred=true` 时，首次调用只传 `uri`，不要传空的 `nextCursor`。
-- offline-mirror 下 `reference_read` 沿 revision 固定的 cursor 翻页；metadata-only 下每次读取都会重新向 Provider 请求正文。
+- offline-mirror 下 `reference_read` 沿当前 revision 的 cursor 翻页；metadata-only 下每次读取都会重新向 Provider 请求正文。
 - `before` 只作为一个版本的 deprecated 兼容参数；不能与 `cursor` 同时提供。
 - mention 或 `reference_list` 会授予当前 task 对 URI 的读取权限；未授权 URI 会被拒绝。
-- 每条 conversation 的旧 revision 至少保留 30 天，因此同步后旧 cursor 仍能重放原内容。
+- 每条 conversation 只保留最新 revision；正文更新后，指向旧 revision 的 cursor 会过期。
 - `reference_attachment_read` 单独校验 conversation 授权，附件上限为 25 MiB。
 - 同步只保存附件元数据和同源 locator，并将附件归类为 `image` 或 `file`；空地址和站点根路径不会标记为可用。
 - 不可读取的附件会在模型侧附加 `[User attached 1 image; image contents were not included]` 或对应的 file 提示，原始对话正文保持不变。
@@ -147,7 +181,7 @@ pnpm run build
 npm pack --dry-run
 ```
 
-测试覆盖同步中断、不可变 revision、旧 cursor、分支过滤、参数注入、输出上限、超时、权限、附件和 UI 引用 URI。Windows 无创建 symlink 权限时只跳过该项平台前置条件；Linux CI 或具备权限的 Windows 仍执行越界 symlink 安全测试。
+测试覆盖同步中断、最新 revision 替换、旧 cursor 过期、分支过滤、参数注入、输出上限、超时、权限、附件和 UI 引用 URI。Windows 无创建 symlink 权限时只跳过该项平台前置条件；Linux CI 或具备权限的 Windows 仍执行越界 symlink 安全测试。
 
 ## Acknowledgements
 
@@ -159,3 +193,20 @@ npm pack --dry-run
 ## 来源与许可
 
 本项目为 MIT。第三方代码的版权声明、许可证文本、移植来源及固定上游 commit 记录在 [NOTICE.md](./NOTICE.md)。OpenCLI 作为 Apache-2.0 外部依赖，不被打包进本插件。
+
+<!-- LINK GROUP -->
+
+[repository-link]: https://github.com/Chael-Chael/dsh-reference-anything
+[typescript-link]: https://www.typescriptlang.org/
+[typescript-shield]: https://img.shields.io/badge/TypeScript-3178C6?labelColor=black&logo=typescript&logoColor=white&style=flat-square
+[dsh-plugin-shield]: https://img.shields.io/badge/DSH-plugin-ffffff?labelColor=black&style=flat-square
+[github-version-shield]: https://img.shields.io/github/package-json/v/Chael-Chael/dsh-reference-anything?color=369eff&label=version&labelColor=black&style=flat-square
+[github-releases-link]: https://github.com/Chael-Chael/dsh-reference-anything/releases
+[github-stars-link]: https://github.com/Chael-Chael/dsh-reference-anything/stargazers
+[github-stars-shield]: https://img.shields.io/github/stars/Chael-Chael/dsh-reference-anything?color=ffcb47&labelColor=black&style=flat-square
+[github-forks-link]: https://github.com/Chael-Chael/dsh-reference-anything/forks
+[github-forks-shield]: https://img.shields.io/github/forks/Chael-Chael/dsh-reference-anything?color=8ae8ff&labelColor=black&style=flat-square
+[github-issues-link]: https://github.com/Chael-Chael/dsh-reference-anything/issues
+[github-issues-shield]: https://img.shields.io/github/issues/Chael-Chael/dsh-reference-anything?color=ff80eb&labelColor=black&style=flat-square
+[github-license-link]: https://github.com/Chael-Chael/dsh-reference-anything/blob/main/LICENSE
+[github-license-shield]: https://img.shields.io/badge/license-MIT-white?labelColor=black&style=flat-square
