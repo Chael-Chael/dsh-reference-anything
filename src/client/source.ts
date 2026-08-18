@@ -126,7 +126,10 @@ export function createWorkspaceSource(load: (sessionId: string, signal: AbortSig
     onPick({ candidate }) {
       const row = candidate.workspaceEntry
       if (!row) return undefined
-      const label = row.path.split('/').at(-1) ?? row.path
+      // A basename alone makes two selected files such as src/index.ts and
+      // tests/index.ts indistinguishable once their mentions are rendered to
+      // the model. Keep the workspace-relative path as the visible label.
+      const label = row.path
       const ref = JSON.stringify({ path: row.path, label })
       return { insert: { source: FILE_SOURCE, ref, label: `${row.kind === 'directory' ? '📁' : '📄'} ${label}`, clipboardText: workspaceMention(ref) } }
     },

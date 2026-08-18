@@ -112,14 +112,14 @@ describe('conversation client references', () => {
       .resolves.toBe(`@[ChatGPT · BiWM SFT Loss 解释](${conversationReferenceUri(row.uriId)})`)
   })
 
-  it('groups workspace paths and serializes a compact dsh-file chip', async () => {
+  it('groups workspace paths and serializes a relative-path dsh-file chip', async () => {
     const source = createWorkspaceSource(async () => [{ path: 'src/index.ts', kind: 'file' }])
     const candidates = await source.candidates({ sessionId: 'session-1' as never }, { query: 'index', position: 'inline', signal: new AbortController().signal })
     expect(source.name).toBe('Files and folders')
     const outcome = source.onPick({ candidate: candidates[0]!, session: { sessionId: 'session-1' as never }, position: 'inline', via: 'menu', span: { start: 0, end: 1, draftRev: 1 } })
     if (outcome === undefined || outcome === 'handled' || !('insert' in outcome)) throw new Error('expected file insert')
-    expect(outcome.insert.label).toBe('📄 index.ts')
-    await expect(source.codec?.serialize(outcome.insert.ref, new AbortController().signal)).resolves.toMatch(/^@\[index\.ts\]\(dsh-file:[A-Za-z0-9_-]+\)$/u)
+    expect(outcome.insert.label).toBe('📄 src/index.ts')
+    await expect(source.codec?.serialize(outcome.insert.ref, new AbortController().signal)).resolves.toMatch(/^@\[src\/index\.ts\]\(dsh-file:[A-Za-z0-9_-]+\)$/u)
   })
 
   it('uses the official dsh-session URI returned by the host', async () => {
