@@ -48,6 +48,13 @@ DSH 插件安装阶段不会静默修改 `~/.opencli/plugins`。如果 OpenCLI �
 4. 在输入框键入 `@`，从 `Files and folders`、`DSH sessions` 或 `External conversations` 分组选择来源。
 5. 可用 `@chatgpt 关键词`、`@claude 关键词` 等形式过滤候选。
 
+也可以使用 `类型:名称` 快速限定 `@` 面板，只显示对应分组：
+
+- `@chatgpt:标题`、`@claude:标题`、`@gemini:标题`、`@deepseek:标题`、`@grok:标题`
+- `@files:名称`、`@sessions:名称`、`@skills:名称`、`@commands:名称`
+
+冒号后可以留空以浏览该类型的全部候选，例如 `@skills:`。没有类型前缀时仍同时搜索所有分组。
+
 选中后草稿保存为规范的引用 mention：
 
 ```text

@@ -1,13 +1,9 @@
 import type { InjectFace, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import type { ObservableSnapshot } from '@deepseek-ai/dsh-client-runtime/client'
-import * as ClaudeModule from '@lobehub/icons/es/Claude/components/Mono.js'
-import * as DeepSeekModule from '@lobehub/icons/es/DeepSeek/components/Mono.js'
-import * as GeminiModule from '@lobehub/icons/es/Gemini/components/Mono.js'
-import * as OpenAIModule from '@lobehub/icons/es/OpenAI/components/Mono.js'
-import * as XAIModule from '@lobehub/icons/es/XAI/components/Mono.js'
-import { useEffect, useState, type ComponentType, type CSSProperties } from 'react'
+import { useEffect, useState, type CSSProperties } from 'react'
 import type { ChatProvider, SettingsRecord } from '../wire.ts'
 import type { BrowserProfile, Health, ProviderStats, SyncStatus } from './remote.ts'
+import { ProviderLogo } from './provider-icons.tsx'
 
 interface Mention { label: string; uri: string; start: number; end: number }
 const MENTION = /@\[([^\]]+)]\((dsh-ref:[A-Za-z0-9_-]+)\)/g
@@ -44,11 +40,6 @@ const PROVIDERS: ChatProvider[] = ['chatgpt', 'claude', 'gemini', 'deepseek', 'g
 const PROVIDER_LABEL: Record<ChatProvider, string> = {
   chatgpt: 'ChatGPT', claude: 'Claude', gemini: 'Gemini', deepseek: 'DeepSeek', grok: 'Grok',
 }
-const OpenAIIcon = OpenAIModule.default as unknown as ComponentType<{ size?: number }>
-const ClaudeIcon = ClaudeModule.default as unknown as ComponentType<{ size?: number }>
-const GeminiIcon = GeminiModule.default as unknown as ComponentType<{ size?: number }>
-const DeepSeekIcon = DeepSeekModule.default as unknown as ComponentType<{ size?: number }>
-const XAIIcon = XAIModule.default as unknown as ComponentType<{ size?: number }>
 export function ConversationSettings({ useScope, save, sync, cancel, refresh, install }: SettingsProps) {
   const state = useScope(value => value)
   const settings = state.settings
@@ -101,12 +92,4 @@ function ProviderCard({ provider, stats, busy, autoSync, onSync, index }: { prov
   const label = PROVIDER_LABEL[provider]
   const date = stats?.lastSyncedAt ? new Date(stats.lastSyncedAt).toLocaleString() : 'Never synced'
   return <article className={`dsh_ref_provider dsh_ref_provider_${provider}`} style={{ '--dsh-ref-index': index } as CSSProperties}><div className="dsh_ref_provider_top"><span className="dsh_ref_provider_mark"><ProviderLogo provider={provider} /></span><span className={`dsh_ref_status_dot is_${stats?.status || 'empty'}`} /><span>{stats?.status === 'error' ? 'Error' : stats?.status === 'syncing' ? 'Syncing' : stats?.conversations ? 'Connected' : 'Not synced'}</span></div><h4>{label}</h4><strong>{stats?.conversations ?? 0}</strong><p>local conversations</p><small>Last updated · {date}</small>{stats?.error && <em>{stats.error}</em>}<div className="dsh_ref_provider_foot"><span>{autoSync ? 'Auto sync on' : 'Manual sync'}</span><button type="button" disabled={busy} onClick={onSync}>Sync now</button></div></article>
-}
-
-function ProviderLogo({ provider }: { provider: ChatProvider }) {
-  if (provider === 'chatgpt') return <OpenAIIcon size={22} />
-  if (provider === 'claude') return <ClaudeIcon size={22} />
-  if (provider === 'gemini') return <GeminiIcon size={22} />
-  if (provider === 'deepseek') return <DeepSeekIcon size={22} />
-  return <XAIIcon size={22} />
 }

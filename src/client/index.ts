@@ -7,13 +7,15 @@ import type { ChatProvider, SettingsRecord } from '../wire.ts'
 import { REFERENCE_ANYTHING_REMOTE, type ReferenceAnythingRemoteFace, type SyncStatus } from './remote.ts'
 import { conversationReferenceUri, createCommandSource, createConversationSource, createSessionSource, createSkillSource, createWorkspaceSource } from './source.ts'
 import { ConversationsDock, ConversationSettings, type SettingsSnapshot } from './components.tsx'
-import { adoptConversationMentionProjection, adoptStyles } from './styles.ts'
+import { adoptAdaptiveChipCaret, adoptConversationMentionProjection, adoptReferenceIconProjection, adoptStyles } from './styles.ts'
 
 export const inject = ['inputTriggers', 'remote', 'slots', 'connection']
 
 export function apply(ctx: ClientContext): void {
   adoptStyles()
+  ctx.effect(() => adoptReferenceIconProjection(), 'reference-anything.client.icon-projection')
   ctx.effect(() => adoptConversationMentionProjection(), 'reference-anything.client.message-projection')
+  ctx.effect(() => adoptAdaptiveChipCaret(), 'reference-anything.client.adaptive-chip-caret')
   let remote: ReferenceAnythingRemoteFace | undefined
   const scope = createSnapshotStore<SettingsSnapshot>({
     settings: { opencliPath: 'opencli', profile: '', detailConcurrency: 2, autoSync: false, autoSyncMinutes: 60 }, loading: true,

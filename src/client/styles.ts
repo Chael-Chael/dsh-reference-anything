@@ -1,8 +1,21 @@
+import type { ChatProvider } from '../wire.ts'
+import { PROVIDER_ICON_MARKER, PROVIDER_ICON_PATH } from './provider-icons.tsx'
+
 const css = `
 /* The unified @ trigger menu is owned by DSH, but the plugin can style its
    public ARIA/data contract without depending on generated CSS-module names. */
-[data-composer-card] [role="listbox"]:has([role="presentation"][data-source]){width:100%!important;min-width:0!important;max-width:100%!important;border-radius:22px!important}
+[data-composer-card] [role="listbox"]:has([role="presentation"][data-source]){box-sizing:border-box!important;width:100%!important;min-width:0!important;max-width:100%!important;border-radius:22px!important}
 [data-composer-card] [role="listbox"] [role="presentation"][data-source]:not(:first-child){margin-top:4px;padding-top:12px;border-top:1px solid var(--dsw-alias-border-inverted)}
+/* Codex-like inline references: no filled rounded rectangle. The label uses
+   the same semantic blue as DSH's send button/caret and is allowed to show
+   its complete title instead of the core chip's ellipsis projection. */
+[data-composer-card] [data-decoration="chip"]{display:inline-flex!important;align-items:center!important;width:max-content!important;min-width:4em;border-radius:0!important;background:transparent!important;overflow:visible!important;vertical-align:baseline}
+[data-composer-card] [data-decoration="chip"]:before{display:none!important}
+[data-composer-card] [data-decoration="chip"]>span{position:static!important;width:max-content!important;max-width:none!important;justify-content:flex-start!important;overflow:visible!important;color:var(--dsw-alias-state-business-primary)!important;font-family:inherit!important;font-size:inherit!important;line-height:inherit!important;font-weight:600;transform:none!important;z-index:2}
+.dsh_ref_projected_icon{display:inline-flex!important;align-items:center;gap:.35em}.dsh_ref_projected_icon:before{content:"";display:inline-block;flex:none;width:1em;height:1em;background:currentColor;mask:var(--dsh-ref-provider-icon) center/contain no-repeat;-webkit-mask:var(--dsh-ref-provider-icon) center/contain no-repeat}
+[data-composer-card] [data-decoration="text-ref"]{border-radius:0!important;background:transparent!important;color:var(--dsw-alias-state-business-primary)!important;font-family:inherit!important;font-size:inherit!important;line-height:inherit!important;font-weight:600;box-shadow:none!important}
+[data-composer-card] [data-decoration="text-ref"]:before,[data-composer-card] [data-decoration="text-ref"]:after{display:none!important}
+.dsh_ref_native_caret_hidden{caret-color:transparent!important}.dsh_ref_adaptive_caret{position:fixed;z-index:9999;box-sizing:border-box;width:1px;margin:0;padding:0;border:0;border-radius:0;pointer-events:none;background:var(--dsw-alias-state-business-primary);opacity:1;animation:dsh_ref_caret_blink 1.06s step-end infinite;transform:translateZ(0)}.dsh_ref_adaptive_caret[hidden]{display:none!important}@keyframes dsh_ref_caret_blink{0%,49.99%{opacity:1}50%,100%{opacity:0}}
 .dsh_ref_message_reference{display:inline-flex;align-items:center;gap:6px;max-width:100%;color:#82b1e4;font-weight:600;white-space:nowrap;vertical-align:baseline}.dsh_ref_message_reference:before{content:"";display:inline-block;flex:none;width:20px;height:20px;background:currentColor;mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round' d='M20 11.5a8 8 0 0 1-8.5 8A8.9 8.9 0 0 1 7.7 18.6L3.5 20l1.4-3.7A8 8 0 1 1 20 11.5Z'/%3E%3C/svg%3E") center/contain no-repeat}
 .dsh_ref_rail{display:flex;flex-wrap:wrap;gap:8px;width:calc(100% - var(--dsh-composer-side-clearance)*2);max-width:var(--dsh-composer-card-max-width);margin:0 auto}.dsh_ref_chip{display:inline-flex;align-items:center;min-height:28px}.dsh_ref_open,.dsh_ref_remove{border:0;background:none;font:inherit;cursor:pointer}.dsh_ref_open{display:flex;align-items:center;gap:6px;padding:0;max-width:420px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#82b1e4;font-size:18px;font-weight:600;line-height:28px}.dsh_ref_chip_mark{display:inline-flex;flex:none;width:20px;height:20px}.dsh_ref_chip_mark svg{width:100%;height:100%}.dsh_ref_remove{width:20px;padding:0;color:var(--dsw-alias-label-dimmed);font-size:17px;line-height:1}
 .dsh_ref_settings{display:flex;flex-direction:column;gap:18px;width:min(100%,1060px);padding:0 0 36px;color:var(--dsw-alias-label-primary);font-family:Geist,"Segoe UI",sans-serif}.dsh_ref_settings *{box-sizing:border-box}.dsh_ref_header{display:flex;align-items:flex-start;justify-content:space-between;gap:24px;padding:0 0 10px}.dsh_ref_header h2{margin:0 0 7px;font-size:28px;line-height:1.1;letter-spacing:-.035em}.dsh_ref_header p{margin:0;max-width:620px;color:var(--dsw-alias-label-primary);font-size:13px;line-height:1.5}.dsh_ref_settings button{min-height:34px;padding:0 13px;border:1px solid var(--dsw-alias-label-primary);border-radius:5px;background:transparent;color:var(--dsw-alias-label-primary);font:inherit;font-size:12px;font-weight:650;cursor:pointer}.dsh_ref_settings button:hover:not(:disabled){background:var(--dsw-alias-label-primary);color:var(--dsw-alias-bg-layer-1)}.dsh_ref_settings button:active:not(:disabled){transform:translateY(1px)}.dsh_ref_settings button:disabled{cursor:not-allowed;opacity:.42}
@@ -59,4 +72,177 @@ export function adoptConversationMentionProjection(): () => void {
   })
   observer.observe(document.body, { childList: true, subtree: true })
   return () => { observer.disconnect() }
+}
+
+/** Keep the visible caret aligned with content-sized reference labels. */
+export function adoptAdaptiveChipCaret(): () => void {
+  const caret = document.createElement('i')
+  caret.className = 'dsh_ref_adaptive_caret'
+  caret.hidden = true
+  document.body.append(caret)
+  let frame = 0
+  let restartBlink = false
+  let composing = false
+  const schedule = (restart = false): void => {
+    restartBlink ||= restart
+    cancelAnimationFrame(frame)
+    frame = requestAnimationFrame(update)
+  }
+  const update = (): void => {
+    const input = document.activeElement
+    if (!(input instanceof HTMLTextAreaElement) || input.selectionStart !== input.selectionEnd) return hide()
+    const card = input.closest('[data-composer-card]')
+    const backdrop = card?.querySelector('[data-input-backdrop]')
+    if (!(backdrop instanceof HTMLElement) || backdrop.querySelector('[data-decoration="chip"]') === null) return hide()
+    const range = rangeAtLogicalOffset(backdrop, input.selectionEnd)
+    if (range === undefined) return hide()
+    const measured = range.getBoundingClientRect()
+    const rect = usableCaretRect(measured) ? measured : chipBoundaryRectAtLogicalOffset(backdrop, input.selectionEnd)
+    if (rect === undefined) return hide()
+    // Read the host caret colour without our own transparent override. On a
+    // later update the class is already present; reading first would copy
+    // `transparent` onto the painted caret and make it disappear.
+    input.classList.remove('dsh_ref_native_caret_hidden')
+    const style = getComputedStyle(input)
+    const lineHeight = Number.parseFloat(style.lineHeight)
+    const fontSize = Number.parseFloat(style.fontSize)
+    const resolvedLineHeight = Number.isFinite(lineHeight) ? lineHeight : fontSize * 1.2
+    const resolvedFontSize = Number.isFinite(fontSize) ? fontSize : resolvedLineHeight
+    // Chromium paints a textarea caret against the font's em box, centred in
+    // the line box. Snap to physical pixels so a scaled/DPI display does not
+    // turn the nominal one-pixel stem into a blurred 1.5px line.
+    const ratio = window.devicePixelRatio || 1
+    const snap = (value: number): number => Math.round(value * ratio) / ratio
+    const caretHeight = snap(Math.min(resolvedLineHeight, resolvedFontSize))
+    input.classList.add('dsh_ref_native_caret_hidden')
+    caret.hidden = false
+    caret.style.left = `${snap(rect.left)}px`
+    caret.style.top = `${snap(rect.top + Math.max(0, (resolvedLineHeight - caretHeight) / 2))}px`
+    caret.style.width = '1px'
+    caret.style.height = `${caretHeight}px`
+    // Some embedded Chromium builds expose the computed value as `auto`.
+    // Keep the semantic CSS fallback in that case instead of assigning an
+    // invalid background colour and making the caret disappear.
+    if (style.caretColor !== '' && style.caretColor !== 'auto') caret.style.backgroundColor = style.caretColor
+    else caret.style.removeProperty('background-color')
+    if (restartBlink && !composing) {
+      // Restart from the visible phase without depending on Web Animations,
+      // which is missing in some WebView builds used by desktop shells.
+      caret.style.animation = 'none'
+      void caret.offsetWidth
+      caret.style.removeProperty('animation')
+    }
+    restartBlink = false
+  }
+  const hide = (): void => {
+    document.querySelectorAll('.dsh_ref_native_caret_hidden').forEach(node => node.classList.remove('dsh_ref_native_caret_hidden'))
+    caret.hidden = true
+  }
+  const observer = new MutationObserver(() => schedule())
+  observer.observe(document.body, { childList: true, subtree: true, characterData: true })
+  const passiveEvents = ['selectionchange', 'focusout', 'scroll'] as const
+  const activeEvents = ['input', 'keyup', 'pointerup', 'focusin'] as const
+  const onPassive = (): void => { schedule() }
+  const onActive = (): void => { schedule(true) }
+  const onCompositionStart = (): void => { composing = true; schedule(true) }
+  const onCompositionEnd = (): void => { composing = false; schedule(true) }
+  for (const event of passiveEvents) document.addEventListener(event, onPassive, true)
+  for (const event of activeEvents) document.addEventListener(event, onActive, true)
+  document.addEventListener('compositionstart', onCompositionStart, true)
+  document.addEventListener('compositionend', onCompositionEnd, true)
+  schedule()
+  return () => {
+    cancelAnimationFrame(frame)
+    observer.disconnect()
+    for (const event of passiveEvents) document.removeEventListener(event, onPassive, true)
+    for (const event of activeEvents) document.removeEventListener(event, onActive, true)
+    document.removeEventListener('compositionstart', onCompositionStart, true)
+    document.removeEventListener('compositionend', onCompositionEnd, true)
+    hide()
+    caret.remove()
+  }
+}
+
+/** Render one shared provider SVG in both the @ menu and the selected chip. */
+export function adoptReferenceIconProjection(): () => void {
+  const providers = Object.keys(PROVIDER_ICON_MARKER) as ChatProvider[]
+  const project = (root: ParentNode): void => {
+    const nodes = root instanceof Element && root.matches('span') ? [root] : Array.from(root.querySelectorAll('span'))
+    for (const node of nodes) {
+      const text = node.textContent ?? ''
+      const provider = providers.find(key => text.startsWith(PROVIDER_ICON_MARKER[key]))
+      if (provider === undefined) continue
+      node.textContent = text.slice(PROVIDER_ICON_MARKER[provider].length).trimStart()
+      node.classList.add('dsh_ref_projected_icon')
+      node.setAttribute('data-dsh-ref-provider-icon', provider)
+      const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="${PROVIDER_ICON_PATH[provider]}"/></svg>`
+      node.setAttribute('style', `${node.getAttribute('style') ?? ''};--dsh-ref-provider-icon:url("data:image/svg+xml,${encodeURIComponent(svg)}")`)
+      const chip = node.closest('[data-decoration="chip"]')
+      if (chip !== null) chip.setAttribute('title', node.textContent ?? '')
+    }
+  }
+  project(document)
+  const observer = new MutationObserver(records => {
+    for (const record of records) {
+      if (record.type === 'characterData' && record.target.parentElement !== null) project(record.target.parentElement)
+      for (const node of Array.from(record.addedNodes)) {
+        if (node instanceof Element) project(node)
+        else if (node.parentElement !== null) project(node.parentElement)
+      }
+    }
+  })
+  observer.observe(document.body, { childList: true, subtree: true, characterData: true })
+  return () => { observer.disconnect() }
+}
+
+function usableCaretRect(rect: DOMRect): boolean {
+  return rect.height > 0 || rect.top !== 0 || rect.left !== 0
+}
+
+/** Fallback for Chromium returning an empty collapsed Range immediately after a chip. */
+function chipBoundaryRectAtLogicalOffset(root: HTMLElement, target: number): Pick<DOMRect, 'left' | 'top'> | undefined {
+  let logical = 0
+  const visit = (parent: Node): Pick<DOMRect, 'left' | 'top'> | undefined => {
+    for (const child of Array.from(parent.childNodes)) {
+      if (child instanceof Element && child.matches('[data-decoration="chip"]')) {
+        const chip = child.getBoundingClientRect()
+        if (target === logical) return { left: chip.left, top: chip.top }
+        logical += 1
+        if (target === logical) return { left: chip.right, top: chip.top }
+        continue
+      }
+      if (child instanceof Text) { logical += child.data.length; continue }
+      const found = visit(child)
+      if (found !== undefined) return found
+    }
+    return undefined
+  }
+  return visit(root)
+}
+
+function rangeAtLogicalOffset(root: HTMLElement, target: number): Range | undefined {
+  const range = document.createRange()
+  let logical = 0
+  const visit = (parent: Node): boolean => {
+    for (const child of Array.from(parent.childNodes)) {
+      if (child instanceof Element && child.matches('[data-decoration="chip"]')) {
+        if (target <= logical) { range.setStartBefore(child); range.collapse(true); return true }
+        logical += 1
+        if (target <= logical) { range.setStartAfter(child); range.collapse(true); return true }
+        continue
+      }
+      if (child instanceof Text) {
+        const end = logical + child.data.length
+        if (target <= end) { range.setStart(child, Math.max(0, target - logical)); range.collapse(true); return true }
+        logical = end
+        continue
+      }
+      if (visit(child)) return true
+    }
+    return false
+  }
+  if (visit(root)) return range
+  range.selectNodeContents(root)
+  range.collapse(false)
+  return range
 }

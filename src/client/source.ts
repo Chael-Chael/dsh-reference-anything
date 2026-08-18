@@ -3,6 +3,7 @@ import type { SessionId } from '@deepseek-ai/dsh-client-runtime/client'
 import type { ChatProvider } from '../wire.ts'
 import { encodeReferenceUri } from '../uri-codec.ts'
 import type { SearchResult, SessionCandidate, WorkspaceEntry } from './remote.ts'
+import { PROVIDER_ICON_MARKER } from './provider-icons.tsx'
 
 declare module '@deepseek-ai/dsh-client-ui-input-trigger/client' {
   interface InputTriggerCandidate {
@@ -22,6 +23,16 @@ const FILE_SOURCE = 'Files and folders'
 const SESSION_SOURCE = 'DSH sessions'
 const COMMAND_SOURCE = 'Commands'
 const SKILL_SOURCE = 'Skills'
+
+type SourceScope = 'commands' | 'skills' | 'files' | 'sessions' | 'conversations'
+const PREFIX_SCOPE: Readonly<Record<string, SourceScope>> = {
+  command: 'commands', commands: 'commands', cmd: 'commands',
+  skill: 'skills', skills: 'skills',
+  file: 'files', files: 'files', folder: 'files', folders: 'files', path: 'files',
+  session: 'sessions', sessions: 'sessions', dsh: 'sessions',
+  chat: 'conversations', conversation: 'conversations', conversations: 'conversations',
+  chatgpt: 'conversations', claude: 'conversations', gemini: 'conversations', deepseek: 'conversations', grok: 'conversations',
+}
 
 interface ConversationReference {
   uriId: string
@@ -50,12 +61,15 @@ export function createConversationSource(search: (
   return {
     trigger: '@', name: CONVERSATION_SOURCE, order: 30,
     async candidates(_session, { query, signal }) {
+      const scoped = scopedQuery(query, 'conversations')
+      if (scoped === undefined) return []
       const parsed = parseQuery(query)
+      if (parsed.provider === undefined && scoped !== query.trim()) parsed.query = scoped
       const rows = await search(parsed.query, parsed.provider, signal)
       return rows.map((row): InputTriggerCandidate => ({
         name: row.title,
         description: `${LABEL[row.provider]} · ${row.turnCount} turns · ${formatDate(row.updatedAt)}${row.partial ? ' · partial' : ''}`,
-        icon: '💬', conversation: row,
+        icon: PROVIDER_ICON_MARKER[row.provider], conversation: row,
       }))
     },
     onPick({ candidate }) {
@@ -69,7 +83,7 @@ export function createConversationSource(search: (
           ref: encodeConversationReference(reference),
           // The input's object replacement chip keeps the transport URI out
           // of the textarea while retaining a compact, recognizable label.
-          label: `💬 ${title}`,
+          label: `${PROVIDER_ICON_MARKER[row.provider]} ${title}`,
           clipboardText: formatConversationMention(reference),
         },
       }
@@ -86,9 +100,11 @@ export function createWorkspaceSource(load: (sessionId: string, signal: AbortSig
   return {
     trigger: '@', name: FILE_SOURCE, order: 10,
     async candidates(session, { query, signal }) {
+      const scoped = scopedQuery(query, 'files')
+      if (scoped === undefined) return []
       let entries = cache.get(session.sessionId)
       if (!entries) { entries = await load(session.sessionId, signal); cache.set(session.sessionId, entries) }
-      const needle = query.trim().toLocaleLowerCase()
+      const needle = scoped.toLocaleLowerCase()
       return entries.filter(row => row.path.toLocaleLowerCase().includes(needle)).sort((a, b) => rankPath(a.path, needle) - rankPath(b.path, needle) || a.path.localeCompare(b.path)).slice(0, 12).map(row => ({
         name: row.path.split('/').at(-1) ?? row.path,
         description: row.path,
@@ -111,7 +127,9 @@ export function createSessionSource(search: (sessionId: string, query: string, s
   return {
     trigger: '@', name: SESSION_SOURCE, order: 20,
     async candidates(session, { query, signal }) {
-      return (await search(session.sessionId, query.trim(), signal)).map(row => ({
+      const scoped = scopedQuery(query, 'sessions')
+      if (scoped === undefined) return []
+      return (await search(session.sessionId, scoped, signal)).map(row => ({
         name: row.label, description: row.cwd ?? new Date(row.createdAt).toLocaleString(), icon: '💬', sessionCandidate: row,
       }))
     },
@@ -133,7 +151,9 @@ export function createCommandSource(load: (sessionId: SessionId, signal: AbortSi
     trigger: '@', name: COMMAND_SOURCE, order: 0,
     async candidates(session, { query, position, signal }) {
       if (position !== 'leading') return []
-      const needle = query.trim().toLocaleLowerCase()
+      const scoped = scopedQuery(query, 'commands')
+      if (scoped === undefined) return []
+      const needle = scoped.toLocaleLowerCase()
       return (await load(session.sessionId, signal))
         .filter(row => row.name.toLocaleLowerCase().includes(needle))
         .map(row => ({ name: row.name, description: row.description, hint: row.input?.hint, icon: '⌘', commandName: row.name }))
@@ -148,9 +168,11 @@ export function createSkillSource(load: (sessionId: SessionId, signal: AbortSign
     trigger: '@', name: SKILL_SOURCE, order: 5,
     async candidates(session, { query, position, signal }) {
       if (position !== 'leading') return []
+      const scoped = scopedQuery(query, 'skills')
+      if (scoped === undefined) return []
       let rows = cache.get(session.sessionId)
       if (!rows) { rows = await load(session.sessionId, signal); cache.set(session.sessionId, rows) }
-      const needle = query.trim().toLocaleLowerCase()
+      const needle = scoped.toLocaleLowerCase()
       return rows.filter(row => row.name.toLocaleLowerCase().includes(needle)).map(row => ({
         name: row.name,
         description: `${row.modelInvocable === false ? 'user-only · ' : ''}${row.description}`,
@@ -192,8 +214,18 @@ export function conversationReferenceUri(uriId: string): string {
 }
 
 export function parseQuery(value: string): { query: string; provider?: ChatProvider } {
-  const match = value.trim().match(/^(chatgpt|claude|gemini|deepseek|grok)(?:\s+|$)(.*)$/i)
+  const match = value.trim().match(/^(chatgpt|claude|gemini|deepseek|grok)(?::|\s+|$)(.*)$/i)
   return match ? { provider: match[1]!.toLowerCase() as ChatProvider, query: (match[2] || '').trim() } : { query: value.trim() }
+}
+
+/** Route `type:name` autocomplete syntax to one @ source and strip its prefix. */
+export function scopedQuery(value: string, scope: SourceScope): string | undefined {
+  const trimmed = value.trim()
+  const match = trimmed.match(/^([a-z-]+):(.*)$/iu)
+  if (!match) return trimmed
+  const requested = PREFIX_SCOPE[match[1]!.toLocaleLowerCase()]
+  if (requested === undefined) return trimmed
+  return requested === scope ? (match[2] ?? '').trim() : undefined
 }
 
 function formatDate(value: string): string {

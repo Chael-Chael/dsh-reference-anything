@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { conversationMentions } from '../src/client/components.tsx'
-import { conversationReferenceUri, createCommandSource, createConversationSource, createSessionSource, createSkillSource, createWorkspaceSource, parseQuery } from '../src/client/source.ts'
+import { conversationReferenceUri, createCommandSource, createConversationSource, createSessionSource, createSkillSource, createWorkspaceSource, parseQuery, scopedQuery } from '../src/client/source.ts'
 import { REFERENCE_ANYTHING_INVOCATIONS } from '../src/contract.ts'
 import { decodeReferenceUri } from '../src/uri.ts'
 
@@ -21,7 +21,16 @@ describe('conversation client references', () => {
 
   it('parses a provider prefix without treating ordinary search text as one', () => {
     expect(parseQuery('chatgpt cache design')).toEqual({ provider: 'chatgpt', query: 'cache design' })
+    expect(parseQuery('chatgpt:cache design')).toEqual({ provider: 'chatgpt', query: 'cache design' })
     expect(parseQuery('cache design')).toEqual({ query: 'cache design' })
+  })
+
+  it('routes type:name prefixes to one @ group while keeping unprefixed search global', () => {
+    expect(scopedQuery('skills:creator', 'skills')).toBe('creator')
+    expect(scopedQuery('skills:creator', 'files')).toBeUndefined()
+    expect(scopedQuery('chatgpt:loss', 'conversations')).toBe('loss')
+    expect(scopedQuery('ordinary search', 'files')).toBe('ordinary search')
+    expect(scopedQuery('unknown:value', 'files')).toBe('unknown:value')
   })
 
   it('inserts a visual composer chip while serializing the canonical mention on send', async () => {
@@ -34,7 +43,7 @@ describe('conversation client references', () => {
       candidate: { name: row.title, conversation: row }, session: { sessionId: 'session-1' as never },
       position: 'inline', via: 'menu', span: { start: 0, end: 1, draftRev: 1 },
     })
-    expect(outcome).toMatchObject({ insert: { source: 'External conversations', label: '💬 ChatGPT · BiWM SFT Loss 解释' } })
+    expect(outcome).toMatchObject({ insert: { source: 'External conversations', label: '\uE100 ChatGPT · BiWM SFT Loss 解释' } })
     if (outcome === undefined || outcome === 'handled' || !('insert' in outcome)) throw new Error('expected reference insert')
     await expect(source.codec?.serialize(outcome.insert.ref, new AbortController().signal))
       .resolves.toBe(`@[ChatGPT · BiWM SFT Loss 解释](${conversationReferenceUri(row.uriId)})`)
