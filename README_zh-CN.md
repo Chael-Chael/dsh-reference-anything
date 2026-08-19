@@ -22,6 +22,12 @@ One `@` to reference them all.
 
 </div>
 
+<div align="center">
+
+<img src="./images/demo.gif" alt="dsh-reference-anything 功能演示" width="800" />
+
+</div>
+
 在 DeepSeek Harness（DSH）的统一 `@` 菜单里引用命令、Skills、工作区文件/文件夹、DSH 会话，以及来自 ChatGPT、Claude、Gemini、DeepSeek、Grok 和 Kimi 的历史对话。
 
 本插件通过 OpenCLI 复用用户已登录的 AI 对话窗口来获取历史对话。默认仅在本地保存对话标题；当需要查看正文时，Agent 会根据任务需求按需获取远端内容。用户也可以切换至离线镜像模式，在本地保存最新的完整正文。
