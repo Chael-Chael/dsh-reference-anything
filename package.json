@@ -3,6 +3,9 @@
   "version": "0.2.0",
   "description": "Reference locally mirrored ChatGPT, Claude, Gemini, DeepSeek, Grok, and Kimi conversations from DeepSeek Harness",
   "license": "MIT",
+  "publishConfig": {
+    "access": "public"
+  },
   "type": "module",
   "repository": {
     "type": "git",
@@ -51,7 +54,7 @@
     "opencli-plugin/opencli-plugin.json",
     "opencli-plugin/package.json",
     "cordis.patch.yml",
-    "logo.png",
+    "images/logo.png",
     "NOTICE.md",
     "README.md"
   ],
@@ -76,6 +79,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
     "check": "pnpm run typecheck && pnpm run test && pnpm run build",
+    "prepublishOnly": "pnpm run check",
     "prepare": "node build.mjs"
   },
   "peerDependencies": {

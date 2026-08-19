@@ -35,6 +35,7 @@ One `@` to reference them all.
 ## Roadmap
 
 - [ ] 支持引用本地其他 Agent 的历史对话
+- [ ] 更多的关键词搜索匹配规则，黑名单白名单（特别对于file search）
 - [ ] 支持引用更多 AI 对话平台消息（欢迎大家提意见！）
 - [ ] 支持引用电脑上打开的应用窗口、浏览器窗口
 - [ ] 更多 Idea 欢迎在 Issues 中提出！
@@ -60,13 +61,19 @@ ChatGPT / Claude / Gemini / DeepSeek / Grok / Kimi
 - 已安装并启动 `dsh`；自动安装 OpenCLI 时需要本机 Node.js 附带的 `npm`。
 - 要同步的平台已在所选 Chrome Profile 中登录。
 
-安装 DSH 插件：
+从 npm 安装 DSH 插件：
+
+```powershell
+dsh plugin --profile web add dsh-reference-anything
+```
+
+开发仓库也可以继续使用本地路径安装：
 
 ```powershell
 dsh plugin --profile web add D:\dsh-reference-anything
 ```
 
-安装 DSH 插件后，打开 DSH Web 的 `Settings → Conversations → 可用性检查`，点击**「一键安装」**：它会自动查找 OpenCLI，找不到或版本过低时通过 npm 安装/升级，安装仓库内的 OpenCLI 适配器（等价于 `opencli plugin install file:///D:/dsh-reference-anything/opencli-plugin`）、启动或刷新 Browser Bridge 守护进程，并立即打开 OpenCLI Browser Bridge 扩展的 Chrome Web Store 安装页（`https://chromewebstore.google.com/detail/opencli/ildkmabpimmkaediidaifkhjpohdnifk`）。在商店页确认安装后，回到设置页点击「重新检查」；每个仍未通过的检查项旁都会显示对应恢复操作。
+安装 DSH 插件后，打开 DSH Web 的 `Settings → Conversations → 可用性检查`，点击**「一键安装」**：它会自动查找 OpenCLI，找不到或版本过低时通过 npm 安装/升级，安装 npm 包内附带的 OpenCLI 适配器、启动或刷新 Browser Bridge 守护进程，并立即打开 OpenCLI Browser Bridge 扩展的 Chrome Web Store 安装页（`https://chromewebstore.google.com/detail/opencli/ildkmabpimmkaediidaifkhjpohdnifk`）。在商店页确认安装后，回到设置页点击「重新检查」；每个仍未通过的检查项旁都会显示对应恢复操作。
 
 也可以手动分别完成：
 

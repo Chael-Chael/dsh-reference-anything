@@ -60,13 +60,19 @@ Prerequisites:
 - `dsh` is installed and running; automatic OpenCLI installation requires the `npm` bundled with Node.js.
 - The target platforms are already logged in under the selected Chrome Profile.
 
-Install the DSH plugin:
+Install the DSH plugin from npm:
+
+```powershell
+dsh plugin --profile web add dsh-reference-anything
+```
+
+For development, the repository can still be installed from a local path:
 
 ```powershell
 dsh plugin --profile web add D:\dsh-reference-anything
 ```
 
-After installing the DSH plugin, open `Settings → Conversations → Availability check` in DSH Web and click **Install all**. It discovers OpenCLI, installs or upgrades it through npm when missing or outdated, installs the repository’s adapters (equivalent to `opencli plugin install file:///D:/dsh-reference-anything/opencli-plugin`), starts or refreshes Browser Bridge, and immediately opens the OpenCLI Browser Bridge page in the [Chrome Web Store](https://chromewebstore.google.com/detail/opencli/ildkmabpimmkaediidaifkhjpohdnifk). Confirm the extension installation, then return and click **Check again**. Any remaining failed check displays its own recovery action.
+After installing the DSH plugin, open `Settings → Conversations → Availability check` in DSH Web and click **Install all**. It discovers OpenCLI, installs or upgrades it through npm when missing or outdated, installs the OpenCLI adapters bundled in the npm package, starts or refreshes Browser Bridge, and immediately opens the OpenCLI Browser Bridge page in the [Chrome Web Store](https://chromewebstore.google.com/detail/opencli/ildkmabpimmkaediidaifkhjpohdnifk). Confirm the extension installation, then return and click **Check again**. Any remaining failed check displays its own recovery action.
 
 You can also complete the steps manually:
 

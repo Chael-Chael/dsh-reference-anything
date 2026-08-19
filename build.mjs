@@ -38,6 +38,6 @@ await build({
   footer: { js: 'return module.exports; } });' },
 })
 
-const logoDataUri = `data:image/png;base64,${readFileSync(resolve('logo.png')).toString('base64')}`
+const logoDataUri = `data:image/png;base64,${readFileSync(resolve('images/logo.png')).toString('base64')}`
 const bundledClient = resolve('lib/client.js')
 writeFileSync(bundledClient, readFileSync(bundledClient, 'utf8').replaceAll('__REFERENCE_ANYTHING_LOGO_DATA_URI__', logoDataUri))
