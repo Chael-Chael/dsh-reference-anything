@@ -31,7 +31,7 @@ This plugin uses OpenCLI to access historical conversations through AI chat sess
 
 ## News
 
-- **2026-08-19 · v0.2.2** — Added automatic version checks and in-settings updates, Pill/Raw text input rendering modes, and reusable background browser sessions for more reliable OpenCLI synchronization and input interactions.
+- **2026-08-19 · v0.2.3** — Added automatic version checks and in-settings updates, Pill/Raw text input rendering modes, and reusable background browser sessions for more reliable OpenCLI synchronization and input interactions.
 - **2026-08-18 · v0.2.0** — A redesigned Reference Anything settings page with local session statistics, paginated management, Provider/Profile selection, and sync status checks.
 - **2026-08-18** — Introduced on-demand read protocol: references default to safe pointers, and the agent reads the body and attachments only after authorization.
 - **2026-08-17** — Unified ChatGPT, Claude, Gemini, DeepSeek, Grok, and Kimi under the DSH `@` menu.
