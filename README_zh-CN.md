@@ -2,7 +2,7 @@
 
 <div align="center">
 
-<img src="./logo.png" alt="dsh-reference-anything logo" width="180" />
+<img src="./images/logo.png" alt="dsh-reference-anything logo" width="180" />
 
 <h1>dsh-reference-anything</h1>
 
