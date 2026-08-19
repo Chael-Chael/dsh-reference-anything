@@ -26,6 +26,9 @@ Within the unified `@` menu of DeepSeek Harness (DSH), reference commands, Skill
 
 This plugin uses OpenCLI to access historical conversations through AI chat sessions that are already logged in. By default, only conversation titles are stored locally, and the agent fetches remote content on demand. An optional offline-mirror mode stores the latest complete conversation bodies locally.
 
+> [!NOTE]
+> DSH is currently in Beta, so its underlying capabilities and interfaces may change as it evolves. This plugin will adapt alongside those changes. Because of some current DSH limitations, parts of the implementation may not yet be ideal; we will continue to follow DSH updates and improve the plugin over time. See the relevant sections below for specific limitations and usage notes.
+
 ## News
 
 - **2026-08-19 · v0.2.2** — Added automatic version checks and in-settings updates, Pill/Raw text input rendering modes, and reusable background browser sessions for more reliable OpenCLI synchronization and input interactions.
