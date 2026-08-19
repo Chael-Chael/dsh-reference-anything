@@ -229,12 +229,14 @@ export class ConversationSyncManager {
         const knownScope = this.latestAccountScope(provider)
         const index = await retry(() => runner.syncIndex(provider, signal, sinceFor(knownScope), knownScope), signal)
         accountScope = index.accountScope
+        this.store.setActiveAccountScope(provider, accountScope)
         rows = index.rows
         since = index.sinceApplied
       } else {
         // Compatibility for injected runners and adapters predating
         // `sync-index`; production OpenCliRunner always takes the branch above.
         accountScope = await retry(() => runner.whoami(provider, signal), signal)
+        this.store.setActiveAccountScope(provider, accountScope)
         since = sinceFor(accountScope)
         rows = await retry(() => runner.history(provider, signal, since), signal)
       }
@@ -334,7 +336,7 @@ export class ConversationSyncManager {
     // A conversation with no row yet has no watermark to corrupt, and
     // `commitRevision` needs the row to exist.
     if (!known) await this.store.putConversation(row, accountScope)
-    const detail = await retry(() => runner.detail(provider, row.id, signal), signal)
+    const detail = await retry(() => runner.detail(provider, row.id, signal, accountScope), signal)
     await this.store.commitRevision(key, detail, row)
   }
 
@@ -470,7 +472,8 @@ function isRetryable(error: unknown): boolean {
 /** Failures that describe the provider or its adapter, not one conversation. */
 function isFatal(error: unknown): boolean {
   return error instanceof OpenCliError && (error.code === 'OPENCLI_CONFIGURATION'
-    || error.code === 'PROVIDER_NOT_LOGGED_IN' || error.code === 'EXTENSION_NOT_CONNECTED')
+    || error.code === 'PROVIDER_NOT_LOGGED_IN' || error.code === 'PROVIDER_ACCOUNT_MISMATCH'
+    || error.code === 'EXTENSION_NOT_CONNECTED')
 }
 
 function summarize(failures: readonly string[]): string {

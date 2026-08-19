@@ -9,7 +9,7 @@ export const TYPERT_MANIFEST: TypertContribution = {
     members: [
       { kind: 'method', name: 'workspaceSearch', signature: 'workspaceSearch(agent: Agent, signal: AbortSignal): Promise<WorkspaceEntry[]>' },
       { kind: 'method', name: 'sessionSearch', signature: 'sessionSearch(agent: Agent, input: SessionSearchInput, signal: AbortSignal): Promise<SessionCandidate[]>' },
-      { kind: 'method', name: 'search', signature: 'search(input: SearchInput): SearchResult[]' },
+      { kind: 'method', name: 'search', signature: 'search(input: SearchInput): Promise<SearchResult[]>' },
       { kind: 'method', name: 'health', signature: 'health(signal: AbortSignal): Promise<Health>' },
       { kind: 'method', name: 'profiles', signature: 'profiles(signal: AbortSignal): Promise<BrowserProfile[]>' },
       { kind: 'method', name: 'installAdapter', signature: 'installAdapter(signal: AbortSignal): Promise<boolean>' },
@@ -24,6 +24,7 @@ export const TYPERT_MANIFEST: TypertContribution = {
       { kind: 'method', name: 'storageStats', signature: 'storageStats(): StorageStats' },
       { kind: 'method', name: 'clearProvider', signature: 'clearProvider(input: ClearProviderInput): Promise<number>' },
       { kind: 'method', name: 'clearOlder', signature: 'clearOlder(input: ClearOlderInput): Promise<number>' },
+      { kind: 'method', name: 'clearRemoteMissing', signature: 'clearRemoteMissing(signal: AbortSignal): Promise<number>' },
       { kind: 'method', name: 'syncStates', signature: 'syncStates(): ProviderSyncState[]' },
     ], types: [],
   }], events: [], objects: [] },

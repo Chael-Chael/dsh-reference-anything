@@ -2,15 +2,16 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
-import { ManageConversations, PAGE_SIZE, type BrowseState, type SettingsSnapshot } from '../src/client/components.tsx'
+import { ConversationSettings, ManageConversations, PAGE_SIZE, type BrowseState, type SettingsSnapshot } from '../src/client/components.tsx'
 import type { ManagedConversation } from '../src/client/remote.ts'
 import { en } from '../src/client/locale.ts'
+import { defaultPickerSettings, type SettingsRecord } from '../src/wire.ts'
 
 // React only flushes effects synchronously inside act() when it is told it is
 // in a test environment; without this every act() call warns and defers.
 ;(globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
-const settings = { opencliPath: 'opencli', profile: '', detailConcurrency: 8, autoSync: false, syncOnStartup: false, autoSyncMinutes: 60, historyMode: 'metadata-only' as const, enabledProviders: ['chatgpt', 'claude', 'gemini', 'deepseek', 'grok', 'kimi'] as Array<'chatgpt' | 'claude' | 'gemini' | 'deepseek' | 'grok' | 'kimi'>, maxReadTurns: 10 }
+const settings = { opencliPath: 'opencli', profile: '', detailConcurrency: 8, autoSync: false, syncOnStartup: false, autoSyncMinutes: 60, historyMode: 'metadata-only' as const, enabledProviders: ['chatgpt', 'claude', 'gemini', 'deepseek', 'grok', 'kimi'] as Array<'chatgpt' | 'claude' | 'gemini' | 'deepseek' | 'grok' | 'kimi'>, maxReadTurns: 10, inputRenderMode: 'pill' as const }
 const t = ((key: keyof typeof en, values?: Record<string, string | number>) => Object.entries(values ?? {}).reduce((text, [name, value]) => text.replace(`{${name}}`, String(value)), en[key])) as never
 
 function conversation(overrides: Partial<ManagedConversation> = {}): ManagedConversation {
@@ -97,4 +98,54 @@ describe('manage synced conversations', () => {
     const empty = render(<ManageConversations state={snapshot({ query: 'zzz', offset: 0, page: { items: [], total: 0 } })} syncing={false} browse={noop} deleteConversation={noop} t={t} />)
     expect(empty.querySelector('.dsh_ref_manage_empty')?.textContent).toBe('No synced conversations match.')
   })
+
+  it('offers one action for every conversation confirmed missing remotely', () => {
+    const cleared: string[] = []
+    const page = { items: [conversation({ remoteMissing: true })], total: 1 }
+    const state = { ...snapshot({ query: '', offset: 0, page }), storage: { bytes: 100, conversations: 1, remoteMissing: 1 } }
+    const el = render(<ManageConversations state={state} syncing={false} browse={noop} deleteConversation={noop} clearRemoteMissing={async () => { cleared.push('done') }} t={t} />)
+    const button = el.querySelector('.dsh_ref_section_head button') as HTMLButtonElement
+    vi.spyOn(window, 'confirm').mockReturnValue(true)
+    act(() => { button.click() })
+    expect(cleared).toEqual(['done'])
+  })
 })
+
+describe('general settings editing', () => {
+  const noop = async () => {}
+
+  it('allows a picker limit to be temporarily empty, then validates it on commit', () => {
+    const saved: SettingsRecord[] = []
+    const current: SettingsSnapshot = { settings: { ...settings, picker: defaultPickerSettings() }, loading: true }
+    const useScope = ((selector: (value: SettingsSnapshot) => unknown) => selector(current)) as never
+    const el = render(<ConversationSettings close={() => {}} useSessions={(() => []) as never} useWorkspaces={(() => []) as never} useScope={useScope} save={async value => { saved.push(value) }} sync={noop} cancel={noop} refresh={noop} setupAll={noop} install={noop} restartDaemon={noop} browse={noop} deleteConversation={noop} clearProvider={noop} clearOlder={noop} refreshStats={noop} t={t} />)
+    const input = el.querySelector('.dsh_ref_picker_limit input') as HTMLInputElement
+
+    act(() => { setNativeValue(input, ''); input.dispatchEvent(new Event('input', { bubbles: true })) })
+    expect(input.value).toBe('')
+    expect(saved).toHaveLength(0)
+    act(() => { input.dispatchEvent(new FocusEvent('focusout', { bubbles: true })) })
+    expect(input.value).toBe('6')
+    expect(saved).toHaveLength(0)
+
+    act(() => { setNativeValue(input, '12'); input.dispatchEvent(new Event('input', { bubbles: true })) })
+    act(() => { input.dispatchEvent(new FocusEvent('focusout', { bubbles: true })) })
+    expect(saved.at(-1)?.picker?.commands.limit).toBe(12)
+  })
+
+  it('saves the Raw text input-rendering fallback', () => {
+    const saved: SettingsRecord[] = []
+    const current: SettingsSnapshot = { settings: { ...settings, picker: defaultPickerSettings() }, loading: true }
+    const useScope = ((selector: (value: SettingsSnapshot) => unknown) => selector(current)) as never
+    const el = render(<ConversationSettings close={() => {}} useSessions={(() => []) as never} useWorkspaces={(() => []) as never} useScope={useScope} save={async value => { saved.push(value) }} sync={noop} cancel={noop} refresh={noop} setupAll={noop} install={noop} restartDaemon={noop} browse={noop} deleteConversation={noop} clearProvider={noop} clearOlder={noop} refreshStats={noop} t={t} />)
+    const select = el.querySelector('.dsh_ref_render_mode select') as HTMLSelectElement
+
+    act(() => { setNativeValue(select, 'raw-text'); select.dispatchEvent(new Event('change', { bubbles: true })) })
+    expect(saved.at(-1)?.inputRenderMode).toBe('raw-text')
+  })
+})
+
+function setNativeValue(element: HTMLInputElement | HTMLSelectElement, value: string): void {
+  const descriptor = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(element), 'value')
+  descriptor?.set?.call(element, value)
+}

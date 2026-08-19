@@ -88,6 +88,12 @@ describe('registration', () => {
     expect(scoped.tools.schemas().some(schema => schema.name === 'reference_read')).toBe(false)
   })
 
+  it('tells the agent how to recover from stale account metadata', async () => {
+    const read = ctx.tools.schemas().find(schema => schema.name === 'reference_read')
+    expect(read?.description).toContain('sync that provider')
+    expect(read?.description).toContain('do not repeatedly retry')
+  })
+
   it('is a namespace plugin, so the Loader keeps its inject list', () => {
     // A stray default export would make the Loader unwrap only `apply` and
     // silently drop `inject`, mounting the tools before their services exist.

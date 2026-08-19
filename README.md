@@ -127,6 +127,7 @@ Supports historical conversations from ChatGPT, Claude, Gemini, DeepSeek, Grok, 
 - **Title match:** fuzzy search on conversation titles
 - **Content search:** if title matches are insufficient, the conversation body is searched and matching excerpts are shown in the candidate list
 - **Provider and account isolation:** history is maintained separately by Provider and account scope
+- `@` search uses the account scope cached by the latest sync and never probes the browser; after a sync observes an account switch, it exposes only that account while older rows remain available in conversation management for cleanup
 
 **Reference display:** after selection, the draft shows a removable reference chip:
 ```text
@@ -170,7 +171,7 @@ A reference produces an untrusted-data envelope alongside the current user reque
 
 - The agent calls `reference_read({ uri, limit, cursor })` only when it needs the body. Turns in each page are in chronological order, and pagination moves from newer pages toward older ones.
 - For the initial `deferred=true` item, the first call passes only `uri` and does not send an empty `nextCursor`.
-- In offline-mirror mode, `reference_read` paginates over the current revision. In metadata-only mode, each read requests content from the Provider again.
+- In offline-mirror mode, `reference_read` paginates over the current revision. In metadata-only mode, each read requests content from the Provider again and validates the cached account scope inside that same browser operation. Missing, account-mismatch, and fetch errors instruct the agent to ask for a Provider sync before retrying.
 - `before` is kept only as a deprecated compatibility parameter and cannot be combined with `cursor`.
 - A mention or `reference_list` grants the current task permission to read that URI; unauthorized URIs are rejected.
 - Each conversation keeps only the latest revision. Cursors for older revisions expire after content changes.
@@ -189,6 +190,8 @@ The `reference_anything` storage domain contains:
 - `sync_states`: Provider cursor, profile, progress, and errors
 
 Remote records are marked `remoteMissing` only after a full remote pagination pass succeeds. Local history is never auto-deleted. DOM fallback is used only after an API request fails, and fallback data is always marked `partial=true`.
+
+In `metadata-only` mode, the current browser account is checked inside the same detail operation that reads a referenced body; reads are rejected when it does not match the account scope cached by sync. Conversation management includes a bulk action to delete all locally retained records marked `remoteMissing`.
 
 ## Acknowledgements
 

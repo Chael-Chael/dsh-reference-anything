@@ -24,6 +24,7 @@ export interface SettingsInjected {
   deleteConversation(uriId: string): Promise<void>
   clearProvider(provider: ChatProvider): Promise<void>
   clearOlder(days: number): Promise<void>
+  clearRemoteMissing?: () => Promise<void>
   refreshStats(): Promise<void>
 }
 type T = TranslateNS<typeof REFERENCE_ANYTHING_NS>
@@ -52,9 +53,10 @@ const PICKER_SOURCES: ReadonlyArray<{ id: PickerSource; label: keyof typeof SOUR
   { id: 'conversations', label: 'conversations' },
 ]
 const SOURCE_KEYS = { commands: 'source.commands', skills: 'source.skills', files: 'source.files', sessions: 'source.sessions', conversations: 'source.conversations' } as const
-export function ConversationSettings({ useScope, save, sync, cancel, refresh, setupAll, install, restartDaemon, browse, deleteConversation, clearProvider, clearOlder, refreshStats, t }: SettingsProps) {
+export function ConversationSettings({ useScope, save, sync, cancel, refresh, setupAll, install, restartDaemon, browse, deleteConversation, clearProvider, clearOlder, clearRemoteMissing, refreshStats, t }: SettingsProps) {
   const state = useScope(value => value)
   const settings = state.settings
+  const picker = settings.picker ?? defaultPickerSettings()
   const [installing, setInstalling] = useState(false)
   const [settingUp, setSettingUp] = useState(false)
   const [opencliPath, setOpencliPath] = useState(settings.opencliPath)
@@ -63,7 +65,9 @@ export function ConversationSettings({ useScope, save, sync, cancel, refresh, se
   const [autoSyncMinutes, setAutoSyncMinutes] = useState(String(settings.autoSyncMinutes))
   const [cleanupDays, setCleanupDays] = useState('90')
   const [maxReadTurns, setMaxReadTurns] = useState(String(settings.maxReadTurns))
+  const [pickerLimits, setPickerLimits] = useState<Record<PickerSource, string>>(() => pickerLimitDrafts(picker))
   useEffect(() => { setOpencliPath(settings.opencliPath); setProfile(settings.profile); setDetailConcurrency(String(settings.detailConcurrency)); setAutoSyncMinutes(String(settings.autoSyncMinutes)); setMaxReadTurns(String(settings.maxReadTurns)) }, [settings.opencliPath, settings.profile, settings.detailConcurrency, settings.autoSyncMinutes, settings.maxReadTurns])
+  useEffect(() => { setPickerLimits(pickerLimitDrafts(picker)) }, [picker.commands.limit, picker.skills.limit, picker.files.limit, picker.sessions.limit, picker.conversations.limit])
   // Only while the panel is open, and only the cheap call — `refresh()` also
   // shells out to OpenCLI three times for the health probes.
   // Held in a ref, and armed once: the slot rebuilds its injected actions on
@@ -85,7 +89,6 @@ export function ConversationSettings({ useScope, save, sync, cancel, refresh, se
   }
   const autoSyncMinutesValue = Number(autoSyncMinutes)
   const hasValidAutoSyncMinutes = Number.isInteger(autoSyncMinutesValue) && autoSyncMinutesValue >= 15 && autoSyncMinutesValue <= 1440
-  const picker = settings.picker ?? defaultPickerSettings()
   const syncMode = settings.autoSync ? 'interval' : settings.syncOnStartup ? 'startup' : 'manual'
   const enabled = new Set(settings.enabledProviders)
   const setProviderEnabled = (provider: ChatProvider, value: boolean) => {
@@ -96,6 +99,15 @@ export function ConversationSettings({ useScope, save, sync, cancel, refresh, se
   const patchPicker = (id: PickerSource, patch: Partial<PickerSettings[PickerSource]>) => {
     savePicker({ ...picker, [id]: { ...picker[id], ...patch } })
   }
+  const commitPickerLimit = (id: PickerSource) => {
+    const value = Number(pickerLimits[id])
+    if (Number.isInteger(value) && value >= 1 && value <= 50) {
+      setPickerLimits(current => ({ ...current, [id]: String(value) }))
+      if (value !== picker[id].limit) patchPicker(id, { limit: value })
+      return
+    }
+    setPickerLimits(current => ({ ...current, [id]: String(picker[id].limit) }))
+  }
   const movePicker = (id: PickerSource, direction: -1 | 1) => {
     const ids = [...PICKER_SOURCES].sort((a, b) => picker[a.id].order - picker[b.id].order).map(row => row.id)
     const index = ids.indexOf(id); const other = ids[index + direction]
@@ -103,14 +115,15 @@ export function ConversationSettings({ useScope, save, sync, cancel, refresh, se
     savePicker({ ...picker, [id]: { ...picker[id], order: picker[other].order }, [other]: { ...picker[other], order: picker[id].order } })
   }
   return <section className="dsh_ref_settings">
+    <div className="dsh_ref_notice_layer">{state.notice && <div className="dsh_ref_notice" role="status">{state.notice}</div>}</div>
     <header className="dsh_ref_header"><div><h2>{t('settings.title')}</h2><p>{t('settings.subtitle')}</p></div></header>
     <div className="dsh_ref_workspace">
     {state.error && <div className="dsh_ref_error" role="alert"><strong>{t('settings.actionFailed')}</strong><span>{state.error}</span></div>}
-    {state.notice && <div className="dsh_ref_notice" role="status">{state.notice}</div>}
     <section className="dsh_ref_panel dsh_ref_general_settings"><div className="dsh_ref_section_head"><div><h3>{t('settings.general')}</h3><p>{t('settings.generalDetail')}</p></div></div>
+      <label className="dsh_ref_render_mode"><span><b>{t('settings.inputRenderMode')}</b><small>{t('settings.inputRenderModeDetail')}</small></span><select value={settings.inputRenderMode} onChange={event => { void save({ ...settings, inputRenderMode: event.target.value as SettingsRecord['inputRenderMode'] }) }}><option value="pill">{t('settings.inputRenderPill')}</option><option value="raw-text">{t('settings.inputRenderRaw')}</option></select></label>
       <div className="dsh_ref_picker_list">{[...PICKER_SOURCES].sort((a, b) => picker[a.id].order - picker[b.id].order).map((row, index, rows) => <div className="dsh_ref_picker_row" key={row.id}>
         <label className="dsh_ref_toggle dsh_ref_picker_toggle"><input type="checkbox" checked={picker[row.id].enabled} onChange={event => { patchPicker(row.id, { enabled: event.target.checked }) }} /><span/><b>{t(SOURCE_KEYS[row.label])}</b></label>
-        <label className="dsh_ref_picker_limit"><span>{t('settings.maxItems')}</span><input type="number" min={1} max={50} inputMode="numeric" value={picker[row.id].limit} onChange={event => { const limit = Number(event.target.value); if (Number.isInteger(limit) && limit >= 1 && limit <= 50) patchPicker(row.id, { limit }) }} /></label>
+        <label className="dsh_ref_picker_limit"><span>{t('settings.maxItems')}</span><input type="number" min={1} max={50} inputMode="numeric" value={pickerLimits[row.id]} aria-invalid={pickerLimits[row.id] !== '' && !validPickerLimit(pickerLimits[row.id])} onChange={event => { setPickerLimits(current => ({ ...current, [row.id]: event.target.value })) }} onBlur={() => { commitPickerLimit(row.id) }} onKeyDown={event => { if (event.key === 'Enter') event.currentTarget.blur() }} /></label>
         <div className="dsh_ref_picker_order"><button type="button" disabled={index === 0} aria-label={t('settings.moveUp', { item: t(SOURCE_KEYS[row.label]) })} onClick={() => { movePicker(row.id, -1) }}>↑</button><button type="button" disabled={index === rows.length - 1} aria-label={t('settings.moveDown', { item: t(SOURCE_KEYS[row.label]) })} onClick={() => { movePicker(row.id, 1) }}>↓</button></div>
       </div>)}</div>
     </section>
@@ -145,7 +158,7 @@ export function ConversationSettings({ useScope, save, sync, cancel, refresh, se
       <div className="dsh_ref_chat_divider" />
       <section className="dsh_ref_storage"><div className="dsh_ref_storage_header"><div><h3>{t('storage.title')}</h3><p>{t('storage.detail')}</p></div><div className="dsh_ref_storage_metric"><span>{t('storage.usage')}</span><strong>{formatBytes(state.storage?.bytes ?? 0)}</strong></div></div><div className="dsh_ref_storage_cleanup"><label><span>{t('storage.olderThan')}</span><div className="dsh_ref_number_field"><input type="number" min={1} max={36500} value={cleanupDays} onChange={event => { setCleanupDays(event.target.value) }} /><b>{t('storage.days')}</b></div></label><button className="is_danger" type="button" disabled={state.sync?.status === 'running' || !(Number(cleanupDays) >= 1)} onClick={() => { const days = Number(cleanupDays); if (window.confirm(t('storage.clearOlderConfirm', { days }))) void clearOlder(days) }}>{t('storage.clearOlder')}</button></div></section>
       <div className="dsh_ref_chat_divider" />
-      <ManageConversations state={state} syncing={state.sync?.status === 'running'} browse={browse} deleteConversation={deleteConversation} t={t} />
+      <ManageConversations state={state} syncing={state.sync?.status === 'running'} browse={browse} deleteConversation={deleteConversation} clearRemoteMissing={clearRemoteMissing} t={t} />
     </section>
     </div>
   </section>
@@ -177,6 +190,7 @@ interface ManageProps {
   syncing: boolean
   browse(query: string, provider: ChatProvider | undefined, offset: number): Promise<void>
   deleteConversation(uriId: string): Promise<void>
+  clearRemoteMissing?: () => Promise<void>
   t: T
 }
 /**
@@ -186,7 +200,7 @@ interface ManageProps {
  * individual rows — including ones the provider no longer lists, which are
  * exactly the ones worth deleting.
  */
-export function ManageConversations({ state, syncing, browse, deleteConversation, t }: ManageProps) {
+export function ManageConversations({ state, syncing, browse, deleteConversation, clearRemoteMissing, t }: ManageProps) {
   const browseState = state.browse
   const [text, setText] = useState(browseState?.query ?? '')
   const debounce = useRef<ReturnType<typeof setTimeout>>()
@@ -210,7 +224,7 @@ export function ManageConversations({ state, syncing, browse, deleteConversation
   const offset = browseState?.offset ?? 0
 
   return <div className="dsh_ref_manage">
-    <div className="dsh_ref_section_head"><div><h3>{t('manage.title')}</h3><p>{t('manage.detail')}</p></div></div>
+    <div className="dsh_ref_section_head"><div><h3>{t('manage.title')}</h3><p>{t('manage.detail')}</p></div><button className="is_danger" type="button" disabled={syncing || !(state.storage?.remoteMissing) || !clearRemoteMissing} title={syncing ? t('manage.deleteDisabled') : undefined} onClick={() => { if (window.confirm(t('manage.deleteMissingConfirm'))) void clearRemoteMissing?.() }}>{t('manage.deleteMissing')}</button></div>
     <div className="dsh_ref_manage_filters">
       <input placeholder={t('manage.searchPlaceholder')} value={text} onChange={event => { setText(event.target.value) }} />
       <select value={browseState?.provider ?? ''} onChange={event => {
@@ -254,6 +268,15 @@ function formatUpdatedDate(value: string, t: T): string {
 
 function CheckRow({ label, detail, ready }: { label: string; detail: string; ready: boolean }) {
   return <div className="dsh_ref_check"><span className={ready ? 'is_ready' : 'is_error'}>{ready ? '✓' : '×'}</span><div><strong>{label}</strong><small className={ready ? undefined : 'is_warning'}>{detail}</small></div></div>
+}
+
+function pickerLimitDrafts(picker: PickerSettings): Record<PickerSource, string> {
+  return { commands: String(picker.commands.limit), skills: String(picker.skills.limit), files: String(picker.files.limit), sessions: String(picker.sessions.limit), conversations: String(picker.conversations.limit) }
+}
+
+export function validPickerLimit(value: string): boolean {
+  const parsed = Number(value)
+  return Number.isInteger(parsed) && parsed >= 1 && parsed <= 50
 }
 
 function extensionStateDetail(health: Health | undefined, t: T): string {

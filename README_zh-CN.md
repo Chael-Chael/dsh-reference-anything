@@ -127,6 +127,7 @@ opencli plugin install file:///D:/dsh-reference-anything/opencli-plugin
 - **标题匹配**：支持模糊搜索对话标题
 - **正文检索**：标题匹配不足时，搜索对话正文，在候选行显示匹配片段
 - **平台和账号隔离**：按 Provider 和账号作用域分别维护会话历史
+- `@` 检索只使用最近一次同步缓存的账号范围，不会为搜索连接浏览器；同步识别到账号切换后，只展示新账号记录，旧账号记录仍可在对话管理中查看和清理
 
 **引用展示**：选中后，草稿中显示为可删除的引用 chip：
 ```text
@@ -172,7 +173,7 @@ opencli plugin install file:///D:/dsh-reference-anything/opencli-plugin
 
 - agent 需要正文时才调用 `reference_read({ uri, limit, cursor })`；同一页内部按时间正序展示，翻页方向从最新向更旧。
 - 初始条目的 `deferred=true` 时，首次调用只传 `uri`，不要传空的 `nextCursor`。
-- offline-mirror 下 `reference_read` 沿当前 revision 的 cursor 翻页；metadata-only 下每次读取都会重新向 Provider 请求正文。
+- offline-mirror 下 `reference_read` 沿当前 revision 的 cursor 翻页；metadata-only 下每次读取都会重新向 Provider 请求正文，并在同一次浏览器操作内校验缓存的账号范围。遇到对话缺失、账号不一致或拉取失败时，Agent 会提示用户先同步对应 Provider 再重试。
 - `before` 只作为一个版本的 deprecated 兼容参数；不能与 `cursor` 同时提供。
 - mention 或 `reference_list` 会授予当前 task 对 URI 的读取权限；未授权 URI 会被拒绝。
 - 每条 conversation 只保留最新 revision；正文更新后，指向旧 revision 的 cursor 会过期。
@@ -191,6 +192,8 @@ opencli plugin install file:///D:/dsh-reference-anything/opencli-plugin
 - `sync_states`：Provider cursor、Profile、进度与错误。
 
 只有完整枚举远端分页成功后，才会把远端消失的记录标记为 `remoteMissing`；本地历史不会被自动删除。API 请求失败后才启用 DOM fallback，且 fallback 数据始终标记为 `partial=true`。
+
+metadata-only 模式下，读取引用正文时会在同一次 detail 浏览器操作内校验当前登录账号与同步缓存的账号范围；账号不一致时拒绝读取。对话管理页提供“删除所有云端缺失对话”，用于一次性清理已标记为 `remoteMissing` 的本地条目。
 
 ## Acknowledgements
 

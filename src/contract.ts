@@ -53,7 +53,9 @@ export const browsePageSchema = z.object({
   items: z.array(managedConversationSchema), total: z.number().int().nonnegative(),
 }).readonly()
 export const deleteInputSchema = z.object({ uriId: z.string().min(1) }).readonly()
-export const storageStatsSchema = z.object({ bytes: z.number().int().nonnegative(), conversations: z.number().int().nonnegative() }).readonly()
+export const storageStatsSchema = z.object({
+  bytes: z.number().int().nonnegative(), conversations: z.number().int().nonnegative(), remoteMissing: z.number().int().nonnegative().default(0),
+}).readonly()
 export const clearProviderInputSchema = z.object({ provider: providerSchema }).readonly()
 export const clearOlderInputSchema = z.object({ days: z.number().int().min(1).max(36500) }).readonly()
 export const providerSyncStateSchema = z.object({
@@ -80,6 +82,7 @@ export const REFERENCE_ANYTHING_INVOCATIONS: readonly InvocationDescriptor[] = [
   descriptor('storageStats', [], strict('StorageStats', storageStatsSchema)),
   descriptor('clearProvider', [{ name: 'input', wire: 'input', source: 'json', codec: strict('ClearProviderInput', clearProviderInputSchema) }], strict('Count', z.number().int().nonnegative()), true),
   descriptor('clearOlder', [{ name: 'input', wire: 'input', source: 'json', codec: strict('ClearOlderInput', clearOlderInputSchema) }], strict('Count', z.number().int().nonnegative()), true),
+  descriptor('clearRemoteMissing', [], strict('Count', z.number().int().nonnegative()), true),
   descriptor('syncStates', [], strict('ProviderSyncState[]', z.array(providerSyncStateSchema))),
 ]
 

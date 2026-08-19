@@ -20,6 +20,26 @@ describe('OpenCLI execFile boundary', () => {
     expect(rows[0]?.conversationId).toBe(id)
   })
 
+  it('passes the expected account scope to detail reads', async () => {
+    const script = await fake(`
+      const args=process.argv.slice(2)
+      const at=args.indexOf('--accountScope')
+      if(args[0]!=='dsh-chatgpt'||args[1]!=='detail'||args[2]!=='c1'||at<0||args[at+1]!=='scope') process.exit(78)
+      process.stdout.write(JSON.stringify([{conversationId:'c1',ordinal:0,messageId:'1',parentId:'',branchId:'',activeBranch:true,role:'user',text:'ok',createdAt:'',attachmentsJson:'[]',partial:false}]))
+    `)
+    const rows = await new OpenCliRunner({ executable: process.execPath, prefixArgs: [script] }).detail('chatgpt', 'c1', undefined, 'scope')
+    expect(rows[0]?.conversationId).toBe('c1')
+  })
+
+  it('classifies an adapter account-scope refusal', async () => {
+    const script = await fake(`process.stderr.write('DSH_ACCOUNT_SCOPE_MISMATCH: wrong account');process.exit(1)`)
+    const runner = new OpenCliRunner({ executable: process.execPath, prefixArgs: [script] })
+
+    await expect(runner.detail('chatgpt', 'c1', undefined, 'scope')).rejects.toMatchObject({
+      code: 'PROVIDER_ACCOUNT_MISMATCH',
+    } satisfies Partial<OpenCliError>)
+  })
+
   it('parses account identity and history from one sync-index command', async () => {
     const script = await fake(`process.stdout.write(JSON.stringify([
       {kind:'identity',identity:'account-1',sinceApplied:'2026-08-18T00:00:00.000Z'},
@@ -30,6 +50,13 @@ describe('OpenCLI execFile boundary', () => {
     expect(index.accountScope).toMatch(/^[a-f0-9]{64}$/)
     expect(index.sinceApplied).toBe('2026-08-18T00:00:00.000Z')
     expect(index.rows).toEqual([expect.objectContaining({ provider: 'chatgpt', id: 'c1', title: 'One' })])
+  })
+
+  it('accepts a valid empty full listing so deleted remote rows can be retired', async () => {
+    const script = await fake(`process.stdout.write(JSON.stringify([{kind:'identity',identity:'account-1',sinceApplied:''}]))`)
+    const index = await new OpenCliRunner({ executable: process.execPath, prefixArgs: [script] }).syncIndex('chatgpt')
+    expect(index.rows).toEqual([])
+    expect(index.sinceApplied).toBe('')
   })
 
   it('pins browser commands to background even when the environment requests foreground', async () => {

@@ -13,7 +13,7 @@ const SITE: Record<ChatProvider, string> = {
 }
 
 export type OpenCliErrorCode = 'EXTENSION_NOT_CONNECTED' | 'PROVIDER_TIMEOUT' | 'PROVIDER_NOT_LOGGED_IN'
-  | 'OPENCLI_CONFIGURATION' | 'OPENCLI_OUTPUT_TOO_LARGE' | 'OPENCLI_FAILED'
+  | 'PROVIDER_ACCOUNT_MISMATCH' | 'OPENCLI_CONFIGURATION' | 'OPENCLI_OUTPUT_TOO_LARGE' | 'OPENCLI_FAILED'
 
 export class OpenCliError extends Error {
   constructor(message: string, readonly code: OpenCliErrorCode, options?: ErrorOptions) { super(message, options) }
@@ -133,8 +133,8 @@ export class OpenCliRunner {
     }
   }
 
-  async detail(provider: ChatProvider, id: string, signal?: AbortSignal): Promise<ProviderTurnRow[]> {
-    const rows = await this.json(SITE[provider], 'detail', [id], signal)
+  async detail(provider: ChatProvider, id: string, signal?: AbortSignal, accountScope = ''): Promise<ProviderTurnRow[]> {
+    const rows = await this.json(SITE[provider], 'detail', [id, ...(accountScope ? ['--accountScope', accountScope] : [])], signal)
     return rows.map((raw, index) => {
       const role = stringField(raw, 'role')
       if (role !== 'user' && role !== 'assistant') throw new OpenCliError('provider detail returned an invalid role', 'OPENCLI_CONFIGURATION')
@@ -237,10 +237,11 @@ export class OpenCliRunner {
       const detail = error as { code?: number | string; killed?: boolean; signal?: string; stderr?: string }
       if (detail.code === 'ERR_CHILD_PROCESS_STDIO_MAXBUFFER') throw new OpenCliError('OpenCLI output exceeded the configured limit', 'OPENCLI_OUTPUT_TOO_LARGE', { cause: error })
       if (detail.killed || detail.signal === 'SIGTERM') throw new OpenCliError('OpenCLI provider request timed out', 'PROVIDER_TIMEOUT', { cause: error })
-      const exit = typeof detail.code === 'number' ? detail.code : undefined
-      const code: OpenCliErrorCode = exit === 69 ? 'EXTENSION_NOT_CONNECTED' : exit === 75 ? 'PROVIDER_TIMEOUT'
-        : exit === 77 ? 'PROVIDER_NOT_LOGGED_IN' : exit === 78 ? 'OPENCLI_CONFIGURATION' : 'OPENCLI_FAILED'
       const stderr = String(detail.stderr || '').trim().slice(0, 2_000)
+      const exit = typeof detail.code === 'number' ? detail.code : undefined
+      const code: OpenCliErrorCode = stderr.includes('DSH_ACCOUNT_SCOPE_MISMATCH') ? 'PROVIDER_ACCOUNT_MISMATCH'
+        : exit === 69 ? 'EXTENSION_NOT_CONNECTED' : exit === 75 ? 'PROVIDER_TIMEOUT'
+          : exit === 77 ? 'PROVIDER_NOT_LOGGED_IN' : exit === 78 ? 'OPENCLI_CONFIGURATION' : 'OPENCLI_FAILED'
       throw new OpenCliError(stderr || `OpenCLI exited with ${String(detail.code)}`, code, { cause: error })
     }
   }

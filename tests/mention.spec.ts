@@ -100,6 +100,7 @@ describe('expansion', () => {
     const text = context?.content.flatMap(block => block.type === 'text' ? [block.text] : []).join('')
     expect(text).toContain('untrusted reference to a conversation')
     expect(text).toContain('bodies were not fetched')
+    expect(text).toContain('sync that provider')
     expect(text).toContain(encodeReferenceUri(ref))
     expect(text).not.toContain('by request hash')
   })

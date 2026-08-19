@@ -49,6 +49,10 @@ export const zh = {
   'settings.serviceActionsDetail': '一键安装会自动安装适配器、启动守护进程并打开浏览器扩展安装页；也可单独安装适配器或重启浏览器桥接服务。',
   'settings.general': '通用设置',
   'settings.generalDetail': '控制 @ 面板中可用的类别、显示顺序及每类最多显示的条目数。关闭某类后，它不会出现在 @ 面板，也不会向 Agent 提供对应指令。',
+  'settings.inputRenderMode': '输入框渲染',
+  'settings.inputRenderModeDetail': 'Pill 使用结构化引用并显示完整标题；遇到输入兼容问题时，可改用原生输入框直接插入引用文本。',
+  'settings.inputRenderPill': 'Pill（默认）',
+  'settings.inputRenderRaw': 'Raw text',
   'settings.maxItems': '最多条目',
   'settings.moveUp': '上移 {item}',
   'settings.moveDown': '下移 {item}',
@@ -141,6 +145,8 @@ export const zh = {
   'manage.noLongerListed': '来源已不再列出',
   'manage.updated': '更新于 {date}',
   'manage.delete': '删除',
+  'manage.deleteMissing': '删除所有云端缺失对话',
+  'manage.deleteMissingConfirm': '删除所有已确认在云端缺失的本地对话吗？此操作不可撤销。',
   'manage.deleteDisabled': '同步进行时无法删除',
   'manage.deleteConfirm': '要从本地镜像中删除“{title}”吗？后续同步可能会将其重新写入。',
   'manage.previous': '上一页',
@@ -155,7 +161,7 @@ export const en: Record<keyof typeof zh, string> = {
   'settings.detailConcurrencyDetail': 'Enter 1–8. Higher values sync faster but increase browser and network load. Only affects local full-body storage.', 'settings.maxReadTurns': 'Maximum turns per read', 'settings.maxReadTurnsDetail': 'Maximum conversation turns the agent may read in one reference_read call. Higher values use more context.',
   'notice.cleared': 'Cleared {count} local conversations.', 'provider.enabled': 'Enabled',
   'storage.title': 'Local storage and cleanup', 'storage.detail': 'Approximate local index and transcript payload size. Cleanup affects only local data; a later sync may restore it.', 'storage.usage': 'Current usage', 'storage.olderThan': 'Clear conversations last updated more than', 'storage.days': 'days', 'storage.clearOlder': 'Clear old records', 'storage.clearOlderConfirm': 'Clear every local conversation last updated more than {days} days ago?', 'storage.clearProvider': 'Clear local data', 'storage.clearProviderConfirm': 'Clear all local conversations and sync state for {provider}?',
-  'settings.general': 'General', 'settings.generalDetail': 'Choose the @ groups that are available, their order, and the maximum items each group shows. Disabled groups are unavailable in the @ panel and to the agent.', 'settings.maxItems': 'Maximum items', 'settings.moveUp': 'Move {item} up', 'settings.moveDown': 'Move {item} down',
+  'settings.general': 'General', 'settings.generalDetail': 'Choose the @ groups that are available, their order, and the maximum items each group shows. Disabled groups are unavailable in the @ panel and to the agent.', 'settings.inputRenderMode': 'Input rendering', 'settings.inputRenderModeDetail': 'Pill uses structured references with full labels. If the editor has compatibility issues, Raw text inserts the literal reference into the native input.', 'settings.inputRenderPill': 'Pill (default)', 'settings.inputRenderRaw': 'Raw text', 'settings.maxItems': 'Maximum items', 'settings.moveUp': 'Move {item} up', 'settings.moveDown': 'Move {item} down',
   'settings.reinstall': 'Reinstall adapter', 'settings.oneClickSetup': 'One-click setup', 'settings.settingUp': 'Setting up…', 'settings.restartDaemon': 'Restart Browser Bridge',
   'settings.serviceActions': 'Service actions', 'settings.serviceActionsDetail': 'One-click setup installs the adapter, starts the daemon, and opens the extension install page; you can also install the adapter or restart Browser Bridge individually.',
   'notice.daemonRestarted': 'Browser Bridge restarted.', 'notice.oneClickSetup': 'Extension install page opened. Click "Add to Chrome", then Recheck here.',
@@ -169,7 +175,7 @@ export const en: Record<keyof typeof zh, string> = {
   'check.browserBridge': 'Browser Bridge', 'check.browserExtension': 'Browser extension', 'check.conversationAdapter': 'Conversation adapter',
   'sync.running': 'Syncing', 'sync.complete': 'Sync complete', 'sync.partial': 'Sync completed with errors', 'sync.failed': 'Sync failed', 'sync.cancelled': 'Sync cancelled', 'sync.listing': 'Listing',
   'sync.progressListing': '{listing} source(s) still listing; processed {completed}/{total} discovered conversations', 'sync.progressSourceListing': 'listing…', 'sync.progressSourcesListing': '{count} source(s) listing',
-  'manage.title': 'Manage synced conversations', 'manage.detail': 'Everything mirrored locally, including conversations the provider no longer lists.', 'manage.searchPlaceholder': 'Search titles…', 'manage.allProviders': 'All providers', 'manage.loading': 'Loading…', 'manage.empty': 'No synced conversations match.', 'manage.noLongerListed': 'no longer listed', 'manage.updated': 'updated {date}', 'manage.delete': 'Delete', 'manage.deleteDisabled': 'Cannot delete while a sync is running', 'manage.deleteConfirm': 'Delete "{title}" from the local mirror? A later sync may bring it back.', 'manage.previous': 'Previous', 'manage.next': 'Next', 'manage.pagination': '{start}–{end} of {total}', 'manage.paginationEmpty': '0 of 0',
+  'manage.title': 'Manage synced conversations', 'manage.detail': 'Everything mirrored locally, including conversations the provider no longer lists.', 'manage.searchPlaceholder': 'Search titles…', 'manage.allProviders': 'All providers', 'manage.loading': 'Loading…', 'manage.empty': 'No synced conversations match.', 'manage.noLongerListed': 'no longer listed', 'manage.updated': 'updated {date}', 'manage.delete': 'Delete', 'manage.deleteMissing': 'Delete cloud-missing conversations', 'manage.deleteMissingConfirm': 'Delete every local conversation confirmed missing from the cloud? This cannot be undone.', 'manage.deleteDisabled': 'Cannot delete while a sync is running', 'manage.deleteConfirm': 'Delete "{title}" from the local mirror? A later sync may bring it back.', 'manage.previous': 'Previous', 'manage.next': 'Next', 'manage.pagination': '{start}–{end} of {total}', 'manage.paginationEmpty': '0 of 0',
 }
 
 declare module '@deepseek-ai/dsh-client-ui-slots' {

@@ -19,7 +19,7 @@ describe('settings source registration guard', () => {
       opencliPath: 'opencli', profile: '', detailConcurrency: 2, autoSync: false,
       autoSyncMinutes: 60, historyMode: 'metadata-only',
     })
-    expect(value).toMatchObject({ syncOnStartup: false, maxReadTurns: 10 })
+    expect(value).toMatchObject({ syncOnStartup: false, maxReadTurns: 10, inputRenderMode: 'pill' })
     expect(value.enabledProviders).toEqual(['chatgpt', 'claude', 'gemini', 'deepseek', 'grok', 'kimi'])
   })
   it('treats an unchanged picker returned by an unrelated settings save as equal', () => {

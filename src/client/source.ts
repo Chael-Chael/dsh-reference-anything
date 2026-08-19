@@ -1,6 +1,6 @@
 import type { InputTriggerCandidate, InputTriggerSource } from '@deepseek-ai/dsh-client-ui-input-trigger/client'
 import type { SessionId } from '@deepseek-ai/dsh-client-runtime/client'
-import type { ChatProvider } from '../wire.ts'
+import type { ChatProvider, InputRenderMode } from '../wire.ts'
 import { parseProviderQuery } from '../search.ts'
 import { encodeReferenceUri } from '../uri-codec.ts'
 import type { SearchResult, SessionCandidate, WorkspaceEntry } from './remote.ts'
@@ -32,7 +32,7 @@ export const COMMAND_SOURCE = 'Commands'
 export const SKILL_SOURCE = 'Skills'
 
 type SourceScope = 'commands' | 'skills' | 'files' | 'sessions' | 'conversations'
-export interface PickerSourceOptions { order: number; limit: number }
+export interface PickerSourceOptions { order: number; limit: number; renderMode?: InputRenderMode }
 /** Wait briefly for a pause in typing before issuing a live search. */
 const SEARCH_DEBOUNCE_MS = 100
 const PREFIX_SCOPE: Readonly<Record<string, SourceScope>> = {
@@ -121,6 +121,7 @@ export function createConversationSource(search: (
       // projected by the user-bubble renderer as a native `@Grok` pill.
       const title = `${LABEL[row.provider]}·${row.title}`.replace(/[\[\]]/g, '')
       const reference = { uriId: row.uriId, label: title }
+      if (options.renderMode === 'raw-text') return { text: formatConversationMention(reference) }
       return {
         insert: {
           source: CONVERSATION_SOURCE,
@@ -162,6 +163,7 @@ export function createWorkspaceSource(load: (sessionId: string, signal: AbortSig
       // the model. Keep the workspace-relative path as the visible label.
       const label = row.path
       const ref = JSON.stringify({ path: row.path, label })
+      if (options.renderMode === 'raw-text') return { text: workspaceMention(ref) }
       return { insert: { source: FILE_SOURCE, ref, label: `${row.kind === 'directory' ? '📁' : '📄'} ${label}`, clipboardText: workspaceMention(ref) } }
     },
     codec: { clipboardText: workspaceMention, serialize: ref => Promise.resolve(workspaceMention(ref)) },
@@ -182,6 +184,7 @@ export function createSessionSource(search: (sessionId: string, query: string, s
       const row = candidate.sessionCandidate
       if (!row) return undefined
       const ref = JSON.stringify({ uri: row.sessionId, label: row.label })
+      if (options.renderMode === 'raw-text') return { text: sessionMention(ref) }
       return { insert: { source: SESSION_SOURCE, ref, label: `${SESSION_ICON_MARKER} ${row.label}`, clipboardText: sessionMention(ref) } }
     },
     codec: { clipboardText: sessionMention, serialize: ref => Promise.resolve(sessionMention(ref)) },

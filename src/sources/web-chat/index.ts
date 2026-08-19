@@ -5,7 +5,7 @@ import type { ChatProvider, SettingsRecord } from '../../store/spec.ts'
 import { providerSchema, referenceAnythingDomainSpec, settingsRecordSchema } from '../../store/spec.ts'
 import { ConversationStore, type MatchedVia } from '../../store/store.ts'
 import { ConversationSyncManager } from '../../sync/index.ts'
-import { OpenCliRunner } from '../../opencli.ts'
+import { OpenCliError, OpenCliRunner } from '../../opencli.ts'
 import type { ProviderTurnRow } from '../../store/store.ts'
 import { ReferenceAnythingError } from '../../errors.ts'
 import { parseProviderQuery } from '../../search.ts'
@@ -132,10 +132,32 @@ export default class WebChatHistoryService extends Service implements ReferenceS
 
   private async readRemote(conversationKey: string, window: ReferenceWindow, signal?: AbortSignal): Promise<ReferenceSnapshot> {
     const conversation = this.store.conversations.get(conversationKey)
-    if (!conversation || conversation.remoteMissing) throw new ReferenceAnythingError('conversation is not in the local title index', 'REFERENCE_NOT_FOUND')
+    if (!conversation || conversation.remoteMissing) {
+      throw new ReferenceAnythingError(
+        'conversation is missing from the local active-account index; ask the user to sync its provider and reselect it from the refreshed @ list, then retry',
+        'REFERENCE_NOT_FOUND',
+      )
+    }
     let end: number | undefined = window.before
     if (window.cursor !== undefined) end = decodeLiveCursor(window.cursor, conversationKey)
-    const rows = await this.runner().detail(conversation.provider, conversation.externalId, signal)
+    let rows: ProviderTurnRow[]
+    try {
+      rows = await this.runner().detail(conversation.provider, conversation.externalId, signal, conversation.accountScope)
+    } catch (error) {
+      if (signal?.aborted) throw signal.reason
+      if (error instanceof OpenCliError && error.code === 'PROVIDER_ACCOUNT_MISMATCH') {
+        throw new ReferenceAnythingError(
+          `conversation belongs to a different logged-in ${conversation.provider} account; ask the user to sync ${conversation.provider} and reselect it from the refreshed @ list, then retry`,
+          'REFERENCE_ACCOUNT_MISMATCH',
+          { cause: error },
+        )
+      }
+      throw new ReferenceAnythingError(
+        `could not fetch the conversation from ${conversation.provider}; ask the user to confirm the browser connection and login, sync ${conversation.provider}, and then retry`,
+        'REFERENCE_READ_FAILED',
+        { cause: error },
+      )
+    }
     const turns = projectRemoteTurns(rows)
     const boundedEnd = Math.max(0, Math.min(end ?? turns.length, turns.length))
     const start = Math.max(0, boundedEnd - Math.max(1, Math.trunc(window.limit)))
@@ -155,7 +177,8 @@ export default class WebChatHistoryService extends Service implements ReferenceS
     }
   }
 
-  search(query: string, provider: ChatProvider | undefined, limit: number): ConversationSearchResult[] {
+  async search(query: string, provider: ChatProvider | undefined, limit: number, signal?: AbortSignal): Promise<ConversationSearchResult[]> {
+    signal?.throwIfAborted()
     const parsed = parseProviderQuery(query)
     return this.store
       .list(parsed.query, provider ?? parsed.provider, Math.max(1, Math.min(100, limit)))
@@ -199,6 +222,11 @@ export default class WebChatHistoryService extends Service implements ReferenceS
   async removeOlderThan(days: number): Promise<number> {
     if (this.sync.isRunning()) throw new ReferenceAnythingError('cannot clear old data while a sync is in progress', 'REFERENCE_SYNC_IN_PROGRESS')
     return this.store.removeOlderThan(days)
+  }
+
+  async removeRemoteMissing(): Promise<number> {
+    if (this.sync.isRunning()) throw new ReferenceAnythingError('cannot clear remote-missing data while a sync is in progress', 'REFERENCE_SYNC_IN_PROGRESS')
+    return this.store.removeRemoteMissing()
   }
 
   /** Durable per-provider sync status, independent of any single in-flight job. */

@@ -17,7 +17,7 @@ const css = `
    visual width back into the host height ruler so native auto-grow survives. */
 [data-composer-card] [data-decoration="chip"]{display:inline-flex!important;align-items:center!important;width:max-content!important;min-width:4em;border-radius:0!important;background:transparent!important;overflow:visible!important;vertical-align:baseline}
 [data-composer-card] [data-decoration="chip"]:before{display:none!important}
-[data-composer-card] [data-decoration="chip"]>span{position:static!important;width:max-content!important;max-width:none!important;justify-content:flex-start!important;overflow:visible!important;color:var(--dsw-alias-state-business-primary)!important;font-family:inherit!important;font-size:inherit!important;line-height:inherit!important;font-weight:600;transform:none!important;z-index:2}
+[data-composer-card] [data-decoration="chip"]>span{position:static!important;width:max-content!important;max-width:none!important;justify-content:flex-start!important;overflow:visible!important;color:var(--dsw-alias-state-business-primary)!important;font-family:inherit!important;font-size:inherit!important;line-height:inherit!important;letter-spacing:inherit!important;font-weight:600;transform:none!important;z-index:2}
 .dsh_ref_projected_icon{display:inline!important}.dsh_ref_projected_icon:before{content:"";display:inline-block;width:1em;height:1em;margin-right:.35em;vertical-align:-.125em;background:currentColor;mask:var(--dsh-ref-provider-icon) center/contain no-repeat;-webkit-mask:var(--dsh-ref-provider-icon) center/contain no-repeat}[data-composer-card] .dsh_ref_conversation_chip,[data-composer-card] .dsh_ref_conversation_chip>span,[data-composer-card] .dsh_ref_projected_icon{color:var(--dsw-alias-state-business-primary,#3b82f6)!important}[data-composer-card] [role="listbox"] .dsh_ref_projected_icon:before{background:var(--dsw-alias-label-tertiary,#8b8f98)}
 .dsh_ref_session_icon,.dsh_ref_skill_icon{display:inline!important}.dsh_ref_session_icon:before,.dsh_ref_skill_icon:before{content:"";display:inline-block;width:1.05em;height:1.05em;margin-right:.45em;vertical-align:-.125em;background:var(--dsw-alias-label-secondary,#5f636b);mask:var(--dsh-ref-picker-icon) center/contain no-repeat;-webkit-mask:var(--dsh-ref-picker-icon) center/contain no-repeat}[data-composer-card] [data-decoration="chip"]>.dsh_ref_session_icon:before{background:var(--dsw-alias-state-business-primary,#3b82f6)!important}
 [data-composer-card] [data-decoration="text-ref"]{border-radius:0!important;background:transparent!important;color:var(--dsw-alias-state-business-primary)!important;font-family:inherit!important;font-size:inherit!important;line-height:inherit!important;font-weight:inherit!important;letter-spacing:inherit!important;box-shadow:none!important}
@@ -51,18 +51,18 @@ const css = `
 body[data-ds-dark-theme] .dsh_ref_settings{--dsh-ref-card-surface:var(--dsw-alias-bg-layer-1,#303038);--dsh-ref-control-surface:var(--dsw-alias-bg-layer-2,#363640)}
 .dsh_ref_header{padding:2px 2px 4px}.dsh_ref_header h2{font-size:26px;font-weight:700;letter-spacing:-.025em}.dsh_ref_header p{max-width:660px;color:var(--dsw-alias-label-dimmed,var(--dsw-alias-label-primary));line-height:1.55}.dsh_ref_settings button{border-color:var(--dsh-ref-line);border-radius:9px;background:transparent;color:var(--dsw-alias-label-primary);font-weight:600;transition:background .16s ease,border-color .16s ease,color .16s ease,transform .16s ease}.dsh_ref_settings button:hover:not(:disabled){border-color:var(--dsh-ref-blue-line);background:var(--dsh-ref-blue-soft);color:var(--dsh-ref-blue)}
 .dsh_ref_recheck{border-color:var(--dsh-ref-blue-line)!important;color:var(--dsh-ref-blue)!important;background:var(--dsh-ref-blue-soft)!important}.dsh_ref_recheck:hover:not(:disabled){background:var(--dsh-ref-blue)!important;color:#fff!important}
-.dsh_ref_workspace{gap:12px;border:0;border-radius:0;background:transparent;overflow:visible}.dsh_ref_workspace>.dsh_ref_panel,.dsh_ref_workspace>.dsh_ref_sources{padding:20px;border:1px solid var(--dsh-ref-line);border-radius:14px;background:var(--dsh-ref-surface)}.dsh_ref_workspace>.dsh_ref_panel:last-child{border-bottom:1px solid var(--dsh-ref-line)}.dsh_ref_workspace>.dsh_ref_error{margin:0;border-color:rgba(239,68,68,.3);border-radius:12px;background:rgba(239,68,68,.06)}.dsh_ref_notice{padding:10px 12px;border:1px solid var(--dsh-ref-blue-line);border-radius:10px;background:var(--dsh-ref-blue-soft);color:var(--dsh-ref-blue)}
+.dsh_ref_workspace{gap:12px;border:0;border-radius:0;background:transparent;overflow:visible}.dsh_ref_workspace>.dsh_ref_panel,.dsh_ref_workspace>.dsh_ref_sources{padding:20px;border:1px solid var(--dsh-ref-line);border-radius:14px;background:var(--dsh-ref-surface)}.dsh_ref_workspace>.dsh_ref_panel:last-child{border-bottom:1px solid var(--dsh-ref-line)}.dsh_ref_workspace>.dsh_ref_error{margin:0;border-color:rgba(239,68,68,.3);border-radius:12px;background:rgba(239,68,68,.06)}.dsh_ref_notice_layer{position:sticky;top:12px;z-index:20;display:flex;align-items:flex-start;justify-content:center;height:0;margin-bottom:-20px;pointer-events:none}.dsh_ref_notice{width:max-content;max-width:calc(100% - 32px);padding:10px 14px;border:1px solid var(--dsh-ref-blue);border-radius:10px;background:var(--dsh-ref-blue);color:#fff;animation:dsh_ref_notice_drop .18s ease-out both}@keyframes dsh_ref_notice_drop{from{opacity:0;transform:translateY(-12px)}to{opacity:1;transform:translateY(0)}}
 .dsh_ref_section_head h3{font-size:16px;font-weight:700;letter-spacing:-.015em}.dsh_ref_section_head p{color:var(--dsw-alias-label-dimmed,var(--dsw-alias-label-primary));line-height:1.5}.dsh_ref_health,.dsh_ref_syncing{border-color:var(--dsh-ref-blue-line);border-radius:999px;background:var(--dsh-ref-blue-soft);color:var(--dsh-ref-blue);font-weight:650}.dsh_ref_checklist{gap:13px}.dsh_ref_check>span{border-color:var(--dsh-ref-blue-line);background:var(--dsh-ref-blue-soft);color:var(--dsh-ref-blue)}.dsh_ref_check small{color:var(--dsw-alias-label-dimmed,var(--dsw-alias-label-primary));line-height:1.45}
 .dsh_ref_install{margin-top:18px;padding:13px 14px;border-color:var(--dsh-ref-line);border-radius:11px;background:var(--dsh-ref-card-surface)}.dsh_ref_install span{color:var(--dsw-alias-label-dimmed,var(--dsw-alias-label-primary))}.dsh_ref_service_actions button:first-child{border-color:var(--dsh-ref-blue-line);color:var(--dsh-ref-blue)}.dsh_ref_service_actions button.is_primary{border-color:var(--dsh-ref-blue);background:var(--dsh-ref-blue);color:#fff}.dsh_ref_service_actions button.is_primary:hover:not(:disabled){filter:brightness(.94)}
-.dsh_ref_general_settings{gap:15px}.dsh_ref_picker_list{overflow:hidden;border-color:var(--dsh-ref-line);border-radius:11px;background:var(--dsh-ref-card-surface)}.dsh_ref_picker_row{grid-template-columns:minmax(150px,1fr) auto auto;gap:12px;padding:10px 12px;border-color:var(--dsh-ref-line)}.dsh_ref_picker_row>label:first-child{color:var(--dsw-alias-label-primary)}.dsh_ref_picker_row input{accent-color:var(--dsh-ref-blue)}.dsh_ref_picker_limit{color:var(--dsw-alias-label-dimmed,var(--dsw-alias-label-primary))}.dsh_ref_picker_limit select{border-color:var(--dsh-ref-line);border-radius:7px;background:transparent}.dsh_ref_picker_limit select:focus{outline:2px solid var(--dsh-ref-blue-line);outline-offset:1px}.dsh_ref_picker_order button{min-width:29px;border-color:transparent;background:transparent;color:var(--dsw-alias-label-dimmed,var(--dsw-alias-label-primary))}.dsh_ref_picker_order button:hover:not(:disabled){border-color:transparent;background:var(--dsh-ref-blue-soft);color:var(--dsh-ref-blue)}
+.dsh_ref_general_settings{gap:15px}.dsh_ref_render_mode{display:flex;align-items:center;justify-content:space-between;gap:18px;padding:11px 12px;border:1px solid var(--dsh-ref-line);border-radius:11px;background:var(--dsh-ref-card-surface)}.dsh_ref_render_mode>span{display:grid;min-width:0;gap:3px}.dsh_ref_render_mode b{font-size:12px}.dsh_ref_render_mode small{color:var(--dsw-alias-label-dimmed,var(--dsw-alias-label-primary));font-size:10px;line-height:1.45}.dsh_ref_render_mode select{flex:none;width:132px;height:32px;padding:0 9px;border:1px solid var(--dsh-ref-line);border-radius:7px;outline:0;background:transparent;color:var(--dsw-alias-label-primary);font:11px Geist,"Segoe UI",sans-serif}.dsh_ref_render_mode select:focus{outline:2px solid var(--dsh-ref-blue-line);outline-offset:1px}.dsh_ref_picker_list{overflow:hidden;border-color:var(--dsh-ref-line);border-radius:11px;background:var(--dsh-ref-card-surface)}.dsh_ref_picker_row{grid-template-columns:minmax(150px,1fr) auto auto;gap:12px;padding:10px 12px;border-color:var(--dsh-ref-line)}.dsh_ref_picker_row>label:first-child{color:var(--dsw-alias-label-primary)}.dsh_ref_picker_row input{accent-color:var(--dsh-ref-blue)}.dsh_ref_picker_limit{color:var(--dsw-alias-label-dimmed,var(--dsw-alias-label-primary))}.dsh_ref_picker_limit input{border-color:var(--dsh-ref-line);border-radius:7px}.dsh_ref_picker_limit input:focus{outline:2px solid var(--dsh-ref-blue-line);outline-offset:1px}.dsh_ref_picker_limit input[aria-invalid=true]{border-style:dashed}.dsh_ref_picker_order button{min-width:29px;border-color:transparent;background:transparent;color:var(--dsw-alias-label-dimmed,var(--dsw-alias-label-primary))}.dsh_ref_picker_order button:hover:not(:disabled){border-color:transparent;background:var(--dsh-ref-blue-soft);color:var(--dsh-ref-blue)}
 .dsh_ref_provider_grid{overflow:hidden;border-color:var(--dsh-ref-line);border-radius:11px;background:var(--dsh-ref-card-surface)}.dsh_ref_provider{border-color:var(--dsh-ref-line);transition:background .16s ease}.dsh_ref_provider:hover{background:var(--dsh-ref-blue-soft)}.dsh_ref_provider_mark{border-color:var(--dsh-ref-blue-line);border-radius:8px;color:var(--dsh-ref-blue)}.dsh_ref_provider>small{color:var(--dsw-alias-label-dimmed,var(--dsw-alias-label-primary));opacity:1}.dsh_ref_provider_foot button{border-color:var(--dsh-ref-blue-line);border-radius:7px;color:var(--dsh-ref-blue)}
 .dsh_ref_sync_settings{gap:18px}.dsh_ref_form_grid input,.dsh_ref_form_grid select,.dsh_ref_manage_filters input,.dsh_ref_manage_filters select{border-color:var(--dsh-ref-line);border-radius:8px;background:var(--dsh-ref-control-surface)}.dsh_ref_form_grid input:focus,.dsh_ref_form_grid select:focus,.dsh_ref_manage_filters input:focus,.dsh_ref_manage_filters select:focus{outline-color:var(--dsh-ref-blue-line)}.dsh_ref_field_note{margin:0;color:var(--dsw-alias-label-dimmed,var(--dsw-alias-label-primary));font-size:11px;font-weight:400;line-height:1.45}.dsh_ref_toggle>span{border-color:var(--dsh-ref-blue-line);background:var(--dsh-ref-blue-soft)}.dsh_ref_toggle>span:after{background:var(--dsh-ref-blue)}.dsh_ref_actions .is_primary{border-color:var(--dsh-ref-blue);background:var(--dsh-ref-blue);color:#fff}.dsh_ref_actions .is_primary:hover:not(:disabled){background:var(--dsh-ref-blue);color:#fff;filter:brightness(.94)}.dsh_ref_progress_track{border:0;border-radius:999px;background:var(--dsh-ref-blue-soft)}.dsh_ref_progress_fill{border-radius:999px;background:var(--dsh-ref-blue)}
 .dsh_ref_viability{display:grid;gap:0;margin-top:12px}.dsh_ref_viability_actions{display:flex;align-items:center;flex-wrap:wrap;justify-content:flex-end;gap:8px}.dsh_ref_picker_limit input{border-color:var(--dsh-ref-line);border-radius:7px;background:transparent}.dsh_ref_picker_limit input:focus{outline:2px solid var(--dsh-ref-blue-line);outline-offset:1px}.dsh_ref_picker_order button{color:var(--dsw-alias-label-primary)}body[data-ds-dark-theme] .dsh_ref_picker_order button{color:var(--dsw-alias-label-tertiary,#cbd5e1)}.dsh_ref_provider{grid-template-columns:34px minmax(130px,1fr) minmax(185px,1.1fr) max-content;grid-template-rows:auto auto;row-gap:2px;padding-inline:14px}.dsh_ref_provider_mark{grid-row:1 / span 2}.dsh_ref_provider h4{grid-row:1 / span 2;align-self:center}.dsh_ref_provider>strong{grid-row:1}.dsh_ref_provider>small{grid-column:3;grid-row:2;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.dsh_ref_provider_actions{grid-column:4;grid-row:1 / span 2;min-width:0;flex-wrap:nowrap;justify-content:flex-end}.dsh_ref_provider_actions button{flex:0 0 auto;width:auto;white-space:nowrap}.dsh_ref_toggle>span{background:transparent}.dsh_ref_toggle input:checked+span{border-color:var(--dsh-ref-blue);background:var(--dsh-ref-blue)}.dsh_ref_toggle input:checked+span:after{background:#fff}.dsh_ref_settings button.is_danger{border-color:rgba(220,38,38,.45);color:#dc2626}.dsh_ref_settings button.is_danger:hover:not(:disabled){border-color:#dc2626;background:rgba(220,38,38,.08);color:#dc2626}body[data-ds-dark-theme] .dsh_ref_settings button.is_danger{border-color:rgba(248,113,113,.55);color:#f87171}body[data-ds-dark-theme] .dsh_ref_settings button.is_danger:hover:not(:disabled){border-color:#f87171;background:rgba(248,113,113,.12);color:#f87171}.dsh_ref_manage_list{max-height:340px;overflow-y:auto;overscroll-behavior:contain;border-color:var(--dsh-ref-line);border-radius:11px;background:var(--dsh-ref-card-surface)}.dsh_ref_manage_row{border-color:var(--dsh-ref-line)}.dsh_ref_manage_row:hover{background:var(--dsh-ref-blue-soft)}.dsh_ref_badge{border-color:var(--dsh-ref-blue-line);border-radius:999px;color:var(--dsh-ref-blue)}.dsh_ref_pagination button{border-radius:8px}
 @media(max-width:720px){.dsh_ref_picker_row{grid-template-columns:minmax(0,1fr) auto}.dsh_ref_picker_order{grid-column:2}.dsh_ref_picker_limit{justify-content:flex-end}.dsh_ref_workspace>.dsh_ref_panel,.dsh_ref_workspace>.dsh_ref_sources{padding:18px;border-radius:12px}}
 @media(max-width:520px){.dsh_ref_picker_row{grid-template-columns:1fr}.dsh_ref_picker_limit{justify-content:space-between}.dsh_ref_picker_order{grid-column:auto}.dsh_ref_provider{grid-template-columns:34px minmax(0,1fr) auto;grid-template-rows:auto auto auto}.dsh_ref_provider_mark{grid-row:1 / span 3}.dsh_ref_provider h4{grid-column:2;grid-row:1}.dsh_ref_provider>strong{grid-column:2;grid-row:2}.dsh_ref_provider>small{grid-column:2;grid-row:3}.dsh_ref_provider_actions{grid-column:3;grid-row:1 / span 3;flex-direction:column}.dsh_ref_progress_sources{grid-template-columns:1fr 1fr}}
 /* Keep explanatory copy readable against DSH's light settings surface. */
-.dsh_ref_header p,.dsh_ref_section_head p,.dsh_ref_check small,.dsh_ref_install span,.dsh_ref_picker_limit,.dsh_ref_provider>small,.dsh_ref_field_note{color:#64748b}
-body[data-ds-dark-theme] .dsh_ref_header p,body[data-ds-dark-theme] .dsh_ref_section_head p,body[data-ds-dark-theme] .dsh_ref_check small,body[data-ds-dark-theme] .dsh_ref_install span,body[data-ds-dark-theme] .dsh_ref_picker_limit,body[data-ds-dark-theme] .dsh_ref_provider>small,body[data-ds-dark-theme] .dsh_ref_field_note{color:var(--dsw-alias-label-tertiary,#94a3b8)}
+.dsh_ref_header p,.dsh_ref_section_head p,.dsh_ref_check small,.dsh_ref_install span,.dsh_ref_picker_limit,.dsh_ref_provider>small,.dsh_ref_field_note,.dsh_ref_render_mode small{color:#64748b}
+body[data-ds-dark-theme] .dsh_ref_header p,body[data-ds-dark-theme] .dsh_ref_section_head p,body[data-ds-dark-theme] .dsh_ref_check small,body[data-ds-dark-theme] .dsh_ref_install span,body[data-ds-dark-theme] .dsh_ref_picker_limit,body[data-ds-dark-theme] .dsh_ref_provider>small,body[data-ds-dark-theme] .dsh_ref_field_note,body[data-ds-dark-theme] .dsh_ref_render_mode small{color:var(--dsw-alias-label-tertiary,#94a3b8)}
 .dsh_ref_provider{grid-template-columns:38px minmax(0,1fr);grid-template-rows:auto;align-items:stretch;column-gap:12px;padding:13px 14px}.dsh_ref_provider>.dsh_ref_provider_mark{grid-column:1;grid-row:1;align-self:center}.dsh_ref_provider_content{grid-column:2;display:grid;gap:9px;min-width:0}.dsh_ref_provider_summary{display:grid;grid-template-columns:minmax(120px,1fr) minmax(90px,.45fr) minmax(210px,1fr);align-items:baseline;gap:18px;min-width:0}.dsh_ref_provider_summary h4{grid-column:1;grid-row:auto;margin:0;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13px}.dsh_ref_provider_summary>strong{display:inline-flex;align-items:baseline;gap:3px;font-family:"Geist Mono",Consolas,monospace;font-size:18px;white-space:nowrap}.dsh_ref_provider_summary>strong span{font-family:Geist,"Segoe UI",sans-serif;font-size:11px;font-weight:600}.dsh_ref_provider_summary>small{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--dsw-alias-label-primary);font-size:10px;opacity:.78}.dsh_ref_provider_controls{display:flex;align-items:center;justify-content:space-between;gap:16px;min-width:0}.dsh_ref_provider_controls>.dsh_ref_toggle{flex:none;gap:6px;white-space:nowrap}.dsh_ref_provider_controls>.dsh_ref_toggle>span{width:28px;height:16px}.dsh_ref_provider_controls>.dsh_ref_toggle>span:after{top:2px;left:2px}.dsh_ref_provider_controls>.dsh_ref_toggle input:checked+span:after{transform:translateX(12px)}.dsh_ref_provider_controls>.dsh_ref_provider_actions{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:6px}.dsh_ref_provider_controls>.dsh_ref_provider_actions button{min-height:29px;padding:0 10px;font-size:10px;white-space:nowrap}.dsh_ref_provider_error{display:block;margin:0;padding-top:8px;border-top:1px dashed rgba(220,38,38,.28);color:#dc2626;font-size:10px;font-style:normal;line-height:1.45;overflow-wrap:anywhere}
 .dsh_ref_storage{display:grid;gap:18px}.dsh_ref_storage_header{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:start;gap:24px}.dsh_ref_storage_header h3{margin:0 0 4px;font-size:17px;letter-spacing:-.02em}.dsh_ref_storage_header p{margin:0;max-width:650px;color:#64748b;font-size:12px;line-height:1.55}.dsh_ref_storage_metric{display:grid;justify-items:end;gap:3px;min-width:116px;padding:8px 12px;border:1px solid var(--dsh-ref-blue-line);border-radius:9px;background:var(--dsh-ref-blue-soft)}.dsh_ref_storage_metric span{color:var(--dsw-alias-label-primary);font-size:10px;font-weight:650;opacity:.78}.dsh_ref_storage_metric strong{color:var(--dsw-alias-label-primary);font-family:"Geist Mono",Consolas,monospace;font-size:15px;line-height:1.25;white-space:nowrap}.dsh_ref_storage_cleanup{display:flex;align-items:flex-end;flex-wrap:wrap;gap:10px;padding-top:16px;border-top:1px solid var(--dsh-ref-line)}.dsh_ref_storage_cleanup>label{display:grid;gap:7px;color:var(--dsw-alias-label-primary);font-size:11px;font-weight:650}.dsh_ref_number_field{display:flex;align-items:center;width:190px;height:36px;overflow:hidden;border:1px solid var(--dsh-ref-line);border-radius:8px;background:var(--dsh-ref-control-surface)}.dsh_ref_number_field:focus-within{outline:2px solid var(--dsh-ref-blue-line);outline-offset:1px}.dsh_ref_number_field input{min-width:0;width:100%;height:100%;padding:0 10px;border:0;outline:0;background:transparent;color:var(--dsw-alias-label-primary);font:12px "Geist Mono",Consolas,monospace}.dsh_ref_number_field b{display:grid;place-items:center;align-self:stretch;min-width:42px;border-left:1px solid var(--dsh-ref-line);color:var(--dsw-alias-label-primary);font-size:11px;font-weight:650;opacity:.78}.dsh_ref_storage_cleanup>button{height:36px}
 body[data-ds-dark-theme] .dsh_ref_storage_header p{color:var(--dsw-alias-label-tertiary,#94a3b8)}
@@ -198,12 +198,19 @@ export function adoptMenuExpansionProjection(options: MenuExpansionOptions): () 
   // Key by stable source identity, not the transient React header element, so
   // a candidate refresh preserves how far the user expanded each group.
   const revealed = new Map<string, number>()
+  const configured = new Map<string, number>()
   const project = (root: ParentNode): void => {
     const headers = (root instanceof Element && root.matches(selector) ? [root] : Array.from(root.querySelectorAll(selector)))
       .filter(header => options.sources.includes((header as HTMLElement).dataset.source ?? '')) as HTMLElement[]
     for (const header of headers) {
       const source = header.dataset.source ?? ''
       const configuredLimit = Math.max(1, options.getVisibleLimit(source))
+      // `getVisibleLimit` reads live settings. A settings change starts a
+      // fresh reveal window instead of retaining the previous expanded count.
+      if (configured.get(source) !== configuredLimit) {
+        configured.set(source, configuredLimit)
+        revealed.set(source, configuredLimit)
+      }
       const visibleLimit = revealed.get(source) ?? configuredLimit
       revealed.set(source, visibleLimit)
       const rows: HTMLElement[] = []
@@ -476,11 +483,17 @@ type PointCaretDocument = Document & {
 
 function logicalOffsetFromPoint(input: HTMLTextAreaElement, backdrop: HTMLElement, clientX: number, clientY: number): number | undefined {
   const previousVisibility = input.style.visibility
+  const previousPointerEvents = backdrop.style.pointerEvents
   input.style.visibility = 'hidden'
+  // The host backdrop is deliberately pointer-events:none. Caret hit-testing
+  // follows that rule too, so expose it only for this synchronous probe or the
+  // API returns the outer card instead of its visual text nodes.
+  backdrop.style.pointerEvents = 'auto'
   const pointDocument = document as PointCaretDocument
   const position = pointDocument.caretPositionFromPoint?.(clientX, clientY)
   const range = position === undefined || position === null ? pointDocument.caretRangeFromPoint?.(clientX, clientY) : undefined
   input.style.visibility = previousVisibility
+  backdrop.style.pointerEvents = previousPointerEvents
   const node = position?.offsetNode ?? range?.startContainer
   const nodeOffset = position?.offset ?? range?.startOffset
   if (node === undefined || nodeOffset === undefined) return undefined
@@ -552,16 +565,215 @@ export function adoptAdaptiveChipHitTesting(): () => void {
     event.preventDefault()
   }
   const onPointerCancel = (): void => { press = undefined }
+  const onDoubleClick = (event: MouseEvent): void => {
+    const input = event.target
+    if (!(input instanceof HTMLTextAreaElement)) return
+    const backdrop = input.closest('[data-composer-card]')?.querySelector('[data-input-backdrop]:not([data-dsh-ref-height-ruler])')
+    if (!(backdrop instanceof HTMLElement) || backdrop.querySelector('[data-decoration="chip"]') === null) return
+    const target = logicalOffsetFromPoint(input, backdrop, event.clientX, event.clientY)
+    if (target === undefined) return
+    const selected = wordRangeAtLogicalOffset(input.value, target)
+    const applyWord = (): void => {
+      input.setSelectionRange(selected.start, selected.end)
+      input.dispatchEvent(new Event('select', { bubbles: true }))
+    }
+    applyWord()
+    // Chromium performs its textarea word selection after dispatching the
+    // dblclick event even when the preceding pointerdown was prevented.
+    queueMicrotask(applyWord)
+    event.preventDefault()
+    event.stopImmediatePropagation()
+  }
+  const onClick = (event: MouseEvent): void => {
+    if (event.detail < 3 || !(event.target instanceof HTMLTextAreaElement)) return
+    const input = event.target
+    const backdrop = input.closest('[data-composer-card]')?.querySelector('[data-input-backdrop]:not([data-dsh-ref-height-ruler])')
+    if (!(backdrop instanceof HTMLElement) || backdrop.querySelector('[data-decoration="chip"]') === null) return
+    const style = getComputedStyle(input)
+    const left = backdrop.getBoundingClientRect().left + (Number.parseFloat(style.paddingLeft) || 0) + 1
+    const right = backdrop.getBoundingClientRect().right - (Number.parseFloat(style.paddingRight) || 0) - 1
+    const start = logicalOffsetFromPoint(input, backdrop, left, event.clientY)
+    const end = logicalOffsetFromPoint(input, backdrop, right, event.clientY)
+    if (start === undefined || end === undefined) return
+    const applyLine = (): void => {
+      input.setSelectionRange(Math.min(start, end), Math.max(start, end))
+      input.dispatchEvent(new Event('select', { bubbles: true }))
+    }
+    applyLine()
+    queueMicrotask(applyLine)
+    event.preventDefault()
+    event.stopImmediatePropagation()
+  }
   document.addEventListener('pointerdown', onPointerDown, true)
   document.addEventListener('pointermove', onPointerMove, true)
   document.addEventListener('pointerup', onPointerUp, true)
   document.addEventListener('pointercancel', onPointerCancel, true)
+  document.addEventListener('dblclick', onDoubleClick, true)
+  document.addEventListener('click', onClick, true)
   return () => {
     press = undefined
     document.removeEventListener('pointerdown', onPointerDown, true)
     document.removeEventListener('pointermove', onPointerMove, true)
     document.removeEventListener('pointerup', onPointerUp, true)
     document.removeEventListener('pointercancel', onPointerCancel, true)
+    document.removeEventListener('dblclick', onDoubleClick, true)
+    document.removeEventListener('click', onClick, true)
+  }
+}
+
+/** Native-like word/chip selection in the textarea's logical value. */
+export function wordRangeAtLogicalOffset(value: string, offset: number): { start: number, end: number } {
+  const at = Math.min(Math.max(offset, 0), value.length)
+  const chip = value[at] === '\uFFFC' ? at : at > 0 && value[at - 1] === '\uFFFC' ? at - 1 : -1
+  if (chip >= 0) return { start: chip, end: chip + 1 }
+  const pivot = at === value.length && at > 0 ? at - 1 : at
+  if (pivot < 0 || pivot >= value.length) return { start: at, end: at }
+  const kind = (char: string): 'word' | 'space' | 'punctuation' => /[\p{L}\p{N}\p{M}_]/u.test(char)
+    ? 'word' : /\s/u.test(char) ? 'space' : 'punctuation'
+  const selectedKind = kind(value[pivot] ?? '')
+  let start = pivot
+  let end = pivot + 1
+  while (start > 0 && kind(value[start - 1] ?? '') === selectedKind && value[start - 1] !== '\uFFFC') start--
+  while (end < value.length && kind(value[end] ?? '') === selectedKind && value[end] !== '\uFFFC') end++
+  return { start, end }
+}
+
+/** Keep visual-line keyboard navigation aligned with full-width chips. */
+export function adoptAdaptiveChipKeyboardNavigation(): () => void {
+  let preferredX: number | undefined
+  const reset = (): void => { preferredX = undefined }
+  const onKeyDown = (event: KeyboardEvent): void => {
+    const vertical = event.key === 'ArrowUp' || event.key === 'ArrowDown' || event.key === 'PageUp' || event.key === 'PageDown'
+    const lineEdge = event.key === 'Home' || event.key === 'End'
+    if (!vertical && !lineEdge) { reset(); return }
+    // Let the host arbitrate trigger menus first. React's root listener runs
+    // before this document-bubble listener and marks a consumed key prevented.
+    if (event.defaultPrevented || event.isComposing || event.keyCode === 229 || event.altKey || event.ctrlKey || event.metaKey) return
+    if (!(event.target instanceof HTMLTextAreaElement) || document.querySelector('[role="listbox"]') !== null) return
+    const input = event.target
+    const backdrop = input.closest('[data-composer-card]')?.querySelector('[data-input-backdrop]:not([data-dsh-ref-height-ruler])')
+    if (!(backdrop instanceof HTMLElement) || backdrop.querySelector('[data-decoration="chip"]') === null) return
+    const focus = input.selectionDirection === 'backward' ? input.selectionStart : input.selectionEnd
+    let anchorRect = visualCaretRectAtLogicalOffset(backdrop, focus)
+    if (anchorRect === undefined) return
+    const style = getComputedStyle(input)
+    const lineHeight = Number.parseFloat(style.lineHeight)
+    if (!(lineHeight > 0)) return
+    const backdropRect = backdrop.getBoundingClientRect()
+    const paddingLeft = Number.parseFloat(style.paddingLeft) || 0
+    const paddingRight = Number.parseFloat(style.paddingRight) || 0
+    const scrollport = input.closest('[data-input-scroll]')
+    let targetX = anchorRect.left
+    let targetY = anchorRect.top + lineHeight / 2
+    if (vertical) {
+      preferredX ??= anchorRect.left
+      targetX = preferredX
+      const direction = event.key === 'ArrowUp' || event.key === 'PageUp' ? -1 : 1
+      const distance = event.key === 'PageUp' || event.key === 'PageDown'
+        ? Math.max(lineHeight, (scrollport instanceof HTMLElement ? scrollport.clientHeight : lineHeight) - lineHeight)
+        : lineHeight
+      targetY += direction * distance
+      if (scrollport instanceof HTMLElement) {
+        const viewport = scrollport.getBoundingClientRect()
+        if (targetY < viewport.top || targetY > viewport.bottom) {
+          scrollport.scrollTop += targetY < viewport.top ? targetY - viewport.top : targetY - viewport.bottom
+          anchorRect = visualCaretRectAtLogicalOffset(backdrop, focus) ?? anchorRect
+          targetY = anchorRect.top + lineHeight / 2 + direction * distance
+        }
+      }
+    } else {
+      reset()
+      targetX = event.key === 'Home' ? backdropRect.left + paddingLeft + 1 : backdropRect.right - paddingRight - 1
+    }
+    let target = logicalOffsetFromPoint(input, backdrop, targetX, targetY)
+    if (target === undefined) {
+      if (targetY <= backdropRect.top) target = 0
+      else if (targetY >= backdropRect.bottom) target = input.value.length
+      else return
+    }
+    const selectionAnchor = event.shiftKey
+      ? (input.selectionDirection === 'backward' ? input.selectionEnd : input.selectionStart)
+      : target
+    input.setSelectionRange(Math.min(selectionAnchor, target), Math.max(selectionAnchor, target), target < selectionAnchor ? 'backward' : 'forward')
+    input.dispatchEvent(new Event('select', { bubbles: true }))
+    event.preventDefault()
+  }
+  document.addEventListener('keydown', onKeyDown)
+  document.addEventListener('input', reset, true)
+  document.addEventListener('pointerdown', reset, true)
+  return () => {
+    document.removeEventListener('keydown', onKeyDown)
+    document.removeEventListener('input', reset, true)
+    document.removeEventListener('pointerdown', reset, true)
+  }
+}
+
+function logicalOffsetBeforeChip(root: HTMLElement, target: Element): number | undefined {
+  let logical = 0
+  const visit = (parent: Node): boolean => {
+    for (const child of Array.from(parent.childNodes)) {
+      if (child === target) return true
+      if (child instanceof Element && child.matches('[data-decoration="chip"]')) { logical += 1; continue }
+      if (child instanceof Text) { logical += child.data.length; continue }
+      if (visit(child)) return true
+    }
+    return false
+  }
+  return visit(root) ? logical : undefined
+}
+
+/** Restore the caret after a menu-picked chip replaces an @ token mid-draft. */
+export function adoptAdaptiveChipInsertionCaret(): () => void {
+  let pending: { input: HTMLTextAreaElement, expires: number } | undefined
+  let frame = 0
+  const known = new Set<string>()
+  const currentChips = (): Element[] => Array.from(document.querySelectorAll('[data-input-backdrop]:not([data-dsh-ref-height-ruler]) [data-decoration="chip"][data-occurrence]'))
+  for (const chip of currentChips()) known.add(chip.getAttribute('data-occurrence') ?? '')
+  const arm = (input: HTMLTextAreaElement): void => { pending = { input, expires: performance.now() + 1000 } }
+  const onPointerDown = (event: PointerEvent): void => {
+    if (!(event.target instanceof Element) || event.target.closest('[role="option"]') === null) return
+    const input = document.activeElement
+    if (input instanceof HTMLTextAreaElement && input.closest('[data-composer-card]') !== null) arm(input)
+  }
+  const onKeyDown = (event: KeyboardEvent): void => {
+    if (event.key !== 'Enter' || !(event.target instanceof HTMLTextAreaElement)) return
+    const listbox = document.querySelector('[role="listbox"][aria-activedescendant]')
+    if (listbox?.getAttribute('aria-activedescendant')) arm(event.target)
+  }
+  const reconcile = (): void => {
+    const chips = currentChips()
+    const added = chips.find(chip => !known.has(chip.getAttribute('data-occurrence') ?? ''))
+    known.clear()
+    for (const chip of chips) known.add(chip.getAttribute('data-occurrence') ?? '')
+    const pick = pending
+    if (added === undefined || pick === undefined || performance.now() > pick.expires) {
+      if (pick !== undefined && performance.now() > pick.expires) pending = undefined
+      return
+    }
+    const backdrop = added.closest('[data-input-backdrop]:not([data-dsh-ref-height-ruler])')
+    if (!(backdrop instanceof HTMLElement) || !pick.input.isConnected) { pending = undefined; return }
+    const offset = logicalOffsetBeforeChip(backdrop, added)
+    if (offset === undefined || pick.input.value[offset] !== '\uFFFC') { pending = undefined; return }
+    let target = offset + 1
+    if (pick.input.value[target] === ' ') target++
+    pick.input.focus({ preventScroll: true })
+    pick.input.setSelectionRange(target, target)
+    pick.input.dispatchEvent(new Event('select', { bubbles: true }))
+    pending = undefined
+  }
+  const observer = new MutationObserver(() => {
+    cancelAnimationFrame(frame)
+    frame = requestAnimationFrame(reconcile)
+  })
+  observer.observe(document.body, { childList: true, subtree: true })
+  document.addEventListener('pointerdown', onPointerDown, true)
+  document.addEventListener('keydown', onKeyDown, true)
+  return () => {
+    cancelAnimationFrame(frame)
+    observer.disconnect()
+    document.removeEventListener('pointerdown', onPointerDown, true)
+    document.removeEventListener('keydown', onKeyDown, true)
+    pending = undefined
   }
 }
 
@@ -618,9 +830,11 @@ export function adoptAdaptiveChipCaret(): () => void {
   document.body.append(caret)
   let frame = 0
   let restartBlink = false
+  let revealPending = false
   let composing = false
-  const schedule = (restart = false): void => {
+  const schedule = (restart = false, reveal = false): void => {
     restartBlink ||= restart
+    revealPending ||= reveal
     cancelAnimationFrame(frame)
     frame = requestAnimationFrame(update)
   }
@@ -630,16 +844,7 @@ export function adoptAdaptiveChipCaret(): () => void {
     const card = input.closest('[data-composer-card]')
     const backdrop = card?.querySelector('[data-input-backdrop]:not([data-dsh-ref-height-ruler])')
     if (!(backdrop instanceof HTMLElement) || backdrop.querySelector('[data-decoration="chip"]') === null) return hide()
-    const range = rangeAtLogicalOffset(backdrop, input.selectionEnd)
-    if (range === undefined) return hide()
-    const measured = range.getBoundingClientRect()
-    const boundary = caretBoundaryRectAtLogicalOffset(backdrop, input.selectionEnd)
-    // Chromium's collapsed Range has a dependable inline position, but its
-    // vertical origin may sit on the baseline (visibly too low). A neighbouring
-    // glyph/chip rectangle supplies the actual painted line top.
-    const rect = usableCaretRect(measured)
-      ? { left: measured.left, top: boundary?.top ?? measured.top, source: boundary?.source ?? 'range', height: boundary?.height }
-      : boundary
+    const rect = visualCaretRectAtLogicalOffset(backdrop, input.selectionEnd)
     if (rect === undefined || !Number.isFinite(rect.left) || !Number.isFinite(rect.top)) return hide()
     // Read metrics without our transparent-caret override. The painted caret
     // deliberately keeps its semantic CSS colour: embedded Chromium can
@@ -668,8 +873,9 @@ export function adoptAdaptiveChipCaret(): () => void {
       const viewport = scrollport.getBoundingClientRect()
       const overflowAbove = viewport.top - caretTop
       const overflowBelow = caretTop + caretHeight - viewport.bottom
-      if (overflowAbove > 1 || overflowBelow > 1) {
+      if (revealPending && (overflowAbove > 1 || overflowBelow > 1)) {
         scrollport.scrollTop += overflowAbove > 1 ? -overflowAbove : overflowBelow
+        revealPending = false
         schedule()
         return
       }
@@ -695,6 +901,7 @@ export function adoptAdaptiveChipCaret(): () => void {
       caret.style.removeProperty('animation')
     }
     restartBlink = false
+    revealPending = false
   }
   const hide = (): void => {
     document.querySelectorAll('.dsh_ref_native_caret_hidden').forEach(node => node.classList.remove('dsh_ref_native_caret_hidden'))
@@ -709,9 +916,9 @@ export function adoptAdaptiveChipCaret(): () => void {
   // until keyup or the next ordinary text input.
   const activeEvents = ['input', 'keydown', 'keyup', 'pointerup', 'focusin', 'selectionchange'] as const
   const onPassive = (): void => { schedule() }
-  const onActive = (): void => { schedule(true) }
-  const onCompositionStart = (): void => { composing = true; schedule(true) }
-  const onCompositionEnd = (): void => { composing = false; schedule(true) }
+  const onActive = (): void => { schedule(true, true) }
+  const onCompositionStart = (): void => { composing = true; schedule(true, true) }
+  const onCompositionEnd = (): void => { composing = false; schedule(true, true) }
   for (const event of passiveEvents) document.addEventListener(event, onPassive, true)
   for (const event of activeEvents) document.addEventListener(event, onActive, true)
   document.addEventListener('compositionstart', onCompositionStart, true)
@@ -788,6 +995,19 @@ function projectPickerIcon(node: Element, text: string, marker: string, kind: ke
 
 function usableCaretRect(rect: DOMRect): boolean {
   return rect.height > 0 || rect.top !== 0 || rect.left !== 0
+}
+
+function visualCaretRectAtLogicalOffset(root: HTMLElement, target: number): CaretBoundaryRect | undefined {
+  const range = rangeAtLogicalOffset(root, target)
+  if (range === undefined) return undefined
+  const measured = range.getBoundingClientRect()
+  const boundary = caretBoundaryRectAtLogicalOffset(root, target)
+  // Chromium's collapsed Range has a dependable inline position, but its
+  // vertical origin may sit on the baseline. A neighbouring glyph/chip rect
+  // supplies the painted visual line.
+  return usableCaretRect(measured)
+    ? { left: measured.left, top: boundary?.top ?? measured.top, source: boundary?.source ?? 'text', height: boundary?.height }
+    : boundary
 }
 
 /** Snap an ink/chip rectangle to the textarea's shared visual line grid. */

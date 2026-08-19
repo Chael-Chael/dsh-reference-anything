@@ -65,7 +65,7 @@ function clamp(value: number): number {
 
 export interface ManagedConversation extends ConversationRow { remoteMissing: boolean }
 export interface BrowsePage { items: readonly ManagedConversation[]; total: number }
-export interface StorageStats { bytes: number; conversations: number }
+export interface StorageStats { bytes: number; conversations: number; remoteMissing: number }
 export interface ProviderSyncState {
   provider: ChatProvider; status: 'idle' | 'running' | 'cancelled' | 'failed'
   lastSyncAt: string; lastCompleteScanAt: string; error: string
@@ -94,5 +94,6 @@ export interface ReferenceAnythingRemoteFace {
   storageStats(): Promise<RemoteResult<StorageStats>>
   clearProvider(input: { provider: ChatProvider }, signal?: AbortSignal): Promise<RemoteResult<number>>
   clearOlder(input: { days: number }, signal?: AbortSignal): Promise<RemoteResult<number>>
+  clearRemoteMissing(signal?: AbortSignal): Promise<RemoteResult<number>>
   syncStates(): Promise<RemoteResult<readonly ProviderSyncState[]>>
 }

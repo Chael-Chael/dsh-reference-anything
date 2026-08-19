@@ -113,6 +113,16 @@ describe('conversation client references', () => {
       .resolves.toBe(`@[ChatGPT·BiWM SFT Loss 解释](${conversationReferenceUri(row.uriId)})`)
   })
 
+  it('falls back to literal conversation references in Raw text mode', () => {
+    const source = createConversationSource(async () => [], undefined, { order: 30, limit: 6, renderMode: 'raw-text' })
+    const row = searchRow({ uriId: 'chatgpt\0scope\0conversation-raw', title: 'Native editor fallback' })
+    const outcome = source.onPick({
+      candidate: { name: row.title, conversation: row }, session: { sessionId: 'session-1' as never },
+      position: 'inline', via: 'menu', span: { start: 0, end: 1, draftRev: 1 },
+    })
+    expect(outcome).toEqual({ text: `@[ChatGPT·Native editor fallback](${conversationReferenceUri(row.uriId)})` })
+  })
+
   it('groups workspace paths and serializes a relative-path dsh-file chip', async () => {
     const source = createWorkspaceSource(async () => [{ path: 'src/index.ts', kind: 'file' }])
     const candidates = await source.candidates({ sessionId: 'session-1' as never }, { query: 'index', position: 'inline', signal: new AbortController().signal })
@@ -133,6 +143,19 @@ describe('conversation client references', () => {
     if (outcome === undefined || outcome === 'handled' || !('insert' in outcome)) throw new Error('expected session insert')
     expect(outcome.insert.label).toBe('\uE106 项目聊天导出')
     await expect(source.codec?.serialize(outcome.insert.ref, new AbortController().signal)).resolves.toBe(`@[项目聊天导出](${uri})`)
+  })
+
+  it('uses native literal text for files and sessions in Raw text mode', async () => {
+    const file = createWorkspaceSource(async () => [{ path: 'src/index.ts', kind: 'file' }], undefined, { order: 10, limit: 6, renderMode: 'raw-text' })
+    const fileCandidates = await file.candidates({ sessionId: 'session-1' as never }, { query: '', position: 'inline', signal: new AbortController().signal })
+    expect(file.onPick({ candidate: fileCandidates[0]!, session: { sessionId: 'session-1' as never }, position: 'inline', via: 'menu', span: { start: 0, end: 1, draftRev: 1 } }))
+      .toMatchObject({ text: expect.stringMatching(/^@\[src\/index\.ts\]\(dsh-file:[A-Za-z0-9_-]+\)$/u) })
+
+    const uri = 'dsh-session:InNvdXJjZSI'
+    const session = createSessionSource(async () => [{ sessionId: uri, label: '项目聊天导出', createdAt: 1 }], undefined, { order: 20, limit: 6, renderMode: 'raw-text' })
+    const sessionCandidates = await session.candidates({ sessionId: 'session-1' as never }, { query: '', position: 'inline', signal: new AbortController().signal })
+    expect(session.onPick({ candidate: sessionCandidates[0]!, session: { sessionId: 'session-1' as never }, position: 'inline', via: 'menu', span: { start: 0, end: 1, draftRev: 1 } }))
+      .toEqual({ text: `@[项目聊天导出](${uri})` })
   })
 
   it('exposes host commands from every @ panel and hands execution back to the native slash pipeline', async () => {

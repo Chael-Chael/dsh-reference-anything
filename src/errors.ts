@@ -16,6 +16,8 @@ export type ReferenceErrorCode =
   | 'SOURCE_UNAVAILABLE'
   /** The source is usable but holds no item with that id. */
   | 'REFERENCE_NOT_FOUND'
+  /** A live browser read targeted a conversation owned by another account. */
+  | 'REFERENCE_ACCOUNT_MISMATCH'
   /** The source failed while reading; its own error is the `cause`. */
   | 'REFERENCE_READ_FAILED'
   /** The caller cancelled before the read settled. */

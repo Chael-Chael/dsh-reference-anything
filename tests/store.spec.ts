@@ -18,7 +18,7 @@ class Table<V> implements KvTable<string, V> {
 
 function store() {
   const tables = new Map<string, Table<never>>()
-  let settings: SettingsRecord = { opencliPath: 'opencli', profile: '', detailConcurrency: 8, autoSync: false, syncOnStartup: false, autoSyncMinutes: 60, historyMode: 'offline-mirror', enabledProviders: ['chatgpt', 'claude', 'gemini', 'deepseek', 'grok', 'kimi'], maxReadTurns: 10 }
+  let settings: SettingsRecord = { opencliPath: 'opencli', profile: '', detailConcurrency: 8, autoSync: false, syncOnStartup: false, autoSyncMinutes: 60, historyMode: 'offline-mirror', enabledProviders: ['chatgpt', 'claude', 'gemini', 'deepseek', 'grok', 'kimi'], maxReadTurns: 10, inputRenderMode: 'pill' }
   const domain = {
     name: 'reference_anything',
     global: { get: () => settings, set: async (value: SettingsRecord) => { settings = value } },
@@ -110,6 +110,46 @@ describe('conversation mirror', () => {
     const db = store(); const key = await db.putConversation(history, 'scope')
     await db.markRemoteMissing('chatgpt', 'scope', new Set())
     expect(db.conversations.get(key)?.remoteMissing).toBe(true)
+  })
+
+  it('hides older account scopes from discovery after the active account changes', async () => {
+    const db = store()
+    await db.putConversation(history, 'old-account')
+    const current = { ...history, id: 'current-account-chat', title: 'Current account chat' }
+    await db.putConversation(current, 'new-account')
+
+    db.setActiveAccountScope('chatgpt', 'new-account')
+    expect(db.list('', 'chatgpt', 10).map(match => match.row.externalId)).toEqual(['current-account-chat'])
+  })
+
+  it('uses the latest persisted sync account for discovery after restart', async () => {
+    const db = store()
+    await db.putConversation(history, 'old-account')
+    await db.putConversation({ ...history, id: 'current-account-chat' }, 'new-account')
+    await db.syncStates.put('chatgpt:old-account', {
+      provider: 'chatgpt', profile: '', accountScope: 'old-account', cursor: '', status: 'idle',
+      lastSyncAt: '2026-08-18T00:00:00.000Z', lastCompleteScanAt: '', error: '', completed: 1, total: 1,
+      consecutiveFailures: 0, nextEligibleAt: '',
+    })
+    await db.syncStates.put('chatgpt:new-account', {
+      provider: 'chatgpt', profile: '', accountScope: 'new-account', cursor: '', status: 'idle',
+      lastSyncAt: '2026-08-19T00:00:00.000Z', lastCompleteScanAt: '', error: '', completed: 1, total: 1,
+      consecutiveFailures: 0, nextEligibleAt: '',
+    })
+
+    expect(db.list('', 'chatgpt', 10).map(match => match.row.externalId)).toEqual(['current-account-chat'])
+  })
+
+  it('counts and permanently clears remote-missing conversations', async () => {
+    const db = store()
+    const missing = await db.putConversation(history, 'scope')
+    await db.putConversation({ ...history, id: 'kept' }, 'scope')
+    await db.markRemoteMissing('chatgpt', 'scope', new Set(['kept']))
+
+    expect(db.storageStats().remoteMissing).toBe(1)
+    expect(await db.removeRemoteMissing()).toBe(1)
+    expect(db.conversations.get(missing)).toBeUndefined()
+    expect(db.storageStats().remoteMissing).toBe(0)
   })
 
   it('derives provider statistics from existing local records without a sync-state row', async () => {

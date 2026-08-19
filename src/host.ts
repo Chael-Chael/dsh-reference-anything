@@ -18,7 +18,7 @@ export class ReferenceAnythingRemote extends TypertRemoteService {
 
   search(input: { query: string; provider?: ChatProvider; limit: number }, signal: AbortSignal) {
     signal.throwIfAborted()
-    return this.ctx.referenceChatHistory.search(input.query, input.provider, input.limit)
+    return this.ctx.referenceChatHistory.search(input.query, input.provider, input.limit, signal)
   }
   health(signal: AbortSignal) { return this.ctx.referenceChatHistory.health(signal) }
   profiles(signal: AbortSignal) { return this.ctx.referenceChatHistory.profiles(signal) }
@@ -46,6 +46,9 @@ export class ReferenceAnythingRemote extends TypertRemoteService {
   }
   clearOlder(input: { days: number }, signal: AbortSignal) {
     signal.throwIfAborted(); return this.ctx.referenceChatHistory.removeOlderThan(input.days)
+  }
+  clearRemoteMissing(signal: AbortSignal) {
+    signal.throwIfAborted(); return this.ctx.referenceChatHistory.removeRemoteMissing()
   }
   syncStates() { return this.ctx.referenceChatHistory.syncStates() }
 }

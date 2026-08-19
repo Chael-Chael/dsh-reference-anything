@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it } from 'vitest'
-import { adoptAdaptiveChipHitTesting, adoptAdaptiveComposerHeight, adoptConversationMentionProjection, adoptConversationSyncActionProjection, adoptMenuExpansionProjection, adoptMenuGroupTitleProjection, adoptReferenceIconProjection, adoptStyles, logicalOffsetAtDomPoint, rangeBetweenLogicalOffsets, refreshActiveTriggerMenu, visualCaretTop } from '../src/client/styles.ts'
+import { adoptAdaptiveChipHitTesting, adoptAdaptiveChipInsertionCaret, adoptAdaptiveChipKeyboardNavigation, adoptAdaptiveComposerHeight, adoptConversationMentionProjection, adoptConversationSyncActionProjection, adoptMenuExpansionProjection, adoptMenuGroupTitleProjection, adoptReferenceIconProjection, adoptStyles, logicalOffsetAtDomPoint, rangeBetweenLogicalOffsets, refreshActiveTriggerMenu, visualCaretTop, wordRangeAtLogicalOffset } from '../src/client/styles.ts'
 import { syncProgressFraction, type SyncStatus } from '../src/client/remote.ts'
 
 afterEach(() => {
@@ -22,6 +22,7 @@ describe('plugin-owned DSH presentation overrides', () => {
     expect(text).toContain('[data-decoration="chip"]:before{display:none!important}')
     expect(text).toContain('[data-decoration="chip"]>span{position:static!important')
     expect(text).toContain('font-size:inherit!important')
+    expect(text).toContain('line-height:inherit!important;letter-spacing:inherit!important')
     expect(text).toContain('font-weight:inherit!important;letter-spacing:inherit!important')
     expect(text).toContain('[data-composer-card] .dsh_ref_conversation_chip')
     expect(text).toContain('[data-decoration="chip"]>.dsh_ref_session_icon:before{background:var(--dsw-alias-state-business-primary,#3b82f6)!important}')
@@ -40,6 +41,12 @@ describe('plugin-owned DSH presentation overrides', () => {
     expect(text).not.toContain('.dsh_ref_chip{')
     expect(text).toContain('.dsh_ref_menu_sync{position:relative')
     expect(text).toContain('border-radius:999px;background:rgba(59,130,246,.11)')
+    expect(text).toContain('.dsh_ref_notice_layer{position:sticky;top:12px;z-index:20;display:flex;align-items:flex-start')
+    expect(text).not.toContain('.dsh_ref_notice{position:fixed')
+    expect(text).toContain('background:var(--dsh-ref-blue);color:#fff;animation:dsh_ref_notice_drop')
+    expect(text).toContain('@keyframes dsh_ref_notice_drop')
+    expect(text).toContain('.dsh_ref_render_mode{display:flex')
+    expect(text).toContain('.dsh_ref_field_note,.dsh_ref_render_mode small{color:#64748b}')
   })
 
   it('projects a logged dsh-ref mention without exposing its opaque URI', () => {
@@ -161,6 +168,59 @@ describe('plugin-owned DSH presentation overrides', () => {
       dispose()
       if (point) Object.defineProperty(document, 'caretPositionFromPoint', point)
       else delete (document as unknown as Record<string, unknown>).caretPositionFromPoint
+    }
+  })
+
+  it('selects visual words and atomic chips at their logical offsets', () => {
+    const value = '\uFFFC ordinary words'
+    expect(wordRangeAtLogicalOffset(value, 0)).toEqual({ start: 0, end: 1 })
+    expect(wordRangeAtLogicalOffset(value, 1)).toEqual({ start: 0, end: 1 })
+    expect(wordRangeAtLogicalOffset(value, 4)).toEqual({ start: 2, end: 10 })
+    expect(wordRangeAtLogicalOffset(value, 13)).toEqual({ start: 11, end: 16 })
+  })
+
+  it('uses backdrop hit-testing for visual-line keyboard navigation', () => {
+    document.body.innerHTML = '<div data-composer-card><div data-input-scroll><div data-input-backdrop style="padding:4px 12px 0 16px"><span data-decoration="chip"><span>Long title</span></span>after</div><textarea style="font-size:16px;line-height:24px;padding:4px 12px 0 16px">\uFFFCafter</textarea></div></div>'
+    const input = document.querySelector('textarea')!
+    const backdrop = document.querySelector('[data-input-backdrop]') as HTMLElement
+    const trailing = backdrop.lastChild as Text
+    backdrop.getBoundingClientRect = () => ({ left: 0, right: 400, top: 0, bottom: 200, width: 400, height: 200, x: 0, y: 0, toJSON() {} })
+    const nativeRect = Range.prototype.getBoundingClientRect
+    Range.prototype.getBoundingClientRect = () => ({ left: 120, right: 120, top: 100, bottom: 120, width: 0, height: 20, x: 120, y: 100, toJSON() {} })
+    const point = Object.getOwnPropertyDescriptor(document, 'caretPositionFromPoint')
+    Object.defineProperty(document, 'caretPositionFromPoint', { configurable: true, value: () => ({ offsetNode: trailing, offset: 2 }) })
+    const dispose = adoptAdaptiveChipKeyboardNavigation()
+    try {
+      input.focus()
+      input.setSelectionRange(input.value.length, input.value.length)
+      input.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowUp', bubbles: true, cancelable: true }))
+      expect(input.selectionStart).toBe(3)
+      expect(input.selectionEnd).toBe(3)
+    } finally {
+      dispose()
+      Range.prototype.getBoundingClientRect = nativeRect
+      if (point) Object.defineProperty(document, 'caretPositionFromPoint', point)
+      else delete (document as unknown as Record<string, unknown>).caretPositionFromPoint
+    }
+  })
+
+  it('restores the caret after a picked chip when copied text contains a later @ token', async () => {
+    document.body.innerHTML = '<div data-composer-card><div data-input-backdrop>@first copied @second</div><textarea>@first copied @second</textarea><div role="listbox" aria-activedescendant="pick"><button id="pick" role="option">pick</button></div></div>'
+    const input = document.querySelector('textarea')!
+    input.focus()
+    input.setSelectionRange(6, 6)
+    const dispose = adoptAdaptiveChipInsertionCaret()
+    try {
+      document.getElementById('pick')?.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true }))
+      input.value = '\uFFFC copied @second'
+      input.setSelectionRange(input.value.length, input.value.length) // controlled update/browser jump
+      const backdrop = document.querySelector('[data-input-backdrop]')!
+      backdrop.innerHTML = '<span data-decoration="chip" data-occurrence="7"><span>Picked</span></span> copied @second'
+      await new Promise<void>(resolve => { requestAnimationFrame(() => { requestAnimationFrame(() => { resolve() }) }) })
+      expect(input.selectionStart).toBe(2)
+      expect(input.selectionEnd).toBe(2)
+    } finally {
+      dispose()
     }
   })
 
@@ -319,6 +379,20 @@ describe('plugin-owned DSH presentation overrides', () => {
     const rows = Array.from(document.querySelectorAll('[role="option"]')) as HTMLElement[]
     expect(rows.filter(row => !row.classList.contains('dsh_ref_menu_collapsed'))).toHaveLength(5)
     expect(document.querySelector('[data-dsh-ref-menu-expand="External conversations"]')).not.toBeNull()
+    dispose()
+  })
+
+  it('resets a command group to the newly configured visible limit', async () => {
+    let limit = 4
+    document.body.innerHTML = '<div role="listbox"><div role="presentation" data-source="Commands">Commands</div><button role="option">1</button><button role="option">2</button><button role="option">3</button><button role="option">4</button><button role="option">5</button><button role="option">6</button></div>'
+    const dispose = adoptMenuExpansionProjection({ sources: ['Commands'], label: '展开', getVisibleLimit: () => limit })
+    const rows = Array.from(document.querySelectorAll('[role="option"]')) as HTMLElement[]
+    expect(rows.filter(row => !row.classList.contains('dsh_ref_menu_collapsed'))).toHaveLength(4)
+
+    limit = 2
+    document.querySelector('[role="listbox"]')?.append(document.createComment('settings changed'))
+    await new Promise(resolve => { setTimeout(resolve, 0) })
+    expect(rows.filter(row => !row.classList.contains('dsh_ref_menu_collapsed'))).toHaveLength(2)
     dispose()
   })
 

@@ -60,7 +60,7 @@ export interface ProviderStats {
   error?: string
 }
 
-export interface StorageStats { bytes: number; conversations: number }
+export interface StorageStats { bytes: number; conversations: number; remoteMissing: number }
 
 interface CursorPayload {
   v: 1
@@ -98,6 +98,7 @@ export class ConversationStore {
   readonly chunks: KvTable<string, TurnChunkRecord>
   readonly attachments: KvTable<string, AttachmentRecord>
   readonly syncStates: KvTable<string, SyncStateRecord>
+  private readonly observedAccountScopes = new Map<ChatProvider, string | undefined>()
 
   constructor(readonly domain: RefDomain) {
     this.conversations = domain.table('conversations')
@@ -105,6 +106,10 @@ export class ConversationStore {
     this.chunks = domain.table('turn_chunks')
     this.attachments = domain.table('attachments')
     this.syncStates = domain.table('sync_states')
+  }
+
+  setActiveAccountScope(provider: ChatProvider, accountScope: string | undefined): void {
+    this.observedAccountScopes.set(provider, accountScope)
   }
 
   get settings(): SettingsRecord { return this.domain.global.get() }
@@ -151,8 +156,10 @@ export class ConversationStore {
    */
   list(query: string, provider: ChatProvider | undefined, limit: number): ConversationMatch[] {
     const needle = query.trim()
+    const activeScopes = this.activeAccountScopes()
     const candidates = [...this.conversations.entries()]
-      .filter(([, row]) => !row.remoteMissing && (!provider || row.provider === provider))
+      .filter(([, row]) => !row.remoteMissing && (!provider || row.provider === provider)
+        && (!activeScopes.has(row.provider) || activeScopes.get(row.provider) === row.accountScope))
       .sort(compareConversationRows)
     if (needle === '') {
       return candidates.slice(0, limit).map(([key, row]) => ({ key, row, via: 'recent' as const }))
@@ -273,7 +280,15 @@ export class ConversationStore {
     for (const table of tables) for (const [key, value] of table.entries()) {
       bytes += Buffer.byteLength(JSON.stringify([key, value]), 'utf8')
     }
-    return { bytes, conversations: this.conversations.size }
+    const remoteMissing = [...this.conversations.entries()].filter(([, row]) => row.remoteMissing).length
+    return { bytes, conversations: this.conversations.size, remoteMissing }
+  }
+
+  /** Permanently remove every row a complete remote scan marked as absent. */
+  async removeRemoteMissing(): Promise<number> {
+    const keys = [...this.conversations.entries()].filter(([, row]) => row.remoteMissing).map(([key]) => key)
+    for (const key of keys) await this.remove(key)
+    return keys.length
   }
 
   async removeProvider(provider: ChatProvider): Promise<number> {
@@ -435,6 +450,27 @@ export class ConversationStore {
     await this.conversations.put(conversationKey, merged)
     await this.removeSupersededRevisions(conversationKey, revision)
     return revision
+  }
+
+  /**
+   * Most recently observed logged-in account per provider.
+   *
+   * A non-empty account scope is written as soon as account discovery and
+   * listing complete, even if later per-conversation work fails. Older local
+   * accounts remain manageable, but must not leak back into the @ picker.
+   */
+  activeAccountScopes(): ReadonlyMap<ChatProvider, string | undefined> {
+    const active = new Map<ChatProvider, { scope: string; at: number }>()
+    for (const [, row] of this.syncStates.entries()) {
+      if (!row.accountScope) continue
+      const at = Date.parse(row.lastSyncAt || '')
+      if (Number.isNaN(at)) continue
+      const current = active.get(row.provider)
+      if (!current || at >= current.at) active.set(row.provider, { scope: row.accountScope, at })
+    }
+    const result = new Map<ChatProvider, string | undefined>([...active].map(([provider, value]) => [provider, value.scope]))
+    for (const [provider, scope] of this.observedAccountScopes) result.set(provider, scope)
+    return result
   }
 
   /** Keep exactly the latest transcript revision for a conversation. */

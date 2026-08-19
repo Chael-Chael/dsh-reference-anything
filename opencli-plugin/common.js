@@ -123,7 +123,6 @@ export function registerProvider(config) {
         config.domain,
         `${config.site} sync-index`,
       )
-      if (rows.length === 0 && !effectiveSince) throw new EmptyResultError(`${config.site} sync-index`, 'No conversations found')
       return [
         { kind: 'identity', identity: identity.identity, sinceApplied: effectiveSince },
         ...rows.map(row => ({ kind: 'conversation', identity: '', sinceApplied: '', ...row })),
@@ -155,11 +154,6 @@ export function registerProvider(config) {
         config.domain,
         `${config.site} history-all`,
       )
-      // Under `since`, "nothing new" is the expected answer on a quiet
-      // account — only a full listing that comes back empty is a problem.
-      if (rows.length === 0 && !since) {
-        throw new EmptyResultError(`${config.site} history-all`, 'No conversations found')
-      }
       return rows
     }),
   })
@@ -174,12 +168,27 @@ export function registerProvider(config) {
     browser: true,
     ...browserSession,
     navigateBefore: false,
-    args: [{ name: 'id', positional: true, required: true, help: 'Provider conversation id' }],
+    args: [
+      { name: 'id', positional: true, required: true, help: 'Provider conversation id' },
+      { name: 'accountScope', help: 'Expected hashed account scope; mismatch refuses the read' },
+    ],
     columns: DETAIL_COLUMNS,
     func: async (page, kwargs) => inTemporaryTab(page, async () => {
       const id = String(kwargs.id || '').trim()
       if (!id) throw new ArgumentError('id must be a non-empty conversation id')
       await page.goto(config.home, { settleMs: 600 })
+      const expectedScope = String(kwargs.accountScope || '').trim()
+      if (expectedScope) {
+        const identity = await evaluate(page, config.whoamiScript, {}, `${config.site} detail identity`)
+        if (identity?.code === 'AUTH') throw new AuthRequiredError(config.domain)
+        if (identity?.ok !== true || typeof identity.identity !== 'string' || !identity.identity) {
+          throw new CommandExecutionError(`${config.site} detail: stable account identity unavailable`)
+        }
+        const actualScope = createHash('sha256').update(`${config.provider.toLocaleLowerCase()}\0${identity.identity}`).digest('hex')
+        if (actualScope !== expectedScope) {
+          throw new CommandExecutionError(`DSH_ACCOUNT_SCOPE_MISMATCH: ${config.site} detail: conversation belongs to a different logged-in account`)
+        }
+      }
       let result = await evaluate(page, config.detailScript, { id }, `${config.site} detail`)
       if (result?.ok !== true && result?.code !== 'AUTH' && result?.code !== 'RATE_LIMIT' && config.fallbackScript) {
         await page.goto(config.conversationUrl(id), { settleMs: 1800 })
