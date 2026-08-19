@@ -1,6 +1,6 @@
 import { build } from 'esbuild'
 import { execFileSync } from 'node:child_process'
-import { readdirSync, rmSync } from 'node:fs'
+import { readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 
 const outputDirectory = resolve('lib')
@@ -37,3 +37,7 @@ await build({
   },
   footer: { js: 'return module.exports; } });' },
 })
+
+const logoDataUri = `data:image/png;base64,${readFileSync(resolve('logo.png')).toString('base64')}`
+const bundledClient = resolve('lib/client.js')
+writeFileSync(bundledClient, readFileSync(bundledClient, 'utf8').replaceAll('__REFERENCE_ANYTHING_LOGO_DATA_URI__', logoDataUri))

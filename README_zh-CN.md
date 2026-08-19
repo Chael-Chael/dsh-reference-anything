@@ -2,6 +2,8 @@
 
 <div align="center">
 
+<img src="./logo.png" alt="dsh-reference-anything logo" width="180" />
+
 <h1>dsh-reference-anything</h1>
 
 One `@` to reference them all.
@@ -55,7 +57,7 @@ ChatGPT / Claude / Gemini / DeepSeek / Grok / Kimi
 
 前置条件：
 
-- 已全局安装 `dsh` 和 `opencli`。
+- 已安装并启动 `dsh`；自动安装 OpenCLI 时需要本机 Node.js 附带的 `npm`。
 - 要同步的平台已在所选 Chrome Profile 中登录。
 
 安装 DSH 插件：
@@ -64,7 +66,7 @@ ChatGPT / Claude / Gemini / DeepSeek / Grok / Kimi
 dsh plugin --profile web add D:\dsh-reference-anything
 ```
 
-安装 DSH 插件后，打开 DSH Web 的 `Settings → Conversations → 可用性检查`，点击**「一键安装」**：它会自动安装仓库内的 OpenCLI 适配器（等价于 `opencli plugin install file:///D:/dsh-reference-anything/opencli-plugin`）、在需要时启动 Browser Bridge 守护进程，并打开 OpenCLI Browser Bridge 扩展的 Chrome Web Store 安装页（`https://chromewebstore.google.com/detail/opencli/ildkmabpimmkaediidaifkhjpohdnifk`）。在商店页点击 “Add to Chrome” 后，回到设置页点击「重新检查」，扩展即显示为已连接。
+安装 DSH 插件后，打开 DSH Web 的 `Settings → Conversations → 可用性检查`，点击**「一键安装」**：它会自动查找 OpenCLI，找不到或版本过低时通过 npm 安装/升级，安装仓库内的 OpenCLI 适配器（等价于 `opencli plugin install file:///D:/dsh-reference-anything/opencli-plugin`）、启动或刷新 Browser Bridge 守护进程，并立即打开 OpenCLI Browser Bridge 扩展的 Chrome Web Store 安装页（`https://chromewebstore.google.com/detail/opencli/ildkmabpimmkaediidaifkhjpohdnifk`）。在商店页确认安装后，回到设置页点击「重新检查」；每个仍未通过的检查项旁都会显示对应恢复操作。
 
 也可以手动分别完成：
 
@@ -72,7 +74,7 @@ dsh plugin --profile web add D:\dsh-reference-anything
 opencli plugin install file:///D:/dsh-reference-anything/opencli-plugin
 ```
 
-浏览器扩展无法由网页静默安装，必须通过 Chrome Web Store（或从 [OpenCLI Releases](https://github.com/jackwener/opencli/releases) 手动 “Load unpacked”）安装。DSH 插件安装阶段不会静默修改 `~/.opencli/plugins`。如果 OpenCLI 发现多个浏览器 Profile，请在 DSH 的 Conversations 设置页选择一个 Profile，再执行同步。
+浏览器扩展无法由网页静默安装，必须通过 Chrome Web Store（或从 [OpenCLI Releases](https://github.com/jackwener/opencli/releases) 手动 “Load unpacked”）确认安装。如果浏览器阻止自动打开商店，设置页会保留可点击的备用链接。如果 OpenCLI 发现多个浏览器 Profile，可直接在失败的检查项中选择并应用一个已连接 Profile。全局 npm 安装受系统权限限制；失败时页面会保留原始错误，供用户按提示处理。
 
 ## 使用
 
@@ -193,7 +195,7 @@ opencli plugin install file:///D:/dsh-reference-anything/opencli-plugin
 
 只有完整枚举远端分页成功后，才会把远端消失的记录标记为 `remoteMissing`；本地历史不会被自动删除。API 请求失败后才启用 DOM fallback，且 fallback 数据始终标记为 `partial=true`。
 
-metadata-only 模式下，读取引用正文时会在同一次 detail 浏览器操作内校验当前登录账号与同步缓存的账号范围；账号不一致时拒绝读取。对话管理页提供“删除所有云端缺失对话”，用于一次性清理已标记为 `remoteMissing` 的本地条目。
+metadata-only 模式下，读取引用正文时会在同一次 detail 浏览器操作内校验当前登录账号与同步缓存的账号范围；账号不一致时拒绝读取。对话管理页提供“删除所有云端缺失对话”和“删除旧账号消息”，后者只清理已识别当前账号的 Provider 中属于非当前账号的本地条目。
 
 ## Acknowledgements
 

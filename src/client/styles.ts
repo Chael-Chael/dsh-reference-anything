@@ -1,6 +1,9 @@
 import type { ChatProvider } from '../wire.ts'
 import { syncProgressFraction, type SyncStatus } from './remote.ts'
-import { PICKER_ICON_PATH, PROVIDER_ICON_MARKER, PROVIDER_ICON_PATH, SESSION_ICON_MARKER, SKILL_ICON_MARKER } from './provider-icons.tsx'
+import {
+  PICKER_ICON_MARKER, PICKER_ICON_NODES, PICKER_ICON_STROKE_WIDTH, PROVIDER_ICON_MARKER, PROVIDER_ICON_PATH,
+  type PickerIconKind,
+} from './provider-icons.tsx'
 import type { TranslateNS } from '@deepseek-ai/dsh-client-locale/client'
 import type { REFERENCE_ANYTHING_NS } from './locale.ts'
 
@@ -11,15 +14,16 @@ const css = `
 [data-composer-card] [role="listbox"] [role="presentation"][data-source]:not(:first-child){margin-top:4px;padding-top:12px;border-top:1px solid var(--dsw-alias-border-inverted)}
 [data-composer-card] [role="listbox"] [role="presentation"][data-source="External conversations"]{display:flex;align-items:center;justify-content:flex-start;gap:8px}
 .dsh_ref_menu_sync{position:relative;display:inline-grid;place-items:center;flex:none;min-width:96px;height:26px;padding:0 11px;overflow:hidden;border:1px solid rgba(59,130,246,.28);border-radius:999px;background:rgba(59,130,246,.11);color:var(--dsw-alias-state-business-primary,#3b82f6);font:650 11px/1 Geist,"Segoe UI",sans-serif;cursor:pointer;isolation:isolate;transition:background .16s ease,border-color .16s ease,transform .16s ease}.dsh_ref_menu_sync:hover:not(:disabled){border-color:rgba(59,130,246,.42);background:rgba(59,130,246,.16)}.dsh_ref_menu_sync:active:not(:disabled){transform:translateY(1px)}.dsh_ref_menu_sync:disabled{cursor:default;opacity:.86}.dsh_ref_menu_sync>span{position:relative;z-index:1;white-space:nowrap}.dsh_ref_menu_sync>i{position:absolute;inset:0;z-index:0;background:rgba(59,130,246,.14);transform:scaleX(var(--dsh-ref-sync-progress,0));transform-origin:left;transition:transform .2s ease}
-.dsh_ref_menu_expand{display:block;width:auto;min-height:30px;padding:4px 12px;border:0!important;border-radius:0!important;background:none!important;box-shadow:none!important;color:var(--dsw-alias-label-tertiary,#8b8f98);font:600 14px/22px Geist,"Segoe UI",sans-serif;cursor:pointer;text-align:left}.dsh_ref_menu_expand:hover{background:none!important;color:var(--dsw-alias-label-tertiary,#8b8f98);text-decoration:underline}
+.dsh_ref_menu_expand{display:block;width:auto;min-height:30px;padding:4px 12px;border:0!important;border-radius:0!important;background:none!important;box-shadow:none!important;color:var(--dsw-alias-label-tertiary,#8b8f98);font:400 14px/22px Geist,"Segoe UI",sans-serif;cursor:pointer;text-align:left}.dsh_ref_menu_expand:hover{background:none!important;color:var(--dsw-alias-label-tertiary,#8b8f98);text-decoration:underline}
 .dsh_ref_menu_collapsed{display:none!important}
 /* Codex-like inline references. The adaptive projection below mirrors their
    visual width back into the host height ruler so native auto-grow survives. */
 [data-composer-card] [data-decoration="chip"]{display:inline-flex!important;align-items:center!important;width:max-content!important;min-width:4em;border-radius:0!important;background:transparent!important;overflow:visible!important;vertical-align:baseline}
 [data-composer-card] [data-decoration="chip"]:before{display:none!important}
-[data-composer-card] [data-decoration="chip"]>span{position:static!important;width:max-content!important;max-width:none!important;justify-content:flex-start!important;overflow:visible!important;color:var(--dsw-alias-state-business-primary)!important;font-family:inherit!important;font-size:inherit!important;line-height:inherit!important;letter-spacing:inherit!important;font-weight:600;transform:none!important;z-index:2}
+[data-composer-card] [data-decoration="chip"]>span{position:static!important;width:max-content!important;max-width:none!important;justify-content:flex-start!important;overflow:visible!important;color:var(--dsw-alias-state-business-primary)!important;font-family:inherit!important;font-size:inherit!important;line-height:inherit!important;letter-spacing:inherit!important;font-weight:inherit!important;transform:none!important;z-index:2}
 .dsh_ref_projected_icon{display:inline!important}.dsh_ref_projected_icon:before{content:"";display:inline-block;width:1em;height:1em;margin-right:.35em;vertical-align:-.125em;background:currentColor;mask:var(--dsh-ref-provider-icon) center/contain no-repeat;-webkit-mask:var(--dsh-ref-provider-icon) center/contain no-repeat}[data-composer-card] .dsh_ref_conversation_chip,[data-composer-card] .dsh_ref_conversation_chip>span,[data-composer-card] .dsh_ref_projected_icon{color:var(--dsw-alias-state-business-primary,#3b82f6)!important}[data-composer-card] [role="listbox"] .dsh_ref_projected_icon:before{background:var(--dsw-alias-label-tertiary,#8b8f98)}
-.dsh_ref_session_icon,.dsh_ref_skill_icon{display:inline!important}.dsh_ref_session_icon:before,.dsh_ref_skill_icon:before{content:"";display:inline-block;width:1.05em;height:1.05em;margin-right:.45em;vertical-align:-.125em;background:var(--dsw-alias-label-secondary,#5f636b);mask:var(--dsh-ref-picker-icon) center/contain no-repeat;-webkit-mask:var(--dsh-ref-picker-icon) center/contain no-repeat}[data-composer-card] [data-decoration="chip"]>.dsh_ref_session_icon:before{background:var(--dsw-alias-state-business-primary,#3b82f6)!important}
+.dsh_ref_picker_icon{display:inline!important}.dsh_ref_picker_icon:before{content:"";display:inline-block;width:1.05em;height:1.05em;margin-right:.45em;vertical-align:-.125em;background:var(--dsw-alias-label-secondary,#5f636b);mask:var(--dsh-ref-picker-icon) center/contain no-repeat;-webkit-mask:var(--dsh-ref-picker-icon) center/contain no-repeat}[data-composer-card] [data-decoration="chip"]>.dsh_ref_picker_icon:before{background:var(--dsw-alias-state-business-primary,#3b82f6)!important}
+[data-composer-card] [role="listbox"] :is(.dsh_ref_projected_icon,.dsh_ref_picker_icon){display:inline-flex!important;align-items:center!important;justify-content:center!important;flex:none;width:16px!important;height:16px!important;line-height:1!important}[data-composer-card] [role="listbox"] :is(.dsh_ref_projected_icon,.dsh_ref_picker_icon):before{display:block;width:16px;height:16px;margin:0;vertical-align:0}
 [data-composer-card] [data-decoration="text-ref"]{border-radius:0!important;background:transparent!important;color:var(--dsw-alias-state-business-primary)!important;font-family:inherit!important;font-size:inherit!important;line-height:inherit!important;font-weight:inherit!important;letter-spacing:inherit!important;box-shadow:none!important}
 [data-composer-card] [data-decoration="text-ref"]:before,[data-composer-card] [data-decoration="text-ref"]:after{display:none!important}
 [data-composer-card] [data-dsh-ref-height-ruler]{position:relative!important;inset:auto!important;display:block!important;width:100%!important;height:auto!important;min-height:var(--dsh-ref-native-min-height,0px)!important;overflow:visible!important;visibility:hidden!important;pointer-events:none!important}
@@ -33,7 +37,7 @@ const css = `
 .dsh_ref_general_settings{display:grid;gap:16px}.dsh_ref_picker_list{border:1px solid var(--dsw-alias-label-primary)}.dsh_ref_picker_row{display:grid;grid-template-columns:minmax(170px,1fr) auto auto;align-items:center;gap:14px;padding:10px 12px;border-bottom:1px solid var(--dsw-alias-label-primary)}.dsh_ref_picker_row:last-child{border-bottom:0}.dsh_ref_picker_row>label:first-child{display:flex;align-items:center;gap:9px;font-size:12px;font-weight:650}.dsh_ref_picker_row>.dsh_ref_picker_toggle b{font-size:12px}.dsh_ref_picker_row input{width:16px;height:16px;margin:0;accent-color:var(--dsw-alias-label-primary)}.dsh_ref_picker_limit{display:flex;align-items:center;gap:7px;color:var(--dsw-alias-label-primary);font-size:10px}.dsh_ref_picker_limit input{height:30px;width:58px;padding:0 6px;border:1px solid var(--dsw-alias-label-primary);border-radius:0;background:transparent;color:var(--dsw-alias-label-primary);font:11px Geist,"Segoe UI",sans-serif}.dsh_ref_picker_order{display:flex;gap:5px}.dsh_ref_picker_order button{min-width:30px;min-height:30px;padding:0;font-size:15px;line-height:1}
 .dsh_ref_sync_settings{display:grid;gap:20px}.dsh_ref_form_grid{display:grid;grid-template-columns:1fr 1fr;gap:15px}.dsh_ref_form_grid label{display:grid;gap:6px}.dsh_ref_form_grid label>span{font-size:11px;font-weight:650}.dsh_ref_form_grid input,.dsh_ref_form_grid select{width:100%;height:36px;padding:0 10px;border:1px solid var(--dsw-alias-label-primary);border-radius:0;outline:0;background:transparent;color:var(--dsw-alias-label-primary);font:12px Geist,"Segoe UI",sans-serif}.dsh_ref_form_grid input:focus,.dsh_ref_form_grid select:focus{outline:2px solid var(--dsw-alias-label-primary);outline-offset:2px}.dsh_ref_form_grid input[aria-invalid=true]{border-style:dashed}.dsh_ref_form_grid select:disabled{opacity:.42}.dsh_ref_toggle{display:flex!important;flex-direction:row!important;align-items:center;gap:8px;cursor:pointer}.dsh_ref_toggle input{position:absolute;opacity:0}.dsh_ref_toggle>span{position:relative;width:32px;height:18px;border:1px solid var(--dsw-alias-label-primary);border-radius:9px;background:transparent}.dsh_ref_toggle>span:after{content:"";position:absolute;top:3px;left:3px;width:10px;height:10px;border-radius:50%;background:var(--dsw-alias-label-primary);transition:transform .18s}.dsh_ref_toggle input:checked+span:after{transform:translateX(14px)}.dsh_ref_toggle b{font-size:11px}.dsh_ref_actions{display:flex;flex-wrap:wrap;gap:8px}.dsh_ref_actions .is_primary{background:var(--dsw-alias-label-primary);color:var(--dsw-alias-bg-layer-1)}.dsh_ref_actions .is_danger{border-style:dashed}.dsh_ref_inline_error,.dsh_ref_auto_note{margin:0;color:var(--dsw-alias-label-primary);font-size:11px}.dsh_ref_auto_note{opacity:.7}.dsh_ref_notice{padding:10px 0;border-bottom:1px solid var(--dsw-alias-label-primary);font-size:11px}
  .dsh_ref_progress_wrap{display:grid;gap:6px;margin-top:4px}.dsh_ref_progress_track{height:6px;border:1px solid var(--dsw-alias-label-primary);background:transparent;overflow:hidden}.dsh_ref_progress_fill{height:100%;background:var(--dsw-alias-label-primary);transition:width .2s ease}.dsh_ref_progress_fill.is_failed,.dsh_ref_progress_fill.is_cancelled{opacity:.4}.dsh_ref_progress_fill.is_partial{opacity:.7}.dsh_ref_progress_label{margin:0;color:var(--dsw-alias-label-primary);font-size:10px;text-transform:lowercase;opacity:.7}.dsh_ref_progress_sources{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:4px 12px}.dsh_ref_progress_sources span{display:flex;justify-content:space-between;gap:8px;font-size:10px}.dsh_ref_progress_sources i{font-style:normal;opacity:.65}
-.dsh_ref_manage{display:grid;gap:15px}.dsh_ref_manage_filters{display:grid;grid-template-columns:1fr 180px;gap:12px}.dsh_ref_manage_filters input,.dsh_ref_manage_filters select{width:100%;height:36px;padding:0 10px;border:1px solid var(--dsw-alias-label-primary);border-radius:0;outline:0;background:transparent;color:var(--dsw-alias-label-primary);font:12px Geist,"Segoe UI",sans-serif}.dsh_ref_manage_filters input:focus,.dsh_ref_manage_filters select:focus{outline:2px solid var(--dsw-alias-label-primary);outline-offset:2px}.dsh_ref_manage_empty{margin:0;padding:20px;border:1px dashed var(--dsw-alias-label-primary);color:var(--dsw-alias-label-primary);font-size:11px;text-align:center}
+.dsh_ref_manage{display:grid;gap:15px}.dsh_ref_manage_actions{display:flex;align-items:center;justify-content:flex-end;flex-wrap:wrap;gap:8px}.dsh_ref_manage_actions button{white-space:nowrap}.dsh_ref_manage_filters{display:grid;grid-template-columns:1fr 180px;gap:12px}.dsh_ref_manage_filters input,.dsh_ref_manage_filters select{width:100%;height:36px;padding:0 10px;border:1px solid var(--dsw-alias-label-primary);border-radius:0;outline:0;background:transparent;color:var(--dsw-alias-label-primary);font:12px Geist,"Segoe UI",sans-serif}.dsh_ref_manage_filters input:focus,.dsh_ref_manage_filters select:focus{outline:2px solid var(--dsw-alias-label-primary);outline-offset:2px}.dsh_ref_manage_empty{margin:0;padding:20px;border:1px dashed var(--dsw-alias-label-primary);color:var(--dsw-alias-label-primary);font-size:11px;text-align:center}
 .dsh_ref_manage_list{list-style:none;display:grid;gap:0;margin:0;padding:0;max-height:340px;overflow-y:auto;border:1px solid var(--dsw-alias-label-primary)}.dsh_ref_manage_row{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:11px 13px;border-bottom:1px solid var(--dsw-alias-label-primary)}.dsh_ref_manage_row:last-child{border-bottom:0}.dsh_ref_manage_main{display:grid;gap:3px;min-width:0}.dsh_ref_manage_title_row{display:flex;align-items:center;flex-wrap:wrap;gap:7px;min-width:0}.dsh_ref_manage_title{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:420px;font-size:13px}.dsh_ref_manage_meta{color:var(--dsw-alias-label-primary);font-size:10px;opacity:.7}.dsh_ref_manage_row button{min-height:29px;padding:0 10px;font-size:10px;flex:none}.dsh_ref_manage_row .is_danger{border-style:dashed}
 .dsh_ref_badge{padding:1px 7px;border:1px solid var(--dsw-alias-label-primary);color:var(--dsw-alias-label-primary);font-size:10px;white-space:nowrap}.dsh_ref_badge.is_warn{border-style:dashed}
 .dsh_ref_pagination{display:flex;align-items:center;justify-content:space-between;gap:12px;color:var(--dsw-alias-label-primary);font-size:10px}.dsh_ref_pagination button{min-height:29px;padding:0 10px;font-size:10px}
@@ -63,6 +67,7 @@ body[data-ds-dark-theme] .dsh_ref_settings{--dsh-ref-card-surface:var(--dsw-alia
 /* Keep explanatory copy readable against DSH's light settings surface. */
 .dsh_ref_header p,.dsh_ref_section_head p,.dsh_ref_check small,.dsh_ref_install span,.dsh_ref_picker_limit,.dsh_ref_provider>small,.dsh_ref_field_note,.dsh_ref_render_mode small{color:#64748b}
 body[data-ds-dark-theme] .dsh_ref_header p,body[data-ds-dark-theme] .dsh_ref_section_head p,body[data-ds-dark-theme] .dsh_ref_check small,body[data-ds-dark-theme] .dsh_ref_install span,body[data-ds-dark-theme] .dsh_ref_picker_limit,body[data-ds-dark-theme] .dsh_ref_provider>small,body[data-ds-dark-theme] .dsh_ref_field_note,body[data-ds-dark-theme] .dsh_ref_render_mode small{color:var(--dsw-alias-label-tertiary,#94a3b8)}
+.dsh_ref_header_brand{display:flex;align-items:flex-start;gap:14px}.dsh_ref_header_brand img{flex:none;width:42px;height:42px;object-fit:contain;border-radius:10px}
 .dsh_ref_provider{grid-template-columns:38px minmax(0,1fr);grid-template-rows:auto;align-items:stretch;column-gap:12px;padding:13px 14px}.dsh_ref_provider>.dsh_ref_provider_mark{grid-column:1;grid-row:1;align-self:center}.dsh_ref_provider_content{grid-column:2;display:grid;gap:9px;min-width:0}.dsh_ref_provider_summary{display:grid;grid-template-columns:minmax(120px,1fr) minmax(90px,.45fr) minmax(210px,1fr);align-items:baseline;gap:18px;min-width:0}.dsh_ref_provider_summary h4{grid-column:1;grid-row:auto;margin:0;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13px}.dsh_ref_provider_summary>strong{display:inline-flex;align-items:baseline;gap:3px;font-family:"Geist Mono",Consolas,monospace;font-size:18px;white-space:nowrap}.dsh_ref_provider_summary>strong span{font-family:Geist,"Segoe UI",sans-serif;font-size:11px;font-weight:600}.dsh_ref_provider_summary>small{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--dsw-alias-label-primary);font-size:10px;opacity:.78}.dsh_ref_provider_controls{display:flex;align-items:center;justify-content:space-between;gap:16px;min-width:0}.dsh_ref_provider_controls>.dsh_ref_toggle{flex:none;gap:6px;white-space:nowrap}.dsh_ref_provider_controls>.dsh_ref_toggle>span{width:28px;height:16px}.dsh_ref_provider_controls>.dsh_ref_toggle>span:after{top:2px;left:2px}.dsh_ref_provider_controls>.dsh_ref_toggle input:checked+span:after{transform:translateX(12px)}.dsh_ref_provider_controls>.dsh_ref_provider_actions{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:6px}.dsh_ref_provider_controls>.dsh_ref_provider_actions button{min-height:29px;padding:0 10px;font-size:10px;white-space:nowrap}.dsh_ref_provider_error{display:block;margin:0;padding-top:8px;border-top:1px dashed rgba(220,38,38,.28);color:#dc2626;font-size:10px;font-style:normal;line-height:1.45;overflow-wrap:anywhere}
 .dsh_ref_storage{display:grid;gap:18px}.dsh_ref_storage_header{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:start;gap:24px}.dsh_ref_storage_header h3{margin:0 0 4px;font-size:17px;letter-spacing:-.02em}.dsh_ref_storage_header p{margin:0;max-width:650px;color:#64748b;font-size:12px;line-height:1.55}.dsh_ref_storage_metric{display:grid;justify-items:end;gap:3px;min-width:116px;padding:8px 12px;border:1px solid var(--dsh-ref-blue-line);border-radius:9px;background:var(--dsh-ref-blue-soft)}.dsh_ref_storage_metric span{color:var(--dsw-alias-label-primary);font-size:10px;font-weight:650;opacity:.78}.dsh_ref_storage_metric strong{color:var(--dsw-alias-label-primary);font-family:"Geist Mono",Consolas,monospace;font-size:15px;line-height:1.25;white-space:nowrap}.dsh_ref_storage_cleanup{display:flex;align-items:flex-end;flex-wrap:wrap;gap:10px;padding-top:16px;border-top:1px solid var(--dsh-ref-line)}.dsh_ref_storage_cleanup>label{display:grid;gap:7px;color:var(--dsw-alias-label-primary);font-size:11px;font-weight:650}.dsh_ref_number_field{display:flex;align-items:center;width:190px;height:36px;overflow:hidden;border:1px solid var(--dsh-ref-line);border-radius:8px;background:var(--dsh-ref-control-surface)}.dsh_ref_number_field:focus-within{outline:2px solid var(--dsh-ref-blue-line);outline-offset:1px}.dsh_ref_number_field input{min-width:0;width:100%;height:100%;padding:0 10px;border:0;outline:0;background:transparent;color:var(--dsw-alias-label-primary);font:12px "Geist Mono",Consolas,monospace}.dsh_ref_number_field b{display:grid;place-items:center;align-self:stretch;min-width:42px;border-left:1px solid var(--dsh-ref-line);color:var(--dsw-alias-label-primary);font-size:11px;font-weight:650;opacity:.78}.dsh_ref_storage_cleanup>button{height:36px}
 body[data-ds-dark-theme] .dsh_ref_storage_header p{color:var(--dsw-alias-label-tertiary,#94a3b8)}
@@ -72,6 +77,7 @@ body[data-ds-dark-theme] .dsh_ref_storage_header p{color:var(--dsw-alias-label-t
 .dsh_ref_workspace>.dsh_ref_panel.dsh_ref_general_settings{padding:0;border:0;border-radius:0;background:transparent}
 /* The remaining sections keep their structural outline, but not a filled grey card. */
 .dsh_ref_workspace>.dsh_ref_panel,.dsh_ref_workspace>.dsh_ref_sources{background:transparent}.dsh_ref_check>span.is_ready{border-color:rgba(22,163,74,.35);background:rgba(22,163,74,.1);color:#16a34a}.dsh_ref_check>span.is_error{border-color:rgba(220,38,38,.35);background:rgba(220,38,38,.08);color:#dc2626}.dsh_ref_check small.is_warning,.dsh_ref_provider>em,.dsh_ref_error{color:#dc2626}
+.dsh_ref_health.is_ready{border-color:rgba(22,163,74,.35);background:rgba(22,163,74,.1);color:#16a34a}.dsh_ref_check_body{flex:1}.dsh_ref_check_actions{display:flex!important;align-items:center;flex-wrap:wrap;gap:7px!important;margin-top:6px}.dsh_ref_check_actions>button{min-height:28px;padding:0 9px;border-color:var(--dsh-ref-blue-line);border-radius:7px;color:var(--dsh-ref-blue);font-size:10px}.dsh_ref_check_profile{display:flex!important;grid-template-columns:none!important;align-items:center;gap:7px!important}.dsh_ref_check_profile select{height:29px;max-width:220px;padding:0 8px;border:1px solid var(--dsh-ref-line);border-radius:7px;background:var(--dsh-ref-control-surface);color:var(--dsw-alias-label-primary);font:11px Geist,"Segoe UI",sans-serif}.dsh_ref_store_fallback{margin:14px 0 0;padding:10px 12px;border:1px solid rgba(220,38,38,.3);border-radius:9px;background:rgba(220,38,38,.06);color:#dc2626;font-size:11px}.dsh_ref_store_fallback a{color:inherit;font-weight:700}.dsh_ref_setup_step{margin:14px 0 0;padding:9px 11px;border:1px solid var(--dsh-ref-blue-line);border-radius:9px;background:var(--dsh-ref-blue-soft);color:var(--dsh-ref-blue);font-size:11px;font-weight:650}
 .dsh_ref_chat{gap:0}.dsh_ref_chat_divider{height:0;margin:20px 0;border-top:1px solid var(--dsh-ref-line)}
 @media(prefers-reduced-motion:reduce){.dsh_ref_settings *{transition:none!important}}
 `
@@ -140,9 +146,10 @@ export interface MenuExpansionOptions {
  * The host deliberately ignores an `input` event when the detected trigger
  * hit is identical to the open one. Briefly changing the native value creates
  * a superseding generation; restoring it synchronously makes the final
- * generation fetch fresh candidates while the menu remains open.
+ * generation fetch fresh candidates while the menu remains open. The menu's
+ * scroll position is retained until that asynchronous generation commits.
  */
-export function refreshActiveTriggerMenu(): boolean {
+export function refreshActiveTriggerMenu(source?: string): boolean {
   const editor = document.activeElement
   if (!(editor instanceof HTMLTextAreaElement || editor instanceof HTMLInputElement)) return false
   const start = editor.selectionStart
@@ -157,6 +164,9 @@ export function refreshActiveTriggerMenu(): boolean {
   const listbox = editor.closest('[data-composer-card]')?.querySelector('[role="listbox"]')
   const viewport = listbox?.firstElementChild instanceof HTMLElement ? listbox.firstElementChild : undefined
   const menuScrollTop = viewport?.scrollTop
+  const scrollPreserver = listbox instanceof HTMLElement && menuScrollTop !== undefined
+    ? preserveTriggerMenuScroll(listbox, menuScrollTop, source)
+    : undefined
   const changed = `${original.slice(0, start)}\u200B${original.slice(end)}`
   const descriptor = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(editor), 'value')
   const setValue = (value: string): void => {
@@ -169,22 +179,90 @@ export function refreshActiveTriggerMenu(): boolean {
   setValue(original)
   editor.setSelectionRange(start, end)
   editor.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'deleteContentBackward' }))
-  if (menuScrollTop !== undefined) restoreTriggerMenuScroll(menuScrollTop)
+  scrollPreserver?.arm()
   return true
 }
 
-/** Restore the menu viewport after the host replaces it for a refreshed query. */
-function restoreTriggerMenuScroll(scrollTop: number): void {
-  let frames = 0
-  const restore = (): void => {
-    const listbox = document.querySelector('[role="listbox"]')
-    const viewport = listbox?.firstElementChild
-    if (viewport instanceof HTMLElement) viewport.scrollTop = scrollTop
-    // The menu store update and its scrollIntoView effect can land on adjacent
-    // frames. Restore after both without retaining stale DOM references.
-    if (++frames < 3) requestAnimationFrame(restore)
+/** Keep an asynchronously refreshed menu at its prior viewport position. */
+function preserveTriggerMenuScroll(listbox: HTMLElement, scrollTop: number, source?: string): { arm(): void } {
+  const composer = listbox.closest('[data-composer-card]') ?? listbox.parentElement ?? document.body
+  let armed = false
+  let disposed = false
+  let sawPending = false
+  let settleTimer: ReturnType<typeof setTimeout> | undefined
+  let expiryTimer: ReturnType<typeof setTimeout> | undefined
+
+  const currentListbox = (): HTMLElement | undefined => {
+    if (listbox.isConnected) return listbox
+    const replacement = composer.querySelector('[role="listbox"]')
+    return replacement instanceof HTMLElement ? replacement : undefined
   }
-  requestAnimationFrame(restore)
+  const restoreFrames = (remaining = 3): void => {
+    if (disposed) return
+    requestAnimationFrame(() => {
+      if (disposed) return
+      const viewport = currentListbox()?.firstElementChild
+      if (viewport instanceof HTMLElement) viewport.scrollTop = scrollTop
+      if (remaining > 1) restoreFrames(remaining - 1)
+    })
+  }
+  const sourcePending = (): boolean => {
+    if (!source) return false
+    const menu = currentListbox()
+    if (!menu) return false
+    return Array.from(menu.querySelectorAll('[data-source]')).some(node =>
+      node instanceof HTMLElement
+      && node.dataset.source === source
+      && node.getAttribute('role') !== 'presentation'
+      && node.getAttribute('role') !== 'option')
+  }
+  const dispose = (): void => {
+    if (disposed) return
+    disposed = true
+    observer.disconnect()
+    if (settleTimer) clearTimeout(settleTimer)
+    if (expiryTimer) clearTimeout(expiryTimer)
+    document.removeEventListener('wheel', cancelOnUserScroll, true)
+    document.removeEventListener('touchstart', cancelOnUserScroll, true)
+    document.removeEventListener('pointerdown', cancelOnUserScroll, true)
+    document.removeEventListener('keydown', cancelOnUserScroll, true)
+  }
+  const cancelOnUserScroll = (event: Event): void => {
+    const menu = currentListbox()
+    if (menu && event.target instanceof Node && menu.contains(event.target)) dispose()
+  }
+  const settle = (): void => {
+    if (settleTimer) clearTimeout(settleTimer)
+    // React's highlighted-option effect runs after the candidate DOM commit.
+    // A short trailing window lets our final frames land after scrollIntoView.
+    settleTimer = setTimeout(() => { restoreFrames(); setTimeout(dispose, 80) }, 80)
+  }
+  const observer = new MutationObserver(() => {
+    if (!armed || disposed) return
+    restoreFrames()
+    if (sourcePending()) {
+      sawPending = true
+      if (settleTimer) clearTimeout(settleTimer)
+    } else if (sawPending) {
+      settle()
+    }
+  })
+  observer.observe(composer, { childList: true, subtree: true })
+  document.addEventListener('wheel', cancelOnUserScroll, true)
+  document.addEventListener('touchstart', cancelOnUserScroll, true)
+  document.addEventListener('pointerdown', cancelOnUserScroll, true)
+  document.addEventListener('keydown', cancelOnUserScroll, true)
+
+  return {
+    arm: () => {
+      armed = true
+      sawPending = sourcePending()
+      restoreFrames()
+      // Adapters can fail without ever publishing a final candidate group.
+      // Bound the observer lifetime so a failed refresh retains no listeners.
+      expiryTimer = setTimeout(dispose, 15_000)
+    },
+  }
 }
 
 /**
@@ -346,7 +424,7 @@ export function adoptConversationSyncActionProjection(options: ConversationSyncA
       if (button.isConnected) update(button)
       else buttons.delete(button)
     }
-    if (previousRunning && !running) refreshActiveTriggerMenu()
+    if (previousRunning && !running) refreshActiveTriggerMenu(options.source)
     previousRunning = running
   }
   project(document)
@@ -482,23 +560,113 @@ type PointCaretDocument = Document & {
 }
 
 function logicalOffsetFromPoint(input: HTMLTextAreaElement, backdrop: HTMLElement, clientX: number, clientY: number): number | undefined {
-  const previousVisibility = input.style.visibility
-  const previousPointerEvents = backdrop.style.pointerEvents
-  input.style.visibility = 'hidden'
+  const previousVisibility = input.style.getPropertyValue('visibility')
+  const previousVisibilityPriority = input.style.getPropertyPriority('visibility')
+  const previousPointerEvents = backdrop.style.getPropertyValue('pointer-events')
+  const previousPointerEventsPriority = backdrop.style.getPropertyPriority('pointer-events')
+  input.style.setProperty('visibility', 'hidden', 'important')
   // The host backdrop is deliberately pointer-events:none. Caret hit-testing
   // follows that rule too, so expose it only for this synchronous probe or the
   // API returns the outer card instead of its visual text nodes.
-  backdrop.style.pointerEvents = 'auto'
+  backdrop.style.setProperty('pointer-events', 'auto', 'important')
   const pointDocument = document as PointCaretDocument
-  const position = pointDocument.caretPositionFromPoint?.(clientX, clientY)
-  const range = position === undefined || position === null ? pointDocument.caretRangeFromPoint?.(clientX, clientY) : undefined
-  input.style.visibility = previousVisibility
-  backdrop.style.pointerEvents = previousPointerEvents
+  let position: ReturnType<NonNullable<PointCaretDocument['caretPositionFromPoint']>> | undefined
+  let range: Range | null | undefined
+  try {
+    position = pointDocument.caretPositionFromPoint?.(clientX, clientY)
+    range = position === undefined || position === null ? pointDocument.caretRangeFromPoint?.(clientX, clientY) : undefined
+  } finally {
+    restoreInlineProperty(input.style, 'visibility', previousVisibility, previousVisibilityPriority)
+    restoreInlineProperty(backdrop.style, 'pointer-events', previousPointerEvents, previousPointerEventsPriority)
+  }
   const node = position?.offsetNode ?? range?.startContainer
   const nodeOffset = position?.offset ?? range?.startOffset
-  if (node === undefined || nodeOffset === undefined) return undefined
-  const logical = logicalOffsetAtDomPoint(backdrop, node, nodeOffset, clientX)
-  return logical === undefined ? undefined : Math.min(logical, input.value.length)
+  const preciseNode = node instanceof Text || (node instanceof Node
+    && ((node instanceof Element ? node : node.parentElement)?.closest('[data-decoration="chip"]') ?? null) !== null)
+  const logical = node === undefined || nodeOffset === undefined
+    ? undefined
+    : logicalOffsetAtDomPoint(backdrop, node, nodeOffset, clientX)
+  const clamped = logical === undefined ? undefined : Math.min(logical, input.value.length)
+  const style = getComputedStyle(input)
+  const lineHeight = Number.parseFloat(style.lineHeight)
+  const fontSize = Number.parseFloat(style.fontSize)
+  const resolvedLineHeight = lineHeight > 0 ? lineHeight : fontSize > 0 ? fontSize * 1.2 : 20
+  if (clamped !== undefined && preciseNode) return clamped
+  return nearestVisualLogicalOffset(backdrop, input.value.length, clientX, clientY, resolvedLineHeight) ?? clamped
+}
+
+function restoreInlineProperty(style: CSSStyleDeclaration, name: string, value: string, priority: string): void {
+  if (value === '') style.removeProperty(name)
+  else style.setProperty(name, value, priority)
+}
+
+interface VisualLogicalBoundary { offset: number, left: number, top: number, height: number }
+
+/** Geometric fallback when Chromium cannot hit-test the visual backdrop. */
+export function nearestVisualLogicalOffset(root: HTMLElement, maxLogical: number, clientX: number, clientY: number, lineHeight: number): number | undefined {
+  const boundaries = visualLogicalBoundaries(root, maxLogical, lineHeight)
+  if (boundaries.length === 0) return undefined
+  const style = getComputedStyle(root)
+  const paddingTop = Number.parseFloat(style.paddingTop) || 0
+  const contentTop = root.getBoundingClientRect().top + paddingTop
+  const targetLine = Math.floor((clientY - contentTop) / lineHeight)
+  const lineOf = (boundary: VisualLogicalBoundary): number => Math.round((boundary.top - contentTop) / lineHeight)
+  let nearestLineDistance = Number.POSITIVE_INFINITY
+  for (const boundary of boundaries) nearestLineDistance = Math.min(nearestLineDistance, Math.abs(lineOf(boundary) - targetLine))
+  const onLine = boundaries.filter(boundary => Math.abs(lineOf(boundary) - targetLine) === nearestLineDistance)
+  return onLine.reduce((best, boundary) => {
+    const distance = Math.abs(boundary.left - clientX)
+    const bestDistance = Math.abs(best.left - clientX)
+    if (distance !== bestDistance) return distance < bestDistance ? boundary : best
+    return boundary.offset > best.offset ? boundary : best
+  }).offset
+}
+
+function visualLogicalBoundaries(root: HTMLElement, maxLogical: number, lineHeight: number): VisualLogicalBoundary[] {
+  const boundaries: VisualLogicalBoundary[] = []
+  const direction = getComputedStyle(root).direction
+  let logical = 0
+  const add = (offset: number, left: number, top: number, height: number): void => {
+    if (offset < 0 || offset > maxLogical || !Number.isFinite(left) || !Number.isFinite(top)) return
+    boundaries.push({ offset, left, top, height: height > 0 ? height : lineHeight })
+  }
+  const visit = (parent: Node): void => {
+    for (const child of Array.from(parent.childNodes)) {
+      if (logical > maxLogical) return
+      if (child instanceof Element && child.matches('[data-decoration="chip"]')) {
+        const rect = child.getBoundingClientRect()
+        const start = direction === 'rtl' ? rect.right : rect.left
+        const end = direction === 'rtl' ? rect.left : rect.right
+        add(logical, start, rect.top, rect.height)
+        logical += 1
+        add(logical, end, rect.top, rect.height)
+        continue
+      }
+      if (child instanceof Text) {
+        const text = child.data
+        let local = 0
+        for (const symbol of text) {
+          const next = local + symbol.length
+          const range = document.createRange()
+          range.setStart(child, local)
+          range.setEnd(child, next)
+          const rect = range.getBoundingClientRect()
+          if (usableCaretRect(rect)) {
+            const start = direction === 'rtl' ? rect.right : rect.left
+            const end = direction === 'rtl' ? rect.left : rect.right
+            add(logical + local, start, rect.top, rect.height)
+            add(logical + next, end, rect.top, rect.height)
+          }
+          local = next
+        }
+        logical += text.length
+        continue
+      }
+      visit(child)
+    }
+  }
+  visit(root)
+  return boundaries
 }
 
 /** Convert a point in the visual backdrop into the textarea's logical index. */
@@ -722,14 +890,37 @@ function logicalOffsetBeforeChip(root: HTMLElement, target: Element): number | u
   return visit(root) ? logical : undefined
 }
 
-/** Restore the caret after a menu-picked chip replaces an @ token mid-draft. */
+interface PendingMenuPick {
+  input: HTMLTextAreaElement
+  beforeValue: string
+  expires: number
+}
+
+function changedRange(before: string, after: string): { start: number, insertedLength: number } | undefined {
+  if (before === after) return undefined
+  let start = 0
+  const shared = Math.min(before.length, after.length)
+  while (start < shared && before[start] === after[start]) start++
+  let beforeEnd = before.length
+  let afterEnd = after.length
+  while (beforeEnd > start && afterEnd > start && before[beforeEnd - 1] === after[afterEnd - 1]) {
+    beforeEnd--
+    afterEnd--
+  }
+  return { start, insertedLength: afterEnd - start }
+}
+
+/** Restore the caret after a menu pick replaces an @ token mid-draft. */
 export function adoptAdaptiveChipInsertionCaret(): () => void {
-  let pending: { input: HTMLTextAreaElement, expires: number } | undefined
+  let pending: PendingMenuPick | undefined
   let frame = 0
   const known = new Set<string>()
   const currentChips = (): Element[] => Array.from(document.querySelectorAll('[data-input-backdrop]:not([data-dsh-ref-height-ruler]) [data-decoration="chip"][data-occurrence]'))
   for (const chip of currentChips()) known.add(chip.getAttribute('data-occurrence') ?? '')
-  const arm = (input: HTMLTextAreaElement): void => { pending = { input, expires: performance.now() + 1000 } }
+  const arm = (input: HTMLTextAreaElement): void => {
+    pending = { input, beforeValue: input.value, expires: performance.now() + 1000 }
+    schedule()
+  }
   const onPointerDown = (event: PointerEvent): void => {
     if (!(event.target instanceof Element) || event.target.closest('[role="option"]') === null) return
     const input = document.activeElement
@@ -746,26 +937,41 @@ export function adoptAdaptiveChipInsertionCaret(): () => void {
     known.clear()
     for (const chip of chips) known.add(chip.getAttribute('data-occurrence') ?? '')
     const pick = pending
-    if (added === undefined || pick === undefined || performance.now() > pick.expires) {
-      if (pick !== undefined && performance.now() > pick.expires) pending = undefined
+    if (pick === undefined) return
+    if (performance.now() > pick.expires || !pick.input.isConnected) {
+      pending = undefined
       return
     }
-    const backdrop = added.closest('[data-input-backdrop]:not([data-dsh-ref-height-ruler])')
-    if (!(backdrop instanceof HTMLElement) || !pick.input.isConnected) { pending = undefined; return }
-    const offset = logicalOffsetBeforeChip(backdrop, added)
-    if (offset === undefined || pick.input.value[offset] !== '\uFFFC') { pending = undefined; return }
-    let target = offset + 1
-    if (pick.input.value[target] === ' ') target++
+    let target: number | undefined
+    if (added !== undefined) {
+      const backdrop = added.closest('[data-input-backdrop]:not([data-dsh-ref-height-ruler])')
+      if (backdrop instanceof HTMLElement) {
+        const offset = logicalOffsetBeforeChip(backdrop, added)
+        if (offset !== undefined && pick.input.value[offset] === '\uFFFC') {
+          target = offset + 1
+          if (pick.input.value[target] === ' ') target++
+        }
+      }
+    }
+    const change = changedRange(pick.beforeValue, pick.input.value)
+    target ??= change === undefined ? undefined : change.start + change.insertedLength
+    if (target === undefined) {
+      schedule()
+      return
+    }
     pick.input.focus({ preventScroll: true })
     pick.input.setSelectionRange(target, target)
     pick.input.dispatchEvent(new Event('select', { bubbles: true }))
     pending = undefined
   }
-  const observer = new MutationObserver(() => {
+  const schedule = (): void => {
     cancelAnimationFrame(frame)
     frame = requestAnimationFrame(reconcile)
+  }
+  const observer = new MutationObserver(() => {
+    schedule()
   })
-  observer.observe(document.body, { childList: true, subtree: true })
+  observer.observe(document.body, { childList: true, subtree: true, characterData: true })
   document.addEventListener('pointerdown', onPointerDown, true)
   document.addEventListener('keydown', onKeyDown, true)
   return () => {
@@ -939,6 +1145,7 @@ export function adoptAdaptiveChipCaret(): () => void {
 /** Render one shared provider SVG in both the @ menu and the selected chip. */
 export function adoptReferenceIconProjection(): () => void {
   const providers = Object.keys(PROVIDER_ICON_MARKER) as ChatProvider[]
+  const pickerKinds = Object.keys(PICKER_ICON_MARKER) as PickerIconKind[]
   const project = (root: ParentNode): void => {
     // Only rewrite leaf labels. Rewriting a chip's outer span via textContent
     // would destroy the host-owned inner label and make its ::before logo
@@ -947,12 +1154,9 @@ export function adoptReferenceIconProjection(): () => void {
       .filter(node => node.children.length === 0)
     for (const node of nodes) {
       const text = node.textContent ?? ''
-      if (text.startsWith(SESSION_ICON_MARKER)) {
-        projectPickerIcon(node, text, SESSION_ICON_MARKER, 'session')
-        continue
-      }
-      if (text.startsWith(SKILL_ICON_MARKER)) {
-        projectPickerIcon(node, text, SKILL_ICON_MARKER, 'skill')
+      const pickerKind = pickerKinds.find(kind => text.startsWith(PICKER_ICON_MARKER[kind]))
+      if (pickerKind !== undefined) {
+        projectPickerIcon(node, text, PICKER_ICON_MARKER[pickerKind], pickerKind)
         continue
       }
       const provider = providers.find(key => text.startsWith(PROVIDER_ICON_MARKER[key]))
@@ -984,12 +1188,15 @@ export function adoptReferenceIconProjection(): () => void {
   return () => { observer.disconnect() }
 }
 
-function projectPickerIcon(node: Element, text: string, marker: string, kind: keyof typeof PICKER_ICON_PATH): void {
+function projectPickerIcon(node: Element, text: string, marker: string, kind: PickerIconKind): void {
   node.textContent = text.slice(marker.length).trimStart()
-  node.classList.add(`dsh_ref_${kind}_icon`)
+  node.classList.add('dsh_ref_picker_icon', `dsh_ref_${kind}_icon`)
   node.setAttribute('data-dsh-ref-picker-icon', kind)
-  const paths = PICKER_ICON_PATH[kind].map(d => `<path d="${d}"/>`).join('')
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="black" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${paths}</svg>`
+  const shapes = PICKER_ICON_NODES[kind].map(({ tag, attrs }) => {
+    const attributes = Object.entries(attrs).map(([name, value]) => ` ${name}="${value}"`).join('')
+    return `<${tag}${attributes}/>`
+  }).join('')
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="black" stroke-width="${PICKER_ICON_STROKE_WIDTH}" stroke-linecap="round" stroke-linejoin="round">${shapes}</svg>`
   node.setAttribute('style', `${node.getAttribute('style') ?? ''};--dsh-ref-picker-icon:url("data:image/svg+xml,${encodeURIComponent(svg)}")`)
 }
 
@@ -997,7 +1204,7 @@ function usableCaretRect(rect: DOMRect): boolean {
   return rect.height > 0 || rect.top !== 0 || rect.left !== 0
 }
 
-function visualCaretRectAtLogicalOffset(root: HTMLElement, target: number): CaretBoundaryRect | undefined {
+export function visualCaretRectAtLogicalOffset(root: HTMLElement, target: number): CaretBoundaryRect | undefined {
   const range = rangeAtLogicalOffset(root, target)
   if (range === undefined) return undefined
   const measured = range.getBoundingClientRect()
@@ -1046,19 +1253,22 @@ function caretBoundaryRectAtLogicalOffset(root: HTMLElement, target: number): Ca
         const end = start + child.data.length
         if (target >= start && target <= end && child.data.length > 0) {
           const range = document.createRange()
-          if (target > start) {
-            const at = Math.min(child.data.length, target - start)
-            range.setStart(child, at - 1)
-            range.setEnd(child, at)
-            const rect = range.getBoundingClientRect()
-            if (usableCaretRect(rect)) return { left: rect.right, top: rect.top, height: rect.height, source: 'text' }
-          }
+          // Prefer the following real glyph. At a soft wrap or immediately
+          // after a chip, the preceding glyph belongs to the previous visual
+          // line and would paint the custom caret one line too high.
           if (target < end) {
             const at = Math.max(0, target - start)
             range.setStart(child, at)
             range.setEnd(child, at + 1)
             const rect = range.getBoundingClientRect()
             if (usableCaretRect(rect)) return { left: rect.left, top: rect.top, height: rect.height, source: 'text' }
+          }
+          if (target > start) {
+            const at = Math.min(child.data.length, target - start)
+            range.setStart(child, at - 1)
+            range.setEnd(child, at)
+            const rect = range.getBoundingClientRect()
+            if (usableCaretRect(rect)) return { left: rect.right, top: rect.top, height: rect.height, source: 'text' }
           }
         }
         logical = end

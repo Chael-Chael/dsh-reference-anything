@@ -51,6 +51,7 @@
     "opencli-plugin/opencli-plugin.json",
     "opencli-plugin/package.json",
     "cordis.patch.yml",
+    "logo.png",
     "NOTICE.md",
     "README.md"
   ],

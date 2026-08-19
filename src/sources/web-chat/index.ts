@@ -5,7 +5,7 @@ import type { ChatProvider, SettingsRecord } from '../../store/spec.ts'
 import { providerSchema, referenceAnythingDomainSpec, settingsRecordSchema } from '../../store/spec.ts'
 import { ConversationStore, type MatchedVia } from '../../store/store.ts'
 import { ConversationSyncManager } from '../../sync/index.ts'
-import { OpenCliError, OpenCliRunner } from '../../opencli.ts'
+import { OpenCliError, OpenCliRunner, discoverOpenCli, installOpenCli as installOpenCliPackage, type OpenCliDiscovery } from '../../opencli.ts'
 import type { ProviderTurnRow } from '../../store/store.ts'
 import { ReferenceAnythingError } from '../../errors.ts'
 import { parseProviderQuery } from '../../search.ts'
@@ -229,11 +229,26 @@ export default class WebChatHistoryService extends Service implements ReferenceS
     return this.store.removeRemoteMissing()
   }
 
+  async removeOldAccounts(): Promise<number> {
+    if (this.sync.isRunning()) throw new ReferenceAnythingError('cannot clear old-account data while a sync is in progress', 'REFERENCE_SYNC_IN_PROGRESS')
+    return this.store.removeOldAccounts()
+  }
+
   /** Durable per-provider sync status, independent of any single in-flight job. */
   syncStates() { return this.store.syncStateSummary() }
 
   getSettings(): SettingsRecord { return this.store.settings }
   async restartDaemon(signal?: AbortSignal): Promise<boolean> { await this.runner().restartDaemon(signal); return true }
+  async discoverOpenCli(signal?: AbortSignal): Promise<OpenCliDiscovery> {
+    return discoverOpenCli(this.store.settings.opencliPath, signal)
+  }
+  async installOpenCli(signal?: AbortSignal): Promise<OpenCliDiscovery> {
+    const discovery = await installOpenCliPackage(signal)
+    if (this.store.settings.opencliPath !== discovery.executable) {
+      await this.store.setSettings({ ...this.store.settings, opencliPath: discovery.executable })
+    }
+    return discovery
+  }
   async updateSettings(value: unknown): Promise<SettingsRecord> {
     const settings = settingsRecordSchema.parse(value)
     const enteringMetadataOnly = settings.historyMode === 'metadata-only' && this.store.settings.historyMode !== 'metadata-only'

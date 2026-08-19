@@ -1,14 +1,26 @@
 import { describe, expect, it } from 'vitest'
 import { defaultPickerSettings, samePickerSettings, settingsRecordSchema } from '../src/wire.ts'
-import { OPENCLI_EXTENSION_STORE_URL, setupReady } from '../src/client/health.ts'
+import { createSettingsOpenHealthCheck, OPENCLI_EXTENSION_STORE_URL, runSetupSequence, setupReady } from '../src/client/health.ts'
 import type { Health } from '../src/client/remote.ts'
 
 const healthy: Health = {
   version: '1.8.6', daemon: 'Daemon: running (PID 1)', pluginInstalled: true,
   daemonRunning: true, extensionConnected: true, extensionState: 'connected',
+  opencliCompatible: true, daemonStale: false, connectivityOk: true, adapterCommandsReady: true, adapterCompatible: true,
 }
 
 describe('settings source registration guard', () => {
+  it('runs the automatic health check only once per plugin lifetime', async () => {
+    let checks = 0
+    const checkOnOpen = createSettingsOpenHealthCheck(async () => { checks++ })
+
+    await checkOnOpen(false)
+    await checkOnOpen(true)
+    await checkOnOpen(true)
+
+    expect(checks).toBe(1)
+  })
+
   it('defaults every @ source to six visible items', () => {
     const picker = defaultPickerSettings()
     expect(Object.values(picker).map(source => source.limit)).toEqual([6, 6, 6, 6, 6])
@@ -48,7 +60,45 @@ describe('browser extension install', () => {
     expect(setupReady(undefined)).toBe(false)
     expect(setupReady({ ...healthy, version: '' })).toBe(false)
     expect(setupReady({ ...healthy, daemonRunning: false })).toBe(false)
+    expect(setupReady({ ...healthy, daemonStale: true })).toBe(false)
     expect(setupReady({ ...healthy, extensionConnected: false })).toBe(false)
+    expect(setupReady({ ...healthy, connectivityOk: false })).toBe(false)
     expect(setupReady({ ...healthy, pluginInstalled: false })).toBe(false)
+    expect(setupReady({ ...healthy, adapterCompatible: false })).toBe(false)
+  })
+
+  it('runs recovery steps in dependency order and rechecks between them', async () => {
+    const order: string[] = []
+    let current: Health = {
+      ...healthy, version: '', opencliCompatible: false, pluginInstalled: false, adapterCompatible: false,
+      daemonRunning: false, daemonStale: false, extensionConnected: false, extensionState: 'daemon-offline', connectivityOk: false,
+    }
+    await runSetupSequence({
+      health: () => current,
+      refresh: async () => { order.push('refresh') },
+      discoverOpenCli: async () => { order.push('discover'); return { found: true, executable: 'found-opencli', version: '1.8.6' } },
+      selectOpenCli: async () => { order.push('select'); current = { ...current, version: '1.8.6', opencliCompatible: true } },
+      installOpenCli: async () => { order.push('install-opencli') },
+      installAdapter: async () => { order.push('adapter'); current = { ...current, pluginInstalled: true, adapterCompatible: true } },
+      restartDaemon: async () => { order.push('daemon'); current = { ...current, daemonRunning: true, extensionState: 'disconnected' } },
+      stage: value => { order.push(`stage:${value}`) },
+    })
+    expect(order).toEqual([
+      'stage:checking', 'stage:opencli', 'discover', 'select', 'refresh',
+      'stage:adapter', 'adapter', 'refresh', 'stage:daemon', 'daemon', 'stage:checking', 'refresh',
+    ])
+  })
+
+  it('does not rewrite healthy dependencies during setup', async () => {
+    const called: string[] = []
+    await runSetupSequence({
+      health: () => healthy,
+      refresh: async () => { called.push('refresh') },
+      discoverOpenCli: async () => { called.push('discover'); return { found: false, executable: '', version: '' } },
+      selectOpenCli: async () => { called.push('select') }, installOpenCli: async () => { called.push('opencli') },
+      installAdapter: async () => { called.push('adapter') }, restartDaemon: async () => { called.push('daemon') },
+      stage: value => { called.push(`stage:${value}`) },
+    })
+    expect(called).toEqual(['stage:checking', 'stage:checking', 'refresh'])
   })
 })

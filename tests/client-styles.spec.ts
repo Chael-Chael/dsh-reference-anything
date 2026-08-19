@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it } from 'vitest'
-import { adoptAdaptiveChipHitTesting, adoptAdaptiveChipInsertionCaret, adoptAdaptiveChipKeyboardNavigation, adoptAdaptiveComposerHeight, adoptConversationMentionProjection, adoptConversationSyncActionProjection, adoptMenuExpansionProjection, adoptMenuGroupTitleProjection, adoptReferenceIconProjection, adoptStyles, logicalOffsetAtDomPoint, rangeBetweenLogicalOffsets, refreshActiveTriggerMenu, visualCaretTop, wordRangeAtLogicalOffset } from '../src/client/styles.ts'
+import { adoptAdaptiveChipHitTesting, adoptAdaptiveChipInsertionCaret, adoptAdaptiveChipKeyboardNavigation, adoptAdaptiveComposerHeight, adoptConversationMentionProjection, adoptConversationSyncActionProjection, adoptMenuExpansionProjection, adoptMenuGroupTitleProjection, adoptReferenceIconProjection, adoptStyles, logicalOffsetAtDomPoint, rangeBetweenLogicalOffsets, refreshActiveTriggerMenu, visualCaretRectAtLogicalOffset, visualCaretTop, wordRangeAtLogicalOffset } from '../src/client/styles.ts'
 import { syncProgressFraction, type SyncStatus } from '../src/client/remote.ts'
 
 afterEach(() => {
@@ -23,12 +23,16 @@ describe('plugin-owned DSH presentation overrides', () => {
     expect(text).toContain('[data-decoration="chip"]>span{position:static!important')
     expect(text).toContain('font-size:inherit!important')
     expect(text).toContain('line-height:inherit!important;letter-spacing:inherit!important')
-    expect(text).toContain('font-weight:inherit!important;letter-spacing:inherit!important')
+    expect(text).toContain('letter-spacing:inherit!important;font-weight:inherit!important;transform:none!important')
+    expect(text).not.toContain('letter-spacing:inherit!important;font-weight:600')
     expect(text).toContain('[data-composer-card] .dsh_ref_conversation_chip')
-    expect(text).toContain('[data-decoration="chip"]>.dsh_ref_session_icon:before{background:var(--dsw-alias-state-business-primary,#3b82f6)!important}')
+    expect(text).toContain('[data-decoration="chip"]>.dsh_ref_picker_icon:before{background:var(--dsw-alias-state-business-primary,#3b82f6)!important}')
     expect(text).toContain('.dsh_ref_projected_icon{display:inline!important}')
+    expect(text).toContain('.dsh_ref_picker_icon{display:inline!important}')
     expect(text).toContain('margin-right:.35em;vertical-align:-.125em')
-    expect(text).toContain('.dsh_ref_session_icon,.dsh_ref_skill_icon{display:inline!important}')
+    expect(text).toContain('.dsh_ref_picker_icon:before{content:"";display:inline-block')
+    expect(text).toContain('[role="listbox"] :is(.dsh_ref_projected_icon,.dsh_ref_picker_icon){display:inline-flex!important;align-items:center!important;justify-content:center!important')
+    expect(text).toContain('[role="listbox"] :is(.dsh_ref_projected_icon,.dsh_ref_picker_icon):before{display:block;width:16px;height:16px;margin:0;vertical-align:0}')
     expect(text).not.toContain('.dsh_ref_conversation_chip>.dsh_ref_projected_icon:before{transform:translateY(.2em)!important}')
     expect(text).not.toContain('[data-decoration="chip"]>.dsh_ref_session_icon:before{transform:translateY(.2em)!important')
     expect(text).toContain('[role="listbox"] .dsh_ref_projected_icon:before{background:var(--dsw-alias-label-tertiary,#8b8f98)}')
@@ -46,7 +50,10 @@ describe('plugin-owned DSH presentation overrides', () => {
     expect(text).toContain('background:var(--dsh-ref-blue);color:#fff;animation:dsh_ref_notice_drop')
     expect(text).toContain('@keyframes dsh_ref_notice_drop')
     expect(text).toContain('.dsh_ref_render_mode{display:flex')
+    expect(text).toContain('.dsh_ref_header_brand{display:flex;align-items:flex-start;gap:14px}')
     expect(text).toContain('.dsh_ref_field_note,.dsh_ref_render_mode small{color:#64748b}')
+    expect(text).toContain('.dsh_ref_menu_expand{display:block')
+    expect(text).toContain('font:400 14px/22px Geist')
   })
 
   it('projects a logged dsh-ref mention without exposing its opaque URI', () => {
@@ -171,6 +178,84 @@ describe('plugin-owned DSH presentation overrides', () => {
     }
   })
 
+  it('maps line-end whitespace and scrolled visual lines without native placeholder fallback', () => {
+    document.body.innerHTML = '<div data-composer-card><div data-input-backdrop style="padding-top:4px">ab<span data-decoration="chip"><span>Long reference</span></span>cd\nef</div><textarea style="font-size:16px;line-height:24px">ab\uFFFCcd\nef</textarea></div>'
+    const input = document.querySelector('textarea')!
+    const backdrop = document.querySelector('[data-input-backdrop]') as HTMLElement
+    const chip = backdrop.querySelector('[data-decoration="chip"]') as HTMLElement
+    const leading = backdrop.firstChild as Text
+    const trailing = backdrop.lastChild as Text
+    let scrollShift = 0
+    backdrop.getBoundingClientRect = () => rect(0, 96 - scrollShift, 320, 72)
+    chip.getBoundingClientRect = () => rect(40, 100 - scrollShift, 70, 20)
+    const nativeRect = Range.prototype.getBoundingClientRect
+    Range.prototype.getBoundingClientRect = function () {
+      if (this.startContainer === leading) return rect(10 + this.startOffset * 10, 100 - scrollShift, 10, 20)
+      if (this.startContainer === trailing) {
+        if (this.startOffset === 2) return rect(0, 0, 0, 0)
+        const secondLine = this.startOffset >= 3
+        return rect((secondLine ? 10 : 110) + (secondLine ? this.startOffset - 3 : this.startOffset) * 10, (secondLine ? 124 : 100) - scrollShift, 10, 20)
+      }
+      return rect(0, 0, 0, 0)
+    }
+    const point = Object.getOwnPropertyDescriptor(document, 'caretPositionFromPoint')
+    Object.defineProperty(document, 'caretPositionFromPoint', { configurable: true, value: () => ({ offsetNode: backdrop, offset: backdrop.childNodes.length }) })
+    const dispose = adoptAdaptiveChipHitTesting()
+    try {
+      input.dispatchEvent(new MouseEvent('pointerdown', { button: 0, clientX: 260, clientY: 110, bubbles: true }))
+      input.dispatchEvent(new MouseEvent('pointerup', { button: 0, clientX: 260, clientY: 110, bubbles: true }))
+      expect(input.selectionStart).toBe(5)
+      expect(input.selectionEnd).toBe(5)
+
+      scrollShift = 48
+      input.dispatchEvent(new MouseEvent('pointerdown', { button: 0, clientX: 11, clientY: 86, bubbles: true }))
+      input.dispatchEvent(new MouseEvent('pointerup', { button: 0, clientX: 11, clientY: 86, bubbles: true }))
+      expect(input.selectionStart).toBe(6)
+      expect(input.selectionEnd).toBe(6)
+    } finally {
+      dispose()
+      Range.prototype.getBoundingClientRect = nativeRect
+      if (point) Object.defineProperty(document, 'caretPositionFromPoint', point)
+      else delete (document as unknown as Record<string, unknown>).caretPositionFromPoint
+    }
+  })
+
+  it('uses the following text line for a caret immediately after a chip', () => {
+    document.body.innerHTML = '<div data-input-backdrop><span data-decoration="chip"><span>Long reference</span></span>after</div>'
+    const root = document.querySelector('[data-input-backdrop]') as HTMLElement
+    const chip = root.querySelector('[data-decoration="chip"]') as HTMLElement
+    const trailing = root.lastChild as Text
+    chip.getBoundingClientRect = () => rect(10, 100, 80, 20)
+    const nativeRect = Range.prototype.getBoundingClientRect
+    Range.prototype.getBoundingClientRect = function () {
+      if (this.startContainer === trailing && !this.collapsed) return rect(10, 124, 10, 20)
+      if (this.collapsed) return rect(10, 100, 0, 0)
+      return rect(0, 0, 0, 0)
+    }
+    try {
+      expect(visualCaretRectAtLogicalOffset(root, 1)?.top).toBe(124)
+    } finally {
+      Range.prototype.getBoundingClientRect = nativeRect
+    }
+  })
+
+  it('uses the following glyph line at a soft-wrap boundary', () => {
+    document.body.innerHTML = '<div data-input-backdrop>ab</div>'
+    const root = document.querySelector('[data-input-backdrop]') as HTMLElement
+    const text = root.firstChild as Text
+    const nativeRect = Range.prototype.getBoundingClientRect
+    Range.prototype.getBoundingClientRect = function () {
+      if (this.startContainer === text && !this.collapsed) return rect(this.startOffset === 0 ? 80 : 10, this.startOffset === 0 ? 100 : 124, 10, 20)
+      if (this.collapsed) return rect(10, 100, 0, 0)
+      return rect(0, 0, 0, 0)
+    }
+    try {
+      expect(visualCaretRectAtLogicalOffset(root, 1)?.top).toBe(124)
+    } finally {
+      Range.prototype.getBoundingClientRect = nativeRect
+    }
+  })
+
   it('selects visual words and atomic chips at their logical offsets', () => {
     const value = '\uFFFC ordinary words'
     expect(wordRangeAtLogicalOffset(value, 0)).toEqual({ start: 0, end: 1 })
@@ -224,6 +309,44 @@ describe('plugin-owned DSH presentation overrides', () => {
     }
   })
 
+  it('restores the caret after a mouse-picked command replaces an @ token mid-draft', async () => {
+    document.body.innerHTML = '<div data-composer-card><div data-input-backdrop>before @commands after</div><textarea>before @commands after</textarea><div role="listbox" aria-activedescendant="pick"><button id="pick" role="option">plan</button></div></div>'
+    const input = document.querySelector('textarea')!
+    input.focus()
+    input.setSelectionRange(16, 16)
+    const dispose = adoptAdaptiveChipInsertionCaret()
+    try {
+      document.getElementById('pick')?.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true }))
+      input.value = 'before /plan after'
+      input.setSelectionRange(input.value.length, input.value.length)
+      document.querySelector('[data-input-backdrop]')!.textContent = input.value
+      await new Promise<void>(resolve => { requestAnimationFrame(() => { requestAnimationFrame(() => { resolve() }) }) })
+      expect(input.selectionStart).toBe(12)
+      expect(input.selectionEnd).toBe(12)
+    } finally {
+      dispose()
+    }
+  })
+
+  it('restores the caret after a keyboard-picked skill replaces an @ token mid-draft', async () => {
+    document.body.innerHTML = '<div data-composer-card><div data-input-backdrop>before @skills:review after</div><textarea>before @skills:review after</textarea><div role="listbox" aria-activedescendant="pick"><button id="pick" role="option">review</button></div></div>'
+    const input = document.querySelector('textarea')!
+    input.focus()
+    input.setSelectionRange(21, 21)
+    const dispose = adoptAdaptiveChipInsertionCaret()
+    try {
+      input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))
+      input.value = 'before /review  after'
+      input.setSelectionRange(input.value.length, input.value.length)
+      document.querySelector('[data-input-backdrop]')!.textContent = input.value
+      await new Promise<void>(resolve => { requestAnimationFrame(() => { requestAnimationFrame(() => { resolve() }) }) })
+      expect(input.selectionStart).toBe(15)
+      expect(input.selectionEnd).toBe(15)
+    } finally {
+      dispose()
+    }
+  })
+
   it('projects the DSH session marker as an outlined conversation icon', () => {
     document.body.innerHTML = '<div role="listbox"><span>\uE106 Session title</span></div>'
     const dispose = adoptReferenceIconProjection()
@@ -240,6 +363,21 @@ describe('plugin-owned DSH presentation overrides', () => {
     expect(projected?.textContent).toBe('review')
     expect(projected?.getAttribute('style')).toContain('--dsh-ref-picker-icon')
     expect(projected?.getAttribute('style')).toContain('fill%3D%22none%22')
+    dispose()
+  })
+
+  it('projects Command and file-type markers with the same Lucide stroke weight', () => {
+    document.body.innerHTML = '<div role="listbox"><span>\uE108 plan</span><span>\uE10B hero.png</span></div><span data-decoration="chip"><span>\uE109 assets</span></span>'
+    const dispose = adoptReferenceIconProjection()
+    const command = document.querySelector('[data-dsh-ref-picker-icon="command"]')
+    const image = document.querySelector('[data-dsh-ref-picker-icon="image"]')
+    const folder = document.querySelector('[data-dsh-ref-picker-icon="folder"]')
+    expect(command?.textContent).toBe('plan')
+    expect(command?.getAttribute('style')).toContain('stroke-width%3D%222%22')
+    expect(image?.getAttribute('style')).toContain('%3Crect')
+    expect(image?.getAttribute('style')).toContain('stroke-width%3D%222%22')
+    expect(folder?.textContent).toBe('assets')
+    expect(folder?.classList.contains('dsh_ref_picker_icon')).toBe(true)
     dispose()
   })
 
@@ -309,17 +447,31 @@ describe('plugin-owned DSH presentation overrides', () => {
     expect(document.activeElement).toBe(editor)
   })
 
-  it('restores the open menu scroll position after a sync refresh', async () => {
+  it('restores the open menu scroll position after asynchronous sync results replace the rows', async () => {
     const card = document.createElement('div'); card.dataset.composerCard = ''
     const editor = document.createElement('textarea'); editor.value = '@chatgpt'
     const listbox = document.createElement('div'); listbox.setAttribute('role', 'listbox')
-    const viewport = document.createElement('div'); listbox.append(viewport); card.append(editor, listbox); document.body.append(card)
+    const viewport = document.createElement('div')
+    const header = document.createElement('div'); header.setAttribute('role', 'presentation'); header.dataset.source = 'External conversations'
+    const oldRow = document.createElement('button'); oldRow.setAttribute('role', 'option')
+    viewport.append(header, oldRow); listbox.append(viewport); card.append(editor, listbox); document.body.append(card)
     viewport.scrollTop = 120
-    editor.addEventListener('input', () => { if (editor.value === '@chatgpt') viewport.scrollTop = 0 })
+    editor.addEventListener('input', () => {
+      if (editor.value !== '@chatgpt') return
+      const loading = document.createElement('div'); loading.dataset.source = 'External conversations'
+      viewport.replaceChildren(header, loading)
+      viewport.scrollTop = 0
+      setTimeout(() => {
+        const refreshedRow = document.createElement('button'); refreshedRow.setAttribute('role', 'option')
+        viewport.replaceChildren(header, refreshedRow)
+        // The host's post-commit highlighted-row effect runs after data arrives.
+        viewport.scrollTop = 0
+      }, 100)
+    })
     editor.focus(); editor.setSelectionRange(editor.value.length, editor.value.length)
 
-    expect(refreshActiveTriggerMenu()).toBe(true)
-    await new Promise<void>(resolve => { requestAnimationFrame(() => { requestAnimationFrame(() => { requestAnimationFrame(() => { resolve() }) }) }) })
+    expect(refreshActiveTriggerMenu('External conversations')).toBe(true)
+    await new Promise(resolve => { setTimeout(resolve, 260) })
     expect(viewport.scrollTop).toBe(120)
   })
 
@@ -432,3 +584,7 @@ describe('plugin-owned DSH presentation overrides', () => {
     dispose()
   })
 })
+
+function rect(left: number, top: number, width: number, height: number): DOMRect {
+  return { left, right: left + width, width, top, bottom: top + height, height, x: left, y: top, toJSON() {} } as DOMRect
+}

@@ -22,6 +22,8 @@ export class ReferenceAnythingRemote extends TypertRemoteService {
   }
   health(signal: AbortSignal) { return this.ctx.referenceChatHistory.health(signal) }
   profiles(signal: AbortSignal) { return this.ctx.referenceChatHistory.profiles(signal) }
+  discoverOpenCli(signal: AbortSignal) { return this.ctx.referenceChatHistory.discoverOpenCli(signal) }
+  installOpenCli(signal: AbortSignal) { return this.ctx.referenceChatHistory.installOpenCli(signal) }
   installAdapter(signal: AbortSignal) { return this.ctx.referenceChatHistory.installAdapter(signal) }
   restartDaemon(signal: AbortSignal) { return this.ctx.referenceChatHistory.restartDaemon(signal) }
   stats() { return this.ctx.referenceChatHistory.stats() }
@@ -49,6 +51,9 @@ export class ReferenceAnythingRemote extends TypertRemoteService {
   }
   clearRemoteMissing(signal: AbortSignal) {
     signal.throwIfAborted(); return this.ctx.referenceChatHistory.removeRemoteMissing()
+  }
+  clearOldAccounts(signal: AbortSignal) {
+    signal.throwIfAborted(); return this.ctx.referenceChatHistory.removeOldAccounts()
   }
   syncStates() { return this.ctx.referenceChatHistory.syncStates() }
 }

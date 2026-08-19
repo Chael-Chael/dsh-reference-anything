@@ -20,9 +20,12 @@ export interface Health {
   version: string; daemon: string; pluginInstalled: boolean
   daemonRunning: boolean; extensionConnected: boolean; extensionState: ExtensionState
   extensionVersion?: string; profileCount?: number
-  versionError?: string; daemonError?: string; pluginError?: string
+  opencliCompatible: boolean; daemonVersion?: string; daemonStale: boolean
+  connectivityOk: boolean; pluginVersion?: string; adapterCommandsReady: boolean; adapterCompatible: boolean
+  versionError?: string; daemonError?: string; pluginError?: string; doctorError?: string
 }
 export interface BrowserProfile { id: string; alias?: string; connected: boolean; isDefault: boolean }
+export interface OpenCliDiscovery { found: boolean; executable: string; version: string; error?: string }
 export interface ProviderStats {
   provider: ChatProvider; conversations: number; lastSyncedAt: string
   status: 'ready' | 'syncing' | 'error' | 'empty'; error?: string
@@ -65,7 +68,7 @@ function clamp(value: number): number {
 
 export interface ManagedConversation extends ConversationRow { remoteMissing: boolean }
 export interface BrowsePage { items: readonly ManagedConversation[]; total: number }
-export interface StorageStats { bytes: number; conversations: number; remoteMissing: number }
+export interface StorageStats { bytes: number; conversations: number; remoteMissing: number; oldAccountConversations: number }
 export interface ProviderSyncState {
   provider: ChatProvider; status: 'idle' | 'running' | 'cancelled' | 'failed'
   lastSyncAt: string; lastCompleteScanAt: string; error: string
@@ -81,6 +84,8 @@ export interface ReferenceAnythingRemoteFace {
   search(input: { query: string; provider?: ChatProvider; limit: number }, signal?: AbortSignal): Promise<RemoteResult<readonly SearchResult[]>>
   health(signal?: AbortSignal): Promise<RemoteResult<Health>>
   profiles(signal?: AbortSignal): Promise<RemoteResult<readonly BrowserProfile[]>>
+  discoverOpenCli(signal?: AbortSignal): Promise<RemoteResult<OpenCliDiscovery>>
+  installOpenCli(signal?: AbortSignal): Promise<RemoteResult<OpenCliDiscovery>>
   installAdapter(signal?: AbortSignal): Promise<RemoteResult<boolean>>
   restartDaemon(signal?: AbortSignal): Promise<RemoteResult<boolean>>
   stats(): Promise<RemoteResult<readonly ProviderStats[]>>
@@ -95,5 +100,6 @@ export interface ReferenceAnythingRemoteFace {
   clearProvider(input: { provider: ChatProvider }, signal?: AbortSignal): Promise<RemoteResult<number>>
   clearOlder(input: { days: number }, signal?: AbortSignal): Promise<RemoteResult<number>>
   clearRemoteMissing(signal?: AbortSignal): Promise<RemoteResult<number>>
+  clearOldAccounts(signal?: AbortSignal): Promise<RemoteResult<number>>
   syncStates(): Promise<RemoteResult<readonly ProviderSyncState[]>>
 }

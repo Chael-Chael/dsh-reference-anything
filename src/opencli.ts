@@ -1,19 +1,24 @@
 import { execFile as nodeExecFile } from 'node:child_process'
 import { existsSync } from 'node:fs'
-import { join, resolve } from 'node:path'
+import { dirname, join, resolve } from 'node:path'
 import { promisify } from 'node:util'
 import { createHash } from 'node:crypto'
 import type { ChatProvider } from './store/spec.ts'
 import type { ProviderConversationRow, ProviderTurnRow } from './store/store.ts'
 
 const execFile = promisify(nodeExecFile)
+export const MIN_OPENCLI_VERSION = '1.8.6'
+export const MIN_ADAPTER_VERSION = '0.2.0'
+export const OPENCLI_NPM_PACKAGE = '@jackwener/opencli'
 const SITE: Record<ChatProvider, string> = {
   chatgpt: 'dsh-chatgpt', claude: 'dsh-claude', gemini: 'dsh-gemini',
   deepseek: 'dsh-deepseek', grok: 'dsh-grok', kimi: 'dsh-kimi',
 }
+const REQUIRED_ADAPTER_COMMANDS = ['chatgpt', 'claude', 'gemini', 'deepseek', 'grok', 'kimi'] as const
 
 export type OpenCliErrorCode = 'EXTENSION_NOT_CONNECTED' | 'PROVIDER_TIMEOUT' | 'PROVIDER_NOT_LOGGED_IN'
   | 'PROVIDER_ACCOUNT_MISMATCH' | 'OPENCLI_CONFIGURATION' | 'OPENCLI_OUTPUT_TOO_LARGE' | 'OPENCLI_FAILED'
+  | 'OPENCLI_INSTALL_FAILED'
 
 export class OpenCliError extends Error {
   constructor(message: string, readonly code: OpenCliErrorCode, options?: ErrorOptions) { super(message, options) }
@@ -41,9 +46,25 @@ export interface OpenCliHealth {
   extensionState: ExtensionState
   extensionVersion?: string
   profileCount?: number
+  opencliCompatible: boolean
+  daemonVersion?: string
+  daemonStale: boolean
+  connectivityOk: boolean
+  pluginVersion?: string
+  adapterCommandsReady: boolean
+  adapterCompatible: boolean
   versionError?: string
   daemonError?: string
   pluginError?: string
+  doctorError?: string
+}
+
+/** Result returned to the settings page after searching for an executable. */
+export interface OpenCliDiscovery {
+  found: boolean
+  executable: string
+  version: string
+  error?: string
 }
 
 export interface DaemonStatus {
@@ -156,20 +177,41 @@ export class OpenCliRunner {
   }
 
   async health(signal?: AbortSignal): Promise<OpenCliHealth> {
-    const [version, daemon, plugins] = await Promise.all([
+    const [version, daemon, plugins, doctor] = await Promise.all([
       this.probe(['--version'], signal), this.probe(['daemon', 'status'], signal), this.probe(['plugin', 'list'], signal),
+      this.probe(['doctor'], signal),
     ])
     const status = parseDaemonStatus(daemon.value)
+    const cliVersion = normalizeVersion(version.value)
+    const daemonVersion = daemon.value.match(/^Version:\s+v?([^\s(]+)/m)?.[1]
+    const pluginVersion = plugins.value.match(/dsh-chat-history\s+@([^\s—]+)/i)?.[1]
+    const pluginInstalled = /dsh-chat-history/i.test(plugins.value)
+    const adapterCommandsReady = REQUIRED_ADAPTER_COMMANDS.every(command => new RegExp(`\\b${command}\\b`, 'i').test(plugins.value))
+    const opencliCompatible = versionAtLeast(cliVersion, MIN_OPENCLI_VERSION)
+    const daemonStale = Boolean(status.daemonRunning && (!daemonVersion || normalizeVersion(daemonVersion) !== cliVersion))
+    const connectivityOk = /\[OK\]\s+Connectivity:/i.test(doctor.value)
     return {
-      version: version.value.trim(), daemon: daemon.value.trim(), pluginInstalled: /dsh-chat-history/i.test(plugins.value),
+      version: cliVersion, daemon: daemon.value.trim(), pluginInstalled,
       daemonRunning: status.daemonRunning, extensionConnected: status.extensionConnected, extensionState: status.extensionState,
+      opencliCompatible, daemonStale, connectivityOk,
       ...(status.extensionVersion ? { extensionVersion: status.extensionVersion } : {}),
       ...(status.profileCount !== undefined ? { profileCount: status.profileCount } : {}),
+      ...(daemonVersion ? { daemonVersion: normalizeVersion(daemonVersion) } : {}),
+      ...(pluginVersion ? { pluginVersion: normalizeVersion(pluginVersion) } : {}),
+      adapterCommandsReady,
+      adapterCompatible: pluginInstalled && adapterCommandsReady && versionAtLeast(pluginVersion ?? '', MIN_ADAPTER_VERSION),
       ...(version.error ? { versionError: version.error } : {}),
       ...(daemon.error ? { daemonError: daemon.error } : {}),
       ...(plugins.error ? { pluginError: plugins.error } : {}),
+      ...(doctor.error ? { doctorError: doctor.error } : {}),
     }
   }
+
+  /** Lightweight executable validation used by automatic path discovery. */
+  async version(signal?: AbortSignal): Promise<string> { return normalizeVersion(await this.raw(['--version'], signal)) }
+
+  /** Confirm the executable also exposes OpenCLI's plugin command, not merely a semver-looking --version. */
+  async verifyInstallation(signal?: AbortSignal): Promise<void> { await this.raw(['plugin', 'list'], signal) }
 
   async profiles(signal?: AbortSignal): Promise<BrowserProfile[]> {
     const output = await this.raw(['profile', 'list'], signal)
@@ -230,14 +272,14 @@ export class OpenCliRunner {
     try {
       const result = await execFile(invocation.file, fullArgs, {
         encoding: 'utf8', timeout: this.timeoutMs, maxBuffer: this.maxStdoutBytes,
-        windowsHide: true, shell: false, signal,
+        windowsHide: true, shell: false, signal, env: { ...process.env, OPENCLI_WINDOW: 'background' },
       })
       return result.stdout
     } catch (error: unknown) {
-      const detail = error as { code?: number | string; killed?: boolean; signal?: string; stderr?: string }
+      const detail = error as { code?: number | string; killed?: boolean; signal?: string; stderr?: string; stdout?: string }
       if (detail.code === 'ERR_CHILD_PROCESS_STDIO_MAXBUFFER') throw new OpenCliError('OpenCLI output exceeded the configured limit', 'OPENCLI_OUTPUT_TOO_LARGE', { cause: error })
       if (detail.killed || detail.signal === 'SIGTERM') throw new OpenCliError('OpenCLI provider request timed out', 'PROVIDER_TIMEOUT', { cause: error })
-      const stderr = String(detail.stderr || '').trim().slice(0, 2_000)
+      const stderr = String(detail.stderr || detail.stdout || '').trim().slice(0, 2_000)
       const exit = typeof detail.code === 'number' ? detail.code : undefined
       const code: OpenCliErrorCode = stderr.includes('DSH_ACCOUNT_SCOPE_MISMATCH') ? 'PROVIDER_ACCOUNT_MISMATCH'
         : exit === 69 ? 'EXTENSION_NOT_CONNECTED' : exit === 75 ? 'PROVIDER_TIMEOUT'
@@ -245,6 +287,84 @@ export class OpenCliRunner {
       throw new OpenCliError(stderr || `OpenCLI exited with ${String(detail.code)}`, code, { cause: error })
     }
   }
+}
+
+/** Locate a working OpenCLI without asking a command-line newcomer for PATH details. */
+export async function discoverOpenCli(configured = 'opencli', signal?: AbortSignal): Promise<OpenCliDiscovery> {
+  const candidates = openCliCandidates(configured)
+  let lastError = ''
+  for (const executable of candidates) {
+    try {
+      const runner = new OpenCliRunner({ executable, timeoutMs: 15_000 })
+      const version = await runner.version(signal)
+      await runner.verifyInstallation(signal)
+      if (version) return { found: true, executable, version }
+    } catch (error) {
+      lastError = error instanceof Error ? error.message : String(error)
+    }
+  }
+  return { found: false, executable: configured, version: '', ...(lastError ? { error: lastError } : {}) }
+}
+
+/** Install or upgrade the supported OpenCLI package through this Node runtime's npm. */
+export async function installOpenCli(signal?: AbortSignal): Promise<OpenCliDiscovery> {
+  const npm = resolveNpmInvocation()
+  if (!npm) {
+    throw new OpenCliError('npm was not found next to the Node.js runtime; install Node.js/npm, then retry', 'OPENCLI_INSTALL_FAILED')
+  }
+  try {
+    await execFile(npm.file, [...npm.prefix, 'install', '--global', `${OPENCLI_NPM_PACKAGE}@>=${MIN_OPENCLI_VERSION}`], {
+      encoding: 'utf8', timeout: 5 * 60_000, maxBuffer: 8 * 1024 * 1024,
+      windowsHide: true, shell: false, signal,
+    })
+  } catch (error) {
+    const detail = error as { stderr?: string; stdout?: string }
+    const output = String(detail.stderr || detail.stdout || '').trim().slice(0, 2_000)
+    throw new OpenCliError(output || 'npm could not install OpenCLI globally', 'OPENCLI_INSTALL_FAILED', { cause: error })
+  }
+  const discovery = await discoverOpenCli('opencli', signal)
+  if (!discovery.found) throw new OpenCliError(discovery.error || 'OpenCLI was installed but could not be located', 'OPENCLI_INSTALL_FAILED')
+  return discovery
+}
+
+function openCliCandidates(configured: string): string[] {
+  const candidates = [configured, 'opencli']
+  const prefix = process.env.npm_config_prefix
+  if (process.platform === 'win32') {
+    if (process.env.APPDATA) candidates.push(join(process.env.APPDATA, 'npm', 'opencli.cmd'))
+    if (prefix) candidates.push(join(prefix, 'opencli.cmd'))
+  } else {
+    if (prefix) candidates.push(join(prefix, 'bin', 'opencli'))
+    candidates.push('/usr/local/bin/opencli', '/opt/homebrew/bin/opencli')
+  }
+  return [...new Set(candidates.filter(Boolean))]
+}
+
+function resolveNpmInvocation(): { file: string; prefix: string[] } | undefined {
+  const npmExecPath = process.env.npm_execpath
+  if (npmExecPath && existsSync(npmExecPath)) {
+    return /\.(?:c?js|mjs)$/i.test(npmExecPath)
+      ? { file: process.execPath, prefix: [npmExecPath] }
+      : { file: npmExecPath, prefix: [] }
+  }
+  const besideNode = join(dirname(process.execPath), 'node_modules', 'npm', 'bin', 'npm-cli.js')
+  if (existsSync(besideNode)) return { file: process.execPath, prefix: [besideNode] }
+  if (process.platform !== 'win32') return { file: 'npm', prefix: [] }
+  return undefined
+}
+
+function normalizeVersion(value: string): string { return value.trim().replace(/^v/i, '').split(/\s+/)[0] ?? '' }
+
+/** Numeric semver comparison for the stable x.y.z versions OpenCLI publishes. */
+export function versionAtLeast(value: string, minimum: string): boolean {
+  const parse = (input: string) => normalizeVersion(input).split('.').slice(0, 3).map(part => Number.parseInt(part, 10))
+  const actual = parse(value); const required = parse(minimum)
+  if (actual.length < 3 || actual.some(Number.isNaN)) return false
+  for (let index = 0; index < 3; index++) {
+    const left = actual[index] ?? 0; const right = required[index] ?? 0
+    if (left !== right) return left > right
+  }
+  return true
 }
 
 function resolveInvocation(configured: string): { file: string; prefix: string[] } {

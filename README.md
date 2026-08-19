@@ -2,6 +2,8 @@
 
 <div align="center">
 
+<img src="./logo.png" alt="dsh-reference-anything logo" width="180" />
+
 <h1>dsh-reference-anything</h1>
 
 One `@` to reference them all.
@@ -55,7 +57,7 @@ This does not include the legacy standalone DeepSeek CDP / `--remote-debugging-p
 
 Prerequisites:
 
-- `dsh` and `opencli` are installed globally.
+- `dsh` is installed and running; automatic OpenCLI installation requires the `npm` bundled with Node.js.
 - The target platforms are already logged in under the selected Chrome Profile.
 
 Install the DSH plugin:
@@ -64,7 +66,7 @@ Install the DSH plugin:
 dsh plugin --profile web add D:\dsh-reference-anything
 ```
 
-After installing the DSH plugin, open `Settings → Conversations → Availability check` in DSH Web and click **Install all**. This will automatically install the repository’s OpenCLI adapters (equivalent to `opencli plugin install file:///D:/dsh-reference-anything/opencli-plugin`), start the Browser Bridge daemon when needed, and open the OpenCLI Browser Bridge extension page in the [Chrome Web Store](https://chromewebstore.google.com/detail/opencli/ildkmabpimmkaediidaifkhjpohdnifk). After clicking “Add to Chrome” on the store page, return to the settings page and click **Check again**; the extension will then appear as connected.
+After installing the DSH plugin, open `Settings → Conversations → Availability check` in DSH Web and click **Install all**. It discovers OpenCLI, installs or upgrades it through npm when missing or outdated, installs the repository’s adapters (equivalent to `opencli plugin install file:///D:/dsh-reference-anything/opencli-plugin`), starts or refreshes Browser Bridge, and immediately opens the OpenCLI Browser Bridge page in the [Chrome Web Store](https://chromewebstore.google.com/detail/opencli/ildkmabpimmkaediidaifkhjpohdnifk). Confirm the extension installation, then return and click **Check again**. Any remaining failed check displays its own recovery action.
 
 You can also complete the steps manually:
 
@@ -72,7 +74,7 @@ You can also complete the steps manually:
 opencli plugin install file:///D:/dsh-reference-anything/opencli-plugin
 ```
 
-Browser extensions cannot be silently installed from a webpage; they must be added via the Chrome Web Store or manually via “Load unpacked” from [OpenCLI Releases](https://github.com/jackwener/opencli/releases). Installing the DSH plugin does not silently modify `~/.opencli/plugins`. If OpenCLI detects multiple browser profiles, select one in the DSH Conversations settings page before syncing.
+Browser extensions cannot be silently installed from a webpage; confirm the installation in the Chrome Web Store or use “Load unpacked” from [OpenCLI Releases](https://github.com/jackwener/opencli/releases). If the browser blocks the store popup, the settings page keeps a normal fallback link. When multiple browser profiles are connected, select and apply one directly in the failed check. Global npm installation remains subject to OS permissions; failures retain their original diagnostic in the settings page.
 
 ## Usage
 
@@ -191,7 +193,7 @@ The `reference_anything` storage domain contains:
 
 Remote records are marked `remoteMissing` only after a full remote pagination pass succeeds. Local history is never auto-deleted. DOM fallback is used only after an API request fails, and fallback data is always marked `partial=true`.
 
-In `metadata-only` mode, the current browser account is checked inside the same detail operation that reads a referenced body; reads are rejected when it does not match the account scope cached by sync. Conversation management includes a bulk action to delete all locally retained records marked `remoteMissing`.
+In `metadata-only` mode, the current browser account is checked inside the same detail operation that reads a referenced body; reads are rejected when it does not match the account scope cached by sync. Conversation management includes bulk actions for records marked `remoteMissing` and for local chats owned by non-current accounts of providers whose current account is known.
 
 ## Acknowledgements
 

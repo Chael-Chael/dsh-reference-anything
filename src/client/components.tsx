@@ -1,23 +1,27 @@
 import type { InjectFace, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import type { ObservableSnapshot } from '@deepseek-ai/dsh-client-runtime/client'
-import { useEffect, useRef, useState, type CSSProperties } from 'react'
+import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import { defaultPickerSettings, type ChatProvider, type PickerSettings, type PickerSource, type SettingsRecord } from '../wire.ts'
 import { syncProgressFraction, type BrowsePage, type BrowserProfile, type Health, type ProviderStats, type StorageStats, type SyncStatus } from './remote.ts'
 import { ProviderLogo } from './provider-icons.tsx'
 import { type REFERENCE_ANYTHING_NS } from './locale.ts'
 import type { TranslateNS } from '@deepseek-ai/dsh-client-locale/client'
+import { OPENCLI_EXTENSION_STORE_URL, openExtensionStore, setupReady, type SetupStage } from './health.ts'
 
 /** Current query/filter/page of the "Manage synced conversations" list, plus its last fetched page. */
 export interface BrowseState { query: string; provider?: ChatProvider; offset: number; page?: BrowsePage }
-
-export interface SettingsSnapshot { settings: SettingsRecord; health?: Health; profiles?: readonly BrowserProfile[]; stats?: readonly ProviderStats[]; storage?: StorageStats; sync?: SyncStatus; error?: string; notice?: string; loading?: boolean; browse?: BrowseState }
+export interface SettingsSnapshot { settings: SettingsRecord; health?: Health; profiles?: readonly BrowserProfile[]; stats?: readonly ProviderStats[]; storage?: StorageStats; sync?: SyncStatus; error?: string; notice?: string; loading?: boolean; browse?: BrowseState; setupStep?: SetupStage }
 export interface SettingsInjected {
   hooks: { scope: ObservableSnapshot<SettingsSnapshot> }
   save(value: SettingsRecord): Promise<void>
   sync(providers: ChatProvider[], mode: 'incremental' | 'full'): Promise<void>
   cancel(): Promise<void>
   refresh(): Promise<void>
-  setupAll(): Promise<void>
+  refreshOnOpen(): Promise<void>
+  setupAll(extensionPageOpened: boolean): Promise<void>
+  discoverOpenCli(): Promise<void>
+  installOpenCli(): Promise<void>
+  useProfile(profile: string): Promise<void>
   install(): Promise<void>
   restartDaemon(): Promise<void>
   browse(query: string, provider: ChatProvider | undefined, offset: number): Promise<void>
@@ -25,6 +29,7 @@ export interface SettingsInjected {
   clearProvider(provider: ChatProvider): Promise<void>
   clearOlder(days: number): Promise<void>
   clearRemoteMissing?: () => Promise<void>
+  clearOldAccounts?: () => Promise<void>
   refreshStats(): Promise<void>
 }
 type T = TranslateNS<typeof REFERENCE_ANYTHING_NS>
@@ -53,21 +58,40 @@ const PICKER_SOURCES: ReadonlyArray<{ id: PickerSource; label: keyof typeof SOUR
   { id: 'conversations', label: 'conversations' },
 ]
 const SOURCE_KEYS = { commands: 'source.commands', skills: 'source.skills', files: 'source.files', sessions: 'source.sessions', conversations: 'source.conversations' } as const
-export function ConversationSettings({ useScope, save, sync, cancel, refresh, setupAll, install, restartDaemon, browse, deleteConversation, clearProvider, clearOlder, clearRemoteMissing, refreshStats, t }: SettingsProps) {
+const REFERENCE_ANYTHING_LOGO = '__REFERENCE_ANYTHING_LOGO_DATA_URI__'
+export function ConversationSettings({ useScope, save, sync, cancel, refresh, refreshOnOpen, setupAll, discoverOpenCli, installOpenCli, useProfile, install, restartDaemon, browse, deleteConversation, clearProvider, clearOlder, clearRemoteMissing, clearOldAccounts, refreshStats, t }: SettingsProps) {
   const state = useScope(value => value)
   const settings = state.settings
   const picker = settings.picker ?? defaultPickerSettings()
-  const [installing, setInstalling] = useState(false)
-  const [settingUp, setSettingUp] = useState(false)
+  const [busyAction, setBusyAction] = useState<string>()
+  const busyActionRef = useRef(false)
+  const automaticRefresh = useRef(refreshOnOpen)
+  const checkedWhileEnabled = useRef(false)
+  const [storeBlocked, setStoreBlocked] = useState(false)
   const [opencliPath, setOpencliPath] = useState(settings.opencliPath)
   const [profile, setProfile] = useState(settings.profile)
   const [detailConcurrency, setDetailConcurrency] = useState(String(settings.detailConcurrency))
   const [autoSyncMinutes, setAutoSyncMinutes] = useState(String(settings.autoSyncMinutes))
   const [cleanupDays, setCleanupDays] = useState('90')
   const [maxReadTurns, setMaxReadTurns] = useState(String(settings.maxReadTurns))
+  const [repairProfile, setRepairProfile] = useState('')
   const [pickerLimits, setPickerLimits] = useState<Record<PickerSource, string>>(() => pickerLimitDrafts(picker))
   useEffect(() => { setOpencliPath(settings.opencliPath); setProfile(settings.profile); setDetailConcurrency(String(settings.detailConcurrency)); setAutoSyncMinutes(String(settings.autoSyncMinutes)); setMaxReadTurns(String(settings.maxReadTurns)) }, [settings.opencliPath, settings.profile, settings.detailConcurrency, settings.autoSyncMinutes, settings.maxReadTurns])
   useEffect(() => { setPickerLimits(pickerLimitDrafts(picker)) }, [picker.commands.limit, picker.skills.limit, picker.files.limit, picker.sessions.limit, picker.conversations.limit])
+  automaticRefresh.current = refreshOnOpen
+  useEffect(() => {
+    if (!picker.conversations.enabled) {
+      checkedWhileEnabled.current = false
+      return
+    }
+    if (state.loading || checkedWhileEnabled.current) return
+    checkedWhileEnabled.current = true
+    void automaticRefresh.current()
+  }, [picker.conversations.enabled, state.loading])
+  const connectedProfiles = state.profiles?.filter(item => item.connected) ?? []
+  useEffect(() => {
+    if (!connectedProfiles.some(item => item.id === repairProfile)) setRepairProfile(connectedProfiles[0]?.id ?? '')
+  }, [state.profiles, repairProfile])
   // Only while the panel is open, and only the cheap call — `refresh()` also
   // shells out to OpenCLI three times for the health probes.
   // Held in a ref, and armed once: the slot rebuilds its injected actions on
@@ -91,6 +115,38 @@ export function ConversationSettings({ useScope, save, sync, cancel, refresh, se
   const hasValidAutoSyncMinutes = Number.isInteger(autoSyncMinutesValue) && autoSyncMinutesValue >= 15 && autoSyncMinutesValue <= 1440
   const syncMode = settings.autoSync ? 'interval' : settings.syncOnStartup ? 'startup' : 'manual'
   const enabled = new Set(settings.enabledProviders)
+  const opencliReady = Boolean(state.health?.version && state.health.opencliCompatible)
+  const daemonReady = Boolean(state.health?.daemonRunning && !state.health.daemonStale)
+  const extensionReady = Boolean(state.health?.extensionConnected && state.health.connectivityOk)
+  const adapterReady = Boolean(state.health?.pluginInstalled && state.health.adapterCompatible)
+  const runAction = (name: string, action: () => Promise<void>) => {
+    if (busyActionRef.current || state.loading) return
+    busyActionRef.current = true
+    setBusyAction(name)
+    void action().finally(() => { busyActionRef.current = false; setBusyAction(undefined) })
+  }
+  const openStore = (): boolean => {
+    const opened = openExtensionStore()
+    setStoreBlocked(!opened)
+    return opened
+  }
+  const profileControl = connectedProfiles.length > 0 ? <div className="dsh_ref_check_profile">
+    <select aria-label={t('settings.profileRecoveryChoice')} value={repairProfile} onChange={event => { setRepairProfile(event.target.value) }}>
+      {connectedProfiles.map(item => <option key={item.id} value={item.id}>{item.alias || item.id}</option>)}
+    </select>
+    <button type="button" disabled={!repairProfile || Boolean(busyAction)} onClick={() => { runAction('profile', () => useProfile(repairProfile)) }}>{busyAction === 'profile' ? t('settings.applying') : t('settings.useProfile')}</button>
+  </div> : undefined
+  const needsProfileRecovery = state.health?.extensionState === 'profile-required' || state.health?.extensionState === 'profile-disconnected'
+  let extensionActionLabel: string | undefined
+  let extensionAction: (() => void) | undefined
+  if (!opencliReady) {
+    extensionActionLabel = t('settings.installOpenCli'); extensionAction = () => { runAction('opencli', installOpenCli) }
+  } else if (!daemonReady || Boolean(state.health?.extensionConnected && !state.health.connectivityOk)) {
+    extensionActionLabel = t('settings.restartDaemon'); extensionAction = () => { runAction('daemon', restartDaemon) }
+  } else if (state.health?.extensionState === 'disconnected' || (needsProfileRecovery && !profileControl)) {
+    extensionActionLabel = t('settings.openExtensionStore'); extensionAction = () => { runAction('extension', async () => { openStore() }) }
+  }
+  const extensionSecondaryLabel = state.health?.extensionState === 'disconnected' && daemonReady ? t('settings.restartDaemon') : undefined
   const setProviderEnabled = (provider: ChatProvider, value: boolean) => {
     const next = value ? [...new Set([...settings.enabledProviders, provider])] : settings.enabledProviders.filter(item => item !== provider)
     void save({ ...settings, enabledProviders: next })
@@ -116,7 +172,7 @@ export function ConversationSettings({ useScope, save, sync, cancel, refresh, se
   }
   return <section className="dsh_ref_settings">
     <div className="dsh_ref_notice_layer">{state.notice && <div className="dsh_ref_notice" role="status">{state.notice}</div>}</div>
-    <header className="dsh_ref_header"><div><h2>{t('settings.title')}</h2><p>{t('settings.subtitle')}</p></div></header>
+    <header className="dsh_ref_header"><div className="dsh_ref_header_brand"><img src={REFERENCE_ANYTHING_LOGO} alt=""/><div><h2>{t('settings.title')}</h2><p>{t('settings.subtitle')}</p></div></div></header>
     <div className="dsh_ref_workspace">
     {state.error && <div className="dsh_ref_error" role="alert"><strong>{t('settings.actionFailed')}</strong><span>{state.error}</span></div>}
     <section className="dsh_ref_panel dsh_ref_general_settings"><div className="dsh_ref_section_head"><div><h3>{t('settings.general')}</h3><p>{t('settings.generalDetail')}</p></div></div>
@@ -128,14 +184,24 @@ export function ConversationSettings({ useScope, save, sync, cancel, refresh, se
       </div>)}</div>
     </section>
     <section className="dsh_ref_sources dsh_ref_chat"><div className="dsh_ref_section_head"><div><h3>{t('settings.sources')}</h3><p>{t('settings.sourcesDetail')}</p></div>{state.sync?.status === 'running' && <span className="dsh_ref_syncing">{t('settings.syncing', { source: t('settings.sources'), completed: state.sync.completed, total: state.sync.total })}</span>}</div>
-      <section className="dsh_ref_viability"><div className="dsh_ref_section_head"><div><h3>{t('settings.viability')}</h3><p>{t('settings.viabilityDetail')}</p></div><div className="dsh_ref_viability_actions"><button className="dsh_ref_recheck" type="button" onClick={() => { void refresh() }}>{t('settings.recheck')}</button></div></div>
+      <section className="dsh_ref_viability"><div className="dsh_ref_section_head"><div><h3>{t('settings.viability')}</h3><p>{t('settings.viabilityDetail')}</p></div><div className="dsh_ref_viability_actions"><button className="dsh_ref_recheck" type="button" disabled={state.loading || Boolean(busyAction)} onClick={() => { runAction('refresh', refresh) }}>{busyAction === 'refresh' ? t('settings.checking') : t('settings.recheck')}</button></div></div>
         {state.loading ? <div className="dsh_ref_skeleton"><i/><i/><i/></div> : <div className="dsh_ref_checklist">
-          <CheckRow label="OpenCLI" detail={state.health?.version || state.health?.versionError || t('settings.notDetected')} ready={Boolean(state.health?.version)} />
-          <CheckRow label={t('check.browserBridge')} detail={state.health?.daemonRunning ? t('settings.daemonRunning') : state.health?.daemonError || t('settings.daemonNotRunning')} ready={Boolean(state.health?.daemonRunning)} />
-          <CheckRow label={t('check.browserExtension')} detail={extensionStateDetail(state.health, t)} ready={Boolean(state.health?.extensionConnected)} />
-          <CheckRow label={t('check.conversationAdapter')} detail={state.health?.pluginInstalled ? t('settings.adapterInstalled') : state.health?.pluginError || t('settings.adapterMissing')} ready={Boolean(state.health?.pluginInstalled)} />
+          <CheckRow label="OpenCLI" detail={openCliStateDetail(state.health, t)} ready={opencliReady}
+            actionLabel={!state.health?.version ? t('settings.installOpenCli') : t('settings.upgradeOpenCli')} actionBusy={busyAction === 'opencli'} actionDisabled={Boolean(busyAction)} onAction={() => { runAction('opencli', installOpenCli) }}
+            secondaryLabel={t('settings.findOpenCli')} onSecondary={() => { runAction('discover', discoverOpenCli) }} />
+          <CheckRow label={t('check.browserBridge')} detail={daemonStateDetail(state.health, t)} ready={daemonReady}
+            actionLabel={!opencliReady ? t('settings.installOpenCli') : t('settings.restartDaemon')} actionBusy={busyAction === 'daemon'} actionDisabled={Boolean(busyAction)} onAction={() => { runAction(!opencliReady ? 'opencli' : 'daemon', !opencliReady ? installOpenCli : restartDaemon) }} />
+          <CheckRow label={t('check.browserExtension')} detail={extensionStateDetail(state.health, t)} ready={extensionReady}
+            actionLabel={extensionActionLabel} actionBusy={busyAction === 'extension' || busyAction === 'daemon' || busyAction === 'opencli'} actionDisabled={Boolean(busyAction)} onAction={extensionAction}
+            secondaryLabel={extensionSecondaryLabel} onSecondary={extensionSecondaryLabel ? () => { runAction('daemon', restartDaemon) } : undefined}
+            control={needsProfileRecovery ? profileControl : undefined} />
+          <CheckRow label={t('check.conversationAdapter')} detail={adapterStateDetail(state.health, t)} ready={adapterReady}
+            actionLabel={!opencliReady ? t('settings.installOpenCli') : state.health?.pluginInstalled ? t('settings.reinstall') : t('settings.install')}
+            actionBusy={busyAction === 'adapter'} actionDisabled={Boolean(busyAction)} onAction={() => { runAction(!opencliReady ? 'opencli' : 'adapter', !opencliReady ? installOpenCli : install) }} />
         </div>}
-        <div className="dsh_ref_install"><div><strong>{t('settings.serviceActions')}</strong><span>{t('settings.serviceActionsDetail')}</span></div><div className="dsh_ref_service_actions"><button className="is_primary" type="button" disabled={settingUp} onClick={() => { setSettingUp(true); void setupAll().finally(() => { setSettingUp(false) }) }}>{settingUp ? t('settings.settingUp') : t('settings.oneClickSetup')}</button><button type="button" disabled={installing} onClick={() => { setInstalling(true); void install().finally(() => { setInstalling(false) }) }}>{installing ? t('settings.installing') : state.health?.pluginInstalled ? t('settings.reinstall') : t('settings.install')}</button><button type="button" onClick={() => { void restartDaemon() }}>{t('settings.restartDaemon')}</button></div></div>
+        {storeBlocked && <p className="dsh_ref_store_fallback" role="alert">{t('settings.extensionStoreBlocked')} <a href={OPENCLI_EXTENSION_STORE_URL} target="_blank" rel="noreferrer">{t('settings.openExtensionStore')}</a></p>}
+        {busyAction === 'setup' && state.setupStep && <p className="dsh_ref_setup_step" role="status">{t(`settings.setupStep.${state.setupStep}` as keyof typeof import('./locale.ts').zh)}</p>}
+        <div className="dsh_ref_install"><div><strong>{t('settings.serviceActions')}</strong><span>{t('settings.serviceActionsDetail')}</span></div><div className="dsh_ref_service_actions"><button className="is_primary" type="button" disabled={state.loading || Boolean(busyAction)} onClick={() => { const opened = state.health?.extensionConnected ? true : openStore(); runAction('setup', () => setupAll(opened)) }}>{busyAction === 'setup' ? t('settings.settingUp') : t('settings.oneClickSetup')}</button><button type="button" disabled={state.loading || Boolean(busyAction) || !opencliReady} onClick={() => { runAction('adapter', install) }}>{busyAction === 'adapter' ? t('settings.installing') : state.health?.pluginInstalled ? t('settings.reinstall') : t('settings.install')}</button><button type="button" disabled={state.loading || Boolean(busyAction) || !opencliReady} onClick={() => { runAction('daemon', restartDaemon) }}>{busyAction === 'daemon' ? t('settings.restarting') : t('settings.restartDaemon')}</button></div></div>
       </section>
       <div className="dsh_ref_chat_divider" />
       <div className="dsh_ref_provider_grid">{PROVIDERS.map((provider, index) => <ProviderCard key={provider} provider={provider} index={index} stats={state.stats?.find(row => row.provider === provider)} busy={state.sync?.status === 'running'} autoSync={settings.autoSync} enabled={enabled.has(provider)} onEnabled={value => { setProviderEnabled(provider, value) }} onSync={(mode) => { void sync([provider], mode) }} onClear={() => { if (window.confirm(t('storage.clearProviderConfirm', { provider: PROVIDER_LABEL[provider] }))) void clearProvider(provider) }} t={t} />)}</div>
@@ -145,8 +211,8 @@ export function ConversationSettings({ useScope, save, sync, cancel, refresh, se
       <div className="dsh_ref_form_grid">
         <label><span>{t('settings.syncMode')}</span><select value={syncMode} onChange={event => { const mode = event.target.value; void save({ ...settings, autoSync: mode === 'interval', syncOnStartup: mode === 'startup' || mode === 'interval' }) }}><option value="manual">{t('settings.syncManual')}</option><option value="startup">{t('settings.syncStartup')}</option><option value="interval">{t('settings.syncInterval')}</option></select><small className="dsh_ref_field_note">{syncMode === 'manual' ? t('settings.syncManualDetail') : syncMode === 'startup' ? t('settings.syncStartupDetail') : t('settings.autoNote', { minutes: settings.autoSyncMinutes })}</small></label>
         <label><span>{t('settings.historyMode')}</span><select value={settings.historyMode} onChange={event => { void save({ ...settings, historyMode: event.target.value as SettingsRecord['historyMode'] }) }}><option value="metadata-only">{t('settings.metadataOnly')}</option><option value="offline-mirror">{t('settings.offlineMirror')}</option></select><small className="dsh_ref_field_note">{settings.historyMode === 'metadata-only' ? t('settings.metadataOnlyDetail') : t('settings.offlineMirrorDetail')}</small></label>
-        <label><span>{t('settings.opencli')}</span><input value={opencliPath} onChange={event => { setOpencliPath(event.target.value) }} onBlur={() => { if (opencliPath.trim()) void save({ ...settings, opencliPath: opencliPath.trim() }) }} /><small className="dsh_ref_field_note">{t('settings.opencliDetail')}</small></label>
-        <label><span>{t('settings.chromeProfile')}</span><input list="dsh-ref-profiles" value={profile} placeholder={t('settings.defaultProfile')} onChange={event => { setProfile(event.target.value) }} onBlur={() => { void save({ ...settings, profile: profile.trim() }) }} /><datalist id="dsh-ref-profiles">{state.profiles?.filter(item => item.connected).map(item => <option key={item.id} value={item.alias || item.id}>{item.id}</option>)}</datalist><small className="dsh_ref_field_note">{t('settings.chromeProfileDetail')}</small></label>
+        <label><span>{t('settings.opencli')}</span><input value={opencliPath} onChange={event => { setOpencliPath(event.target.value) }} onBlur={() => { if (opencliPath.trim()) void save({ ...settings, opencliPath: opencliPath.trim() }).then(refresh) }} /><small className="dsh_ref_field_note">{t('settings.opencliDetail')}</small></label>
+        <label><span>{t('settings.chromeProfile')}</span><input list="dsh-ref-profiles" value={profile} placeholder={t('settings.defaultProfile')} onChange={event => { setProfile(event.target.value) }} onBlur={() => { void save({ ...settings, profile: profile.trim() }).then(refresh) }} /><datalist id="dsh-ref-profiles">{state.profiles?.filter(item => item.connected).map(item => <option key={item.id} value={item.alias || item.id}>{item.id}</option>)}</datalist><small className="dsh_ref_field_note">{t('settings.chromeProfileDetail')}</small></label>
         <label><span>{t('settings.detailConcurrency')}</span><input type="number" min={1} max={8} value={detailConcurrency} aria-invalid={!(Number(detailConcurrency) >= 1 && Number(detailConcurrency) <= 8)} onChange={event => { setDetailConcurrency(event.target.value) }} onBlur={saveConcurrency} /><small className="dsh_ref_field_note">{t('settings.detailConcurrencyDetail')}</small></label>
         <label><span>{t('settings.maxReadTurns')}</span><input type="number" min={1} max={100} value={maxReadTurns} aria-invalid={!(Number(maxReadTurns) >= 1 && Number(maxReadTurns) <= 100)} onChange={event => { setMaxReadTurns(event.target.value) }} onBlur={() => { const value = Number(maxReadTurns); if (Number.isInteger(value) && value >= 1 && value <= 100) void save({ ...settings, maxReadTurns: value }) }} /><small className="dsh_ref_field_note">{t('settings.maxReadTurnsDetail')}</small></label>
         <label><span>{t('settings.interval')}</span><input type="number" min={15} max={1440} inputMode="numeric" disabled={!settings.autoSync} value={autoSyncMinutes} aria-invalid={!hasValidAutoSyncMinutes} onChange={event => { setAutoSyncMinutes(event.target.value) }} onBlur={saveAutoSyncMinutes} />{settings.autoSync && <small className="dsh_ref_field_note">{t('settings.autoNote', { minutes: settings.autoSyncMinutes })}</small>}</label>
@@ -158,7 +224,7 @@ export function ConversationSettings({ useScope, save, sync, cancel, refresh, se
       <div className="dsh_ref_chat_divider" />
       <section className="dsh_ref_storage"><div className="dsh_ref_storage_header"><div><h3>{t('storage.title')}</h3><p>{t('storage.detail')}</p></div><div className="dsh_ref_storage_metric"><span>{t('storage.usage')}</span><strong>{formatBytes(state.storage?.bytes ?? 0)}</strong></div></div><div className="dsh_ref_storage_cleanup"><label><span>{t('storage.olderThan')}</span><div className="dsh_ref_number_field"><input type="number" min={1} max={36500} value={cleanupDays} onChange={event => { setCleanupDays(event.target.value) }} /><b>{t('storage.days')}</b></div></label><button className="is_danger" type="button" disabled={state.sync?.status === 'running' || !(Number(cleanupDays) >= 1)} onClick={() => { const days = Number(cleanupDays); if (window.confirm(t('storage.clearOlderConfirm', { days }))) void clearOlder(days) }}>{t('storage.clearOlder')}</button></div></section>
       <div className="dsh_ref_chat_divider" />
-      <ManageConversations state={state} syncing={state.sync?.status === 'running'} browse={browse} deleteConversation={deleteConversation} clearRemoteMissing={clearRemoteMissing} t={t} />
+      <ManageConversations state={state} syncing={state.sync?.status === 'running'} browse={browse} deleteConversation={deleteConversation} clearRemoteMissing={clearRemoteMissing} clearOldAccounts={clearOldAccounts} t={t} />
     </section>
     </div>
   </section>
@@ -191,6 +257,7 @@ interface ManageProps {
   browse(query: string, provider: ChatProvider | undefined, offset: number): Promise<void>
   deleteConversation(uriId: string): Promise<void>
   clearRemoteMissing?: () => Promise<void>
+  clearOldAccounts?: () => Promise<void>
   t: T
 }
 /**
@@ -200,7 +267,7 @@ interface ManageProps {
  * individual rows — including ones the provider no longer lists, which are
  * exactly the ones worth deleting.
  */
-export function ManageConversations({ state, syncing, browse, deleteConversation, clearRemoteMissing, t }: ManageProps) {
+export function ManageConversations({ state, syncing, browse, deleteConversation, clearRemoteMissing, clearOldAccounts, t }: ManageProps) {
   const browseState = state.browse
   const [text, setText] = useState(browseState?.query ?? '')
   const debounce = useRef<ReturnType<typeof setTimeout>>()
@@ -224,7 +291,7 @@ export function ManageConversations({ state, syncing, browse, deleteConversation
   const offset = browseState?.offset ?? 0
 
   return <div className="dsh_ref_manage">
-    <div className="dsh_ref_section_head"><div><h3>{t('manage.title')}</h3><p>{t('manage.detail')}</p></div><button className="is_danger" type="button" disabled={syncing || !(state.storage?.remoteMissing) || !clearRemoteMissing} title={syncing ? t('manage.deleteDisabled') : undefined} onClick={() => { if (window.confirm(t('manage.deleteMissingConfirm'))) void clearRemoteMissing?.() }}>{t('manage.deleteMissing')}</button></div>
+    <div className="dsh_ref_section_head"><div><h3>{t('manage.title')}</h3><p>{t('manage.detail')}</p></div><div className="dsh_ref_manage_actions"><button className="is_danger" type="button" disabled={syncing || !(state.storage?.oldAccountConversations) || !clearOldAccounts} title={syncing ? t('manage.deleteDisabled') : undefined} onClick={() => { if (window.confirm(t('manage.deleteOldAccountsConfirm'))) void clearOldAccounts?.() }}>{t('manage.deleteOldAccounts')}</button><button className="is_danger" type="button" disabled={syncing || !(state.storage?.remoteMissing) || !clearRemoteMissing} title={syncing ? t('manage.deleteDisabled') : undefined} onClick={() => { if (window.confirm(t('manage.deleteMissingConfirm'))) void clearRemoteMissing?.() }}>{t('manage.deleteMissing')}</button></div></div>
     <div className="dsh_ref_manage_filters">
       <input placeholder={t('manage.searchPlaceholder')} value={text} onChange={event => { setText(event.target.value) }} />
       <select value={browseState?.provider ?? ''} onChange={event => {
@@ -266,8 +333,11 @@ function formatUpdatedDate(value: string, t: T): string {
   return Number.isNaN(date.getTime()) ? t('conversation.unknownDate') : date.toLocaleDateString()
 }
 
-function CheckRow({ label, detail, ready }: { label: string; detail: string; ready: boolean }) {
-  return <div className="dsh_ref_check"><span className={ready ? 'is_ready' : 'is_error'}>{ready ? '✓' : '×'}</span><div><strong>{label}</strong><small className={ready ? undefined : 'is_warning'}>{detail}</small></div></div>
+function CheckRow({ label, detail, ready, actionLabel, secondaryLabel, actionBusy, actionDisabled, onAction, onSecondary, control }: {
+  label: string; detail: string; ready: boolean; actionLabel?: string; secondaryLabel?: string
+  actionBusy?: boolean; actionDisabled?: boolean; onAction?: () => void; onSecondary?: () => void; control?: ReactNode
+}) {
+  return <div className="dsh_ref_check"><span className={ready ? 'is_ready' : 'is_error'}>{ready ? '✓' : '×'}</span><div className="dsh_ref_check_body"><strong>{label}</strong><small className={ready ? undefined : 'is_warning'}>{detail}</small>{!ready && (control || onAction || onSecondary) && <div className="dsh_ref_check_actions">{control}{onAction && actionLabel && <button type="button" aria-busy={actionBusy} disabled={actionDisabled} onClick={onAction}>{actionBusy ? `${actionLabel}…` : actionLabel}</button>}{onSecondary && secondaryLabel && <button type="button" disabled={actionDisabled} onClick={onSecondary}>{secondaryLabel}</button>}</div>}</div></div>
 }
 
 function pickerLimitDrafts(picker: PickerSettings): Record<PickerSource, string> {
@@ -279,8 +349,28 @@ export function validPickerLimit(value: string): boolean {
   return Number.isInteger(parsed) && parsed >= 1 && parsed <= 50
 }
 
+function openCliStateDetail(health: Health | undefined, t: T): string {
+  if (!health?.version) return health?.versionError || t('settings.notDetected')
+  if (!health.opencliCompatible) return t('settings.opencliVersionUnsupported', { version: health.version })
+  return `v${health.version}`
+}
+
+function daemonStateDetail(health: Health | undefined, t: T): string {
+  if (!health?.daemonRunning) return health?.daemonError || t('settings.daemonNotRunning')
+  if (health.daemonStale) return t('settings.daemonStale', { version: health.daemonVersion || t('settings.unknownVersion') })
+  return health.daemonVersion ? t('settings.daemonRunningVersion', { version: health.daemonVersion }) : t('settings.daemonRunning')
+}
+
+function adapterStateDetail(health: Health | undefined, t: T): string {
+  if (!health?.pluginInstalled) return health?.pluginError || t('settings.adapterMissing')
+  if (!health.adapterCommandsReady) return t('settings.adapterIncomplete')
+  if (!health.adapterCompatible) return t('settings.adapterVersionUnsupported', { version: health.pluginVersion || t('settings.unknownVersion') })
+  return health.pluginVersion ? t('settings.adapterInstalledVersion', { version: health.pluginVersion }) : t('settings.adapterInstalled')
+}
+
 function extensionStateDetail(health: Health | undefined, t: T): string {
   if (!health) return t('settings.extensionDisconnected')
+  if (health.extensionConnected && !health.connectivityOk) return health.doctorError || t('settings.extensionConnectivityFailed')
   switch (health.extensionState) {
     case 'connected': return health.extensionVersion ? t('settings.extensionConnected', { version: health.extensionVersion }) : t('settings.extensionConnectedUnknown')
     case 'profile-required': return t('settings.extensionProfileRequired', { count: health.profileCount ?? 0 })

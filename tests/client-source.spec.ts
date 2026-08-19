@@ -2,8 +2,9 @@ import { describe, expect, it } from 'vitest'
 import {
   CONVERSATION_SOURCE, conversationReferenceUri, createCommandSource,
   createConversationSource, createSearchDebounce, createSessionSource, createSkillSource, createWorkspaceSource,
-  describeRow, disambiguate, parseQuery, scopedQuery,
+  describeRow, disambiguate, parseQuery, scopedQuery, workspaceIconKind,
 } from '../src/client/source.ts'
+import { PICKER_ICON_MARKER } from '../src/client/provider-icons.tsx'
 import type { SearchResult } from '../src/client/remote.ts'
 import { REFERENCE_ANYTHING_INVOCATIONS } from '../src/contract.ts'
 import { decodeReferenceUri } from '../src/uri.ts'
@@ -129,8 +130,19 @@ describe('conversation client references', () => {
     expect(source.name).toBe('Files and folders')
     const outcome = source.onPick({ candidate: candidates[0]!, session: { sessionId: 'session-1' as never }, position: 'inline', via: 'menu', span: { start: 0, end: 1, draftRev: 1 } })
     if (outcome === undefined || outcome === 'handled' || !('insert' in outcome)) throw new Error('expected file insert')
-    expect(outcome.insert.label).toBe('📄 src/index.ts')
+    expect(candidates[0]?.icon).toBe(PICKER_ICON_MARKER.code)
+    expect(outcome.insert.label).toBe(`${PICKER_ICON_MARKER.code} src/index.ts`)
     await expect(source.codec?.serialize(outcome.insert.ref, new AbortController().signal)).resolves.toMatch(/^@\[src\/index\.ts\]\(dsh-file:[A-Za-z0-9_-]+\)$/u)
+  })
+
+  it('classifies workspace icons from path metadata without reading file contents', () => {
+    expect(workspaceIconKind({ path: 'assets/hero.PNG', kind: 'file' })).toBe('image')
+    expect(workspaceIconKind({ path: 'notes/todo.txt', kind: 'file' })).toBe('text')
+    expect(workspaceIconKind({ path: 'src/index.ts', kind: 'file' })).toBe('code')
+    expect(workspaceIconKind({ path: 'config/app.yaml', kind: 'file' })).toBe('data')
+    expect(workspaceIconKind({ path: 'exports/report.xlsx', kind: 'file' })).toBe('spreadsheet')
+    expect(workspaceIconKind({ path: 'unknown/model.bin', kind: 'file' })).toBe('file')
+    expect(workspaceIconKind({ path: 'src', kind: 'directory' })).toBe('folder')
   })
 
   it('uses the official dsh-session URI returned by the host', async () => {
@@ -163,7 +175,7 @@ describe('conversation client references', () => {
     await expect(source.candidates({ sessionId: 'session-1' as never }, { query: 'commands', position: 'leading', signal: new AbortController().signal }))
       .resolves.toEqual([expect.objectContaining({ name: 'plan', commandName: 'plan' })])
     const candidates = await source.candidates({ sessionId: 'session-1' as never }, { query: 'pla', position: 'leading', signal: new AbortController().signal })
-    expect(candidates).toEqual([expect.objectContaining({ name: 'plan', commandName: 'plan' })])
+    expect(candidates).toEqual([expect.objectContaining({ name: 'plan', icon: PICKER_ICON_MARKER.command, commandName: 'plan' })])
     expect(source.onPick({ candidate: candidates[0]!, session: { sessionId: 'session-1' as never }, position: 'leading', via: 'menu', span: { start: 0, end: 4, draftRev: 1 } })).toEqual({ text: '/plan' })
     await expect(source.candidates({ sessionId: 'session-1' as never }, { query: 'pla', position: 'inline', signal: new AbortController().signal }))
       .resolves.toEqual([expect.objectContaining({ name: 'plan', commandName: 'plan' })])

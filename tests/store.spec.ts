@@ -152,6 +152,35 @@ describe('conversation mirror', () => {
     expect(db.storageStats().remoteMissing).toBe(0)
   })
 
+  it('counts and clears only conversations belonging to known inactive accounts', async () => {
+    const db = store()
+    const oldKey = await db.putConversation(history, 'old-account')
+    const currentKey = await db.putConversation({ ...history, id: 'current' }, 'current-account')
+    const unknownProviderKey = await db.putConversation({ ...history, provider: 'claude', id: 'claude-chat' }, 'claude-account')
+    await db.commitRevision(oldKey, turns(2))
+    db.setActiveAccountScope('chatgpt', 'current-account')
+    await db.syncStates.put('chatgpt:old-account', {
+      provider: 'chatgpt', profile: '', accountScope: 'old-account', cursor: '', status: 'idle',
+      lastSyncAt: '2026-08-18T00:00:00.000Z', lastCompleteScanAt: '', error: '', completed: 1, total: 1,
+      consecutiveFailures: 0, nextEligibleAt: '',
+    })
+    await db.syncStates.put('chatgpt:current-account', {
+      provider: 'chatgpt', profile: '', accountScope: 'current-account', cursor: '', status: 'idle',
+      lastSyncAt: '2026-08-19T00:00:00.000Z', lastCompleteScanAt: '', error: '', completed: 1, total: 1,
+      consecutiveFailures: 0, nextEligibleAt: '',
+    })
+
+    expect(db.storageStats().oldAccountConversations).toBe(1)
+    expect(await db.removeOldAccounts()).toBe(1)
+    expect(db.conversations.get(oldKey)).toBeUndefined()
+    expect(db.conversations.get(currentKey)).toBeDefined()
+    expect(db.conversations.get(unknownProviderKey)).toBeDefined()
+    expect(db.revisions.size).toBe(0)
+    expect(db.syncStates.get('chatgpt:old-account')).toBeUndefined()
+    expect(db.syncStates.get('chatgpt:current-account')).toBeDefined()
+    expect(db.storageStats().oldAccountConversations).toBe(0)
+  })
+
   it('derives provider statistics from existing local records without a sync-state row', async () => {
     const db = store()
     await db.putConversation(history, 'scope')

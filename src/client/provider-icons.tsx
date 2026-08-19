@@ -15,16 +15,116 @@ export const PROVIDER_ICON_PATH: Readonly<Record<ChatProvider, string>> = {
 export const PROVIDER_ICON_MARKER: Readonly<Record<ChatProvider, string>> = {
   chatgpt: '\uE100', claude: '\uE101', gemini: '\uE102', deepseek: '\uE103', grok: '\uE104', kimi: '\uE105',
 }
-export const SESSION_ICON_MARKER = '\uE106'
-export const SKILL_ICON_MARKER = '\uE107'
 
-/** Lucide paths used by the non-provider entries in the @ picker. */
-export const PICKER_ICON_PATH = {
-  // lucide-react ScrollText
-  skill: ['M15 12h-5', 'M15 8h-5', 'M19 17V5a2 2 0 0 0-2-2H4', 'M8 21h12a2 2 0 0 0 2-2v-1a1 1 0 0 0-1-1H11a1 1 0 0 0-1 1v1a2 2 0 1 1-4 0V5a2 2 0 1 0-4 0v2a1 1 0 0 0 1 1h3'],
-  // lucide-react MessageCircle
-  session: ['M7.9 20A9 9 0 1 0 4 16.1L2 22Z'],
-} as const
+export type PickerIconKind =
+  | 'command' | 'skill' | 'session'
+  | 'folder' | 'file' | 'image' | 'text' | 'code' | 'data'
+  | 'archive' | 'spreadsheet' | 'audio' | 'video' | 'presentation' | 'font'
+
+/** Private-use markers let the host's string-only icon API carry an SVG identity. */
+export const PICKER_ICON_MARKER: Readonly<Record<PickerIconKind, string>> = {
+  session: '\uE106', skill: '\uE107', command: '\uE108', folder: '\uE109', file: '\uE10A',
+  image: '\uE10B', text: '\uE10C', code: '\uE10D', data: '\uE10E', archive: '\uE10F',
+  spreadsheet: '\uE110', audio: '\uE111', video: '\uE112', presentation: '\uE113', font: '\uE114',
+}
+export const SESSION_ICON_MARKER = PICKER_ICON_MARKER.session
+export const SKILL_ICON_MARKER = PICKER_ICON_MARKER.skill
+export const COMMAND_ICON_MARKER = PICKER_ICON_MARKER.command
+
+type PickerIconNode = Readonly<{
+  tag: 'path' | 'rect' | 'circle'
+  attrs: Readonly<Record<string, string>>
+}>
+
+/** Lucide v0.562 icon nodes used by non-provider entries in the @ picker. */
+export const PICKER_ICON_NODES = {
+  // Command
+  command: [{ tag: 'path', attrs: { d: 'M15 6v12a3 3 0 1 0 3-3H6a3 3 0 1 0 3 3V6a3 3 0 1 0-3 3h12a3 3 0 1 0-3-3' } }],
+  // ScrollText
+  skill: [
+    { tag: 'path', attrs: { d: 'M15 12h-5' } }, { tag: 'path', attrs: { d: 'M15 8h-5' } },
+    { tag: 'path', attrs: { d: 'M19 17V5a2 2 0 0 0-2-2H4' } },
+    { tag: 'path', attrs: { d: 'M8 21h12a2 2 0 0 0 2-2v-1a1 1 0 0 0-1-1H11a1 1 0 0 0-1 1v1a2 2 0 1 1-4 0V5a2 2 0 1 0-4 0v2a1 1 0 0 0 1 1h3' } },
+  ],
+  // MessageCircle
+  session: [{ tag: 'path', attrs: { d: 'M7.9 20A9 9 0 1 0 4 16.1L2 22Z' } }],
+  // FolderClosed
+  folder: [
+    { tag: 'path', attrs: { d: 'M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z' } },
+    { tag: 'path', attrs: { d: 'M2 10h20' } },
+  ],
+  // File
+  file: [
+    { tag: 'path', attrs: { d: 'M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z' } },
+    { tag: 'path', attrs: { d: 'M14 2v5a1 1 0 0 0 1 1h5' } },
+  ],
+  // Image
+  image: [
+    { tag: 'rect', attrs: { width: '18', height: '18', x: '3', y: '3', rx: '2', ry: '2' } },
+    { tag: 'circle', attrs: { cx: '9', cy: '9', r: '2' } },
+    { tag: 'path', attrs: { d: 'm21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21' } },
+  ],
+  // FileText
+  text: [
+    { tag: 'path', attrs: { d: 'M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z' } },
+    { tag: 'path', attrs: { d: 'M14 2v5a1 1 0 0 0 1 1h5' } }, { tag: 'path', attrs: { d: 'M10 9H8' } },
+    { tag: 'path', attrs: { d: 'M16 13H8' } }, { tag: 'path', attrs: { d: 'M16 17H8' } },
+  ],
+  // FileCode2
+  code: [
+    { tag: 'path', attrs: { d: 'M4 12.15V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.706.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2h-3.35' } },
+    { tag: 'path', attrs: { d: 'M14 2v5a1 1 0 0 0 1 1h5' } }, { tag: 'path', attrs: { d: 'm5 16-3 3 3 3' } },
+    { tag: 'path', attrs: { d: 'm9 22 3-3-3-3' } },
+  ],
+  // FileJson2
+  data: [
+    { tag: 'path', attrs: { d: 'M14 22h4a2 2 0 0 0 2-2V8a2.4 2.4 0 0 0-.706-1.706l-3.588-3.588A2.4 2.4 0 0 0 14 2H6a2 2 0 0 0-2 2v6' } },
+    { tag: 'path', attrs: { d: 'M14 2v5a1 1 0 0 0 1 1h5' } },
+    { tag: 'path', attrs: { d: 'M5 14a1 1 0 0 0-1 1v2a1 1 0 0 1-1 1 1 1 0 0 1 1 1v2a1 1 0 0 0 1 1' } },
+    { tag: 'path', attrs: { d: 'M9 22a1 1 0 0 0 1-1v-2a1 1 0 0 1 1-1 1 1 0 0 1-1-1v-2a1 1 0 0 0-1-1' } },
+  ],
+  // FileArchive
+  archive: [
+    { tag: 'path', attrs: { d: 'M13.659 22H18a2 2 0 0 0 2-2V8a2.4 2.4 0 0 0-.706-1.706l-3.588-3.588A2.4 2.4 0 0 0 14 2H6a2 2 0 0 0-2 2v11.5' } },
+    { tag: 'path', attrs: { d: 'M14 2v5a1 1 0 0 0 1 1h5' } }, { tag: 'path', attrs: { d: 'M8 12v-1' } },
+    { tag: 'path', attrs: { d: 'M8 18v-2' } }, { tag: 'path', attrs: { d: 'M8 7V6' } },
+    { tag: 'circle', attrs: { cx: '8', cy: '20', r: '2' } },
+  ],
+  // FileSpreadsheet
+  spreadsheet: [
+    { tag: 'path', attrs: { d: 'M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z' } },
+    { tag: 'path', attrs: { d: 'M14 2v5a1 1 0 0 0 1 1h5' } }, { tag: 'path', attrs: { d: 'M8 13h2' } },
+    { tag: 'path', attrs: { d: 'M14 13h2' } }, { tag: 'path', attrs: { d: 'M8 17h2' } },
+    { tag: 'path', attrs: { d: 'M14 17h2' } },
+  ],
+  // FileAudio
+  audio: [
+    { tag: 'path', attrs: { d: 'M4 6.835V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.706.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2h-.343' } },
+    { tag: 'path', attrs: { d: 'M14 2v5a1 1 0 0 0 1 1h5' } },
+    { tag: 'path', attrs: { d: 'M2 19a2 2 0 0 1 4 0v1a2 2 0 0 1-4 0v-4a6 6 0 0 1 12 0v4a2 2 0 0 1-4 0v-1a2 2 0 0 1 4 0' } },
+  ],
+  // FileVideo
+  video: [
+    { tag: 'path', attrs: { d: 'M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z' } },
+    { tag: 'path', attrs: { d: 'M14 2v5a1 1 0 0 0 1 1h5' } },
+    { tag: 'path', attrs: { d: 'M15.033 13.44a.647.647 0 0 1 0 1.12l-4.065 2.352a.645.645 0 0 1-.968-.56v-4.704a.645.645 0 0 1 .967-.56z' } },
+  ],
+  // Presentation
+  presentation: [
+    { tag: 'path', attrs: { d: 'M2 3h20' } }, { tag: 'path', attrs: { d: 'M21 3v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V3' } },
+    { tag: 'path', attrs: { d: 'm7 21 5-5 5 5' } },
+  ],
+  // FileType2
+  font: [
+    { tag: 'path', attrs: { d: 'M12 22h6a2 2 0 0 0 2-2V8a2.4 2.4 0 0 0-.706-1.706l-3.588-3.588A2.4 2.4 0 0 0 14 2H6a2 2 0 0 0-2 2v6' } },
+    { tag: 'path', attrs: { d: 'M14 2v5a1 1 0 0 0 1 1h5' } },
+    { tag: 'path', attrs: { d: 'M3 16v-1.5a.5.5 0 0 1 .5-.5h7a.5.5 0 0 1 .5.5V16' } },
+    { tag: 'path', attrs: { d: 'M6 22h2' } }, { tag: 'path', attrs: { d: 'M7 14v8' } },
+  ],
+} as const satisfies Readonly<Record<PickerIconKind, readonly PickerIconNode[]>>
+
+/** Lucide's default outline weight; every projected Lucide icon uses it. */
+export const PICKER_ICON_STROKE_WIDTH = 2
 
 export function ProviderLogo({ provider, size = 22 }: { provider: ChatProvider; size?: number }) {
   return <svg fill="currentColor" fillRule="evenodd" width={size} height={size} viewBox="0 0 24 24" aria-hidden><path d={PROVIDER_ICON_PATH[provider]} /></svg>

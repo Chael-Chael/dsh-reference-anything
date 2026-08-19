@@ -60,7 +60,7 @@ export interface ProviderStats {
   error?: string
 }
 
-export interface StorageStats { bytes: number; conversations: number; remoteMissing: number }
+export interface StorageStats { bytes: number; conversations: number; remoteMissing: number; oldAccountConversations: number }
 
 interface CursorPayload {
   v: 1
@@ -281,13 +281,28 @@ export class ConversationStore {
       bytes += Buffer.byteLength(JSON.stringify([key, value]), 'utf8')
     }
     const remoteMissing = [...this.conversations.entries()].filter(([, row]) => row.remoteMissing).length
-    return { bytes, conversations: this.conversations.size, remoteMissing }
+    const oldAccountConversations = this.oldAccountConversationKeys().length
+    return { bytes, conversations: this.conversations.size, remoteMissing, oldAccountConversations }
   }
 
   /** Permanently remove every row a complete remote scan marked as absent. */
   async removeRemoteMissing(): Promise<number> {
     const keys = [...this.conversations.entries()].filter(([, row]) => row.remoteMissing).map(([key]) => key)
     for (const key of keys) await this.remove(key)
+    return keys.length
+  }
+
+  /** Permanently remove conversations and sync metadata owned by inactive accounts. */
+  async removeOldAccounts(): Promise<number> {
+    // Resolve the active scopes once. Removing sync-state rows while deriving
+    // this map could otherwise make the definition of "old" change mid-pass.
+    const activeScopes = this.activeAccountScopes()
+    const keys = this.oldAccountConversationKeys(activeScopes)
+    for (const key of keys) await this.remove(key)
+    for (const [key, row] of this.syncStates.entries()) {
+      const activeScope = activeScopes.get(row.provider)
+      if (activeScope !== undefined && row.accountScope !== activeScope) await this.syncStates.delete(key)
+    }
     return keys.length
   }
 
@@ -471,6 +486,14 @@ export class ConversationStore {
     const result = new Map<ChatProvider, string | undefined>([...active].map(([provider, value]) => [provider, value.scope]))
     for (const [provider, scope] of this.observedAccountScopes) result.set(provider, scope)
     return result
+  }
+
+  private oldAccountConversationKeys(activeScopes = this.activeAccountScopes()): string[] {
+    return [...this.conversations.entries()].filter(([, row]) => {
+      const activeScope = activeScopes.get(row.provider)
+      // No known current account means there is no safe basis for deletion.
+      return activeScope !== undefined && row.accountScope !== activeScope
+    }).map(([key]) => key)
   }
 
   /** Keep exactly the latest transcript revision for a conversation. */

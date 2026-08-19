@@ -4,7 +4,10 @@ import type { ChatProvider, InputRenderMode } from '../wire.ts'
 import { parseProviderQuery } from '../search.ts'
 import { encodeReferenceUri } from '../uri-codec.ts'
 import type { SearchResult, SessionCandidate, WorkspaceEntry } from './remote.ts'
-import { PROVIDER_ICON_MARKER, SESSION_ICON_MARKER, SKILL_ICON_MARKER } from './provider-icons.tsx'
+import {
+  COMMAND_ICON_MARKER, PICKER_ICON_MARKER, PROVIDER_ICON_MARKER, SESSION_ICON_MARKER, SKILL_ICON_MARKER,
+  type PickerIconKind,
+} from './provider-icons.tsx'
 import type { TranslateNS } from '@deepseek-ai/dsh-client-locale/client'
 import type { REFERENCE_ANYTHING_NS } from './locale.ts'
 
@@ -30,6 +33,61 @@ export const FILE_SOURCE = 'Files and folders'
 export const SESSION_SOURCE = 'DSH sessions'
 export const COMMAND_SOURCE = 'Commands'
 export const SKILL_SOURCE = 'Skills'
+
+type WorkspaceIconKind = Extract<PickerIconKind,
+  'folder' | 'file' | 'image' | 'text' | 'code' | 'data' | 'archive' |
+  'spreadsheet' | 'audio' | 'video' | 'presentation' | 'font'>
+
+const WORKSPACE_EXTENSION_KIND: Readonly<Partial<Record<string, WorkspaceIconKind>>> = Object.freeze({
+  // Image
+  png: 'image', jpg: 'image', jpeg: 'image', gif: 'image', webp: 'image', svg: 'image', avif: 'image',
+  bmp: 'image', ico: 'image', tif: 'image', tiff: 'image', heic: 'image', heif: 'image',
+  // Plain text and document-like files
+  txt: 'text', md: 'text', mdx: 'text', rtf: 'text', log: 'text', tex: 'text', pdf: 'text',
+  doc: 'text', docx: 'text', odt: 'text', epub: 'text',
+  // Source code
+  js: 'code', jsx: 'code', ts: 'code', tsx: 'code', mjs: 'code', cjs: 'code', html: 'code', htm: 'code',
+  css: 'code', scss: 'code', sass: 'code', less: 'code', vue: 'code', svelte: 'code', astro: 'code',
+  py: 'code', rb: 'code', php: 'code', java: 'code', kt: 'code', kts: 'code', c: 'code', h: 'code',
+  cpp: 'code', hpp: 'code', cc: 'code', cs: 'code', go: 'code', rs: 'code', swift: 'code',
+  sh: 'code', bash: 'code', zsh: 'code', fish: 'code', ps1: 'code', bat: 'code', cmd: 'code',
+  sql: 'code', proto: 'code', graphql: 'code', gql: 'code', lua: 'code', r: 'code', scala: 'code',
+  dart: 'code', ex: 'code', exs: 'code', erl: 'code', hrl: 'code', fs: 'code', fsx: 'code', vb: 'code', ipynb: 'code',
+  // Structured/config data
+  json: 'data', jsonc: 'data', yaml: 'data', yml: 'data', toml: 'data', xml: 'data', ini: 'data',
+  cfg: 'data', conf: 'data', properties: 'data', env: 'data', lock: 'data',
+  // Archives and packages
+  zip: 'archive', tar: 'archive', gz: 'archive', bz2: 'archive', xz: 'archive', '7z': 'archive',
+  rar: 'archive', tgz: 'archive', deb: 'archive', rpm: 'archive', apk: 'archive',
+  // Tables
+  csv: 'spreadsheet', tsv: 'spreadsheet', xls: 'spreadsheet', xlsx: 'spreadsheet', xlsm: 'spreadsheet',
+  ods: 'spreadsheet', numbers: 'spreadsheet',
+  // Audio/video
+  mp3: 'audio', wav: 'audio', flac: 'audio', m4a: 'audio', aac: 'audio', ogg: 'audio', opus: 'audio',
+  wma: 'audio', aiff: 'audio',
+  mp4: 'video', mov: 'video', mkv: 'video', webm: 'video', avi: 'video', wmv: 'video', m4v: 'video',
+  mpeg: 'video', mpg: 'video',
+  // Slide decks and fonts
+  ppt: 'presentation', pptx: 'presentation', odp: 'presentation', key: 'presentation',
+  ttf: 'font', otf: 'font', woff: 'font', woff2: 'font', eot: 'font',
+})
+
+const EXTENSIONLESS_WORKSPACE_KIND: Readonly<Record<string, WorkspaceIconKind>> = Object.freeze({
+  readme: 'text', license: 'text', notice: 'text', changelog: 'text',
+  dockerfile: 'code', makefile: 'code', justfile: 'code', 'cmakelists.txt': 'code',
+  '.gitignore': 'data', '.gitattributes': 'data', '.editorconfig': 'data', '.npmrc': 'data', '.env': 'data',
+})
+
+/** Classify from the already-listed path only; this never stats or reads the file. */
+export function workspaceIconKind(row: WorkspaceEntry): WorkspaceIconKind {
+  if (row.kind === 'directory') return 'folder'
+  const basename = row.path.replaceAll('\\', '/').split('/').at(-1)?.toLowerCase() ?? ''
+  const named = EXTENSIONLESS_WORKSPACE_KIND[basename]
+  if (named !== undefined) return named
+  const dot = basename.lastIndexOf('.')
+  const extension = dot >= 0 ? basename.slice(dot + 1) : ''
+  return WORKSPACE_EXTENSION_KIND[extension] ?? 'file'
+}
 
 type SourceScope = 'commands' | 'skills' | 'files' | 'sessions' | 'conversations'
 export interface PickerSourceOptions { order: number; limit: number; renderMode?: InputRenderMode }
@@ -148,12 +206,15 @@ export function createWorkspaceSource(load: (sessionId: string, signal: AbortSig
       if (scoped === undefined) return []
       const entries = await load(session.sessionId, signal)
       const needle = scoped.toLocaleLowerCase()
-      return entries.filter(row => row.path.toLocaleLowerCase().includes(needle)).sort((a, b) => rankPath(a.path, needle) - rankPath(b.path, needle) || a.path.localeCompare(b.path)).slice(0, 50).map(row => ({
-        name: row.path.split('/').at(-1) ?? row.path,
-        description: row.path,
-        icon: row.kind === 'directory' ? '📁' : '📄',
-        workspaceEntry: row,
-      }))
+      return entries.filter(row => row.path.toLocaleLowerCase().includes(needle)).sort((a, b) => rankPath(a.path, needle) - rankPath(b.path, needle) || a.path.localeCompare(b.path)).slice(0, 50).map(row => {
+        const iconKind = workspaceIconKind(row)
+        return {
+          name: row.path.split('/').at(-1) ?? row.path,
+          description: row.path,
+          icon: PICKER_ICON_MARKER[iconKind],
+          workspaceEntry: row,
+        }
+      })
     },
     onPick({ candidate }) {
       const row = candidate.workspaceEntry
@@ -164,7 +225,7 @@ export function createWorkspaceSource(load: (sessionId: string, signal: AbortSig
       const label = row.path
       const ref = JSON.stringify({ path: row.path, label })
       if (options.renderMode === 'raw-text') return { text: workspaceMention(ref) }
-      return { insert: { source: FILE_SOURCE, ref, label: `${row.kind === 'directory' ? '📁' : '📄'} ${label}`, clipboardText: workspaceMention(ref) } }
+      return { insert: { source: FILE_SOURCE, ref, label: `${PICKER_ICON_MARKER[workspaceIconKind(row)]} ${label}`, clipboardText: workspaceMention(ref) } }
     },
     codec: { clipboardText: workspaceMention, serialize: ref => Promise.resolve(workspaceMention(ref)) },
   }
@@ -203,7 +264,7 @@ export function createCommandSource(load: (sessionId: SessionId, signal: AbortSi
       const needle = scoped.toLocaleLowerCase()
       return (await load(session.sessionId, signal))
         .filter(row => row.name.toLocaleLowerCase().includes(needle))
-        .slice(0, 50).map(row => ({ name: row.name, description: row.description, hint: row.input?.hint, icon: '⌘', commandName: row.name }))
+        .slice(0, 50).map(row => ({ name: row.name, description: row.description, hint: row.input?.hint, icon: COMMAND_ICON_MARKER, commandName: row.name }))
     },
     onPick({ candidate }) { return candidate.commandName ? { text: `/${candidate.commandName}` } : undefined },
   }
