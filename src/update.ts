@@ -113,7 +113,10 @@ export class PackageUpdateManager {
 export async function fetchLatestVersion(signal?: AbortSignal): Promise<string> {
   const timeout = AbortSignal.timeout(CHECK_TIMEOUT_MS)
   const response = await fetch(NPM_LATEST_URL, {
-    headers: { accept: 'application/vnd.npm.install-v1+json' },
+    // The registry's package metadata endpoint accepts the install-v1 media
+    // type, but its `/latest` dist-tag endpoint responds 406 to that same
+    // header. Request ordinary JSON because this endpoint returns one manifest.
+    headers: { accept: 'application/json' },
     signal: signal ? AbortSignal.any([signal, timeout]) : timeout,
   })
   if (!response.ok) throw new Error(`npm registry returned HTTP ${String(response.status)}`)

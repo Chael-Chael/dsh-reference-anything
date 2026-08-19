@@ -2,11 +2,12 @@ import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { compareVersions, findOwningProfileDir, PackageUpdateManager } from '../src/update.ts'
+import { compareVersions, fetchLatestVersion, findOwningProfileDir, NPM_LATEST_URL, PackageUpdateManager } from '../src/update.ts'
 
 const temporaryRoots: string[] = []
 
 afterEach(async () => {
+  vi.unstubAllGlobals()
   await Promise.all(temporaryRoots.splice(0).map(root => rm(root, { recursive: true, force: true })))
 })
 
@@ -25,6 +26,18 @@ async function installedProfile(version = '0.2.1'): Promise<{ packageRoot: strin
 }
 
 describe('package update manager', () => {
+  it('requests ordinary JSON from the npm latest endpoint', async () => {
+    const request = vi.fn(async () => new Response(JSON.stringify({ version: '0.2.2' }), {
+      status: 200, headers: { 'content-type': 'application/json' },
+    }))
+    vi.stubGlobal('fetch', request)
+
+    await expect(fetchLatestVersion()).resolves.toBe('0.2.2')
+    expect(request).toHaveBeenCalledWith(NPM_LATEST_URL, expect.objectContaining({
+      headers: { accept: 'application/json' },
+    }))
+  })
+
   it('compares stable and prerelease versions', () => {
     expect(compareVersions('0.2.2', '0.2.1')).toBe(1)
     expect(compareVersions('0.2.1', '0.2.1')).toBe(0)
