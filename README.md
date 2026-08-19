@@ -37,7 +37,7 @@ This plugin uses OpenCLI to access historical conversations through AI chat sess
 
 ## News
 
-- **2026-08-19 · v0.2.3** — Added automatic version checks and in-settings updates, Pill/Raw text input rendering modes, and reusable background browser sessions for more reliable OpenCLI synchronization and input interactions.
+- **2026-08-19 · v0.2.4** — Added automatic version checks and in-settings updates, Pill/Raw text input rendering modes, and reusable background browser sessions for more reliable OpenCLI synchronization and input interactions.
 - **2026-08-18 · v0.2.0** — A redesigned Reference Anything settings page with local session statistics, paginated management, Provider/Profile selection, and sync status checks.
 - **2026-08-18** — Introduced on-demand read protocol: references default to safe pointers, and the agent reads the body and attachments only after authorization.
 - **2026-08-17** — Unified ChatGPT, Claude, Gemini, DeepSeek, Grok, and Kimi under the DSH `@` menu.
@@ -104,13 +104,19 @@ The `@` menu contains five groups: `Commands`, `Skills`, `Files and folders`, `D
 
 Available only at the start of the draft. To browse all commands, use `@commands` or the native DSH `/` panel.
 
+<p align="center"><img src="./images/at-commands.png" alt="Browse DSH commands from the @ menu" width="800" /></p>
+
 #### @Skills — DSH skill library
 
 Available only at the start of the draft. To browse all skills, use `@skills:` or the native DSH `/` panel.
 
+<p align="center"><img src="./images/at-skills.png" alt="Browse DSH skills from the @ menu" width="800" /></p>
+
 #### @Files and folders — workspace files and directories
 
 Type `@files:` in the input box to browse all files and folders in the workspace. Search supports fuzzy matching on titles, so both `@cachedes` and `@cache-design` can match “Cache design notes.”
+
+<p align="center"><img src="./images/at-files.png" alt="Browse workspace files and folders from the @ menu" width="800" /></p>
 
 Features:
 - Quick reference to workspace files with automatic workspace-boundary validation
@@ -120,6 +126,8 @@ Features:
 #### @DSH sessions — DSH session history
 
 Type `@sessions:` to browse locally synced DSH sessions. Sessions are ranked by match quality, with recency as fallback ordering.
+
+<p align="center"><img src="./images/at-sessions.png" alt="Browse DSH sessions from the @ menu" width="800" /></p>
 
 Search capabilities:
 - **Title match:** fuzzy search on session titles
@@ -131,6 +139,8 @@ Full browsing is available on the settings page’s paginated list. Session refe
 #### @External conversations — external conversation platforms
 
 Supports historical conversations from ChatGPT, Claude, Gemini, DeepSeek, Grok, and Kimi.
+
+<p align="center"><img src="./images/at-external-conversations.png" alt="Browse external conversations from the @ menu" width="800" /></p>
 
 **Platform filtering:**
 - Use `@chatgpt:cache` or `@claude:refactor` to filter a specific platform

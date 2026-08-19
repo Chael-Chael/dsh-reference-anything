@@ -37,7 +37,7 @@ One `@` to reference them all.
 
 ## 新闻
 
-- **2026-08-19 · v0.2.3** — 新增插件版本自动检查与设置页内更新，提供 Pill/Raw text 两种输入框渲染方式，并通过可复用的后台浏览器会话提升 OpenCLI 同步稳定性及输入交互兼容性。
+- **2026-08-19 · v0.2.4** — 新增插件版本自动检查与设置页内更新，提供 Pill/Raw text 两种输入框渲染方式，并通过可复用的后台浏览器会话提升 OpenCLI 同步稳定性及输入交互兼容性。
 - **2026-08-18 · v0.2.0** — 全新 Reference Anything 设置页，支持本地会话统计、分页管理、Provider/Profile 选择与同步状态检查。
 - **2026-08-18** — 引入按需读取协议：引用默认只传递安全指针，正文与附件由 agent 在获得授权后按需读取。
 - **2026-08-17** — ChatGPT、Claude、Gemini、DeepSeek、Grok 和 Kimi 统一接入 DSH 的 `@` 菜单。
@@ -104,13 +104,19 @@ opencli daemon restart
 
 仅在草稿开头可用。浏览全部命令可用 `@commands` 或 DSH 原生 `/` 面板。
 
+<p align="center"><img src="./images/at-commands.png" alt="通过 @ 菜单浏览 DSH 命令" width="800" /></p>
+
 #### @Skills — DSH 技能库
 
 仅在草稿开头可用。浏览全部技能可用 `@skills:` 或 DSH 原生 `/` 面板。
 
+<p align="center"><img src="./images/at-skills.png" alt="通过 @ 菜单浏览 DSH 技能" width="800" /></p>
+
 #### @Files and folders — 工作区文件与目录
 
 在输入框键入 `@files:` 可浏览工作区的全部文件和文件夹。搜索时支持模糊匹配标题，例如 `@cachedes` 和 `@cache-design` 都能命中 "Cache design notes"。
+
+<p align="center"><img src="./images/at-files.png" alt="通过 @ 菜单浏览工作区文件和文件夹" width="800" /></p>
 
 **功能**：
 - 快速引用工作区文件，自动校验工作区边界
@@ -120,6 +126,8 @@ opencli daemon restart
 #### @DSH sessions — DSH 会话历史
 
 在输入框键入 `@sessions:` 可浏览本地已同步的 DSH 会话。会话按匹配质量排序，时间兜底。
+
+<p align="center"><img src="./images/at-sessions.png" alt="通过 @ 菜单浏览 DSH 会话" width="800" /></p>
 
 **搜索能力**：
 - **标题匹配**：模糊搜索会话标题
@@ -131,6 +139,8 @@ opencli daemon restart
 #### @External conversations — 外部对话平台
 
 支持 ChatGPT、Claude、Gemini、DeepSeek、Grok 和 Kimi 的历史对话。
+
+<p align="center"><img src="./images/at-external-conversations.png" alt="通过 @ 菜单浏览外部对话" width="800" /></p>
 
 **按平台过滤**：
 - 使用 `@chatgpt:缓存`、`@claude:重构` 的格式过滤特定平台
