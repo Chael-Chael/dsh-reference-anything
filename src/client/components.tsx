@@ -122,6 +122,7 @@ export function ConversationSettings({ useScope, save, sync, cancel, refresh, re
   const daemonReady = Boolean(state.health?.daemonRunning && !state.health.daemonStale)
   const extensionReady = Boolean(state.health?.extensionConnected && state.health.connectivityOk)
   const adapterReady = Boolean(state.health?.pluginInstalled && state.health.adapterCompatible)
+  const adapterNeedsRepair = Boolean(state.health?.pluginInstalled && !adapterReady)
   const runAction = (name: string, action: () => Promise<void>) => {
     if (busyActionRef.current || state.loading) return
     busyActionRef.current = true
@@ -209,12 +210,12 @@ export function ConversationSettings({ useScope, save, sync, cancel, refresh, re
             secondaryLabel={extensionSecondaryLabel} onSecondary={extensionSecondaryLabel ? () => { runAction('daemon', restartDaemon) } : undefined}
             control={needsProfileRecovery ? profileControl : undefined} />
           <CheckRow label={t('check.conversationAdapter')} detail={adapterStateDetail(state.health, t)} ready={adapterReady}
-            actionLabel={!opencliReady ? t('settings.installOpenCli') : state.health?.pluginInstalled ? t('settings.reinstall') : t('settings.install')}
+            actionLabel={!opencliReady ? t('settings.installOpenCli') : adapterNeedsRepair ? t('settings.repairAdapter') : state.health?.pluginInstalled ? t('settings.reinstall') : t('settings.install')}
             actionBusy={busyAction === 'adapter'} actionDisabled={Boolean(busyAction)} onAction={() => { runAction(!opencliReady ? 'opencli' : 'adapter', !opencliReady ? installOpenCli : install) }} />
         </div>}
         {storeBlocked && <p className="dsh_ref_store_fallback" role="alert">{t('settings.extensionStoreBlocked')} <a href={OPENCLI_EXTENSION_STORE_URL} target="_blank" rel="noreferrer">{t('settings.openExtensionStore')}</a></p>}
         {busyAction === 'setup' && state.setupStep && <p className="dsh_ref_setup_step" role="status">{t(`settings.setupStep.${state.setupStep}` as keyof typeof import('./locale.ts').zh)}</p>}
-        <div className="dsh_ref_install"><div><strong>{t('settings.serviceActions')}</strong><span>{t('settings.serviceActionsDetail')}</span></div><div className="dsh_ref_service_actions"><button className="is_primary" type="button" disabled={state.loading || Boolean(busyAction)} onClick={() => { const opened = state.health?.extensionConnected ? true : openStore(); runAction('setup', () => setupAll(opened)) }}>{busyAction === 'setup' ? t('settings.settingUp') : t('settings.oneClickSetup')}</button><button type="button" disabled={state.loading || Boolean(busyAction) || !opencliReady} onClick={() => { runAction('adapter', install) }}>{busyAction === 'adapter' ? t('settings.installing') : state.health?.pluginInstalled ? t('settings.reinstall') : t('settings.install')}</button><button type="button" disabled={state.loading || Boolean(busyAction) || !opencliReady} onClick={() => { runAction('daemon', restartDaemon) }}>{busyAction === 'daemon' ? t('settings.restarting') : t('settings.restartDaemon')}</button></div></div>
+        <div className="dsh_ref_install"><div><strong>{t('settings.serviceActions')}</strong><span>{t('settings.serviceActionsDetail')}</span></div><div className="dsh_ref_service_actions"><button className="is_primary" type="button" disabled={state.loading || Boolean(busyAction)} onClick={() => { const opened = state.health?.extensionConnected ? true : openStore(); runAction('setup', () => setupAll(opened)) }}>{busyAction === 'setup' ? t('settings.settingUp') : t('settings.oneClickSetup')}</button></div></div>
       </section>
       <div className="dsh_ref_chat_divider" />
       <div className="dsh_ref_provider_grid">{PROVIDERS.map((provider, index) => <ProviderCard key={provider} provider={provider} index={index} stats={state.stats?.find(row => row.provider === provider)} busy={state.sync?.status === 'running'} autoSync={settings.autoSync} enabled={enabled.has(provider)} onEnabled={value => { setProviderEnabled(provider, value) }} onSync={(mode) => { void sync([provider], mode) }} onClear={() => { if (window.confirm(t('storage.clearProviderConfirm', { provider: PROVIDER_LABEL[provider] }))) void clearProvider(provider) }} t={t} />)}</div>
@@ -390,6 +391,7 @@ function daemonStateDetail(health: Health | undefined, t: T): string {
 
 function adapterStateDetail(health: Health | undefined, t: T): string {
   if (!health?.pluginInstalled) return health?.pluginError || t('settings.adapterMissing')
+  if (health.pluginError) return t('settings.adapterLoadFailed', { error: health.pluginError })
   if (!health.adapterCommandsReady) return t('settings.adapterIncomplete')
   if (!health.adapterCompatible) return t('settings.adapterVersionUnsupported', { version: health.pluginVersion || t('settings.unknownVersion') })
   return health.pluginVersion ? t('settings.adapterInstalledVersion', { version: health.pluginVersion }) : t('settings.adapterInstalled')

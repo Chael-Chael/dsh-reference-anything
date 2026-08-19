@@ -54,7 +54,8 @@ describe('package update manager', () => {
     const { packageRoot, profileDir } = await installedProfile()
     const fetchLatest = vi.fn(async () => '0.2.2')
     const install = vi.fn(async () => {})
-    const manager = new PackageUpdateManager({ packageRoot, fetchLatest, install })
+    const afterInstall = vi.fn(async () => {})
+    const manager = new PackageUpdateManager({ packageRoot, fetchLatest, install, afterInstall })
 
     await expect(manager.check()).resolves.toMatchObject({
       currentVersion: '0.2.1', latestVersion: '0.2.2', updateAvailable: true,
@@ -65,9 +66,21 @@ describe('package update manager', () => {
     await expect(manager.update()).resolves.toEqual({ version: '0.2.2', restartRequired: true })
     expect(fetchLatest).toHaveBeenCalledTimes(2)
     expect(install).toHaveBeenCalledWith(profileDir, '0.2.2', undefined)
+    expect(afterInstall).toHaveBeenCalledWith(profileDir, '0.2.2', undefined)
     await expect(manager.status()).resolves.toMatchObject({
       currentVersion: '0.2.2', latestVersion: '0.2.2', updateAvailable: false,
     })
+  })
+
+  it('does not report an update as complete when post-update adapter repair fails', async () => {
+    const { packageRoot } = await installedProfile()
+    const manager = new PackageUpdateManager({
+      packageRoot, fetchLatest: async () => '0.2.2', install: async () => {},
+      afterInstall: async () => { throw new Error('adapter repair failed') },
+    })
+
+    await expect(manager.update()).rejects.toThrow('adapter repair failed')
+    await expect(manager.status()).resolves.toMatchObject({ updateAvailable: true })
   })
 
   it('does not invoke pnpm when npm reports the installed version', async () => {

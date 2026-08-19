@@ -101,4 +101,19 @@ describe('browser extension install', () => {
     })
     expect(called).toEqual(['stage:checking', 'stage:checking', 'refresh'])
   })
+
+  it('repairs an installed adapter when its modules failed to load', async () => {
+    const called: string[] = []
+    let current: Health = { ...healthy, adapterCommandsReady: false, adapterCompatible: false, pluginError: 'import failed' }
+    await runSetupSequence({
+      health: () => current,
+      refresh: async () => { called.push('refresh') },
+      discoverOpenCli: async () => ({ found: true, executable: 'opencli', version: '1.8.6' }),
+      selectOpenCli: async () => {}, installOpenCli: async () => {},
+      installAdapter: async () => { called.push('repair'); current = { ...healthy } },
+      restartDaemon: async () => {}, stage: value => { called.push(`stage:${value}`) },
+    })
+
+    expect(called).toEqual(['stage:checking', 'stage:adapter', 'repair', 'refresh', 'stage:checking', 'refresh'])
+  })
 })

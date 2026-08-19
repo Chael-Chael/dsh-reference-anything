@@ -15,6 +15,7 @@ const SITE: Record<ChatProvider, string> = {
   deepseek: 'dsh-deepseek', grok: 'dsh-grok', kimi: 'dsh-kimi',
 }
 const REQUIRED_ADAPTER_COMMANDS = ['chatgpt', 'claude', 'gemini', 'deepseek', 'grok', 'kimi'] as const
+const ADAPTER_PLUGIN_NAME = 'dsh-chat-history'
 
 /**
  * A persistent OpenCLI site session owns one mutable browser tab. Serialize
@@ -194,7 +195,9 @@ export class OpenCliRunner {
     const daemonVersion = daemon.value.match(/^Version:\s+v?([^\s(]+)/m)?.[1]
     const pluginVersion = plugins.value.match(/dsh-chat-history\s+@([^\s—]+)/i)?.[1]
     const pluginInstalled = /dsh-chat-history/i.test(plugins.value)
-    const adapterCommandsReady = REQUIRED_ADAPTER_COMMANDS.every(command => new RegExp(`\\b${command}\\b`, 'i').test(plugins.value))
+    const adapterLoadError = adapterPluginLoadError(plugins.diagnostic)
+    const adapterCommandsReady = !adapterLoadError
+      && REQUIRED_ADAPTER_COMMANDS.every(command => new RegExp(`\\b${command}\\b`, 'i').test(plugins.value))
     const opencliCompatible = versionAtLeast(cliVersion, MIN_OPENCLI_VERSION)
     const daemonStale = Boolean(status.daemonRunning && (!daemonVersion || normalizeVersion(daemonVersion) !== cliVersion))
     const connectivityOk = /\[OK\]\s+Connectivity:/i.test(doctor.value)
@@ -210,7 +213,7 @@ export class OpenCliRunner {
       adapterCompatible: pluginInstalled && adapterCommandsReady && versionAtLeast(pluginVersion ?? '', MIN_ADAPTER_VERSION),
       ...(version.error ? { versionError: version.error } : {}),
       ...(daemon.error ? { daemonError: daemon.error } : {}),
-      ...(plugins.error ? { pluginError: plugins.error } : {}),
+      ...(plugins.error || adapterLoadError ? { pluginError: plugins.error || adapterLoadError } : {}),
       ...(doctor.error ? { doctorError: doctor.error } : {}),
     }
   }
@@ -234,13 +237,28 @@ export class OpenCliRunner {
   }
 
   async installPlugin(pluginUrl: string, signal?: AbortSignal): Promise<void> {
-    await this.raw(['plugin', 'install', pluginUrl], signal)
+    const before = await this.command(['plugin', 'list'], signal)
+    if (new RegExp(`\\b${ADAPTER_PLUGIN_NAME}\\b`, 'i').test(before.stdout)) {
+      await this.raw(['plugin', 'update', ADAPTER_PLUGIN_NAME], signal)
+    } else {
+      await this.raw(['plugin', 'install', pluginUrl], signal)
+    }
+
+    const after = await this.command(['plugin', 'list'], signal)
+    const loadError = adapterPluginLoadError(after.stderr)
+    const commandsReady = REQUIRED_ADAPTER_COMMANDS.every(command => new RegExp(`\\b${command}\\b`, 'i').test(after.stdout))
+    if (loadError || !commandsReady) {
+      throw new OpenCliError(loadError || 'OpenCLI did not register all six conversation adapters', 'OPENCLI_CONFIGURATION')
+    }
   }
 
   async restartDaemon(signal?: AbortSignal): Promise<void> { await this.raw(['daemon', 'restart'], signal) }
 
-  private async probe(args: string[], signal?: AbortSignal): Promise<{ value: string; error?: string }> {
-    try { return { value: await this.raw(args, signal) } }
+  private async probe(args: string[], signal?: AbortSignal): Promise<{ value: string; diagnostic?: string; error?: string }> {
+    try {
+      const result = await this.command(args, signal)
+      return { value: result.stdout, ...(result.stderr.trim() ? { diagnostic: result.stderr.trim() } : {}) }
+    }
     catch (error) { return { value: '', error: error instanceof Error ? error.message : String(error) } }
   }
 
@@ -281,6 +299,10 @@ export class OpenCliRunner {
   }
 
   private async raw(args: string[], signal?: AbortSignal): Promise<string> {
+    return (await this.command(args, signal)).stdout
+  }
+
+  private async command(args: string[], signal?: AbortSignal): Promise<{ stdout: string; stderr: string }> {
     const invocation = resolveInvocation(this.executable)
     const fullArgs = [...invocation.prefix, ...this.prefixArgs, ...(this.profile ? ['--profile', this.profile] : []), ...args]
     try {
@@ -288,7 +310,7 @@ export class OpenCliRunner {
         encoding: 'utf8', timeout: this.timeoutMs, maxBuffer: this.maxStdoutBytes,
         windowsHide: true, shell: false, signal, env: { ...process.env, OPENCLI_WINDOW: 'background' },
       })
-      return result.stdout
+      return { stdout: result.stdout, stderr: result.stderr }
     } catch (error: unknown) {
       const detail = error as { code?: number | string; killed?: boolean; signal?: string; stderr?: string; stdout?: string }
       if (detail.code === 'ERR_CHILD_PROCESS_STDIO_MAXBUFFER') throw new OpenCliError('OpenCLI output exceeded the configured limit', 'OPENCLI_OUTPUT_TOO_LARGE', { cause: error })
@@ -301,6 +323,14 @@ export class OpenCliRunner {
       throw new OpenCliError(stderr || `OpenCLI exited with ${String(detail.code)}`, code, { cause: error })
     }
   }
+}
+
+/** Keep successful-process diagnostics: OpenCLI reports plugin import failures on stderr while exiting zero. */
+function adapterPluginLoadError(diagnostic = ''): string {
+  const lines = diagnostic.split(/\r?\n/)
+    .map(line => line.trim())
+    .filter(line => /Plugin dsh-chat-history\//i.test(line))
+  return [...new Set(lines)].join('\n').slice(0, 2_000)
 }
 
 async function serializeSiteCommand<T>(key: string, task: () => Promise<T>): Promise<T> {

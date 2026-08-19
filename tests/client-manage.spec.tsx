@@ -49,14 +49,15 @@ afterEach(() => {
 
 function renderSettings(current: SettingsSnapshot, actions: {
   setupAll?: (opened: boolean) => Promise<void>; discoverOpenCli?: () => Promise<void>; installOpenCli?: () => Promise<void>
-  useProfile?: (profile: string) => Promise<void>; refresh?: () => Promise<void>; checkUpdate?: () => Promise<void>; installUpdate?: () => Promise<void>
+  useProfile?: (profile: string) => Promise<void>; install?: () => Promise<void>; refresh?: () => Promise<void>
+  checkUpdate?: () => Promise<void>; installUpdate?: () => Promise<void>
 } = {}): HTMLElement {
   const noop = async () => {}
   const useScope = ((selector: (value: SettingsSnapshot) => unknown) => selector(current)) as never
   return render(<ConversationSettings close={() => {}} useSessions={(() => []) as never} useWorkspaces={(() => []) as never}
     useScope={useScope} save={noop} sync={noop} cancel={noop} refresh={actions.refresh ?? noop} refreshOnOpen={actions.refresh ?? noop}
     setupAll={actions.setupAll ?? noop} discoverOpenCli={actions.discoverOpenCli ?? noop} installOpenCli={actions.installOpenCli ?? noop}
-    useProfile={actions.useProfile ?? noop} install={noop} restartDaemon={noop} checkUpdate={actions.checkUpdate ?? noop} installUpdate={actions.installUpdate ?? noop} browse={noop} deleteConversation={noop}
+    useProfile={actions.useProfile ?? noop} install={actions.install ?? noop} restartDaemon={noop} checkUpdate={actions.checkUpdate ?? noop} installUpdate={actions.installUpdate ?? noop} browse={noop} deleteConversation={noop}
     clearProvider={noop} clearOlder={noop} refreshStats={noop} t={t} />)
 }
 
@@ -101,6 +102,31 @@ describe('settings update bar', () => {
     await act(async () => { button.click() })
     expect(installUpdate).toHaveBeenCalledOnce()
     expect(confirmation).toHaveBeenCalledTimes(2)
+  })
+})
+
+describe('adapter viability repair', () => {
+  it('keeps only one-click setup in service actions because row actions already handle repairs', () => {
+    const el = renderSettings({ settings, health: healthyHealth })
+    const actions = el.querySelector('.dsh_ref_service_actions')!
+
+    expect(actions.querySelectorAll('button')).toHaveLength(1)
+    expect(actions.textContent).toBe('One-click setup')
+  })
+
+  it('shows an import failure and offers a working repair action', async () => {
+    const install = vi.fn(async () => {})
+    const health: Health = {
+      ...healthyHealth, adapterCommandsReady: false, adapterCompatible: false,
+      pluginError: "⚠ Plugin dsh-chat-history/chatgpt.js: Cannot find package '@jackwener/opencli'",
+    }
+    const el = renderSettings({ settings, health }, { install })
+    const adapterRow = Array.from(el.querySelectorAll('.dsh_ref_check')).find(row => row.textContent?.includes('Conversation adapter'))!
+    const repair = Array.from(adapterRow.querySelectorAll('button')).find(button => button.textContent === 'Repair adapter') as HTMLButtonElement
+
+    expect(adapterRow.textContent).toContain('The adapter is registered but failed to load')
+    await act(async () => { repair.click() })
+    expect(install).toHaveBeenCalledOnce()
   })
 })
 

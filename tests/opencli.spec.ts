@@ -154,6 +154,54 @@ describe('OpenCLI execFile boundary', () => {
     })
   })
 
+  it('treats a successful plugin listing with adapter import warnings as broken', async () => {
+    const script = await fake(`
+      const args=process.argv.slice(2).join(' ')
+      if(args==='--version') process.stdout.write('1.8.6')
+      else if(args==='daemon status') process.stdout.write('Daemon: running (PID 1)\\nVersion: v1.8.6\\nExtension: connected')
+      else if(args==='plugin list') {
+        process.stdout.write('dsh-chat-history @0.2.1 (chatgpt, claude, deepseek, gemini, grok, kimi)')
+        process.stderr.write("⚠ Plugin dsh-chat-history/chatgpt.js: Cannot find package '@jackwener/opencli'")
+      } else if(args==='doctor') process.stdout.write('[OK] Connectivity: connected in 0.2s')
+    `)
+
+    await expect(new OpenCliRunner({ executable: process.execPath, prefixArgs: [script] }).health()).resolves.toMatchObject({
+      pluginInstalled: true, adapterCommandsReady: false, adapterCompatible: false,
+      pluginError: expect.stringContaining("Cannot find package '@jackwener/opencli'"),
+    })
+  })
+
+  it('repairs an already registered adapter and verifies that it loads', async () => {
+    const script = await fake(`
+      const { existsSync, writeFileSync } = await import('node:fs')
+      const marker = new URL('./repaired', import.meta.url)
+      const args=process.argv.slice(2).join(' ')
+      if(args==='plugin list') {
+        process.stdout.write('dsh-chat-history @0.2.1 (chatgpt, claude, deepseek, gemini, grok, kimi)')
+        if(!existsSync(marker)) process.stderr.write("⚠ Plugin dsh-chat-history/chatgpt.js: Cannot find package '@jackwener/opencli'")
+      } else if(args==='plugin update dsh-chat-history') writeFileSync(marker, '')
+      else process.exit(78)
+    `)
+
+    await expect(new OpenCliRunner({ executable: process.execPath, prefixArgs: [script] })
+      .installPlugin('file:///adapter')).resolves.toBeUndefined()
+  })
+
+  it('installs a missing adapter and verifies that it loads', async () => {
+    const script = await fake(`
+      const { existsSync, writeFileSync } = await import('node:fs')
+      const marker = new URL('./installed', import.meta.url)
+      const args=process.argv.slice(2).join(' ')
+      if(args==='plugin list') {
+        if(existsSync(marker)) process.stdout.write('dsh-chat-history @0.2.1 (chatgpt, claude, deepseek, gemini, grok, kimi)')
+      } else if(args==='plugin install file:///adapter') writeFileSync(marker, '')
+      else process.exit(78)
+    `)
+
+    await expect(new OpenCliRunner({ executable: process.execPath, prefixArgs: [script] })
+      .installPlugin('file:///adapter')).resolves.toBeUndefined()
+  })
+
   it('detects stale daemon, live connectivity, and adapter compatibility independently', async () => {
     const script = await fake(`
       const args=process.argv.slice(2).join(' ')

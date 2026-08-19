@@ -6,7 +6,9 @@ import { providerSchema, referenceAnythingDomainSpec, settingsRecordSchema } fro
 import { ConversationStore, type MatchedVia } from '../../store/store.ts'
 import { ConversationSyncManager } from '../../sync/index.ts'
 import { OpenCliError, OpenCliRunner, discoverOpenCli, installOpenCli as installOpenCliPackage, type OpenCliDiscovery } from '../../opencli.ts'
-import { PackageUpdateManager, type PackageUpdateResult, type PackageUpdateStatus } from '../../update.ts'
+import { PACKAGE_NAME, PackageUpdateManager, type PackageUpdateResult, type PackageUpdateStatus } from '../../update.ts'
+import { join } from 'node:path'
+import { pathToFileURL } from 'node:url'
 import type { ProviderTurnRow } from '../../store/store.ts'
 import { ReferenceAnythingError } from '../../errors.ts'
 import { parseProviderQuery } from '../../search.ts'
@@ -70,7 +72,11 @@ export default class WebChatHistoryService extends Service implements ReferenceS
   private syncValue?: ConversationSyncManager
   private autoSyncInterval?: ReturnType<typeof setInterval>
   private autoSyncCatchUp?: ReturnType<typeof setTimeout>
-  private readonly packageUpdates = new PackageUpdateManager()
+  private readonly packageUpdates = new PackageUpdateManager({
+    afterInstall: async (profileDir, _version, signal) => {
+      await this.installAdapterFrom(pathToFileURL(join(profileDir, 'node_modules', PACKAGE_NAME, 'opencli-plugin')).href, signal)
+    },
+  })
   private readonly liveAttachments = new Map<string, { attachment: ConversationAttachment & { locator?: string }; expiresAt: number }>()
 
   constructor(ctx: Context, private readonly config: Config = {}) { super(ctx, 'referenceChatHistory') }
@@ -292,11 +298,15 @@ export default class WebChatHistoryService extends Service implements ReferenceS
   }
 
   async installAdapter(signal?: AbortSignal): Promise<boolean> {
+    await this.installAdapterFrom(new URL('../../../opencli-plugin/', import.meta.url).href, signal)
+    return true
+  }
+
+  private async installAdapterFrom(pluginUrl: string, signal?: AbortSignal): Promise<void> {
     const settings = this.store.settings
     const runner = new OpenCliRunner({ executable: settings.opencliPath, profile: settings.profile,
       timeoutMs: this.config.timeoutMs, maxStdoutBytes: this.config.maxStdoutBytes })
-    await runner.installPlugin(new URL('../../../opencli-plugin/', import.meta.url).href, signal)
-    return true
+    await runner.installPlugin(pluginUrl, signal)
   }
 
 

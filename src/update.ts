@@ -31,6 +31,7 @@ interface UpdateManagerOptions {
   dshHome?: string
   fetchLatest?: (signal?: AbortSignal) => Promise<string>
   install?: (profileDir: string, version: string, signal?: AbortSignal) => Promise<void>
+  afterInstall?: (profileDir: string, version: string, signal?: AbortSignal) => Promise<void>
 }
 
 /** One startup/manual-check cache and the confirmed profile-local updater. */
@@ -39,6 +40,7 @@ export class PackageUpdateManager {
   private readonly dshHome?: string
   private readonly fetchLatest: (signal?: AbortSignal) => Promise<string>
   private readonly install: (profileDir: string, version: string, signal?: AbortSignal) => Promise<void>
+  private readonly afterInstall?: (profileDir: string, version: string, signal?: AbortSignal) => Promise<void>
   private cached?: PackageUpdateStatus
   private checking?: Promise<PackageUpdateStatus>
 
@@ -47,6 +49,7 @@ export class PackageUpdateManager {
     this.dshHome = options.dshHome
     this.fetchLatest = options.fetchLatest ?? fetchLatestVersion
     this.install = options.install ?? installPackageVersion
+    this.afterInstall = options.afterInstall
   }
 
   /** Return the startup result, waiting for it when it is still in flight. */
@@ -73,6 +76,7 @@ export class PackageUpdateManager {
     if (!status.updateAvailable) return { version: status.currentVersion, restartRequired: false }
     const profileDir = await findOwningProfileDir(this.packageRoot, this.dshHome)
     await this.install(profileDir, status.latestVersion, signal)
+    await this.afterInstall?.(profileDir, status.latestVersion, signal)
     this.cached = {
       currentVersion: status.latestVersion,
       latestVersion: status.latestVersion,
