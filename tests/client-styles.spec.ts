@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it } from 'vitest'
-import { adoptAdaptiveComposerHeight, adoptConversationMentionProjection, adoptConversationSyncActionProjection, adoptMenuExpansionProjection, adoptMenuGroupTitleProjection, adoptReferenceIconProjection, adoptStyles, refreshActiveTriggerMenu } from '../src/client/styles.ts'
-import type { SyncStatus } from '../src/client/remote.ts'
+import { adoptAdaptiveChipHitTesting, adoptAdaptiveComposerHeight, adoptConversationMentionProjection, adoptConversationSyncActionProjection, adoptMenuExpansionProjection, adoptMenuGroupTitleProjection, adoptReferenceIconProjection, adoptStyles, logicalOffsetAtDomPoint, rangeBetweenLogicalOffsets, refreshActiveTriggerMenu, visualCaretTop } from '../src/client/styles.ts'
+import { syncProgressFraction, type SyncStatus } from '../src/client/remote.ts'
 
 afterEach(() => {
   document.body.replaceChildren()
@@ -25,6 +25,9 @@ describe('plugin-owned DSH presentation overrides', () => {
     expect(text).toContain('font-weight:inherit!important;letter-spacing:inherit!important')
     expect(text).toContain('[data-composer-card] .dsh_ref_conversation_chip')
     expect(text).toContain('[data-decoration="chip"]>.dsh_ref_session_icon:before{background:var(--dsw-alias-state-business-primary,#3b82f6)!important}')
+    expect(text).toContain('.dsh_ref_projected_icon{display:inline!important}')
+    expect(text).toContain('margin-right:.35em;vertical-align:-.125em')
+    expect(text).toContain('.dsh_ref_session_icon,.dsh_ref_skill_icon{display:inline!important}')
     expect(text).not.toContain('.dsh_ref_conversation_chip>.dsh_ref_projected_icon:before{transform:translateY(.2em)!important}')
     expect(text).not.toContain('[data-decoration="chip"]>.dsh_ref_session_icon:before{transform:translateY(.2em)!important')
     expect(text).toContain('[role="listbox"] .dsh_ref_projected_icon:before{background:var(--dsw-alias-label-tertiary,#8b8f98)}')
@@ -32,6 +35,7 @@ describe('plugin-owned DSH presentation overrides', () => {
     expect(text).toContain('.dsh_ref_toggle{position:relative}')
     expect(text).not.toContain('.dsh_ref_conversation_chip,.dsh_ref_conversation_chip>span,.dsh_ref_projected_icon{color:')
     expect(text).toContain('.dsh_ref_adaptive_caret')
+    expect(text).toContain('[data-dsh-ref-height-ruler]')
     expect(text).toContain('dsh_ref_caret_blink')
     expect(text).not.toContain('.dsh_ref_chip{')
     expect(text).toContain('.dsh_ref_menu_sync{position:relative')
@@ -72,27 +76,91 @@ describe('plugin-owned DSH presentation overrides', () => {
     dispose()
   })
 
-  it('extends the native mirror to the visual height of wrapped content-sized chips', async () => {
-    document.body.innerHTML = '<div data-composer-card><div data-input-backdrop><span data-decoration="chip"><span>Long reference title</span></span></div><div data-input-mirror></div></div>'
+  it('lets the visual chip ruler drive native auto-grow and restores the native mirror without chips', async () => {
+    document.body.innerHTML = '<div data-composer-card><div class="grow"><div data-input-backdrop><span data-decoration="chip"><span>Long reference title</span></span></div><div data-input-mirror></div></div></div>'
     const backdrop = document.querySelector('[data-input-backdrop]') as HTMLElement
     const mirror = document.querySelector('[data-input-mirror]') as HTMLElement
-    backdrop.getBoundingClientRect = () => ({ width: 320, height: 24, left: 0, right: 320, top: 0, bottom: 24, x: 0, y: 0, toJSON() {} })
-    const original = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'scrollHeight')
-    Object.defineProperty(HTMLElement.prototype, 'scrollHeight', {
-      configurable: true,
-      get() { return this.hasAttribute('data-dsh-ref-height-probe') ? 72 : 24 },
-    })
+    mirror.getBoundingClientRect = () => ({ width: 320, height: 64, left: 0, right: 320, top: 0, bottom: 64, x: 0, y: 0, toJSON() {} })
     const dispose = adoptAdaptiveComposerHeight()
     try {
       await new Promise<void>(resolve => { requestAnimationFrame(() => { requestAnimationFrame(() => { resolve() }) }) })
-      expect(mirror.style.minHeight).toBe('72px')
+      const ruler = document.querySelector('[data-dsh-ref-height-ruler]')
+      expect(ruler).not.toBeNull()
+      expect(ruler?.textContent).toBe('Long reference title\n')
+      expect((ruler as HTMLElement).style.getPropertyValue('--dsh-ref-native-min-height')).toBe('64px')
+      expect(mirror.style.position).toBe('absolute')
+      expect(mirror.style.inset).toBe('0')
       backdrop.querySelector('[data-decoration="chip"]')?.remove()
       await new Promise<void>(resolve => { requestAnimationFrame(() => { requestAnimationFrame(() => { resolve() }) }) })
-      expect(mirror.style.minHeight).toBe('')
+      expect(document.querySelector('[data-dsh-ref-height-ruler]')).toBeNull()
+      expect(mirror.style.position).toBe('')
     } finally {
       dispose()
-      if (original) Object.defineProperty(HTMLElement.prototype, 'scrollHeight', original)
-      else delete (HTMLElement.prototype as unknown as Record<string, unknown>).scrollHeight
+    }
+  })
+
+  it('keeps the adaptive caret on the textarea line grid after many wrapped lines', () => {
+    expect(visualCaretTop(100, 4, 106, 24, 20)).toBe(106)
+    expect(visualCaretTop(100, 4, 106 + 9 * 24, 24, 20)).toBe(106 + 9 * 24)
+    // Ink metrics may report a small per-font offset, but it must not alter the
+    // selected line or accumulate with its index.
+    expect(visualCaretTop(100, 4, 108 + 9 * 24, 24, 20)).toBe(106 + 9 * 24)
+  })
+
+  it('maps visual text and full-width chip clicks back to logical textarea offsets', () => {
+    document.body.innerHTML = '<div data-input-backdrop>ab<span data-decoration="chip"><span>Very long reference</span></span>cde</div>'
+    const root = document.querySelector('[data-input-backdrop]') as HTMLElement
+    const chip = root.querySelector('[data-decoration="chip"]') as HTMLElement
+    const trailing = root.lastChild as Text
+    chip.getBoundingClientRect = () => ({ left: 20, right: 220, width: 200, top: 0, bottom: 24, height: 24, x: 20, y: 0, toJSON() {} })
+    expect(logicalOffsetAtDomPoint(root, chip.firstChild as Node, 4, 30)).toBe(2)
+    expect(logicalOffsetAtDomPoint(root, chip.firstChild as Node, 4, 210)).toBe(3)
+    expect(logicalOffsetAtDomPoint(root, trailing, 2, 240)).toBe(5)
+  })
+
+  it('moves the real textarea caret to the clicked visual chip edge', () => {
+    document.body.innerHTML = '<div data-composer-card><div data-input-backdrop>ab<span data-decoration="chip"><span>Very long reference</span></span>cde</div><textarea>ab\uFFFCcde</textarea></div>'
+    const input = document.querySelector('textarea')!
+    const chip = document.querySelector('[data-decoration="chip"]') as HTMLElement
+    chip.getBoundingClientRect = () => ({ left: 20, right: 220, width: 200, top: 0, bottom: 24, height: 24, x: 20, y: 0, toJSON() {} })
+    const point = Object.getOwnPropertyDescriptor(document, 'caretPositionFromPoint')
+    Object.defineProperty(document, 'caretPositionFromPoint', { configurable: true, value: () => ({ offsetNode: chip.firstChild as Node, offset: 4 }) })
+    const dispose = adoptAdaptiveChipHitTesting()
+    try {
+      input.dispatchEvent(new MouseEvent('pointerdown', { button: 0, clientX: 210, clientY: 12, bubbles: true }))
+      input.dispatchEvent(new MouseEvent('pointerup', { button: 0, clientX: 210, clientY: 12, bubbles: true }))
+      expect(input.selectionStart).toBe(3)
+      expect(input.selectionEnd).toBe(3)
+    } finally {
+      dispose()
+      if (point) Object.defineProperty(document, 'caretPositionFromPoint', point)
+      else delete (document as unknown as Record<string, unknown>).caretPositionFromPoint
+    }
+  })
+
+  it('maps a dragged visual selection across a chip to logical textarea endpoints', () => {
+    document.body.innerHTML = '<div data-composer-card><div data-input-backdrop>ab<span data-decoration="chip"><span>Very long reference</span></span>cde</div><textarea>ab\uFFFCcde</textarea></div>'
+    const input = document.querySelector('textarea')!
+    const root = document.querySelector('[data-input-backdrop]') as HTMLElement
+    const leading = root.firstChild as Text
+    const trailing = root.lastChild as Text
+    const point = Object.getOwnPropertyDescriptor(document, 'caretPositionFromPoint')
+    Object.defineProperty(document, 'caretPositionFromPoint', {
+      configurable: true,
+      value: (x: number) => x < 100 ? { offsetNode: leading, offset: 1 } : { offsetNode: trailing, offset: 2 },
+    })
+    const dispose = adoptAdaptiveChipHitTesting()
+    try {
+      input.dispatchEvent(new MouseEvent('pointerdown', { button: 0, clientX: 20, clientY: 12, bubbles: true, cancelable: true }))
+      document.dispatchEvent(new MouseEvent('pointermove', { clientX: 240, clientY: 12, bubbles: true, cancelable: true }))
+      document.dispatchEvent(new MouseEvent('pointerup', { button: 0, clientX: 240, clientY: 12, bubbles: true, cancelable: true }))
+      expect(input.selectionStart).toBe(1)
+      expect(input.selectionEnd).toBe(5)
+      expect(rangeBetweenLogicalOffsets(root, 1, 5)?.toString()).toBe('bVery long referencecd')
+    } finally {
+      dispose()
+      if (point) Object.defineProperty(document, 'caretPositionFromPoint', point)
+      else delete (document as unknown as Record<string, unknown>).caretPositionFromPoint
     }
   })
 
@@ -146,6 +214,21 @@ describe('plugin-owned DSH presentation overrides', () => {
     listener()
     expect(button.textContent).toContain('同步完成')
     dispose()
+  })
+
+  it('uses completed provider phases while listing instead of an indeterminate animation', () => {
+    const status: SyncStatus = {
+      jobId: 'job', status: 'running', providers: ['chatgpt', 'claude'], completed: 0, total: 0,
+      providerProgress: [
+        { provider: 'chatgpt', phase: 'syncing', completed: 2, total: 4 },
+        { provider: 'claude', phase: 'listing', completed: 0, total: 0 },
+      ],
+    }
+    expect(syncProgressFraction(status)).toBeCloseTo(0.3125)
+    adoptStyles()
+    const text = document.getElementById('dsh-reference-anything-style')?.textContent ?? ''
+    expect(text).not.toContain('dsh-ref-menu-listing')
+    expect(text).not.toContain('dsh-ref-listing')
   })
 
   it('refreshes an open @ query after sync without changing the draft or caret', () => {
@@ -239,22 +322,30 @@ describe('plugin-owned DSH presentation overrides', () => {
     dispose()
   })
 
-  it('skips collapsed rows during keyboard traversal', async () => {
+  it('only visits visible rows during keyboard traversal until expansion', () => {
     document.body.innerHTML = '<textarea></textarea><div role="listbox" aria-activedescendant="row-0"><div role="presentation" data-source="External conversations">External conversations</div><button id="row-0" role="option">0</button><button id="row-1" role="option">1</button><button id="row-2" role="option">2</button><div role="presentation" data-source="Other">Other</div><button id="row-3" role="option">3</button></div>'
     const editor = document.querySelector('textarea')!
     const listbox = document.querySelector('[role="listbox"]')!
     const dispose = adoptMenuExpansionProjection({ sources: ['External conversations'], label: '展开', getVisibleLimit: () => 1 })
     let index = 0
     editor.addEventListener('keydown', event => {
-      if (event.key === 'ArrowDown') index = Math.min(3, index + 1)
+      if (event.key === 'ArrowDown') index = (index + 1) % 4
+      if (event.key === 'ArrowUp') index = (index + 3) % 4
       listbox.setAttribute('aria-activedescendant', `row-${index}`)
     })
 
-    editor.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }))
-    await new Promise<void>(resolve => { requestAnimationFrame(() => { requestAnimationFrame(() => { resolve() }) }) })
+    editor.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true, cancelable: true }))
     expect(listbox.getAttribute('aria-activedescendant')).toBe('row-3')
     expect(document.getElementById('row-1')?.classList.contains('dsh_ref_menu_collapsed')).toBe(true)
     expect(document.getElementById('row-2')?.classList.contains('dsh_ref_menu_collapsed')).toBe(true)
+
+    editor.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true, cancelable: true }))
+    expect(listbox.getAttribute('aria-activedescendant')).toBe('row-0')
+
+    document.querySelector<HTMLButtonElement>('[data-dsh-ref-menu-expand]')
+      ?.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }))
+    editor.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true, cancelable: true }))
+    expect(listbox.getAttribute('aria-activedescendant')).toBe('row-1')
     dispose()
   })
 

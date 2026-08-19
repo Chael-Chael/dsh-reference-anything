@@ -2,7 +2,7 @@ import type { InjectFace, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import type { ObservableSnapshot } from '@deepseek-ai/dsh-client-runtime/client'
 import { useEffect, useRef, useState, type CSSProperties } from 'react'
 import { defaultPickerSettings, type ChatProvider, type PickerSettings, type PickerSource, type SettingsRecord } from '../wire.ts'
-import type { BrowsePage, BrowserProfile, Health, ProviderStats, StorageStats, SyncStatus } from './remote.ts'
+import { syncProgressFraction, type BrowsePage, type BrowserProfile, type Health, type ProviderStats, type StorageStats, type SyncStatus } from './remote.ts'
 import { ProviderLogo } from './provider-icons.tsx'
 import { type REFERENCE_ANYTHING_NS } from './locale.ts'
 import type { TranslateNS } from '@deepseek-ai/dsh-client-locale/client'
@@ -154,9 +154,9 @@ export function ConversationSettings({ useScope, save, sync, cancel, refresh, se
 /** Progress of the job this tab started, including its terminal outcome. */
 export function SyncProgress({ sync, t }: { sync: SyncStatus; t: T }) {
   const listing = sync.providerProgress.filter(row => row.phase === 'listing').length
-  const pct = sync.total > 0 ? Math.min(100, Math.round((sync.completed / sync.total) * 100)) : sync.status === 'running' ? 0 : 100
+  const pct = sync.status === 'running' ? Math.round(syncProgressFraction(sync) * 100) : 100
   return <div className="dsh_ref_progress_wrap">
-    <div className={`dsh_ref_progress_track${listing > 0 ? ' is_listing' : ''}`} role="progressbar" aria-valuemin={0} aria-valuemax={Math.max(sync.total, 1)} aria-valuenow={sync.completed} aria-valuetext={listing > 0 ? tProgressListing(listing, sync.completed, sync.total, t) : `${sync.completed}/${sync.total}`}>
+    <div className={`dsh_ref_progress_track${listing > 0 ? ' is_listing' : ''}`} role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={pct} aria-valuetext={listing > 0 ? tProgressListing(listing, sync.completed, sync.total, t) : `${pct}% · ${sync.completed}/${sync.total}`}>
       <div className={`dsh_ref_progress_fill is_${sync.status}`} style={{ width: `${pct}%` }} />
     </div>
     <p className="dsh_ref_progress_label">{t(syncStatusKey(sync.status))} · {sync.completed}/{sync.total}{listing > 0 ? ` · ${t('sync.progressSourcesListing', { count: listing })}` : ''}</p>

@@ -34,6 +34,35 @@ export interface SyncStatus {
   error?: string
 }
 
+/**
+ * A deterministic progress fraction for both sync surfaces.
+ *
+ * Listing is one atomic OpenCLI operation, so its conversation total is not
+ * known until the provider returns. While any provider is still listing, give
+ * each listed provider a fixed first-quarter phase, then use its real
+ * completed/total conversation count for the remaining three quarters. Once
+ * all providers have listed, the existing aggregate conversation counter is
+ * exact and avoids changing the meaning of the established UI percentage.
+ */
+export function syncProgressFraction(sync: Pick<SyncStatus, 'status' | 'completed' | 'total' | 'providerProgress'>): number {
+  if (sync.status !== 'running') return sync.status === 'complete' ? 1 : 0
+  if (!sync.providerProgress.some(row => row.phase === 'listing')) {
+    return sync.total > 0 ? clamp(sync.completed / sync.total) : 0
+  }
+  if (sync.providerProgress.length === 0) return 0
+  const fraction = sync.providerProgress.reduce((sum, row) => {
+    if (row.phase === 'listing') return sum
+    if (row.phase === 'complete' && row.total === 0) return sum + 1
+    const detail = row.total > 0 ? clamp(row.completed / row.total) : 0
+    return sum + 0.25 + detail * 0.75
+  }, 0) / sync.providerProgress.length
+  return clamp(fraction)
+}
+
+function clamp(value: number): number {
+  return Math.min(1, Math.max(0, value))
+}
+
 export interface ManagedConversation extends ConversationRow { remoteMissing: boolean }
 export interface BrowsePage { items: readonly ManagedConversation[]; total: number }
 export interface StorageStats { bytes: number; conversations: number }

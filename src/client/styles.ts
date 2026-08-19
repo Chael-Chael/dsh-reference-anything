@@ -1,5 +1,5 @@
 import type { ChatProvider } from '../wire.ts'
-import type { SyncStatus } from './remote.ts'
+import { syncProgressFraction, type SyncStatus } from './remote.ts'
 import { PICKER_ICON_PATH, PROVIDER_ICON_MARKER, PROVIDER_ICON_PATH, SESSION_ICON_MARKER, SKILL_ICON_MARKER } from './provider-icons.tsx'
 import type { TranslateNS } from '@deepseek-ai/dsh-client-locale/client'
 import type { REFERENCE_ANYTHING_NS } from './locale.ts'
@@ -10,7 +10,7 @@ const css = `
 [data-composer-card] [role="listbox"]:has([role="presentation"][data-source]){box-sizing:border-box!important;width:100%!important;min-width:0!important;max-width:100%!important;border-radius:22px!important}
 [data-composer-card] [role="listbox"] [role="presentation"][data-source]:not(:first-child){margin-top:4px;padding-top:12px;border-top:1px solid var(--dsw-alias-border-inverted)}
 [data-composer-card] [role="listbox"] [role="presentation"][data-source="External conversations"]{display:flex;align-items:center;justify-content:flex-start;gap:8px}
-.dsh_ref_menu_sync{position:relative;display:inline-grid;place-items:center;flex:none;min-width:96px;height:26px;padding:0 11px;overflow:hidden;border:1px solid rgba(59,130,246,.28);border-radius:999px;background:rgba(59,130,246,.11);color:var(--dsw-alias-state-business-primary,#3b82f6);font:650 11px/1 Geist,"Segoe UI",sans-serif;cursor:pointer;isolation:isolate;transition:background .16s ease,border-color .16s ease,transform .16s ease}.dsh_ref_menu_sync:hover:not(:disabled){border-color:rgba(59,130,246,.42);background:rgba(59,130,246,.16)}.dsh_ref_menu_sync:active:not(:disabled){transform:translateY(1px)}.dsh_ref_menu_sync:disabled{cursor:default;opacity:.86}.dsh_ref_menu_sync>span{position:relative;z-index:1;white-space:nowrap}.dsh_ref_menu_sync>i{position:absolute;inset:0;z-index:0;background:rgba(59,130,246,.14);transform:scaleX(var(--dsh-ref-sync-progress,0));transform-origin:left;transition:transform .2s ease}.dsh_ref_menu_sync.is_listing>i{width:35%;animation:dsh-ref-menu-listing 1.1s ease-in-out infinite;transform:translateX(-110%)}@keyframes dsh-ref-menu-listing{50%{transform:translateX(285%)}100%{transform:translateX(-110%)}}
+.dsh_ref_menu_sync{position:relative;display:inline-grid;place-items:center;flex:none;min-width:96px;height:26px;padding:0 11px;overflow:hidden;border:1px solid rgba(59,130,246,.28);border-radius:999px;background:rgba(59,130,246,.11);color:var(--dsw-alias-state-business-primary,#3b82f6);font:650 11px/1 Geist,"Segoe UI",sans-serif;cursor:pointer;isolation:isolate;transition:background .16s ease,border-color .16s ease,transform .16s ease}.dsh_ref_menu_sync:hover:not(:disabled){border-color:rgba(59,130,246,.42);background:rgba(59,130,246,.16)}.dsh_ref_menu_sync:active:not(:disabled){transform:translateY(1px)}.dsh_ref_menu_sync:disabled{cursor:default;opacity:.86}.dsh_ref_menu_sync>span{position:relative;z-index:1;white-space:nowrap}.dsh_ref_menu_sync>i{position:absolute;inset:0;z-index:0;background:rgba(59,130,246,.14);transform:scaleX(var(--dsh-ref-sync-progress,0));transform-origin:left;transition:transform .2s ease}
 .dsh_ref_menu_expand{display:block;width:auto;min-height:30px;padding:4px 12px;border:0!important;border-radius:0!important;background:none!important;box-shadow:none!important;color:var(--dsw-alias-label-tertiary,#8b8f98);font:600 14px/22px Geist,"Segoe UI",sans-serif;cursor:pointer;text-align:left}.dsh_ref_menu_expand:hover{background:none!important;color:var(--dsw-alias-label-tertiary,#8b8f98);text-decoration:underline}
 .dsh_ref_menu_collapsed{display:none!important}
 /* Codex-like inline references. The adaptive projection below mirrors their
@@ -18,11 +18,13 @@ const css = `
 [data-composer-card] [data-decoration="chip"]{display:inline-flex!important;align-items:center!important;width:max-content!important;min-width:4em;border-radius:0!important;background:transparent!important;overflow:visible!important;vertical-align:baseline}
 [data-composer-card] [data-decoration="chip"]:before{display:none!important}
 [data-composer-card] [data-decoration="chip"]>span{position:static!important;width:max-content!important;max-width:none!important;justify-content:flex-start!important;overflow:visible!important;color:var(--dsw-alias-state-business-primary)!important;font-family:inherit!important;font-size:inherit!important;line-height:inherit!important;font-weight:600;transform:none!important;z-index:2}
-.dsh_ref_projected_icon{display:inline-flex!important;align-items:center;gap:.35em}.dsh_ref_projected_icon:before{content:"";display:inline-block;flex:none;width:1em;height:1em;background:currentColor;mask:var(--dsh-ref-provider-icon) center/contain no-repeat;-webkit-mask:var(--dsh-ref-provider-icon) center/contain no-repeat}[data-composer-card] .dsh_ref_conversation_chip,[data-composer-card] .dsh_ref_conversation_chip>span,[data-composer-card] .dsh_ref_projected_icon{color:var(--dsw-alias-state-business-primary,#3b82f6)!important}[data-composer-card] [role="listbox"] .dsh_ref_projected_icon:before{background:var(--dsw-alias-label-tertiary,#8b8f98)}
-.dsh_ref_session_icon,.dsh_ref_skill_icon{display:inline-flex!important;align-items:center;gap:.45em}.dsh_ref_session_icon:before,.dsh_ref_skill_icon:before{content:"";display:inline-block;flex:none;width:1.05em;height:1.05em;background:var(--dsw-alias-label-secondary,#5f636b);mask:var(--dsh-ref-picker-icon) center/contain no-repeat;-webkit-mask:var(--dsh-ref-picker-icon) center/contain no-repeat}[data-composer-card] [data-decoration="chip"]>.dsh_ref_session_icon:before{background:var(--dsw-alias-state-business-primary,#3b82f6)!important}
+.dsh_ref_projected_icon{display:inline!important}.dsh_ref_projected_icon:before{content:"";display:inline-block;width:1em;height:1em;margin-right:.35em;vertical-align:-.125em;background:currentColor;mask:var(--dsh-ref-provider-icon) center/contain no-repeat;-webkit-mask:var(--dsh-ref-provider-icon) center/contain no-repeat}[data-composer-card] .dsh_ref_conversation_chip,[data-composer-card] .dsh_ref_conversation_chip>span,[data-composer-card] .dsh_ref_projected_icon{color:var(--dsw-alias-state-business-primary,#3b82f6)!important}[data-composer-card] [role="listbox"] .dsh_ref_projected_icon:before{background:var(--dsw-alias-label-tertiary,#8b8f98)}
+.dsh_ref_session_icon,.dsh_ref_skill_icon{display:inline!important}.dsh_ref_session_icon:before,.dsh_ref_skill_icon:before{content:"";display:inline-block;width:1.05em;height:1.05em;margin-right:.45em;vertical-align:-.125em;background:var(--dsw-alias-label-secondary,#5f636b);mask:var(--dsh-ref-picker-icon) center/contain no-repeat;-webkit-mask:var(--dsh-ref-picker-icon) center/contain no-repeat}[data-composer-card] [data-decoration="chip"]>.dsh_ref_session_icon:before{background:var(--dsw-alias-state-business-primary,#3b82f6)!important}
 [data-composer-card] [data-decoration="text-ref"]{border-radius:0!important;background:transparent!important;color:var(--dsw-alias-state-business-primary)!important;font-family:inherit!important;font-size:inherit!important;line-height:inherit!important;font-weight:inherit!important;letter-spacing:inherit!important;box-shadow:none!important}
 [data-composer-card] [data-decoration="text-ref"]:before,[data-composer-card] [data-decoration="text-ref"]:after{display:none!important}
+[data-composer-card] [data-dsh-ref-height-ruler]{position:relative!important;inset:auto!important;display:block!important;width:100%!important;height:auto!important;min-height:var(--dsh-ref-native-min-height,0px)!important;overflow:visible!important;visibility:hidden!important;pointer-events:none!important}
 .dsh_ref_native_caret_hidden{caret-color:transparent!important}.dsh_ref_adaptive_caret{position:fixed;z-index:9999;box-sizing:border-box;width:1px;margin:0;padding:0;border:0;border-radius:0;pointer-events:none;background:var(--dsw-alias-state-business-primary);opacity:1;animation:dsh_ref_caret_blink 1.06s step-end infinite;transform:translateZ(0)}.dsh_ref_adaptive_caret[hidden]{display:none!important}@keyframes dsh_ref_caret_blink{0%,49.99%{opacity:1}50%,100%{opacity:0}}
+.dsh_ref_native_selection_hidden::selection{background:transparent!important;color:transparent!important}::highlight(dsh-ref-selection){background:rgba(86,132,245,.28);color:var(--dsw-alias-label-primary)}
 .dsh_ref_message_reference{display:inline-flex;align-items:center;gap:6px;max-width:100%;color:#82b1e4;font-weight:600;white-space:nowrap;vertical-align:baseline}.dsh_ref_message_reference:before{content:"";display:inline-block;flex:none;width:20px;height:20px;background:currentColor;mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round' d='M20 11.5a8 8 0 0 1-8.5 8A8.9 8.9 0 0 1 7.7 18.6L3.5 20l1.4-3.7A8 8 0 1 1 20 11.5Z'/%3E%3C/svg%3E") center/contain no-repeat}
 .dsh_ref_settings{display:flex;flex-direction:column;gap:18px;width:min(100%,1060px);padding:0 0 36px;color:var(--dsw-alias-label-primary);font-family:Geist,"Segoe UI",sans-serif}.dsh_ref_settings *{box-sizing:border-box}.dsh_ref_header{display:flex;align-items:flex-start;justify-content:space-between;gap:24px;padding:0 0 10px}.dsh_ref_header h2{margin:0 0 7px;font-size:28px;line-height:1.1;letter-spacing:-.035em}.dsh_ref_header p{margin:0;max-width:620px;color:var(--dsw-alias-label-primary);font-size:13px;line-height:1.5}.dsh_ref_settings button{min-height:34px;padding:0 13px;border:1px solid var(--dsw-alias-label-primary);border-radius:5px;background:transparent;color:var(--dsw-alias-label-primary);font:inherit;font-size:12px;font-weight:650;cursor:pointer}.dsh_ref_settings button:hover:not(:disabled){background:var(--dsw-alias-label-primary);color:var(--dsw-alias-bg-layer-1)}.dsh_ref_settings button:active:not(:disabled){transform:translateY(1px)}.dsh_ref_settings button:disabled{cursor:not-allowed;opacity:.42}
 .dsh_ref_workspace{display:flex;flex-direction:column;border:1px solid var(--dsw-alias-label-primary);border-radius:0;background:transparent;overflow:hidden}.dsh_ref_workspace>.dsh_ref_panel,.dsh_ref_workspace>.dsh_ref_sources{margin:0;padding:24px;border:0;border-bottom:1px solid var(--dsw-alias-label-primary);border-radius:0;background:transparent}.dsh_ref_workspace>.dsh_ref_panel:last-child{border-bottom:0}.dsh_ref_workspace>.dsh_ref_error{margin:20px 24px 0}.dsh_ref_section_head{display:flex;align-items:flex-start;justify-content:space-between;gap:18px}.dsh_ref_section_head h3{margin:0 0 4px;font-size:17px;letter-spacing:-.02em}.dsh_ref_section_head p{margin:0;color:var(--dsw-alias-label-primary);font-size:12px;line-height:1.45}.dsh_ref_health,.dsh_ref_syncing{display:inline-flex;align-items:center;min-height:25px;padding:0 9px;border:1px solid var(--dsw-alias-label-primary);border-radius:4px;background:transparent;color:var(--dsw-alias-label-primary);font-size:10px;font-weight:700}
@@ -30,7 +32,7 @@ const css = `
 .dsh_ref_sources{display:grid;gap:17px}.dsh_ref_provider_grid{display:grid;grid-template-columns:1fr;gap:0;border:1px solid var(--dsw-alias-label-primary)}.dsh_ref_provider{display:grid;grid-template-columns:34px minmax(96px,1fr) minmax(110px,.8fr) minmax(150px,1.3fr) auto;align-items:center;min-width:0;padding:12px 14px;border:0;border-bottom:1px solid var(--dsw-alias-label-primary);border-radius:0;background:transparent}.dsh_ref_provider:last-child{border-bottom:0}.dsh_ref_provider_top{display:contents}.dsh_ref_provider_mark{display:grid;grid-column:1;place-items:center;width:30px;height:30px;border:1px solid var(--dsw-alias-label-primary);color:var(--dsw-alias-label-primary)}.dsh_ref_provider_top>span:not(.dsh_ref_provider_mark):not(.dsh_ref_status_dot){display:none}.dsh_ref_status_dot{display:none}.dsh_ref_provider h4{grid-column:2;margin:0;font-size:13px}.dsh_ref_provider>strong{display:inline-flex;grid-column:3;align-items:baseline;justify-self:start;gap:3px;font-family:"Geist Mono",Consolas,monospace;font-size:18px;white-space:nowrap}.dsh_ref_provider>strong span{font-family:Geist,"Segoe UI",sans-serif;font-size:11px;font-weight:600}.dsh_ref_provider>small{grid-column:4;margin:0;color:var(--dsw-alias-label-primary);font-size:10px;opacity:.7}.dsh_ref_provider>em{display:none}.dsh_ref_provider_foot{display:contents}.dsh_ref_provider_foot>span{display:none}.dsh_ref_provider_actions{grid-column:5;display:flex;gap:6px}.dsh_ref_provider_foot button{min-height:29px;padding:0 10px;font-size:10px}.dsh_ref_empty{padding:20px;border:1px dashed var(--dsw-alias-label-primary);color:var(--dsw-alias-label-primary);font-size:11px;text-align:center}
 .dsh_ref_general_settings{display:grid;gap:16px}.dsh_ref_picker_list{border:1px solid var(--dsw-alias-label-primary)}.dsh_ref_picker_row{display:grid;grid-template-columns:minmax(170px,1fr) auto auto;align-items:center;gap:14px;padding:10px 12px;border-bottom:1px solid var(--dsw-alias-label-primary)}.dsh_ref_picker_row:last-child{border-bottom:0}.dsh_ref_picker_row>label:first-child{display:flex;align-items:center;gap:9px;font-size:12px;font-weight:650}.dsh_ref_picker_row>.dsh_ref_picker_toggle b{font-size:12px}.dsh_ref_picker_row input{width:16px;height:16px;margin:0;accent-color:var(--dsw-alias-label-primary)}.dsh_ref_picker_limit{display:flex;align-items:center;gap:7px;color:var(--dsw-alias-label-primary);font-size:10px}.dsh_ref_picker_limit input{height:30px;width:58px;padding:0 6px;border:1px solid var(--dsw-alias-label-primary);border-radius:0;background:transparent;color:var(--dsw-alias-label-primary);font:11px Geist,"Segoe UI",sans-serif}.dsh_ref_picker_order{display:flex;gap:5px}.dsh_ref_picker_order button{min-width:30px;min-height:30px;padding:0;font-size:15px;line-height:1}
 .dsh_ref_sync_settings{display:grid;gap:20px}.dsh_ref_form_grid{display:grid;grid-template-columns:1fr 1fr;gap:15px}.dsh_ref_form_grid label{display:grid;gap:6px}.dsh_ref_form_grid label>span{font-size:11px;font-weight:650}.dsh_ref_form_grid input,.dsh_ref_form_grid select{width:100%;height:36px;padding:0 10px;border:1px solid var(--dsw-alias-label-primary);border-radius:0;outline:0;background:transparent;color:var(--dsw-alias-label-primary);font:12px Geist,"Segoe UI",sans-serif}.dsh_ref_form_grid input:focus,.dsh_ref_form_grid select:focus{outline:2px solid var(--dsw-alias-label-primary);outline-offset:2px}.dsh_ref_form_grid input[aria-invalid=true]{border-style:dashed}.dsh_ref_form_grid select:disabled{opacity:.42}.dsh_ref_toggle{display:flex!important;flex-direction:row!important;align-items:center;gap:8px;cursor:pointer}.dsh_ref_toggle input{position:absolute;opacity:0}.dsh_ref_toggle>span{position:relative;width:32px;height:18px;border:1px solid var(--dsw-alias-label-primary);border-radius:9px;background:transparent}.dsh_ref_toggle>span:after{content:"";position:absolute;top:3px;left:3px;width:10px;height:10px;border-radius:50%;background:var(--dsw-alias-label-primary);transition:transform .18s}.dsh_ref_toggle input:checked+span:after{transform:translateX(14px)}.dsh_ref_toggle b{font-size:11px}.dsh_ref_actions{display:flex;flex-wrap:wrap;gap:8px}.dsh_ref_actions .is_primary{background:var(--dsw-alias-label-primary);color:var(--dsw-alias-bg-layer-1)}.dsh_ref_actions .is_danger{border-style:dashed}.dsh_ref_inline_error,.dsh_ref_auto_note{margin:0;color:var(--dsw-alias-label-primary);font-size:11px}.dsh_ref_auto_note{opacity:.7}.dsh_ref_notice{padding:10px 0;border-bottom:1px solid var(--dsw-alias-label-primary);font-size:11px}
-.dsh_ref_progress_wrap{display:grid;gap:6px;margin-top:4px}.dsh_ref_progress_track{height:6px;border:1px solid var(--dsw-alias-label-primary);background:transparent;overflow:hidden}.dsh_ref_progress_fill{height:100%;background:var(--dsw-alias-label-primary);transition:width .2s ease}.dsh_ref_progress_track.is_listing .dsh_ref_progress_fill{min-width:8%;animation:dsh-ref-listing 1.2s ease-in-out infinite}.dsh_ref_progress_fill.is_failed,.dsh_ref_progress_fill.is_cancelled{opacity:.4}.dsh_ref_progress_fill.is_partial{opacity:.7}.dsh_ref_progress_label{margin:0;color:var(--dsw-alias-label-primary);font-size:10px;text-transform:lowercase;opacity:.7}.dsh_ref_progress_sources{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:4px 12px}.dsh_ref_progress_sources span{display:flex;justify-content:space-between;gap:8px;font-size:10px}.dsh_ref_progress_sources i{font-style:normal;opacity:.65}@keyframes dsh-ref-listing{0%,100%{transform:translateX(-20%);opacity:.45}50%{transform:translateX(20%);opacity:1}}
+ .dsh_ref_progress_wrap{display:grid;gap:6px;margin-top:4px}.dsh_ref_progress_track{height:6px;border:1px solid var(--dsw-alias-label-primary);background:transparent;overflow:hidden}.dsh_ref_progress_fill{height:100%;background:var(--dsw-alias-label-primary);transition:width .2s ease}.dsh_ref_progress_fill.is_failed,.dsh_ref_progress_fill.is_cancelled{opacity:.4}.dsh_ref_progress_fill.is_partial{opacity:.7}.dsh_ref_progress_label{margin:0;color:var(--dsw-alias-label-primary);font-size:10px;text-transform:lowercase;opacity:.7}.dsh_ref_progress_sources{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:4px 12px}.dsh_ref_progress_sources span{display:flex;justify-content:space-between;gap:8px;font-size:10px}.dsh_ref_progress_sources i{font-style:normal;opacity:.65}
 .dsh_ref_manage{display:grid;gap:15px}.dsh_ref_manage_filters{display:grid;grid-template-columns:1fr 180px;gap:12px}.dsh_ref_manage_filters input,.dsh_ref_manage_filters select{width:100%;height:36px;padding:0 10px;border:1px solid var(--dsw-alias-label-primary);border-radius:0;outline:0;background:transparent;color:var(--dsw-alias-label-primary);font:12px Geist,"Segoe UI",sans-serif}.dsh_ref_manage_filters input:focus,.dsh_ref_manage_filters select:focus{outline:2px solid var(--dsw-alias-label-primary);outline-offset:2px}.dsh_ref_manage_empty{margin:0;padding:20px;border:1px dashed var(--dsw-alias-label-primary);color:var(--dsw-alias-label-primary);font-size:11px;text-align:center}
 .dsh_ref_manage_list{list-style:none;display:grid;gap:0;margin:0;padding:0;max-height:340px;overflow-y:auto;border:1px solid var(--dsw-alias-label-primary)}.dsh_ref_manage_row{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:11px 13px;border-bottom:1px solid var(--dsw-alias-label-primary)}.dsh_ref_manage_row:last-child{border-bottom:0}.dsh_ref_manage_main{display:grid;gap:3px;min-width:0}.dsh_ref_manage_title_row{display:flex;align-items:center;flex-wrap:wrap;gap:7px;min-width:0}.dsh_ref_manage_title{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:420px;font-size:13px}.dsh_ref_manage_meta{color:var(--dsw-alias-label-primary);font-size:10px;opacity:.7}.dsh_ref_manage_row button{min-height:29px;padding:0 10px;font-size:10px;flex:none}.dsh_ref_manage_row .is_danger{border-style:dashed}
 .dsh_ref_badge{padding:1px 7px;border:1px solid var(--dsw-alias-label-primary);color:var(--dsw-alias-label-primary);font-size:10px;white-space:nowrap}.dsh_ref_badge.is_warn{border-style:dashed}
@@ -239,30 +241,37 @@ export function adoptMenuExpansionProjection(options: MenuExpansionOptions): () 
   const observer = new MutationObserver(() => { project(document) })
   observer.observe(document.body, { childList: true, subtree: true })
   let keyboardSkip = false
-  const skipCollapsed = (editor: HTMLElement, key: 'ArrowDown' | 'ArrowUp', remaining = 100): void => {
-    if (remaining <= 0) { keyboardSkip = false; return }
-    const listbox = document.querySelector('[role="listbox"]')
-    const activeId = listbox?.getAttribute('aria-activedescendant')
-    const active = activeId ? document.getElementById(activeId) : null
-    if (!(active instanceof HTMLElement) || !active.classList.contains('dsh_ref_menu_collapsed')) {
-      keyboardSkip = false
-      return
-    }
-    editor.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true }))
-    requestAnimationFrame(() => { skipCollapsed(editor, key, remaining - 1) })
-  }
   const onKeyDown = (event: KeyboardEvent): void => {
     if (keyboardSkip || (event.key !== 'ArrowDown' && event.key !== 'ArrowUp')) return
-    if (!(event.target instanceof HTMLElement) || document.querySelector('[role="listbox"]') === null) return
-    const key = event.key
-    const editor = event.target
+    if (!(event.target instanceof HTMLElement)) return
+    const listbox = document.querySelector('[role="listbox"]')
+    const activeId = listbox?.getAttribute('aria-activedescendant')
+    const options = Array.from(listbox?.querySelectorAll('[role="option"]') ?? []) as HTMLElement[]
+    const at = activeId ? options.findIndex(option => option.id === activeId) : -1
+    if (at < 0 || options.length === 0) return
+    const direction = event.key === 'ArrowDown' ? 1 : -1
+    let steps = 1
+    while (steps < options.length && options[(at + direction * steps + options.length) % options.length]
+      ?.classList.contains('dsh_ref_menu_collapsed')) steps++
+    // Replace the host's single move with one synchronous move per underlying
+    // row needed to reach the next visible option. React then commits only the
+    // final highlight, so collapsed rows never become a keyboard destination.
+    if (steps === 1) return
+    event.preventDefault()
+    event.stopImmediatePropagation()
     keyboardSkip = true
-    requestAnimationFrame(() => { skipCollapsed(editor, key, 100) })
+    try {
+      for (let index = 0; index < steps; index++) {
+        event.target.dispatchEvent(new KeyboardEvent('keydown', { key: event.key, bubbles: true, cancelable: true }))
+      }
+    } finally {
+      keyboardSkip = false
+    }
   }
-  document.addEventListener('keydown', onKeyDown)
+  document.addEventListener('keydown', onKeyDown, true)
   return () => {
     observer.disconnect()
-    document.removeEventListener('keydown', onKeyDown)
+    document.removeEventListener('keydown', onKeyDown, true)
     for (const button of Array.from(document.querySelectorAll('[data-dsh-ref-menu-expand]'))) button.remove()
   }
 }
@@ -289,7 +298,7 @@ export function adoptConversationSyncActionProjection(options: ConversationSyncA
             : status?.status === 'failed' ? options.failedLabel
               : status?.status === 'cancelled' ? options.cancelledLabel
                 : options.idleLabel
-    const progress = running && status.total > 0 ? Math.min(1, status.completed / status.total) : 0
+    const progress = running ? syncProgressFraction(status) : 0
     button.style.setProperty('--dsh-ref-sync-progress', String(progress))
   }
   const project = (root: ParentNode): void => {
@@ -390,39 +399,55 @@ export function adoptConversationMentionProjection(): () => void {
  *
  * DSH's native mirror sees every structured reference as one fixed-width
  * U+FFFC. Our visual chip can be wider and therefore wrap onto more lines.
- * Measure an off-screen copy of the real backdrop and raise (never replace)
- * the native mirror's minimum height to the visual content height.
+ * A hidden copy of the visual backdrop participates in the host's existing
+ * grow container. The native mirror stays mounted for host bookkeeping, but
+ * becomes an overlay while chips exist so its fixed-width placeholders do not
+ * add a second, conflicting height.
  */
 export function adoptAdaptiveComposerHeight(): () => void {
   let frame = 0
+  const nativeFloor = new WeakMap<HTMLElement, number>()
   const schedule = (): void => {
     cancelAnimationFrame(frame)
     frame = requestAnimationFrame(update)
   }
   const update = (): void => {
-    for (const backdrop of Array.from(document.querySelectorAll('[data-composer-card] [data-input-backdrop]'))) {
+    for (const backdrop of Array.from(document.querySelectorAll('[data-composer-card] [data-input-backdrop]:not([data-dsh-ref-height-ruler])'))) {
       if (!(backdrop instanceof HTMLElement)) continue
       const card = backdrop.closest('[data-composer-card]')
       const mirror = card?.querySelector('[data-input-mirror]')
       if (!(mirror instanceof HTMLElement)) continue
+      const oldRuler = card?.querySelector('[data-dsh-ref-height-ruler]')
       if (backdrop.querySelector('[data-decoration="chip"]') === null) {
-        mirror.style.removeProperty('min-height')
+        oldRuler?.remove()
+        mirror.style.removeProperty('position')
+        mirror.style.removeProperty('inset')
+        mirror.style.removeProperty('width')
+        const height = mirror.getBoundingClientRect().height
+        if (height > 0) nativeFloor.set(mirror, height)
         continue
       }
-      const width = backdrop.getBoundingClientRect().width || backdrop.clientWidth
-      if (!(width > 0)) continue
-      const probe = backdrop.cloneNode(true) as HTMLElement
-      probe.dataset.dshRefHeightProbe = ''
-      probe.style.cssText = `position:fixed;inset:auto;left:-100000px;top:0;width:${width}px;height:auto;min-height:0;overflow:visible;visibility:hidden;pointer-events:none;`
-      document.body.append(probe)
-      const height = probe.scrollHeight
-      probe.remove()
-      if (height > 0) mirror.style.minHeight = `${height}px`
+      const floor = nativeFloor.get(mirror) ?? mirror.getBoundingClientRect().height
+      const ruler = backdrop.cloneNode(true) as HTMLElement
+      ruler.dataset.dshRefHeightRuler = ''
+      ruler.setAttribute('aria-hidden', 'true')
+      // The host mirror renders `${draft}\n`. Its sentinel is essential for
+      // preserving the current line and an empty/trailing-newline line box.
+      ruler.append('\n')
+      if (floor > 0) ruler.style.setProperty('--dsh-ref-native-min-height', `${floor}px`)
+      oldRuler?.remove()
+      mirror.parentElement?.insertBefore(ruler, mirror)
+      mirror.style.position = 'absolute'
+      mirror.style.inset = '0'
+      mirror.style.width = '100%'
     }
   }
   const observer = new MutationObserver(records => {
-    const meaningful = records.some(record => record.type === 'characterData' || [...Array.from(record.addedNodes), ...Array.from(record.removedNodes)]
-      .some(node => !(node instanceof Element && node.hasAttribute('data-dsh-ref-height-probe'))))
+    const belongsToRuler = (node: Node): boolean => node instanceof Element
+      ? node.matches('[data-dsh-ref-height-ruler], [data-dsh-ref-height-ruler] *')
+      : node.parentElement?.closest('[data-dsh-ref-height-ruler]') !== null
+    const meaningful = records.some(record => !belongsToRuler(record.target)
+      && [...Array.from(record.addedNodes), ...Array.from(record.removedNodes)].every(node => !belongsToRuler(node)))
     if (meaningful) schedule()
   })
   observer.observe(document.body, { childList: true, subtree: true, characterData: true })
@@ -435,8 +460,149 @@ export function adoptAdaptiveComposerHeight(): () => void {
     observer.disconnect()
     document.removeEventListener('input', onLayout, true)
     window.removeEventListener('resize', onLayout)
-    document.querySelectorAll<HTMLElement>('[data-input-mirror]').forEach(mirror => { mirror.style.removeProperty('min-height') })
-    document.querySelectorAll('[data-dsh-ref-height-probe]').forEach(node => node.remove())
+    document.querySelectorAll<HTMLElement>('[data-input-mirror]').forEach(mirror => {
+      mirror.style.removeProperty('position')
+      mirror.style.removeProperty('inset')
+      mirror.style.removeProperty('width')
+    })
+    document.querySelectorAll('[data-dsh-ref-height-ruler]').forEach(node => node.remove())
+  }
+}
+
+type PointCaretDocument = Document & {
+  caretPositionFromPoint?: (x: number, y: number) => { offsetNode: Node, offset: number } | null
+  caretRangeFromPoint?: (x: number, y: number) => Range | null
+}
+
+function logicalOffsetFromPoint(input: HTMLTextAreaElement, backdrop: HTMLElement, clientX: number, clientY: number): number | undefined {
+  const previousVisibility = input.style.visibility
+  input.style.visibility = 'hidden'
+  const pointDocument = document as PointCaretDocument
+  const position = pointDocument.caretPositionFromPoint?.(clientX, clientY)
+  const range = position === undefined || position === null ? pointDocument.caretRangeFromPoint?.(clientX, clientY) : undefined
+  input.style.visibility = previousVisibility
+  const node = position?.offsetNode ?? range?.startContainer
+  const nodeOffset = position?.offset ?? range?.startOffset
+  if (node === undefined || nodeOffset === undefined) return undefined
+  const logical = logicalOffsetAtDomPoint(backdrop, node, nodeOffset, clientX)
+  return logical === undefined ? undefined : Math.min(logical, input.value.length)
+}
+
+/** Convert a point in the visual backdrop into the textarea's logical index. */
+export function logicalOffsetAtDomPoint(root: HTMLElement, node: Node, nodeOffset: number, clientX: number): number | undefined {
+  if (!root.contains(node) && node !== root) return undefined
+  const chip = (node instanceof Element ? node.closest('[data-decoration="chip"]') : node.parentElement?.closest('[data-decoration="chip"]')) ?? null
+  const logicalLength = (current: Node): number => current instanceof Element && current.matches('[data-decoration="chip"]')
+    ? 1
+    : current instanceof Text ? current.data.length : Array.from(current.childNodes).reduce((sum, child) => sum + logicalLength(child), 0)
+  const before = (target: Node): number => {
+    let total = 0
+    let current: Node | null = target
+    while (current !== null && current !== root) {
+      for (let sibling = current.previousSibling; sibling !== null; sibling = sibling.previousSibling) total += logicalLength(sibling)
+      current = current.parentNode
+    }
+    return total
+  }
+  if (chip !== null && root.contains(chip)) {
+    const rect = chip.getBoundingClientRect()
+    return before(chip) + (clientX >= rect.left + rect.width / 2 ? 1 : 0)
+  }
+  if (node instanceof Text) return before(node) + Math.min(Math.max(nodeOffset, 0), node.data.length)
+  const children = Array.from(node.childNodes)
+  return before(node) + children.slice(0, Math.min(Math.max(nodeOffset, 0), children.length)).reduce((sum, child) => sum + logicalLength(child), 0)
+}
+
+/** Remap simple pointer clicks through the full-width visual chip geometry. */
+export function adoptAdaptiveChipHitTesting(): () => void {
+  let press: { input: HTMLTextAreaElement, backdrop: HTMLElement, anchor: number } | undefined
+  const apply = (input: HTMLTextAreaElement, anchor: number, target: number): void => {
+    input.focus({ preventScroll: true })
+    input.setSelectionRange(Math.min(anchor, target), Math.max(anchor, target), target < anchor ? 'backward' : 'forward')
+    input.dispatchEvent(new Event('select', { bubbles: true }))
+  }
+  const onPointerDown = (event: PointerEvent): void => {
+    const input = event.target
+    if (event.button !== 0 || !(input instanceof HTMLTextAreaElement)) return
+    const backdrop = input.closest('[data-composer-card]')?.querySelector('[data-input-backdrop]:not([data-dsh-ref-height-ruler])')
+    if (!(backdrop instanceof HTMLElement) || backdrop.querySelector('[data-decoration="chip"]') === null) return
+    const target = logicalOffsetFromPoint(input, backdrop, event.clientX, event.clientY)
+    if (target === undefined) return
+    const anchor = event.shiftKey
+      ? (input.selectionDirection === 'backward' ? input.selectionEnd : input.selectionStart)
+      : target
+    press = { input, backdrop, anchor }
+    apply(input, anchor, target)
+    event.preventDefault()
+  }
+  const onPointerMove = (event: PointerEvent): void => {
+    const current = press
+    if (current === undefined) return
+    const target = logicalOffsetFromPoint(current.input, current.backdrop, event.clientX, event.clientY)
+    if (target === undefined) return
+    apply(current.input, current.anchor, target)
+    event.preventDefault()
+  }
+  const onPointerUp = (event: PointerEvent): void => {
+    const current = press
+    press = undefined
+    if (current === undefined) return
+    const target = logicalOffsetFromPoint(current.input, current.backdrop, event.clientX, event.clientY)
+    if (target !== undefined) apply(current.input, current.anchor, target)
+    event.preventDefault()
+  }
+  const onPointerCancel = (): void => { press = undefined }
+  document.addEventListener('pointerdown', onPointerDown, true)
+  document.addEventListener('pointermove', onPointerMove, true)
+  document.addEventListener('pointerup', onPointerUp, true)
+  document.addEventListener('pointercancel', onPointerCancel, true)
+  return () => {
+    press = undefined
+    document.removeEventListener('pointerdown', onPointerDown, true)
+    document.removeEventListener('pointermove', onPointerMove, true)
+    document.removeEventListener('pointerup', onPointerUp, true)
+    document.removeEventListener('pointercancel', onPointerCancel, true)
+  }
+}
+
+type HighlightRegistry = { set: (name: string, highlight: unknown) => void, delete: (name: string) => boolean }
+type HighlightWindow = Window & typeof globalThis & { Highlight?: new (...ranges: Range[]) => unknown }
+
+/** Paint textarea selections against the same full-width chip geometry. */
+export function adoptAdaptiveChipSelection(): () => void {
+  const registry = (globalThis.CSS as (typeof CSS & { highlights?: HighlightRegistry }) | undefined)?.highlights
+  const HighlightCtor = (window as HighlightWindow).Highlight
+  let frame = 0
+  const clear = (): void => {
+    registry?.delete('dsh-ref-selection')
+    document.querySelectorAll('.dsh_ref_native_selection_hidden').forEach(node => node.classList.remove('dsh_ref_native_selection_hidden'))
+  }
+  const update = (): void => {
+    clear()
+    if (registry === undefined || HighlightCtor === undefined) return
+    const input = document.activeElement
+    if (!(input instanceof HTMLTextAreaElement) || input.selectionStart === input.selectionEnd) return
+    const backdrop = input.closest('[data-composer-card]')?.querySelector('[data-input-backdrop]:not([data-dsh-ref-height-ruler])')
+    if (!(backdrop instanceof HTMLElement) || backdrop.querySelector('[data-decoration="chip"]') === null) return
+    const range = rangeBetweenLogicalOffsets(backdrop, input.selectionStart, input.selectionEnd)
+    if (range === undefined) return
+    registry.set('dsh-ref-selection', new HighlightCtor(range))
+    input.classList.add('dsh_ref_native_selection_hidden')
+  }
+  const schedule = (): void => {
+    cancelAnimationFrame(frame)
+    frame = requestAnimationFrame(update)
+  }
+  const observer = new MutationObserver(() => { schedule() })
+  observer.observe(document.body, { childList: true, subtree: true, characterData: true })
+  const events = ['selectionchange', 'select', 'input', 'focusin', 'focusout'] as const
+  for (const event of events) document.addEventListener(event, schedule, true)
+  schedule()
+  return () => {
+    cancelAnimationFrame(frame)
+    observer.disconnect()
+    for (const event of events) document.removeEventListener(event, schedule, true)
+    clear()
   }
 }
 
@@ -462,7 +628,7 @@ export function adoptAdaptiveChipCaret(): () => void {
     const input = document.activeElement
     if (!(input instanceof HTMLTextAreaElement) || input.selectionStart !== input.selectionEnd) return hide()
     const card = input.closest('[data-composer-card]')
-    const backdrop = card?.querySelector('[data-input-backdrop]')
+    const backdrop = card?.querySelector('[data-input-backdrop]:not([data-dsh-ref-height-ruler])')
     if (!(backdrop instanceof HTMLElement) || backdrop.querySelector('[data-decoration="chip"]') === null) return hide()
     const range = rangeAtLogicalOffset(backdrop, input.selectionEnd)
     if (range === undefined) return hide()
@@ -491,9 +657,23 @@ export function adoptAdaptiveChipCaret(): () => void {
     const ratio = window.devicePixelRatio || 1
     const snap = (value: number): number => Math.round(value * ratio) / ratio
     const caretHeight = snap(Math.min(resolvedLineHeight, resolvedFontSize))
-    const caretTop = rect.source === 'chip' && rect.height !== undefined
-      ? rect.top + Math.max(0, (rect.height - caretHeight) / 2)
-      : rect.top
+    // The neighbouring DOM rect is an ink/chip box, not the textarea line
+    // box. Normalise it back to the shared line grid so fractional font metrics
+    // cannot accumulate a vertical error over many wrapped lines.
+    const backdropStyle = getComputedStyle(backdrop)
+    const paddingTop = Number.parseFloat(backdropStyle.paddingTop)
+    const caretTop = visualCaretTop(backdrop.getBoundingClientRect().top, Number.isFinite(paddingTop) ? paddingTop : 0, rect.top, resolvedLineHeight, caretHeight)
+    const scrollport = input.closest('[data-input-scroll]')
+    if (scrollport instanceof HTMLElement) {
+      const viewport = scrollport.getBoundingClientRect()
+      const overflowAbove = viewport.top - caretTop
+      const overflowBelow = caretTop + caretHeight - viewport.bottom
+      if (overflowAbove > 1 || overflowBelow > 1) {
+        scrollport.scrollTop += overflowAbove > 1 ? -overflowAbove : overflowBelow
+        schedule()
+        return
+      }
+    }
     caret.style.left = `${snap(rect.left)}px`
     // A collapsed DOM Range already reports the caret's line-relative paint
     // origin. Centring it in line-height a second time shifts the stem down by
@@ -610,6 +790,13 @@ function usableCaretRect(rect: DOMRect): boolean {
   return rect.height > 0 || rect.top !== 0 || rect.left !== 0
 }
 
+/** Snap an ink/chip rectangle to the textarea's shared visual line grid. */
+export function visualCaretTop(backdropTop: number, paddingTop: number, anchorTop: number, lineHeight: number, caretHeight: number): number {
+  const contentTop = backdropTop + paddingTop
+  const lineIndex = Math.max(0, Math.round((anchorTop - contentTop) / lineHeight))
+  return contentTop + lineIndex * lineHeight + Math.max(0, (lineHeight - caretHeight) / 2)
+}
+
 /**
  * Fallback for Chromium returning an empty collapsed Range at inline
  * boundaries. This notably happens after the trailing space DSH inserts with
@@ -689,5 +876,16 @@ function rangeAtLogicalOffset(root: HTMLElement, target: number): Range | undefi
   if (visit(root)) return range
   range.selectNodeContents(root)
   range.collapse(false)
+  return range
+}
+
+/** Create one backdrop range while counting every visual chip as one index. */
+export function rangeBetweenLogicalOffsets(root: HTMLElement, start: number, end: number): Range | undefined {
+  const first = rangeAtLogicalOffset(root, start)
+  const last = rangeAtLogicalOffset(root, end)
+  if (first === undefined || last === undefined) return undefined
+  const range = document.createRange()
+  range.setStart(first.startContainer, first.startOffset)
+  range.setEnd(last.startContainer, last.startOffset)
   return range
 }

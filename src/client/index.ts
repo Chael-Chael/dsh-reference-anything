@@ -8,7 +8,7 @@ import { ALL_PROVIDERS, defaultPickerSettings, samePickerSettings, type ChatProv
 import { REFERENCE_ANYTHING_REMOTE, type ReferenceAnythingRemoteFace, type SearchResult, type SessionCandidate, type SyncStatus } from './remote.ts'
 import { COMMAND_SOURCE, CONVERSATION_SOURCE, FILE_SOURCE, SESSION_SOURCE, SKILL_SOURCE, createCommandSource, createConversationSource, createSearchDebounce, createSessionSource, createSkillSource, createWorkspaceSource } from './source.ts'
 import { ConversationSettings, PAGE_SIZE, type SettingsSnapshot } from './components.tsx'
-import { adoptAdaptiveChipCaret, adoptAdaptiveComposerHeight, adoptConversationMentionProjection, adoptConversationSyncActionProjection, adoptMenuExpansionProjection, adoptMenuGroupTitleProjection, adoptReferenceIconProjection, adoptStyles } from './styles.ts'
+import { adoptAdaptiveChipCaret, adoptAdaptiveChipHitTesting, adoptAdaptiveChipSelection, adoptAdaptiveComposerHeight, adoptConversationMentionProjection, adoptConversationSyncActionProjection, adoptMenuExpansionProjection, adoptMenuGroupTitleProjection, adoptReferenceIconProjection, adoptStyles } from './styles.ts'
 import { en, REFERENCE_ANYTHING_NS, zh } from './locale.ts'
 import { OPENCLI_EXTENSION_STORE_URL } from './health.ts'
 
@@ -22,6 +22,8 @@ export function apply(ctx: ClientContext): void {
   ctx.effect(() => adoptReferenceIconProjection(), 'reference-anything.client.icon-projection')
   ctx.effect(() => adoptConversationMentionProjection(), 'reference-anything.client.message-projection')
   ctx.effect(() => adoptAdaptiveComposerHeight(), 'reference-anything.client.adaptive-composer-height')
+  ctx.effect(() => adoptAdaptiveChipHitTesting(), 'reference-anything.client.adaptive-chip-hit-testing')
+  ctx.effect(() => adoptAdaptiveChipSelection(), 'reference-anything.client.adaptive-chip-selection')
   ctx.effect(() => adoptAdaptiveChipCaret(), 'reference-anything.client.adaptive-chip-caret')
   let remote: ReferenceAnythingRemoteFace | undefined
   const scope = createSnapshotStore<SettingsSnapshot>({
