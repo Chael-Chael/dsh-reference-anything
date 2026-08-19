@@ -75,7 +75,7 @@ describe('OpenCLI execFile boundary', () => {
     }
   })
 
-  it('serializes commands sharing one persistent provider tab across runner instances', async () => {
+  it('serializes commands sharing one persistent provider session across runner instances', async () => {
     const script = await fake(`
       const { open, unlink } = await import('node:fs/promises')
       const lock = new URL('./' + process.argv[2] + '.lock', import.meta.url)
@@ -91,7 +91,7 @@ describe('OpenCLI execFile boundary', () => {
     await expect(Promise.all([first.history('chatgpt'), second.history('chatgpt')])).resolves.toEqual([[], []])
   })
 
-  it('does not serialize persistent tabs belonging to different providers', async () => {
+  it('does not serialize persistent sessions belonging to different providers', async () => {
     const script = await fake(`
       const { access, writeFile } = await import('node:fs/promises')
       const site = process.argv[2]

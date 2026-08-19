@@ -18,10 +18,10 @@ const REQUIRED_ADAPTER_COMMANDS = ['chatgpt', 'claude', 'gemini', 'deepseek', 'g
 const ADAPTER_PLUGIN_NAME = 'dsh-chat-history'
 
 /**
- * A persistent OpenCLI site session owns one mutable browser tab. Serialize
+ * A persistent OpenCLI site session owns one mutable browser lease. Serialize
  * commands that target the same executable/profile/site across runner
- * instances so concurrent detail workers cannot navigate that tab over one
- * another. Different provider sites still run in parallel.
+ * instances so concurrent detail workers cannot navigate or close each
+ * other's active tab. Different provider sites still run in parallel.
  */
 const SITE_COMMAND_TAILS = new Map<string, Promise<void>>()
 
@@ -281,9 +281,9 @@ export class OpenCliRunner {
   private async json(site: string, operation: string, args: string[], signal?: AbortSignal): Promise<Record<string, unknown>[]> {
     const queueKey = [this.executable, ...this.prefixArgs, this.profile, site].join('\0')
     return serializeSiteCommand(queueKey, async () => {
-      // Pin adapter traffic to one persistent background session. OpenCLI
-      // otherwise lets caller flags override the adapter lifecycle metadata,
-      // which could release its tab or make an unattended sync steal focus.
+      // Pin adapter traffic to one persistent background session. Persistence
+      // suppresses OpenCLI's close-window action; the adapter closes only its
+      // completed task tab and leaves the background container reusable.
       const stdout = await this.raw([
         site, operation, ...args,
         '--site-session', 'persistent', '--window', 'background', '-f', 'json',

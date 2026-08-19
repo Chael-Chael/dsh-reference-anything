@@ -49,6 +49,23 @@ function assertResult(result, domain, operation) {
   return result.rows
 }
 
+/**
+ * Close only the tab used by this adapter command. The persistent site session
+ * prevents OpenCLI from sending its `close-window` lease-release action, while
+ * Browser Bridge can keep and reuse the background container window.
+ */
+async function inTemporaryTab(page, task) {
+  try {
+    return await task()
+  } finally {
+    try {
+      await page.closeTab?.()
+    } catch {
+      // Preserve the provider result/error if the tab or browser closed first.
+    }
+  }
+}
+
 export function registerProvider(config) {
   const browserSession = SYNC_BROWSER_SESSION
 
@@ -64,7 +81,7 @@ export function registerProvider(config) {
     navigateBefore: false,
     args: [],
     columns: ['identity'],
-    func: async (page) => {
+    func: async (page) => inTemporaryTab(page, async () => {
       await page.goto(config.home, { settleMs: 500 })
       const result = await evaluate(page, config.whoamiScript, {}, `${config.site} whoami`)
       if (result?.code === 'AUTH') throw new AuthRequiredError(config.domain)
@@ -72,7 +89,7 @@ export function registerProvider(config) {
         throw new CommandExecutionError(`${config.site} whoami: ${result?.message || 'stable account identity unavailable'}`)
       }
       return [{ identity: result.identity }]
-    },
+    }),
   })
 
   cli({
@@ -90,7 +107,7 @@ export function registerProvider(config) {
       help: 'ISO 8601 instant; stop paging once the listing predates it. Honoured only while the provider pages newest-first',
     }, { name: 'accountScope', help: 'Previously observed hashed account scope; mismatch forces a full listing' }],
     columns: SYNC_INDEX_COLUMNS,
-    func: async (page, kwargs) => {
+    func: async (page, kwargs) => inTemporaryTab(page, async () => {
       const since = String(kwargs.since || '').trim()
       if (since && Number.isNaN(Date.parse(since))) throw new ArgumentError('since must be an ISO 8601 instant')
       await page.goto(config.home, { settleMs: 1200 })
@@ -110,7 +127,7 @@ export function registerProvider(config) {
         { kind: 'identity', identity: identity.identity, sinceApplied: effectiveSince },
         ...rows.map(row => ({ kind: 'conversation', identity: '', sinceApplied: '', ...row })),
       ]
-    },
+    }),
   })
 
   cli({
@@ -128,7 +145,7 @@ export function registerProvider(config) {
       help: 'ISO 8601 instant; stop paging once the listing predates it. Honoured only while the provider pages newest-first',
     }],
     columns: HISTORY_COLUMNS,
-    func: async (page, kwargs) => {
+    func: async (page, kwargs) => inTemporaryTab(page, async () => {
       const since = String(kwargs.since || '').trim()
       if (since && Number.isNaN(Date.parse(since))) throw new ArgumentError('since must be an ISO 8601 instant')
       await page.goto(config.home, { settleMs: 1200 })
@@ -138,7 +155,7 @@ export function registerProvider(config) {
         `${config.site} history-all`,
       )
       return rows
-    },
+    }),
   })
 
   cli({
@@ -156,7 +173,7 @@ export function registerProvider(config) {
       { name: 'accountScope', help: 'Expected hashed account scope; mismatch refuses the read' },
     ],
     columns: DETAIL_COLUMNS,
-    func: async (page, kwargs) => {
+    func: async (page, kwargs) => inTemporaryTab(page, async () => {
       const id = String(kwargs.id || '').trim()
       if (!id) throw new ArgumentError('id must be a non-empty conversation id')
       await page.goto(config.home, { settleMs: 600 })
@@ -180,7 +197,7 @@ export function registerProvider(config) {
       const rows = assertResult(result, config.domain, `${config.site} detail`)
       if (rows.length === 0) throw new EmptyResultError(`${config.site} detail`, `No messages found for ${id}`)
       return rows
-    },
+    }),
   })
 
   cli({
@@ -199,7 +216,7 @@ export function registerProvider(config) {
       { name: 'maxBytes', type: 'int', default: 26214400, help: 'Maximum decoded bytes' },
     ],
     columns: ['attachmentId', 'name', 'mimeType', 'size', 'status', 'localPath'],
-    func: async (page, kwargs) => {
+    func: async (page, kwargs) => inTemporaryTab(page, async () => {
       const locator = String(kwargs.locator || '').trim()
       const output = resolve(String(kwargs.output || ''))
       const maxBytes = Number(kwargs.maxBytes ?? 26_214_400)
@@ -229,15 +246,14 @@ export function registerProvider(config) {
         status: 'available',
         localPath: output,
       }]
-    },
+    }),
   })
 }
 
 /**
  * Keep one stable, background Browser Bridge session per provider site.
- * OpenCLI maps persistent sessions to `site:<config.site>` and keeps their tab
- * lease after both successful and failed commands, so later sync work reuses
- * the same tab. If the user closes it manually, OpenCLI recreates it on demand.
+ * Persistence suppresses OpenCLI's `close-window` action; inTemporaryTab closes
+ * only the finished command's tab so the reusable container window stays alive.
  */
 export const SYNC_BROWSER_SESSION = Object.freeze({
   siteSession: 'persistent',

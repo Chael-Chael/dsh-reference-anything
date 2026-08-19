@@ -28,7 +28,7 @@ One `@` to reference them all.
 
 </div>
 
-Within the unified `@` menu of DeepSeek Harness (DSH), reference commands, Skills, workspace files/folders, DSH sessions, and historical conversations from ChatGPT, Claude, Gemini, DeepSeek, Grok, and Kimi.
+Within a unified `@` menu of DeepSeek Harness (DSH), reference commands, Skills, workspace files/folders, DSH sessions, and historical conversations from ChatGPT, Claude, Gemini, DeepSeek, Grok, and Kimi.
 
 This plugin uses OpenCLI to access historical conversations through AI chat sessions that are already logged in. By default, only conversation titles are stored locally, and the agent fetches remote content on demand. An optional offline-mirror mode stores the latest complete conversation bodies locally.
 
