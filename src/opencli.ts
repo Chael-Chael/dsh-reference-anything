@@ -8,13 +8,21 @@ import type { ProviderConversationRow, ProviderTurnRow } from './store/store.ts'
 
 const execFile = promisify(nodeExecFile)
 export const MIN_OPENCLI_VERSION = '1.8.6'
-export const MIN_ADAPTER_VERSION = '0.2.0'
+export const MIN_ADAPTER_VERSION = '0.2.1'
 export const OPENCLI_NPM_PACKAGE = '@jackwener/opencli'
 const SITE: Record<ChatProvider, string> = {
   chatgpt: 'dsh-chatgpt', claude: 'dsh-claude', gemini: 'dsh-gemini',
   deepseek: 'dsh-deepseek', grok: 'dsh-grok', kimi: 'dsh-kimi',
 }
 const REQUIRED_ADAPTER_COMMANDS = ['chatgpt', 'claude', 'gemini', 'deepseek', 'grok', 'kimi'] as const
+
+/**
+ * A persistent OpenCLI site session owns one mutable browser tab. Serialize
+ * commands that target the same executable/profile/site across runner
+ * instances so concurrent detail workers cannot navigate that tab over one
+ * another. Different provider sites still run in parallel.
+ */
+const SITE_COMMAND_TAILS = new Map<string, Promise<void>>()
 
 export type OpenCliErrorCode = 'EXTENSION_NOT_CONNECTED' | 'PROVIDER_TIMEOUT' | 'PROVIDER_NOT_LOGGED_IN'
   | 'PROVIDER_ACCOUNT_MISMATCH' | 'OPENCLI_CONFIGURATION' | 'OPENCLI_OUTPUT_TOO_LARGE' | 'OPENCLI_FAILED'
@@ -253,17 +261,23 @@ export class OpenCliRunner {
   }
 
   private async json(site: string, operation: string, args: string[], signal?: AbortSignal): Promise<Record<string, unknown>[]> {
-    // Pin adapter traffic to a background tab. OpenCLI otherwise lets the
-    // process-wide OPENCLI_WINDOW environment variable override the adapter's
-    // defaultWindowMode, which could make an unattended sync steal focus.
-    const stdout = await this.raw([site, operation, ...args, '--window', 'background', '-f', 'json'], signal)
-    try {
-      const parsed: unknown = JSON.parse(stdout)
-      if (!Array.isArray(parsed) || parsed.some(row => !row || typeof row !== 'object' || Array.isArray(row))) throw new Error('expected object array')
-      return parsed as Record<string, unknown>[]
-    } catch (error) {
-      throw new OpenCliError('OpenCLI returned malformed JSON', 'OPENCLI_CONFIGURATION', { cause: error })
-    }
+    const queueKey = [this.executable, ...this.prefixArgs, this.profile, site].join('\0')
+    return serializeSiteCommand(queueKey, async () => {
+      // Pin adapter traffic to one persistent background session. OpenCLI
+      // otherwise lets caller flags override the adapter lifecycle metadata,
+      // which could release its tab or make an unattended sync steal focus.
+      const stdout = await this.raw([
+        site, operation, ...args,
+        '--site-session', 'persistent', '--window', 'background', '-f', 'json',
+      ], signal)
+      try {
+        const parsed: unknown = JSON.parse(stdout)
+        if (!Array.isArray(parsed) || parsed.some(row => !row || typeof row !== 'object' || Array.isArray(row))) throw new Error('expected object array')
+        return parsed as Record<string, unknown>[]
+      } catch (error) {
+        throw new OpenCliError('OpenCLI returned malformed JSON', 'OPENCLI_CONFIGURATION', { cause: error })
+      }
+    })
   }
 
   private async raw(args: string[], signal?: AbortSignal): Promise<string> {
@@ -286,6 +300,18 @@ export class OpenCliRunner {
           : exit === 77 ? 'PROVIDER_NOT_LOGGED_IN' : exit === 78 ? 'OPENCLI_CONFIGURATION' : 'OPENCLI_FAILED'
       throw new OpenCliError(stderr || `OpenCLI exited with ${String(detail.code)}`, code, { cause: error })
     }
+  }
+}
+
+async function serializeSiteCommand<T>(key: string, task: () => Promise<T>): Promise<T> {
+  const previous = SITE_COMMAND_TAILS.get(key) ?? Promise.resolve()
+  const current = previous.then(task, task)
+  const settled = current.then(() => undefined, () => undefined)
+  SITE_COMMAND_TAILS.set(key, settled)
+  try {
+    return await current
+  } finally {
+    if (SITE_COMMAND_TAILS.get(key) === settled) SITE_COMMAND_TAILS.delete(key)
   }
 }
 

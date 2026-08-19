@@ -29,6 +29,13 @@ export const browserProfileSchema = z.object({ id: z.string(), alias: z.string()
 export const openCliDiscoverySchema = z.object({
   found: z.boolean(), executable: z.string(), version: z.string(), error: z.string().optional(),
 }).readonly()
+export const packageUpdateStatusSchema = z.object({
+  currentVersion: z.string(), latestVersion: z.string(), updateAvailable: z.boolean(),
+  checkedAt: z.number().int().nonnegative(), error: z.string().optional(),
+}).readonly()
+export const packageUpdateResultSchema = z.object({
+  version: z.string(), restartRequired: z.boolean(),
+}).readonly()
 export const providerStatsSchema = z.object({
   provider: providerSchema, conversations: z.number().int().nonnegative(), lastSyncedAt: z.string(),
   status: z.enum(['ready', 'syncing', 'error', 'empty']), error: z.string().optional(),
@@ -79,6 +86,9 @@ export const REFERENCE_ANYTHING_INVOCATIONS: readonly InvocationDescriptor[] = [
   descriptor('installOpenCli', [], strict('OpenCliDiscovery', openCliDiscoverySchema), true),
   descriptor('installAdapter', [], strict('Boolean', z.boolean()), true),
   descriptor('restartDaemon', [], strict('Boolean', z.boolean()), true),
+  descriptor('updateStatus', [], strict('PackageUpdateStatus', packageUpdateStatusSchema), true),
+  descriptor('checkUpdate', [], strict('PackageUpdateStatus', packageUpdateStatusSchema), true),
+  descriptor('installUpdate', [], strict('PackageUpdateResult', packageUpdateResultSchema), true),
   descriptor('stats', [], strict('ProviderStats[]', z.array(providerStatsSchema))),
   descriptor('syncStart', [{ name: 'input', wire: 'input', source: 'json', codec: strict('SyncStart', syncStartSchema) }], strict('JobId', z.string())),
   descriptor('syncStatus', [{ name: 'input', wire: 'input', source: 'json', codec: strict('JobInput', jobInputSchema) }], strict('SyncStatus?', syncStatusSchema.optional())),

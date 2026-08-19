@@ -26,6 +26,10 @@ export interface Health {
 }
 export interface BrowserProfile { id: string; alias?: string; connected: boolean; isDefault: boolean }
 export interface OpenCliDiscovery { found: boolean; executable: string; version: string; error?: string }
+export interface PackageUpdateStatus {
+  currentVersion: string; latestVersion: string; updateAvailable: boolean; checkedAt: number; error?: string
+}
+export interface PackageUpdateResult { version: string; restartRequired: boolean }
 export interface ProviderStats {
   provider: ChatProvider; conversations: number; lastSyncedAt: string
   status: 'ready' | 'syncing' | 'error' | 'empty'; error?: string
@@ -88,6 +92,9 @@ export interface ReferenceAnythingRemoteFace {
   installOpenCli(signal?: AbortSignal): Promise<RemoteResult<OpenCliDiscovery>>
   installAdapter(signal?: AbortSignal): Promise<RemoteResult<boolean>>
   restartDaemon(signal?: AbortSignal): Promise<RemoteResult<boolean>>
+  updateStatus(signal?: AbortSignal): Promise<RemoteResult<PackageUpdateStatus>>
+  checkUpdate(signal?: AbortSignal): Promise<RemoteResult<PackageUpdateStatus>>
+  installUpdate(signal?: AbortSignal): Promise<RemoteResult<PackageUpdateResult>>
   stats(): Promise<RemoteResult<readonly ProviderStats[]>>
   syncStart(input: { providers: ChatProvider[]; mode: 'incremental' | 'full' }): Promise<RemoteResult<string>>
   syncStatus(input: { jobId: string }): Promise<RemoteResult<SyncStatus | undefined>>

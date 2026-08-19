@@ -2,7 +2,7 @@ import type { InjectFace, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import type { ObservableSnapshot } from '@deepseek-ai/dsh-client-runtime/client'
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import { defaultPickerSettings, type ChatProvider, type PickerSettings, type PickerSource, type SettingsRecord } from '../wire.ts'
-import { syncProgressFraction, type BrowsePage, type BrowserProfile, type Health, type ProviderStats, type StorageStats, type SyncStatus } from './remote.ts'
+import { syncProgressFraction, type BrowsePage, type BrowserProfile, type Health, type PackageUpdateStatus, type ProviderStats, type StorageStats, type SyncStatus } from './remote.ts'
 import { ProviderLogo } from './provider-icons.tsx'
 import { type REFERENCE_ANYTHING_NS } from './locale.ts'
 import type { TranslateNS } from '@deepseek-ai/dsh-client-locale/client'
@@ -10,7 +10,7 @@ import { OPENCLI_EXTENSION_STORE_URL, openExtensionStore, setupReady, type Setup
 
 /** Current query/filter/page of the "Manage synced conversations" list, plus its last fetched page. */
 export interface BrowseState { query: string; provider?: ChatProvider; offset: number; page?: BrowsePage }
-export interface SettingsSnapshot { settings: SettingsRecord; health?: Health; profiles?: readonly BrowserProfile[]; stats?: readonly ProviderStats[]; storage?: StorageStats; sync?: SyncStatus; error?: string; notice?: string; loading?: boolean; browse?: BrowseState; setupStep?: SetupStage }
+export interface SettingsSnapshot { settings: SettingsRecord; health?: Health; update?: PackageUpdateStatus; profiles?: readonly BrowserProfile[]; stats?: readonly ProviderStats[]; storage?: StorageStats; sync?: SyncStatus; error?: string; notice?: string; loading?: boolean; browse?: BrowseState; setupStep?: SetupStage }
 export interface SettingsInjected {
   hooks: { scope: ObservableSnapshot<SettingsSnapshot> }
   save(value: SettingsRecord): Promise<void>
@@ -24,6 +24,8 @@ export interface SettingsInjected {
   useProfile(profile: string): Promise<void>
   install(): Promise<void>
   restartDaemon(): Promise<void>
+  checkUpdate(): Promise<void>
+  installUpdate(): Promise<void>
   browse(query: string, provider: ChatProvider | undefined, offset: number): Promise<void>
   deleteConversation(uriId: string): Promise<void>
   clearProvider(provider: ChatProvider): Promise<void>
@@ -59,7 +61,8 @@ const PICKER_SOURCES: ReadonlyArray<{ id: PickerSource; label: keyof typeof SOUR
 ]
 const SOURCE_KEYS = { commands: 'source.commands', skills: 'source.skills', files: 'source.files', sessions: 'source.sessions', conversations: 'source.conversations' } as const
 const REFERENCE_ANYTHING_LOGO = '__REFERENCE_ANYTHING_LOGO_DATA_URI__'
-export function ConversationSettings({ useScope, save, sync, cancel, refresh, refreshOnOpen, setupAll, discoverOpenCli, installOpenCli, useProfile, install, restartDaemon, browse, deleteConversation, clearProvider, clearOlder, clearRemoteMissing, clearOldAccounts, refreshStats, t }: SettingsProps) {
+const GITHUB_REPOSITORY_URL = 'https://github.com/Chael-Chael/dsh-reference-anything'
+export function ConversationSettings({ useScope, save, sync, cancel, refresh, refreshOnOpen, setupAll, discoverOpenCli, installOpenCli, useProfile, install, restartDaemon, checkUpdate, installUpdate, browse, deleteConversation, clearProvider, clearOlder, clearRemoteMissing, clearOldAccounts, refreshStats, t }: SettingsProps) {
   const state = useScope(value => value)
   const settings = state.settings
   const picker = settings.picker ?? defaultPickerSettings()
@@ -173,6 +176,16 @@ export function ConversationSettings({ useScope, save, sync, cancel, refresh, re
   return <section className="dsh_ref_settings">
     <div className="dsh_ref_notice_layer">{state.notice && <div className="dsh_ref_notice" role="status">{state.notice}</div>}</div>
     <header className="dsh_ref_header"><div className="dsh_ref_header_brand"><img src={REFERENCE_ANYTHING_LOGO} alt=""/><div><h2>{t('settings.title')}</h2><p>{t('settings.subtitle')}</p></div></div></header>
+    <section className={`dsh_ref_update_bar${state.update?.updateAvailable ? ' is_available' : ''}`} aria-label={t('settings.updateTitle')}>
+      <div className="dsh_ref_update_copy"><strong>{updateTitle(state.update, t)}</strong><small>{updateDetail(state.update, t)}</small></div>
+      <div className="dsh_ref_update_actions">
+        {state.update?.updateAvailable && <button className="is_primary" type="button" disabled={Boolean(busyAction)} onClick={() => {
+          if (window.confirm(t('settings.updateConfirm', { version: state.update?.latestVersion ?? '' }))) runAction('package-update', installUpdate)
+        }}>{busyAction === 'package-update' ? t('settings.updating') : t('settings.updateNow', { version: state.update.latestVersion })}</button>}
+        <button type="button" disabled={Boolean(busyAction)} onClick={() => { runAction('update-check', checkUpdate) }}>{busyAction === 'update-check' ? t('settings.checkingUpdate') : t('settings.checkUpdate')}</button>
+        <a className="dsh_ref_button" href={GITHUB_REPOSITORY_URL} target="_blank" rel="noreferrer">{t('settings.github')}</a>
+      </div>
+    </section>
     <div className="dsh_ref_workspace">
     {state.error && <div className="dsh_ref_error" role="alert"><strong>{t('settings.actionFailed')}</strong><span>{state.error}</span></div>}
     <section className="dsh_ref_panel dsh_ref_general_settings"><div className="dsh_ref_section_head"><div><h3>{t('settings.general')}</h3><p>{t('settings.generalDetail')}</p></div></div>
@@ -338,6 +351,20 @@ function CheckRow({ label, detail, ready, actionLabel, secondaryLabel, actionBus
   actionBusy?: boolean; actionDisabled?: boolean; onAction?: () => void; onSecondary?: () => void; control?: ReactNode
 }) {
   return <div className="dsh_ref_check"><span className={ready ? 'is_ready' : 'is_error'}>{ready ? '✓' : '×'}</span><div className="dsh_ref_check_body"><strong>{label}</strong><small className={ready ? undefined : 'is_warning'}>{detail}</small>{!ready && (control || onAction || onSecondary) && <div className="dsh_ref_check_actions">{control}{onAction && actionLabel && <button type="button" aria-busy={actionBusy} disabled={actionDisabled} onClick={onAction}>{actionBusy ? `${actionLabel}…` : actionLabel}</button>}{onSecondary && secondaryLabel && <button type="button" disabled={actionDisabled} onClick={onSecondary}>{secondaryLabel}</button>}</div>}</div></div>
+}
+
+function updateTitle(update: PackageUpdateStatus | undefined, t: T): string {
+  if (!update) return t('settings.updateTitle')
+  if (update.updateAvailable) return t('settings.updateAvailable', { version: update.latestVersion })
+  if (update.error) return t('settings.updateCheckFailed')
+  return t('settings.upToDate', { version: update.currentVersion })
+}
+
+function updateDetail(update: PackageUpdateStatus | undefined, t: T): string {
+  if (!update) return t('settings.updateCheckingAutomatically')
+  if (update.error) return update.error
+  if (update.updateAvailable) return t('settings.updateAvailableDetail', { current: update.currentVersion, latest: update.latestVersion })
+  return t('settings.upToDateDetail')
 }
 
 function pickerLimitDrafts(picker: PickerSettings): Record<PickerSource, string> {

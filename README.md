@@ -8,7 +8,7 @@
 
 One `@` to reference them all.
 
-**English** · [简体中文](./README_zh-CN.md) · [News](#news) · [Roadmap](#future-roadmap) · [Installation](#installation) · [Usage](#usage) · [Report Bug][github-issues-link]
+**English** · [简体中文](./README_zh-CN.md) · [News](#news) · [Roadmap](#roadmap) · [Installation](#installation) · [Usage](#usage) · [Report Bug][github-issues-link]
 
 <!-- SHIELD GROUP -->
 
@@ -24,34 +24,23 @@ One `@` to reference them all.
 
 Within the unified `@` menu of DeepSeek Harness (DSH), reference commands, Skills, workspace files/folders, DSH sessions, and historical conversations from ChatGPT, Claude, Gemini, DeepSeek, Grok, and Kimi.
 
-This plugin reuses already-logged-in AI conversation windows via OpenCLI and only keeps conversation titles locally. The agent decides whether and when to fetch the remote conversation content on demand.
+This plugin uses OpenCLI to access historical conversations through AI chat sessions that are already logged in. By default, only conversation titles are stored locally, and the agent fetches remote content on demand. An optional offline-mirror mode stores the latest complete conversation bodies locally.
 
 ## News
 
-- **2026-08-18 · v0.2.0** — A redesigned Conversations settings page with local session statistics, paginated management, Provider/Profile selection, and sync status checks.
+- **2026-08-19 · v0.2.2** — Added automatic version checks and in-settings updates, Pill/Raw text input rendering modes, and reusable background browser sessions for more reliable OpenCLI synchronization and input interactions.
+- **2026-08-18 · v0.2.0** — A redesigned Reference Anything settings page with local session statistics, paginated management, Provider/Profile selection, and sync status checks.
 - **2026-08-18** — Introduced on-demand read protocol: references default to safe pointers, and the agent reads the body and attachments only after authorization.
 - **2026-08-17** — Unified ChatGPT, Claude, Gemini, DeepSeek, Grok, and Kimi under the DSH `@` menu.
 
 ## Roadmap
 
 - [ ] Support referencing historical conversations from other local agents
-- [ ] Support more AI conversation platforms (ideas welcome!)
+- [ ] Support more keyword matching rules, including blacklists and whitelists, especially for file search
+- [ ] Support more AI conversation platforms
+- [ ] Provide a quieter AI conversation synchronization mechanism
 - [ ] Support referencing applications or browser windows currently open on the computer
 - [ ] More ideas are welcome in Issues
-
-## Architecture
-
-```text
-DSH Web @Conversations
-        ↕ Host Remote
-DSH Host + reference_anything local mirror
-        ↕ execFile(opencli, argv)
-opencli-plugin-dsh-chat-history
-        ↕ OpenCLI daemon + official Browser Bridge
-ChatGPT / Claude / Gemini / DeepSeek / Grok / Kimi
-```
-
-This does not include the legacy standalone DeepSeek CDP / `--remote-debugging-port` collector. All six platforms use the OpenCLI Provider adapter path, avoiding duplicate browser-reading implementations.
 
 ## Installation
 
@@ -69,30 +58,38 @@ dsh plugin --profile web add dsh-reference-anything
 For development, the repository can still be installed from a local path:
 
 ```powershell
-dsh plugin --profile web add D:\dsh-reference-anything
+# Run from the repository root
+dsh plugin --profile web add .
 ```
 
-After installing the DSH plugin, open `Settings → Conversations → Availability check` in DSH Web and click **Install all**. It discovers OpenCLI, installs or upgrades it through npm when missing or outdated, installs the OpenCLI adapters bundled in the npm package, starts or refreshes Browser Bridge, and immediately opens the OpenCLI Browser Bridge page in the [Chrome Web Store](https://chromewebstore.google.com/detail/opencli/ildkmabpimmkaediidaifkhjpohdnifk). Confirm the extension installation, then return and click **Check again**. Any remaining failed check displays its own recovery action.
+After installing the DSH plugin, open `Settings → Reference Anything → Availability check` in DSH Web (restart DSH first if this settings entry is not yet visible), then click **One-click setup**. It discovers OpenCLI; installs or upgrades it globally through npm when it is missing or older than `1.8.6`; installs the bundled adapters for all six platforms; starts or refreshes Browser Bridge; and opens the OpenCLI Browser Bridge page in the [Chrome Web Store](https://chromewebstore.google.com/detail/opencli/ildkmabpimmkaediidaifkhjpohdnifk). Confirm the extension installation, then return and click **Recheck setup**. Any remaining failed check displays its own recovery action.
 
-You can also complete the steps manually:
+You can also install OpenCLI and the conversation adapter manually, then start Browser Bridge:
 
 ```powershell
-opencli plugin install file:///D:/dsh-reference-anything/opencli-plugin
+npm install --global "@jackwener/opencli@>=1.8.6"
+opencli plugin install file:///C:/path/to/dsh-reference-anything/opencli-plugin
+opencli daemon restart
 ```
 
-Browser extensions cannot be silently installed from a webpage; confirm the installation in the Chrome Web Store or use “Load unpacked” from [OpenCLI Releases](https://github.com/jackwener/opencli/releases). If the browser blocks the store popup, the settings page keeps a normal fallback link. When multiple browser profiles are connected, select and apply one directly in the failed check. Global npm installation remains subject to OS permissions; failures retain their original diagnostic in the settings page.
+Replace `C:/path/to/dsh-reference-anything` with the repository location. Browser extensions cannot be silently installed from a webpage; confirm the installation in the Chrome Web Store, or download an extension package from [OpenCLI Releases](https://github.com/jackwener/opencli/releases) and use “Load unpacked.” If the browser blocks the store popup, the settings page keeps a normal fallback link. When multiple browser profiles are connected, select and apply one directly in the failed check. Global npm installation remains subject to OS permissions; failures retain their original diagnostic in the settings page.
 
 ## Usage
 
-1. Open `Settings → Conversations` in DSH Web.
-2. Check the status of the OpenCLI CLI, daemon, Browser Bridge, and adapters.
-3. Select a Chrome Profile and click `Sync all`, or sync a single Provider.
+1. Open `Settings → Reference Anything` in DSH Web.
+2. Under **Availability check**, confirm that OpenCLI, Browser Bridge, the browser extension, and the conversation adapter are ready.
+3. Under **External conversation sync settings**, choose a connected browser Profile, history storage mode, and sync mode. Then click **Sync enabled sources now**, or sync an individual Provider from its card.
 4. Type `@` in the input box and choose from the `Files and folders`, `DSH sessions`, or `External conversations` groups.
 5. Type a keyword to filter candidates, for example `@cache-design`.
 
+The default **Read bodies on demand** mode stores only the title index locally and uses the browser when an agent reads a reference. Choose **Store full bodies locally** for offline reading and full-text search; this mode keeps only the latest version of each conversation. The settings page also lets you enable or disable each `@` group, reorder groups, set their maximum result counts (six per group by default), and switch between Pill and Raw text input rendering. The plugin checks npm for updates when it loads; restart DSH after installing an update from the settings page.
+
+> [!WARNING]
+> To protect your account and conversation data, external conversations are imported and synchronized through OpenCLI using your existing logged-in browser session. A browser window may temporarily open during use or synchronization, and it may display OpenCLI debugging information. This is expected—please do not be alarmed or close the window manually; wait for the operation to finish.
+
 ### Search
 
-The `@` menu contains five groups: `Commands`, `Skills`, `Files and folders`, `DSH sessions`, and `External conversations`. The first two appear only when `@` is at the beginning of the draft. Each group shows up to five results when the query is empty, and up to eight after a query is entered.
+The `@` menu contains five groups: `Commands`, `Skills`, `Files and folders`, `DSH sessions`, and `External conversations`. The first two appear only when `@` is at the beginning of the draft. Each group shows up to six results by default. Under `Settings → Reference Anything → General`, you can enable or disable groups, reorder them, and set each limit from 1 to 50.
 
 #### @Commands — DSH native commands
 
@@ -133,7 +130,7 @@ Supports historical conversations from ChatGPT, Claude, Gemini, DeepSeek, Grok, 
 
 **Search capabilities:**
 - **Title match:** fuzzy search on conversation titles
-- **Content search:** if title matches are insufficient, the conversation body is searched and matching excerpts are shown in the candidate list
+- **Content search:** available only in **Store full bodies locally** mode; if title matches are insufficient, synchronized bodies are searched and matching excerpts are shown in the candidate list
 - **Provider and account isolation:** history is maintained separately by Provider and account scope
 - `@` search uses the account scope cached by the latest sync and never probes the browser; after a sync observes an account switch, it exposes only that account while older rows remain available in conversation management for cleanup
 
@@ -144,6 +141,9 @@ Supports historical conversations from ChatGPT, Claude, Gemini, DeepSeek, Grok, 
 
 Opening the source URL happens only in the UI; the URL is never injected into model context. The initial reference contains only a safe pointer; if the model needs the body, it calls `reference_read` on demand.
 
+> [!NOTE]
+> Due to DSH's current underlying length limit for References, external-conversation references temporarily use a compatibility layer implemented by this plugin instead of relying entirely on DSH's native reference presentation. As a result, some interactions may behave differently or encounter issues in certain scenarios. We have raised this limitation in DSH Discussions; when a future DSH release provides the necessary support, we will update the plugin promptly and migrate to a more native implementation.
+
 ---
 
 **General notes:**
@@ -151,7 +151,21 @@ Opening the source URL happens only in the UI; the URL is never injected into mo
 - Without a type prefix, all groups are searched at once.
 - For full browsing across groups: sessions are listed on the settings page, while commands and skills use the native `/` panel.
 
-## Model-facing Protocol
+## How External Conversation References Work
+
+```text
+DSH Web @Conversations
+        ↕ Host Remote
+DSH Host + reference_anything local mirror
+        ↕ execFile(opencli, argv)
+opencli-plugin-dsh-chat-history
+        ↕ OpenCLI daemon + official Browser Bridge
+ChatGPT / Claude / Gemini / DeepSeek / Grok / Kimi
+```
+
+This does not include the legacy standalone DeepSeek CDP / `--remote-debugging-port` collector. All six platforms use the OpenCLI Provider adapter path, avoiding duplicate browser-reading implementations.
+
+### Model-facing Protocol
 
 A reference produces an untrusted-data envelope alongside the current user request. The initial envelope contains only pointers and never the conversation body:
 
@@ -187,7 +201,7 @@ A reference produces an untrusted-data envelope alongside the current user reque
 - Sync stores attachment metadata and same-origin locators, not temporary signed URLs. Attachments are classified as `image` or `file`; empty URLs and site-root paths are not marked as available.
 - Unreadable attachments add a model-facing notice such as `[User attached 1 image; image contents were not included]` without altering the original conversation text.
 
-## Sync and Storage
+### Sync and Storage
 
 The `reference_anything` storage domain contains:
 

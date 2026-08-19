@@ -54,6 +54,7 @@ const css = `
 .dsh_ref_toggle{position:relative}
 body[data-ds-dark-theme] .dsh_ref_settings{--dsh-ref-card-surface:var(--dsw-alias-bg-layer-1,#303038);--dsh-ref-control-surface:var(--dsw-alias-bg-layer-2,#363640)}
 .dsh_ref_header{padding:2px 2px 4px}.dsh_ref_header h2{font-size:26px;font-weight:700;letter-spacing:-.025em}.dsh_ref_header p{max-width:660px;color:var(--dsw-alias-label-dimmed,var(--dsw-alias-label-primary));line-height:1.55}.dsh_ref_settings button{border-color:var(--dsh-ref-line);border-radius:9px;background:transparent;color:var(--dsw-alias-label-primary);font-weight:600;transition:background .16s ease,border-color .16s ease,color .16s ease,transform .16s ease}.dsh_ref_settings button:hover:not(:disabled){border-color:var(--dsh-ref-blue-line);background:var(--dsh-ref-blue-soft);color:var(--dsh-ref-blue)}
+.dsh_ref_update_bar{display:flex;align-items:center;justify-content:space-between;gap:18px;padding:13px 14px;border:1px solid var(--dsh-ref-line);border-radius:12px;background:var(--dsh-ref-surface)}.dsh_ref_update_bar.is_available{border-color:var(--dsh-ref-blue-line);background:var(--dsh-ref-blue-soft)}.dsh_ref_update_copy{display:grid;min-width:0;gap:3px}.dsh_ref_update_copy strong{font-size:12px}.dsh_ref_update_copy small{color:#64748b;font-size:10px;line-height:1.45;overflow-wrap:anywhere}.dsh_ref_update_actions{display:flex;align-items:center;flex:none;gap:8px}.dsh_ref_settings .dsh_ref_button{display:inline-flex;align-items:center;justify-content:center;min-height:34px;padding:0 13px;border:1px solid var(--dsh-ref-line);border-radius:9px;background:transparent;color:var(--dsw-alias-label-primary);font-size:12px;font-weight:600;text-decoration:none;transition:background .16s ease,border-color .16s ease,color .16s ease,transform .16s ease}.dsh_ref_settings .dsh_ref_button:hover{border-color:var(--dsh-ref-blue-line);background:var(--dsh-ref-blue-soft);color:var(--dsh-ref-blue)}.dsh_ref_settings .dsh_ref_button:active{transform:translateY(1px)}.dsh_ref_update_actions .is_primary{border-color:var(--dsh-ref-blue);background:var(--dsh-ref-blue);color:#fff}.dsh_ref_update_actions .is_primary:hover:not(:disabled){background:var(--dsh-ref-blue);color:#fff;filter:brightness(.94)}body[data-ds-dark-theme] .dsh_ref_update_copy small{color:var(--dsw-alias-label-tertiary,#94a3b8)}
 .dsh_ref_recheck{border-color:var(--dsh-ref-blue-line)!important;color:var(--dsh-ref-blue)!important;background:var(--dsh-ref-blue-soft)!important}.dsh_ref_recheck:hover:not(:disabled){background:var(--dsh-ref-blue)!important;color:#fff!important}
 .dsh_ref_workspace{gap:12px;border:0;border-radius:0;background:transparent;overflow:visible}.dsh_ref_workspace>.dsh_ref_panel,.dsh_ref_workspace>.dsh_ref_sources{padding:20px;border:1px solid var(--dsh-ref-line);border-radius:14px;background:var(--dsh-ref-surface)}.dsh_ref_workspace>.dsh_ref_panel:last-child{border-bottom:1px solid var(--dsh-ref-line)}.dsh_ref_workspace>.dsh_ref_error{margin:0;border-color:rgba(239,68,68,.3);border-radius:12px;background:rgba(239,68,68,.06)}.dsh_ref_notice_layer{position:sticky;top:12px;z-index:20;display:flex;align-items:flex-start;justify-content:center;height:0;margin-bottom:-20px;pointer-events:none}.dsh_ref_notice{width:max-content;max-width:calc(100% - 32px);padding:10px 14px;border:1px solid var(--dsh-ref-blue);border-radius:10px;background:var(--dsh-ref-blue);color:#fff;animation:dsh_ref_notice_drop .18s ease-out both}@keyframes dsh_ref_notice_drop{from{opacity:0;transform:translateY(-12px)}to{opacity:1;transform:translateY(0)}}
 .dsh_ref_section_head h3{font-size:16px;font-weight:700;letter-spacing:-.015em}.dsh_ref_section_head p{color:var(--dsw-alias-label-dimmed,var(--dsw-alias-label-primary));line-height:1.5}.dsh_ref_health,.dsh_ref_syncing{border-color:var(--dsh-ref-blue-line);border-radius:999px;background:var(--dsh-ref-blue-soft);color:var(--dsh-ref-blue);font-weight:650}.dsh_ref_checklist{gap:13px}.dsh_ref_check>span{border-color:var(--dsh-ref-blue-line);background:var(--dsh-ref-blue-soft);color:var(--dsh-ref-blue)}.dsh_ref_check small{color:var(--dsw-alias-label-dimmed,var(--dsw-alias-label-primary));line-height:1.45}
@@ -62,7 +63,7 @@ body[data-ds-dark-theme] .dsh_ref_settings{--dsh-ref-card-surface:var(--dsw-alia
 .dsh_ref_provider_grid{overflow:hidden;border-color:var(--dsh-ref-line);border-radius:11px;background:var(--dsh-ref-card-surface)}.dsh_ref_provider{border-color:var(--dsh-ref-line);transition:background .16s ease}.dsh_ref_provider:hover{background:var(--dsh-ref-blue-soft)}.dsh_ref_provider_mark{border-color:var(--dsh-ref-blue-line);border-radius:8px;color:var(--dsh-ref-blue)}.dsh_ref_provider>small{color:var(--dsw-alias-label-dimmed,var(--dsw-alias-label-primary));opacity:1}.dsh_ref_provider_foot button{border-color:var(--dsh-ref-blue-line);border-radius:7px;color:var(--dsh-ref-blue)}
 .dsh_ref_sync_settings{gap:18px}.dsh_ref_form_grid input,.dsh_ref_form_grid select,.dsh_ref_manage_filters input,.dsh_ref_manage_filters select{border-color:var(--dsh-ref-line);border-radius:8px;background:var(--dsh-ref-control-surface)}.dsh_ref_form_grid input:focus,.dsh_ref_form_grid select:focus,.dsh_ref_manage_filters input:focus,.dsh_ref_manage_filters select:focus{outline-color:var(--dsh-ref-blue-line)}.dsh_ref_field_note{margin:0;color:var(--dsw-alias-label-dimmed,var(--dsw-alias-label-primary));font-size:11px;font-weight:400;line-height:1.45}.dsh_ref_toggle>span{border-color:var(--dsh-ref-blue-line);background:var(--dsh-ref-blue-soft)}.dsh_ref_toggle>span:after{background:var(--dsh-ref-blue)}.dsh_ref_actions .is_primary{border-color:var(--dsh-ref-blue);background:var(--dsh-ref-blue);color:#fff}.dsh_ref_actions .is_primary:hover:not(:disabled){background:var(--dsh-ref-blue);color:#fff;filter:brightness(.94)}.dsh_ref_progress_track{border:0;border-radius:999px;background:var(--dsh-ref-blue-soft)}.dsh_ref_progress_fill{border-radius:999px;background:var(--dsh-ref-blue)}
 .dsh_ref_viability{display:grid;gap:0;margin-top:12px}.dsh_ref_viability_actions{display:flex;align-items:center;flex-wrap:wrap;justify-content:flex-end;gap:8px}.dsh_ref_picker_limit input{border-color:var(--dsh-ref-line);border-radius:7px;background:transparent}.dsh_ref_picker_limit input:focus{outline:2px solid var(--dsh-ref-blue-line);outline-offset:1px}.dsh_ref_picker_order button{color:var(--dsw-alias-label-primary)}body[data-ds-dark-theme] .dsh_ref_picker_order button{color:var(--dsw-alias-label-tertiary,#cbd5e1)}.dsh_ref_provider{grid-template-columns:34px minmax(130px,1fr) minmax(185px,1.1fr) max-content;grid-template-rows:auto auto;row-gap:2px;padding-inline:14px}.dsh_ref_provider_mark{grid-row:1 / span 2}.dsh_ref_provider h4{grid-row:1 / span 2;align-self:center}.dsh_ref_provider>strong{grid-row:1}.dsh_ref_provider>small{grid-column:3;grid-row:2;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.dsh_ref_provider_actions{grid-column:4;grid-row:1 / span 2;min-width:0;flex-wrap:nowrap;justify-content:flex-end}.dsh_ref_provider_actions button{flex:0 0 auto;width:auto;white-space:nowrap}.dsh_ref_toggle>span{background:transparent}.dsh_ref_toggle input:checked+span{border-color:var(--dsh-ref-blue);background:var(--dsh-ref-blue)}.dsh_ref_toggle input:checked+span:after{background:#fff}.dsh_ref_settings button.is_danger{border-color:rgba(220,38,38,.45);color:#dc2626}.dsh_ref_settings button.is_danger:hover:not(:disabled){border-color:#dc2626;background:rgba(220,38,38,.08);color:#dc2626}body[data-ds-dark-theme] .dsh_ref_settings button.is_danger{border-color:rgba(248,113,113,.55);color:#f87171}body[data-ds-dark-theme] .dsh_ref_settings button.is_danger:hover:not(:disabled){border-color:#f87171;background:rgba(248,113,113,.12);color:#f87171}.dsh_ref_manage_list{max-height:340px;overflow-y:auto;overscroll-behavior:contain;border-color:var(--dsh-ref-line);border-radius:11px;background:var(--dsh-ref-card-surface)}.dsh_ref_manage_row{border-color:var(--dsh-ref-line)}.dsh_ref_manage_row:hover{background:var(--dsh-ref-blue-soft)}.dsh_ref_badge{border-color:var(--dsh-ref-blue-line);border-radius:999px;color:var(--dsh-ref-blue)}.dsh_ref_pagination button{border-radius:8px}
-@media(max-width:720px){.dsh_ref_picker_row{grid-template-columns:minmax(0,1fr) auto}.dsh_ref_picker_order{grid-column:2}.dsh_ref_picker_limit{justify-content:flex-end}.dsh_ref_workspace>.dsh_ref_panel,.dsh_ref_workspace>.dsh_ref_sources{padding:18px;border-radius:12px}}
+@media(max-width:720px){.dsh_ref_update_bar{align-items:stretch;flex-direction:column}.dsh_ref_update_actions{flex-wrap:wrap}.dsh_ref_picker_row{grid-template-columns:minmax(0,1fr) auto}.dsh_ref_picker_order{grid-column:2}.dsh_ref_picker_limit{justify-content:flex-end}.dsh_ref_workspace>.dsh_ref_panel,.dsh_ref_workspace>.dsh_ref_sources{padding:18px;border-radius:12px}}
 @media(max-width:520px){.dsh_ref_picker_row{grid-template-columns:1fr}.dsh_ref_picker_limit{justify-content:space-between}.dsh_ref_picker_order{grid-column:auto}.dsh_ref_provider{grid-template-columns:34px minmax(0,1fr) auto;grid-template-rows:auto auto auto}.dsh_ref_provider_mark{grid-row:1 / span 3}.dsh_ref_provider h4{grid-column:2;grid-row:1}.dsh_ref_provider>strong{grid-column:2;grid-row:2}.dsh_ref_provider>small{grid-column:2;grid-row:3}.dsh_ref_provider_actions{grid-column:3;grid-row:1 / span 3;flex-direction:column}.dsh_ref_progress_sources{grid-template-columns:1fr 1fr}}
 /* Keep explanatory copy readable against DSH's light settings surface. */
 .dsh_ref_header p,.dsh_ref_section_head p,.dsh_ref_check small,.dsh_ref_install span,.dsh_ref_picker_limit,.dsh_ref_provider>small,.dsh_ref_field_note,.dsh_ref_render_mode small{color:#64748b}
@@ -559,6 +560,9 @@ type PointCaretDocument = Document & {
   caretRangeFromPoint?: (x: number, y: number) => Range | null
 }
 
+type CaretVisualAffinity = 'backward' | 'forward'
+const caretVisualAffinity = new WeakMap<HTMLTextAreaElement, CaretVisualAffinity>()
+
 function logicalOffsetFromPoint(input: HTMLTextAreaElement, backdrop: HTMLElement, clientX: number, clientY: number): number | undefined {
   const previousVisibility = input.style.getPropertyValue('visibility')
   const previousVisibilityPriority = input.style.getPropertyPriority('visibility')
@@ -591,8 +595,22 @@ function logicalOffsetFromPoint(input: HTMLTextAreaElement, backdrop: HTMLElemen
   const lineHeight = Number.parseFloat(style.lineHeight)
   const fontSize = Number.parseFloat(style.fontSize)
   const resolvedLineHeight = lineHeight > 0 ? lineHeight : fontSize > 0 ? fontSize * 1.2 : 20
-  if (clamped !== undefined && preciseNode) return clamped
-  return nearestVisualLogicalOffset(backdrop, input.value.length, clientX, clientY, resolvedLineHeight) ?? clamped
+  if (clamped !== undefined && preciseNode) {
+    rememberCaretAffinityAtPoint(input, backdrop, clamped, clientX, clientY)
+    return clamped
+  }
+  // Chromium commonly reports the backdrop element itself for whitespace at
+  // the end of a visual line. Accept a root start/end boundary only when its
+  // measured line and inline side agree with the pointer. Besides being more
+  // accurate, this keeps a click at the end of a very long draft O(1): the old
+  // geometric fallback measured every character before it could return EOF.
+  if (clamped !== undefined && node === backdrop && logicalEndpointMatchesPoint(backdrop, clamped, input.value.length, clientX, clientY, resolvedLineHeight)) {
+    rememberCaretAffinityAtPoint(input, backdrop, clamped, clientX, clientY)
+    return clamped
+  }
+  const fallback = nearestVisualLogicalOffset(backdrop, input.value.length, clientX, clientY, resolvedLineHeight) ?? clamped
+  if (fallback !== undefined) rememberCaretAffinityAtPoint(input, backdrop, fallback, clientX, clientY)
+  return fallback
 }
 
 function restoreInlineProperty(style: CSSStyleDeclaration, name: string, value: string, priority: string): void {
@@ -604,16 +622,74 @@ interface VisualLogicalBoundary { offset: number, left: number, top: number, hei
 
 /** Geometric fallback when Chromium cannot hit-test the visual backdrop. */
 export function nearestVisualLogicalOffset(root: HTMLElement, maxLogical: number, clientX: number, clientY: number, lineHeight: number): number | undefined {
-  const boundaries = visualLogicalBoundaries(root, maxLogical, lineHeight)
-  if (boundaries.length === 0) return undefined
   const style = getComputedStyle(root)
   const paddingTop = Number.parseFloat(style.paddingTop) || 0
   const contentTop = root.getBoundingClientRect().top + paddingTop
   const targetLine = Math.floor((clientY - contentTop) / lineHeight)
   const lineOf = (boundary: VisualLogicalBoundary): number => Math.round((boundary.top - contentTop) / lineHeight)
-  let nearestLineDistance = Number.POSITIVE_INFINITY
-  for (const boundary of boundaries) nearestLineDistance = Math.min(nearestLineDistance, Math.abs(lineOf(boundary) - targetLine))
-  const onLine = boundaries.filter(boundary => Math.abs(lineOf(boundary) - targetLine) === nearestLineDistance)
+  const cache = new Map<string, VisualLogicalBoundary | undefined>()
+  const boundaryAt = (offset: number, affinity: CaretVisualAffinity = 'forward'): VisualLogicalBoundary | undefined => {
+    const at = Math.min(Math.max(offset, 0), maxLogical)
+    const key = `${at}:${affinity}`
+    if (cache.has(key)) return cache.get(key)
+    const rect = visualCaretRectAtLogicalOffset(root, at, affinity)
+    const boundary = rect === undefined ? undefined : { offset: at, left: rect.left, top: rect.top, height: rect.height ?? lineHeight }
+    cache.set(key, boundary)
+    return boundary
+  }
+  const first = boundaryAt(0)
+  const last = boundaryAt(maxLogical)
+  if (first === undefined || last === undefined) return undefined
+  const firstLine = lineOf(first)
+  const lastLine = lineOf(last)
+  const wantedLine = Math.min(Math.max(targetLine, Math.min(firstLine, lastLine)), Math.max(firstLine, lastLine))
+  const firstOffsetOnOrAfterLine = (line: number): number => {
+    let low = 0
+    let high = maxLogical
+    while (low < high) {
+      const middle = Math.floor((low + high) / 2)
+      const boundary = boundaryAt(middle)
+      // A missing collapsed range is rare and local (usually a newline). The
+      // following boundary remains a safe monotonic side for this lower bound.
+      if (boundary === undefined || lineOf(boundary) >= line) high = middle
+      else low = middle + 1
+    }
+    return low
+  }
+  const start = firstOffsetOnOrAfterLine(wantedLine)
+  const after = firstOffsetOnOrAfterLine(wantedLine + 1)
+  const end = after === start && lineOf(last) === wantedLine ? maxLogical : Math.max(start, after - 1)
+  const candidates = new Set<number>([start, end])
+  const span = end - start
+  if (span <= 512) {
+    for (let offset = start; offset <= end; offset++) candidates.add(offset)
+  } else {
+    // A normal wrapped line is far shorter than this. If layout exposes one
+    // enormous line, use its monotonic inline coordinates instead of turning
+    // pointermove into an O(draft length) operation.
+    const rtl = style.direction === 'rtl'
+    let low = start
+    let high = end
+    while (low <= high) {
+      const middle = Math.floor((low + high) / 2)
+      const boundary = boundaryAt(middle)
+      if (boundary === undefined) { high = middle - 1; continue }
+      candidates.add(middle)
+      const beforePoint = rtl ? boundary.left > clientX : boundary.left < clientX
+      if (beforePoint) low = middle + 1
+      else high = middle - 1
+    }
+    for (const offset of [low - 2, low - 1, low, low + 1, low + 2]) {
+      if (offset >= start && offset <= end) candidates.add(offset)
+    }
+  }
+  // A soft-wrap boundary has two native visual positions at the same logical
+  // offset: end of the old line and start of the new one. Keep both so a click
+  // in either place does not jump across the wrap.
+  candidates.add(after)
+  const onLine = Array.from(candidates).flatMap(offset => [boundaryAt(offset, 'backward'), boundaryAt(offset, 'forward')])
+    .filter((boundary): boundary is VisualLogicalBoundary => boundary !== undefined && lineOf(boundary) === wantedLine)
+  if (onLine.length === 0) return Math.abs(targetLine - firstLine) <= Math.abs(targetLine - lastLine) ? first.offset : last.offset
   return onLine.reduce((best, boundary) => {
     const distance = Math.abs(boundary.left - clientX)
     const bestDistance = Math.abs(best.left - clientX)
@@ -622,51 +698,29 @@ export function nearestVisualLogicalOffset(root: HTMLElement, maxLogical: number
   }).offset
 }
 
-function visualLogicalBoundaries(root: HTMLElement, maxLogical: number, lineHeight: number): VisualLogicalBoundary[] {
-  const boundaries: VisualLogicalBoundary[] = []
-  const direction = getComputedStyle(root).direction
-  let logical = 0
-  const add = (offset: number, left: number, top: number, height: number): void => {
-    if (offset < 0 || offset > maxLogical || !Number.isFinite(left) || !Number.isFinite(top)) return
-    boundaries.push({ offset, left, top, height: height > 0 ? height : lineHeight })
-  }
-  const visit = (parent: Node): void => {
-    for (const child of Array.from(parent.childNodes)) {
-      if (logical > maxLogical) return
-      if (child instanceof Element && child.matches('[data-decoration="chip"]')) {
-        const rect = child.getBoundingClientRect()
-        const start = direction === 'rtl' ? rect.right : rect.left
-        const end = direction === 'rtl' ? rect.left : rect.right
-        add(logical, start, rect.top, rect.height)
-        logical += 1
-        add(logical, end, rect.top, rect.height)
-        continue
-      }
-      if (child instanceof Text) {
-        const text = child.data
-        let local = 0
-        for (const symbol of text) {
-          const next = local + symbol.length
-          const range = document.createRange()
-          range.setStart(child, local)
-          range.setEnd(child, next)
-          const rect = range.getBoundingClientRect()
-          if (usableCaretRect(rect)) {
-            const start = direction === 'rtl' ? rect.right : rect.left
-            const end = direction === 'rtl' ? rect.left : rect.right
-            add(logical + local, start, rect.top, rect.height)
-            add(logical + next, end, rect.top, rect.height)
-          }
-          local = next
-        }
-        logical += text.length
-        continue
-      }
-      visit(child)
-    }
-  }
-  visit(root)
-  return boundaries
+function logicalEndpointMatchesPoint(root: HTMLElement, offset: number, maxLogical: number, clientX: number, clientY: number, lineHeight: number): boolean {
+  if (offset !== 0 && offset !== maxLogical) return false
+  const rtl = getComputedStyle(root).direction === 'rtl'
+  return (['backward', 'forward'] as const).some(affinity => {
+    const boundary = visualCaretRectAtLogicalOffset(root, offset, affinity)
+    if (boundary === undefined) return false
+    const sameLine = clientY >= boundary.top - lineHeight / 2 && clientY <= boundary.top + lineHeight * 1.5
+    if (!sameLine) return false
+    if (offset === 0) return rtl ? clientX >= boundary.left - 1 : clientX <= boundary.left + 1
+    return rtl ? clientX <= boundary.left + 1 : clientX >= boundary.left - 1
+  })
+}
+
+function rememberCaretAffinityAtPoint(input: HTMLTextAreaElement, root: HTMLElement, offset: number, clientX: number, clientY: number): void {
+  const choices = (['backward', 'forward'] as const).map(affinity => ({ affinity, rect: visualCaretRectAtLogicalOffset(root, offset, affinity) }))
+    .filter((choice): choice is { affinity: CaretVisualAffinity, rect: CaretBoundaryRect } => choice.rect !== undefined)
+  if (choices.length === 0) return
+  const best = choices.reduce((nearest, choice) => {
+    const distance = Math.abs(choice.rect.top + (choice.rect.height ?? 0) / 2 - clientY) * 1000 + Math.abs(choice.rect.left - clientX)
+    const nearestDistance = Math.abs(nearest.rect.top + (nearest.rect.height ?? 0) / 2 - clientY) * 1000 + Math.abs(nearest.rect.left - clientX)
+    return distance < nearestDistance ? choice : nearest
+  })
+  caretVisualAffinity.set(input, best.affinity)
 }
 
 /** Convert a point in the visual backdrop into the textarea's logical index. */
@@ -696,15 +750,84 @@ export function logicalOffsetAtDomPoint(root: HTMLElement, node: Node, nodeOffse
 
 /** Remap simple pointer clicks through the full-width visual chip geometry. */
 export function adoptAdaptiveChipHitTesting(): () => void {
-  let press: { input: HTMLTextAreaElement, backdrop: HTMLElement, anchor: number } | undefined
-  const apply = (input: HTMLTextAreaElement, anchor: number, target: number): void => {
-    input.focus({ preventScroll: true })
-    input.setSelectionRange(Math.min(anchor, target), Math.max(anchor, target), target < anchor ? 'backward' : 'forward')
+  interface PointerPress {
+    input: HTMLTextAreaElement
+    backdrop: HTMLElement
+    anchor: number
+    anchorStart: number
+    anchorEnd: number
+    unit: 'character' | 'line' | 'word'
+    clientX: number
+    clientY: number
+    startX: number
+    startY: number
+    pointerId: number
+    scrollFrame: number
+  }
+  let press: PointerPress | undefined
+  let clickSequence: { input: HTMLTextAreaElement, x: number, y: number, time: number, count: number } | undefined
+  const applyRange = (input: HTMLTextAreaElement, start: number, end: number, direction: 'backward' | 'forward'): void => {
+    input.setSelectionRange(start, end, direction)
     input.dispatchEvent(new Event('select', { bubbles: true }))
+  }
+  const applyTarget = (current: PointerPress, target: number, clientY: number): void => {
+    if (current.unit === 'character') {
+      applyRange(current.input, Math.min(current.anchor, target), Math.max(current.anchor, target), target < current.anchor ? 'backward' : 'forward')
+      return
+    }
+    const targetRange = current.unit === 'word'
+      ? wordRangeAtLogicalOffset(current.input.value, target)
+      : visualLineRangeAtPoint(current.input, current.backdrop, clientY)
+    if (targetRange === undefined) return
+    if (targetRange.end <= current.anchorStart) applyRange(current.input, targetRange.start, current.anchorEnd, 'backward')
+    else applyRange(current.input, current.anchorStart, targetRange.end, 'forward')
+  }
+  const scrollDelta = (current: PointerPress): number => {
+    const scrollport = current.input.closest('[data-input-scroll]')
+    if (!(scrollport instanceof HTMLElement) || scrollport.scrollHeight <= scrollport.clientHeight) return 0
+    const viewport = scrollport.getBoundingClientRect()
+    const edge = Math.min(32, viewport.height / 4)
+    if (!(edge > 0)) return 0
+    if (current.clientY < viewport.top + edge) return -Math.max(2, Math.min(24, (viewport.top + edge - current.clientY) / 2))
+    if (current.clientY > viewport.bottom - edge) return Math.max(2, Math.min(24, (current.clientY - (viewport.bottom - edge)) / 2))
+    return 0
+  }
+  const scheduleDragScroll = (current: PointerPress): void => {
+    if (current.scrollFrame !== 0 || scrollDelta(current) === 0) return
+    current.scrollFrame = requestAnimationFrame(() => {
+      current.scrollFrame = 0
+      if (press !== current) return
+      const scrollport = current.input.closest('[data-input-scroll]')
+      if (!(scrollport instanceof HTMLElement)) return
+      const before = scrollport.scrollTop
+      scrollport.scrollTop += scrollDelta(current)
+      if (scrollport.scrollTop !== before) {
+        const target = logicalOffsetFromPoint(current.input, current.backdrop, current.clientX, current.clientY)
+        if (target !== undefined) applyTarget(current, target, current.clientY)
+        scheduleDragScroll(current)
+      }
+    })
+  }
+  const finishPress = (): PointerPress | undefined => {
+    const current = press
+    press = undefined
+    if (current === undefined) return undefined
+    cancelAnimationFrame(current.scrollFrame)
+    if (Math.hypot(current.clientX - current.startX, current.clientY - current.startY) > 5) clickSequence = undefined
+    try {
+      if (current.input.hasPointerCapture?.(current.pointerId)) current.input.releasePointerCapture(current.pointerId)
+    } catch {
+      // A detached/disabled textarea can lose capture before pointerup.
+    }
+    return current
   }
   const onPointerDown = (event: PointerEvent): void => {
     const input = event.target
-    if (event.button !== 0 || !(input instanceof HTMLTextAreaElement)) return
+    // Preserve the browser's long-press handles and touch selection menu. The
+    // remapper is needed for precision mouse/pen coordinates around expanded
+    // chips; suppressing touch default behavior would remove an entire native
+    // editing mode with no equivalent handles to offer in return.
+    if (event.button !== 0 || event.pointerType === 'touch' || !(input instanceof HTMLTextAreaElement)) return
     const backdrop = input.closest('[data-composer-card]')?.querySelector('[data-input-backdrop]:not([data-dsh-ref-height-ruler])')
     if (!(backdrop instanceof HTMLElement) || backdrop.querySelector('[data-decoration="chip"]') === null) return
     const target = logicalOffsetFromPoint(input, backdrop, event.clientX, event.clientY)
@@ -712,43 +835,66 @@ export function adoptAdaptiveChipHitTesting(): () => void {
     const anchor = event.shiftKey
       ? (input.selectionDirection === 'backward' ? input.selectionEnd : input.selectionStart)
       : target
-    press = { input, backdrop, anchor }
-    apply(input, anchor, target)
+    const previousClick = clickSequence
+    const continuedClick = previousClick !== undefined && previousClick.input === input
+      && event.timeStamp - previousClick.time <= 500 && Math.hypot(event.clientX - previousClick.x, event.clientY - previousClick.y) <= 5
+    const sequenceCount = continuedClick ? previousClick.count + 1 : 1
+    clickSequence = { input, x: event.clientX, y: event.clientY, time: event.timeStamp, count: sequenceCount }
+    // PointerEvent.detail is zero in Chromium, while synthetic/WebView events
+    // sometimes carry the MouseEvent click count. Track the physical sequence
+    // and accept either representation.
+    const clickCount = Math.max(sequenceCount, event.detail)
+    const unit = clickCount >= 3 ? 'line' : clickCount === 2 ? 'word' : 'character'
+    const unitRange = unit === 'word'
+      ? wordRangeAtLogicalOffset(input.value, target)
+      : unit === 'line' ? visualLineRangeAtPoint(input, backdrop, event.clientY) : undefined
+    const anchorStart = unitRange?.start ?? anchor
+    const anchorEnd = unitRange?.end ?? anchor
+    finishPress()
+    input.focus({ preventScroll: true })
+    press = { input, backdrop, anchor, anchorStart, anchorEnd, unit, clientX: event.clientX, clientY: event.clientY, startX: event.clientX, startY: event.clientY, pointerId: event.pointerId, scrollFrame: 0 }
+    try { input.setPointerCapture?.(event.pointerId) } catch {
+      // Synthetic pointer events and older WebViews may not expose capture.
+    }
+    if (press !== undefined) applyTarget(press, target, event.clientY)
     event.preventDefault()
   }
   const onPointerMove = (event: PointerEvent): void => {
     const current = press
     if (current === undefined) return
+    current.clientX = event.clientX
+    current.clientY = event.clientY
+    if (Math.hypot(current.clientX - current.startX, current.clientY - current.startY) > 5) clickSequence = undefined
     const target = logicalOffsetFromPoint(current.input, current.backdrop, event.clientX, event.clientY)
     if (target === undefined) return
-    apply(current.input, current.anchor, target)
+    applyTarget(current, target, event.clientY)
+    scheduleDragScroll(current)
     event.preventDefault()
   }
   const onPointerUp = (event: PointerEvent): void => {
-    const current = press
-    press = undefined
+    const current = finishPress()
     if (current === undefined) return
     const target = logicalOffsetFromPoint(current.input, current.backdrop, event.clientX, event.clientY)
-    if (target !== undefined) apply(current.input, current.anchor, target)
+    if (target !== undefined) applyTarget(current, target, event.clientY)
     event.preventDefault()
   }
-  const onPointerCancel = (): void => { press = undefined }
+  const onPointerCancel = (): void => { finishPress() }
   const onDoubleClick = (event: MouseEvent): void => {
     const input = event.target
     if (!(input instanceof HTMLTextAreaElement)) return
     const backdrop = input.closest('[data-composer-card]')?.querySelector('[data-input-backdrop]:not([data-dsh-ref-height-ruler])')
     if (!(backdrop instanceof HTMLElement) || backdrop.querySelector('[data-decoration="chip"]') === null) return
-    const target = logicalOffsetFromPoint(input, backdrop, event.clientX, event.clientY)
-    if (target === undefined) return
-    const selected = wordRangeAtLogicalOffset(input.value, target)
-    const applyWord = (): void => {
-      input.setSelectionRange(selected.start, selected.end)
+    // The detail=2 pointerdown already established either the clicked word or
+    // a word-granularity drag range. Chromium performs another native textarea
+    // selection after dblclick dispatch; restore our current range rather than
+    // collapsing a completed drag back to only the word under pointerup.
+    const selected = { start: input.selectionStart, end: input.selectionEnd, direction: input.selectionDirection }
+    const restoreWordSelection = (): void => {
+      input.setSelectionRange(selected.start, selected.end, selected.direction)
       input.dispatchEvent(new Event('select', { bubbles: true }))
     }
-    applyWord()
-    // Chromium performs its textarea word selection after dispatching the
-    // dblclick event even when the preceding pointerdown was prevented.
-    queueMicrotask(applyWord)
+    restoreWordSelection()
+    queueMicrotask(restoreWordSelection)
     event.preventDefault()
     event.stopImmediatePropagation()
   }
@@ -757,18 +903,13 @@ export function adoptAdaptiveChipHitTesting(): () => void {
     const input = event.target
     const backdrop = input.closest('[data-composer-card]')?.querySelector('[data-input-backdrop]:not([data-dsh-ref-height-ruler])')
     if (!(backdrop instanceof HTMLElement) || backdrop.querySelector('[data-decoration="chip"]') === null) return
-    const style = getComputedStyle(input)
-    const left = backdrop.getBoundingClientRect().left + (Number.parseFloat(style.paddingLeft) || 0) + 1
-    const right = backdrop.getBoundingClientRect().right - (Number.parseFloat(style.paddingRight) || 0) - 1
-    const start = logicalOffsetFromPoint(input, backdrop, left, event.clientY)
-    const end = logicalOffsetFromPoint(input, backdrop, right, event.clientY)
-    if (start === undefined || end === undefined) return
-    const applyLine = (): void => {
-      input.setSelectionRange(Math.min(start, end), Math.max(start, end))
+    const selected = { start: input.selectionStart, end: input.selectionEnd, direction: input.selectionDirection }
+    const restoreLineSelection = (): void => {
+      input.setSelectionRange(selected.start, selected.end, selected.direction)
       input.dispatchEvent(new Event('select', { bubbles: true }))
     }
-    applyLine()
-    queueMicrotask(applyLine)
+    restoreLineSelection()
+    queueMicrotask(restoreLineSelection)
     event.preventDefault()
     event.stopImmediatePropagation()
   }
@@ -776,16 +917,21 @@ export function adoptAdaptiveChipHitTesting(): () => void {
   document.addEventListener('pointermove', onPointerMove, true)
   document.addEventListener('pointerup', onPointerUp, true)
   document.addEventListener('pointercancel', onPointerCancel, true)
+  document.addEventListener('lostpointercapture', onPointerCancel, true)
   document.addEventListener('dblclick', onDoubleClick, true)
   document.addEventListener('click', onClick, true)
+  window.addEventListener('blur', onPointerCancel)
   return () => {
-    press = undefined
+    finishPress()
+    clickSequence = undefined
     document.removeEventListener('pointerdown', onPointerDown, true)
     document.removeEventListener('pointermove', onPointerMove, true)
     document.removeEventListener('pointerup', onPointerUp, true)
     document.removeEventListener('pointercancel', onPointerCancel, true)
+    document.removeEventListener('lostpointercapture', onPointerCancel, true)
     document.removeEventListener('dblclick', onDoubleClick, true)
     document.removeEventListener('click', onClick, true)
+    window.removeEventListener('blur', onPointerCancel)
   }
 }
 
@@ -796,6 +942,17 @@ export function wordRangeAtLogicalOffset(value: string, offset: number): { start
   if (chip >= 0) return { start: chip, end: chip + 1 }
   const pivot = at === value.length && at > 0 ? at - 1 : at
   if (pivot < 0 || pivot >= value.length) return { start: at, end: at }
+  // Chromium's native double-click boundaries follow Unicode word
+  // segmentation: CJK words and grapheme-sized punctuation are not equivalent
+  // to one broad run of "non-space" characters. Intl.Segmenter gives us that
+  // same class of boundary while still grouping whitespace runs naturally.
+  if (typeof Intl.Segmenter === 'function') {
+    for (const part of new Intl.Segmenter(undefined, { granularity: 'word' }).segment(value)) {
+      const start = part.index
+      const end = start + part.segment.length
+      if (pivot >= start && pivot < end) return { start, end }
+    }
+  }
   const kind = (char: string): 'word' | 'space' | 'punctuation' => /[\p{L}\p{N}\p{M}_]/u.test(char)
     ? 'word' : /\s/u.test(char) ? 'space' : 'punctuation'
   const selectedKind = kind(value[pivot] ?? '')
@@ -806,14 +963,52 @@ export function wordRangeAtLogicalOffset(value: string, offset: number): { start
   return { start, end }
 }
 
+function visualLineRangeAtPoint(input: HTMLTextAreaElement, backdrop: HTMLElement, clientY: number): { start: number, end: number } | undefined {
+  const style = getComputedStyle(input)
+  const rect = backdrop.getBoundingClientRect()
+  const left = rect.left + (Number.parseFloat(style.paddingLeft) || 0) + 1
+  const right = rect.right - (Number.parseFloat(style.paddingRight) || 0) - 1
+  const parsedLineHeight = Number.parseFloat(style.lineHeight)
+  const fontSize = Number.parseFloat(style.fontSize)
+  const lineHeight = parsedLineHeight > 0 ? parsedLineHeight : fontSize > 0 ? fontSize * 1.2 : 20
+  // Edge hit-testing is surprisingly engine-dependent when the point lands in
+  // textarea padding. Measure the visual line directly first; the point API is
+  // retained as a fallback for WebViews with incomplete Range geometry.
+  const first = nearestVisualLogicalOffset(backdrop, input.value.length, left, clientY, lineHeight)
+    ?? logicalOffsetFromPoint(input, backdrop, left, clientY)
+  const last = nearestVisualLogicalOffset(backdrop, input.value.length, right, clientY, lineHeight)
+    ?? logicalOffsetFromPoint(input, backdrop, right, clientY)
+  if (first === undefined || last === undefined) return undefined
+  const start = Math.min(first, last)
+  let end = Math.max(first, last)
+  // Native triple-click line selection owns the terminating hard newline. A
+  // soft-wrapped visual line has no delimiter here and remains unchanged.
+  if (input.value[end] === '\n') end++
+  return { start, end }
+}
+
 /** Keep visual-line keyboard navigation aligned with full-width chips. */
 export function adoptAdaptiveChipKeyboardNavigation(): () => void {
   let preferredX: number | undefined
-  const reset = (): void => { preferredX = undefined }
+  let preferredFocus: { input: HTMLTextAreaElement, offset: number, value: string } | undefined
+  const reset = (): void => { preferredX = undefined; preferredFocus = undefined }
   const onKeyDown = (event: KeyboardEvent): void => {
     const vertical = event.key === 'ArrowUp' || event.key === 'ArrowDown' || event.key === 'PageUp' || event.key === 'PageDown'
     const lineEdge = event.key === 'Home' || event.key === 'End'
-    if (!vertical && !lineEdge) { reset(); return }
+    if (!vertical && !lineEdge) {
+      reset()
+      if ((event.key === 'ArrowLeft' || event.key === 'ArrowRight') && event.target instanceof HTMLTextAreaElement) {
+        const input = event.target
+        const chip = input.closest('[data-composer-card]')?.querySelector('[data-decoration="chip"]')
+        if (chip instanceof Element) {
+          // The native horizontal edit runs after dispatch. Remember which
+          // visual side of an ambiguous soft-wrap boundary it approaches so
+          // the replacement caret keeps Chromium's upstream/downstream bias.
+          queueMicrotask(() => { caretVisualAffinity.set(input, event.key === 'ArrowLeft' ? 'backward' : 'forward') })
+        }
+      }
+      return
+    }
     // Let the host arbitrate trigger menus first. React's root listener runs
     // before this document-bubble listener and marks a consumed key prevented.
     if (event.defaultPrevented || event.isComposing || event.keyCode === 229 || event.altKey || event.ctrlKey || event.metaKey) return
@@ -821,8 +1016,15 @@ export function adoptAdaptiveChipKeyboardNavigation(): () => void {
     const input = event.target
     const backdrop = input.closest('[data-composer-card]')?.querySelector('[data-input-backdrop]:not([data-dsh-ref-height-ruler])')
     if (!(backdrop instanceof HTMLElement) || backdrop.querySelector('[data-decoration="chip"]') === null) return
-    const focus = input.selectionDirection === 'backward' ? input.selectionStart : input.selectionEnd
-    let anchorRect = visualCaretRectAtLogicalOffset(backdrop, focus)
+    const pageKey = event.key === 'PageUp' || event.key === 'PageDown'
+    // Chromium treats an unmodified Page key on a range directionally: PageUp
+    // starts from the low endpoint and PageDown from the high endpoint,
+    // regardless of which end is the current focus. Arrow/Home/End and every
+    // Shift extension continue from the active end instead.
+    const focus = pageKey && !event.shiftKey && input.selectionStart !== input.selectionEnd
+      ? (event.key === 'PageUp' ? input.selectionStart : input.selectionEnd)
+      : input.selectionDirection === 'backward' ? input.selectionStart : input.selectionEnd
+    let anchorRect = visualCaretRectAtLogicalOffset(backdrop, focus, caretVisualAffinity.get(input))
     if (anchorRect === undefined) return
     const style = getComputedStyle(input)
     const lineHeight = Number.parseFloat(style.lineHeight)
@@ -834,6 +1036,7 @@ export function adoptAdaptiveChipKeyboardNavigation(): () => void {
     let targetX = anchorRect.left
     let targetY = anchorRect.top + lineHeight / 2
     if (vertical) {
+      if (preferredFocus?.input !== input || preferredFocus.offset !== focus || preferredFocus.value !== input.value) preferredX = undefined
       preferredX ??= anchorRect.left
       targetX = preferredX
       const direction = event.key === 'ArrowUp' || event.key === 'PageUp' ? -1 : 1
@@ -845,7 +1048,7 @@ export function adoptAdaptiveChipKeyboardNavigation(): () => void {
         const viewport = scrollport.getBoundingClientRect()
         if (targetY < viewport.top || targetY > viewport.bottom) {
           scrollport.scrollTop += targetY < viewport.top ? targetY - viewport.top : targetY - viewport.bottom
-          anchorRect = visualCaretRectAtLogicalOffset(backdrop, focus) ?? anchorRect
+          anchorRect = visualCaretRectAtLogicalOffset(backdrop, focus, caretVisualAffinity.get(input)) ?? anchorRect
           targetY = anchorRect.top + lineHeight / 2 + direction * distance
         }
       }
@@ -864,15 +1067,12 @@ export function adoptAdaptiveChipKeyboardNavigation(): () => void {
       : target
     input.setSelectionRange(Math.min(selectionAnchor, target), Math.max(selectionAnchor, target), target < selectionAnchor ? 'backward' : 'forward')
     input.dispatchEvent(new Event('select', { bubbles: true }))
+    if (vertical) preferredFocus = { input, offset: target, value: input.value }
     event.preventDefault()
   }
   document.addEventListener('keydown', onKeyDown)
-  document.addEventListener('input', reset, true)
-  document.addEventListener('pointerdown', reset, true)
   return () => {
     document.removeEventListener('keydown', onKeyDown)
-    document.removeEventListener('input', reset, true)
-    document.removeEventListener('pointerdown', reset, true)
   }
 }
 
@@ -1050,7 +1250,7 @@ export function adoptAdaptiveChipCaret(): () => void {
     const card = input.closest('[data-composer-card]')
     const backdrop = card?.querySelector('[data-input-backdrop]:not([data-dsh-ref-height-ruler])')
     if (!(backdrop instanceof HTMLElement) || backdrop.querySelector('[data-decoration="chip"]') === null) return hide()
-    const rect = visualCaretRectAtLogicalOffset(backdrop, input.selectionEnd)
+    const rect = visualCaretRectAtLogicalOffset(backdrop, input.selectionEnd, caretVisualAffinity.get(input))
     if (rect === undefined || !Number.isFinite(rect.left) || !Number.isFinite(rect.top)) return hide()
     // Read metrics without our transparent-caret override. The painted caret
     // deliberately keeps its semantic CSS colour: embedded Chromium can
@@ -1123,10 +1323,20 @@ export function adoptAdaptiveChipCaret(): () => void {
   const activeEvents = ['input', 'keydown', 'keyup', 'pointerup', 'focusin', 'selectionchange'] as const
   const onPassive = (): void => { schedule() }
   const onActive = (): void => { schedule(true, true) }
+  // Our hit-testing can move between two visual positions that share one
+  // logical soft-wrap offset. No native selectionchange is emitted in that
+  // case, so paint synchronously from the explicit select notification.
+  const onSelect = (): void => {
+    restartBlink = true
+    revealPending = true
+    cancelAnimationFrame(frame)
+    update()
+  }
   const onCompositionStart = (): void => { composing = true; schedule(true, true) }
   const onCompositionEnd = (): void => { composing = false; schedule(true, true) }
   for (const event of passiveEvents) document.addEventListener(event, onPassive, true)
   for (const event of activeEvents) document.addEventListener(event, onActive, true)
+  document.addEventListener('select', onSelect, true)
   document.addEventListener('compositionstart', onCompositionStart, true)
   document.addEventListener('compositionend', onCompositionEnd, true)
   schedule()
@@ -1135,6 +1345,7 @@ export function adoptAdaptiveChipCaret(): () => void {
     observer.disconnect()
     for (const event of passiveEvents) document.removeEventListener(event, onPassive, true)
     for (const event of activeEvents) document.removeEventListener(event, onActive, true)
+    document.removeEventListener('select', onSelect, true)
     document.removeEventListener('compositionstart', onCompositionStart, true)
     document.removeEventListener('compositionend', onCompositionEnd, true)
     hide()
@@ -1204,17 +1415,26 @@ function usableCaretRect(rect: DOMRect): boolean {
   return rect.height > 0 || rect.top !== 0 || rect.left !== 0
 }
 
-export function visualCaretRectAtLogicalOffset(root: HTMLElement, target: number): CaretBoundaryRect | undefined {
+function measuredRangeRect(range: Range): DOMRect | undefined {
+  const measure = (range as Range & { getBoundingClientRect?: () => DOMRect }).getBoundingClientRect
+  return typeof measure === 'function' ? measure.call(range) : undefined
+}
+
+export function visualCaretRectAtLogicalOffset(root: HTMLElement, target: number, affinity: CaretVisualAffinity = 'forward'): CaretBoundaryRect | undefined {
   const range = rangeAtLogicalOffset(root, target)
   if (range === undefined) return undefined
-  const measured = range.getBoundingClientRect()
-  const boundary = caretBoundaryRectAtLogicalOffset(root, target)
+  const boundaries = caretBoundaryRectsAtLogicalOffset(root, target)
+  const boundary = affinity === 'backward'
+    ? boundaries.before ?? boundaries.after
+    : boundaries.after ?? boundaries.before
   // Chromium's collapsed Range has a dependable inline position, but its
   // vertical origin may sit on the baseline. A neighbouring glyph/chip rect
-  // supplies the painted visual line.
-  return usableCaretRect(measured)
-    ? { left: measured.left, top: boundary?.top ?? measured.top, source: boundary?.source ?? 'text', height: boundary?.height }
-    : boundary
+  // supplies the painted visual line. At a soft wrap the same logical offset
+  // has two positions, so its chosen neighbour also owns the inline edge.
+  if (boundary !== undefined) return boundary
+  const measured = measuredRangeRect(range)
+  if (measured !== undefined && usableCaretRect(measured)) return { left: measured.left, top: measured.top, source: 'text', height: measured.height }
+  return trailingEmptyLineCaretRect(root, target)
 }
 
 /** Snap an ink/chip rectangle to the textarea's shared visual line grid. */
@@ -1236,50 +1456,85 @@ interface CaretBoundaryRect {
   source: 'chip' | 'text'
 }
 
-function caretBoundaryRectAtLogicalOffset(root: HTMLElement, target: number): CaretBoundaryRect | undefined {
+function caretBoundaryRectsAtLogicalOffset(root: HTMLElement, target: number): { before?: CaretBoundaryRect, after?: CaretBoundaryRect } {
   let logical = 0
-  let trailingChip: CaretBoundaryRect | undefined
-  const visit = (parent: Node): CaretBoundaryRect | undefined => {
+  let before: CaretBoundaryRect | undefined
+  let after: CaretBoundaryRect | undefined
+  const visit = (parent: Node): void => {
     for (const child of Array.from(parent.childNodes)) {
       if (child instanceof Element && child.matches('[data-decoration="chip"]')) {
         const chip = child.getBoundingClientRect()
-        if (target === logical) return { left: chip.left, top: chip.top, height: chip.height, source: 'chip' }
+        if (target === logical) after ??= { left: chip.left, top: chip.top, height: chip.height, source: 'chip' }
         logical += 1
-        if (target === logical) trailingChip = { left: chip.right, top: chip.top, height: chip.height, source: 'chip' }
+        if (target === logical) before = { left: chip.right, top: chip.top, height: chip.height, source: 'chip' }
         continue
       }
       if (child instanceof Text) {
         const start = logical
         const end = start + child.data.length
         if (target >= start && target <= end && child.data.length > 0) {
-          const range = document.createRange()
-          // Prefer the following real glyph. At a soft wrap or immediately
-          // after a chip, the preceding glyph belongs to the previous visual
-          // line and would paint the custom caret one line too high.
           if (target < end) {
+            const range = document.createRange()
             const at = Math.max(0, target - start)
             range.setStart(child, at)
             range.setEnd(child, at + 1)
-            const rect = range.getBoundingClientRect()
-            if (usableCaretRect(rect)) return { left: rect.left, top: rect.top, height: rect.height, source: 'text' }
+            const rect = measuredRangeRect(range)
+            if (rect !== undefined && usableCaretRect(rect)) after ??= { left: rect.left, top: rect.top, height: rect.height, source: 'text' }
           }
           if (target > start) {
+            const range = document.createRange()
             const at = Math.min(child.data.length, target - start)
             range.setStart(child, at - 1)
             range.setEnd(child, at)
-            const rect = range.getBoundingClientRect()
-            if (usableCaretRect(rect)) return { left: rect.right, top: rect.top, height: rect.height, source: 'text' }
+            const rect = measuredRangeRect(range)
+            if (rect !== undefined && usableCaretRect(rect)) before = { left: rect.right, top: rect.top, height: rect.height, source: 'text' }
           }
         }
         logical = end
         continue
       }
-      const found = visit(child)
-      if (found !== undefined) return found
+      visit(child)
     }
-    return trailingChip
   }
-  return visit(root)
+  visit(root)
+  return { before, after }
+}
+
+function trailingEmptyLineCaretRect(root: HTMLElement, target: number): CaretBoundaryRect | undefined {
+  let logical = 0
+  let previous = ''
+  const visit = (parent: Node): void => {
+    for (const child of Array.from(parent.childNodes)) {
+      if (child instanceof Element && child.matches('[data-decoration="chip"]')) {
+        if (logical < target) previous = '\uFFFC'
+        logical += 1
+        continue
+      }
+      if (child instanceof Text) {
+        const end = logical + child.data.length
+        if (target > logical && target <= end) previous = child.data[target - logical - 1] ?? previous
+        logical = end
+        continue
+      }
+      visit(child)
+    }
+  }
+  visit(root)
+  if (target !== logical || previous !== '\n') return undefined
+  const style = getComputedStyle(root)
+  const lineHeight = Number.parseFloat(style.lineHeight)
+  const fontSize = Number.parseFloat(style.fontSize)
+  const height = lineHeight > 0 ? lineHeight : fontSize > 0 ? fontSize * 1.2 : 20
+  const paddingLeft = Number.parseFloat(style.paddingLeft) || 0
+  const paddingRight = Number.parseFloat(style.paddingRight) || 0
+  const paddingBottom = Number.parseFloat(style.paddingBottom) || 0
+  const rect = root.getBoundingClientRect()
+  return {
+    left: style.direction === 'rtl' ? rect.right - paddingRight : rect.left + paddingLeft,
+    top: Math.max(rect.top, rect.bottom - paddingBottom - height),
+    height,
+    source: 'text',
+  }
 }
 
 function rangeAtLogicalOffset(root: HTMLElement, target: number): Range | undefined {

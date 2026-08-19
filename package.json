@@ -1,6 +1,6 @@
 {
   "name": "dsh-reference-anything",
-  "version": "0.2.0",
+  "version": "0.2.2",
   "description": "Reference locally mirrored ChatGPT, Claude, Gemini, DeepSeek, Grok, and Kimi conversations from DeepSeek Harness",
   "license": "MIT",
   "publishConfig": {

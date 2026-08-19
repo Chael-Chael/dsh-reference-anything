@@ -28,7 +28,7 @@ const healthyHealth: Health = {
   version: '1.8.6', daemon: 'Daemon: running', pluginInstalled: true, daemonRunning: true,
   extensionConnected: true, extensionState: 'connected', opencliCompatible: true,
   daemonVersion: '1.8.6', daemonStale: false, connectivityOk: true,
-  pluginVersion: '0.2.0', adapterCommandsReady: true, adapterCompatible: true,
+  pluginVersion: '0.2.1', adapterCommandsReady: true, adapterCompatible: true,
 }
 
 let root: Root | undefined
@@ -49,16 +49,60 @@ afterEach(() => {
 
 function renderSettings(current: SettingsSnapshot, actions: {
   setupAll?: (opened: boolean) => Promise<void>; discoverOpenCli?: () => Promise<void>; installOpenCli?: () => Promise<void>
-  useProfile?: (profile: string) => Promise<void>; refresh?: () => Promise<void>
+  useProfile?: (profile: string) => Promise<void>; refresh?: () => Promise<void>; checkUpdate?: () => Promise<void>; installUpdate?: () => Promise<void>
 } = {}): HTMLElement {
   const noop = async () => {}
   const useScope = ((selector: (value: SettingsSnapshot) => unknown) => selector(current)) as never
   return render(<ConversationSettings close={() => {}} useSessions={(() => []) as never} useWorkspaces={(() => []) as never}
     useScope={useScope} save={noop} sync={noop} cancel={noop} refresh={actions.refresh ?? noop} refreshOnOpen={actions.refresh ?? noop}
     setupAll={actions.setupAll ?? noop} discoverOpenCli={actions.discoverOpenCli ?? noop} installOpenCli={actions.installOpenCli ?? noop}
-    useProfile={actions.useProfile ?? noop} install={noop} restartDaemon={noop} browse={noop} deleteConversation={noop}
+    useProfile={actions.useProfile ?? noop} install={noop} restartDaemon={noop} checkUpdate={actions.checkUpdate ?? noop} installUpdate={actions.installUpdate ?? noop} browse={noop} deleteConversation={noop}
     clearProvider={noop} clearOlder={noop} refreshStats={noop} t={t} />)
 }
+
+describe('settings update bar', () => {
+  const currentUpdate = { currentVersion: '0.2.1', latestVersion: '0.2.1', updateAvailable: false, checkedAt: Date.now() }
+
+  it('appears below the title and above general settings', () => {
+    const el = renderSettings({ settings, update: currentUpdate })
+    const header = el.querySelector('.dsh_ref_header')!
+    const update = el.querySelector('.dsh_ref_update_bar')!
+    const general = el.querySelector('.dsh_ref_general_settings')!
+
+    expect(header.compareDocumentPosition(update) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0)
+    expect(update.compareDocumentPosition(general) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0)
+  })
+
+  it('puts the GitHub repository link immediately to the right of check updates', async () => {
+    const checkUpdate = vi.fn(async () => {})
+    const el = renderSettings({ settings, update: currentUpdate }, { checkUpdate })
+    const actions = el.querySelector('.dsh_ref_update_actions')!
+    const [check, github] = Array.from(actions.children)
+
+    expect(check?.textContent).toBe('Check for updates')
+    expect(github?.textContent).toBe('GitHub')
+    expect(github).toMatchObject({ tagName: 'A' })
+    expect((github as HTMLAnchorElement).href).toBe('https://github.com/Chael-Chael/dsh-reference-anything')
+    expect((github as HTMLAnchorElement).target).toBe('_blank')
+
+    await act(async () => { (check as HTMLButtonElement).click() })
+    expect(checkUpdate).toHaveBeenCalledOnce()
+  })
+
+  it('installs an available version only after confirmation', async () => {
+    const installUpdate = vi.fn(async () => {})
+    const update = { ...currentUpdate, latestVersion: '0.2.2', updateAvailable: true }
+    const el = renderSettings({ settings, update }, { installUpdate })
+    const button = Array.from(el.querySelectorAll('.dsh_ref_update_actions button')).find(item => item.textContent === 'Update to v0.2.2') as HTMLButtonElement
+    const confirmation = vi.spyOn(window, 'confirm').mockReturnValueOnce(false).mockReturnValueOnce(true)
+
+    await act(async () => { button.click() })
+    expect(installUpdate).not.toHaveBeenCalled()
+    await act(async () => { button.click() })
+    expect(installUpdate).toHaveBeenCalledOnce()
+    expect(confirmation).toHaveBeenCalledTimes(2)
+  })
+})
 
 describe('manage synced conversations', () => {
   const noop = async () => {}
@@ -150,7 +194,7 @@ describe('general settings editing', () => {
     const saved: SettingsRecord[] = []
     const current: SettingsSnapshot = { settings: { ...settings, picker: defaultPickerSettings() }, loading: true }
     const useScope = ((selector: (value: SettingsSnapshot) => unknown) => selector(current)) as never
-    const el = render(<ConversationSettings close={() => {}} useSessions={(() => []) as never} useWorkspaces={(() => []) as never} useScope={useScope} save={async value => { saved.push(value) }} sync={noop} cancel={noop} refresh={noop} refreshOnOpen={noop} setupAll={noop} discoverOpenCli={noop} installOpenCli={noop} useProfile={noop} install={noop} restartDaemon={noop} browse={noop} deleteConversation={noop} clearProvider={noop} clearOlder={noop} refreshStats={noop} t={t} />)
+    const el = render(<ConversationSettings close={() => {}} useSessions={(() => []) as never} useWorkspaces={(() => []) as never} useScope={useScope} save={async value => { saved.push(value) }} sync={noop} cancel={noop} refresh={noop} refreshOnOpen={noop} setupAll={noop} discoverOpenCli={noop} installOpenCli={noop} useProfile={noop} install={noop} restartDaemon={noop} checkUpdate={noop} installUpdate={noop} browse={noop} deleteConversation={noop} clearProvider={noop} clearOlder={noop} refreshStats={noop} t={t} />)
     const input = el.querySelector('.dsh_ref_picker_limit input') as HTMLInputElement
 
     act(() => { setNativeValue(input, ''); input.dispatchEvent(new Event('input', { bubbles: true })) })
@@ -169,7 +213,7 @@ describe('general settings editing', () => {
     const saved: SettingsRecord[] = []
     const current: SettingsSnapshot = { settings: { ...settings, picker: defaultPickerSettings() }, loading: true }
     const useScope = ((selector: (value: SettingsSnapshot) => unknown) => selector(current)) as never
-    const el = render(<ConversationSettings close={() => {}} useSessions={(() => []) as never} useWorkspaces={(() => []) as never} useScope={useScope} save={async value => { saved.push(value) }} sync={noop} cancel={noop} refresh={noop} refreshOnOpen={noop} setupAll={noop} discoverOpenCli={noop} installOpenCli={noop} useProfile={noop} install={noop} restartDaemon={noop} browse={noop} deleteConversation={noop} clearProvider={noop} clearOlder={noop} refreshStats={noop} t={t} />)
+    const el = render(<ConversationSettings close={() => {}} useSessions={(() => []) as never} useWorkspaces={(() => []) as never} useScope={useScope} save={async value => { saved.push(value) }} sync={noop} cancel={noop} refresh={noop} refreshOnOpen={noop} setupAll={noop} discoverOpenCli={noop} installOpenCli={noop} useProfile={noop} install={noop} restartDaemon={noop} checkUpdate={noop} installUpdate={noop} browse={noop} deleteConversation={noop} clearProvider={noop} clearOlder={noop} refreshStats={noop} t={t} />)
     const select = el.querySelector('.dsh_ref_render_mode select') as HTMLSelectElement
 
     act(() => { setNativeValue(select, 'raw-text'); select.dispatchEvent(new Event('change', { bubbles: true })) })

@@ -256,12 +256,44 @@ describe('plugin-owned DSH presentation overrides', () => {
     }
   })
 
+  it('preserves both native caret affinities at a soft-wrap boundary', () => {
+    document.body.innerHTML = '<div data-input-backdrop>ab</div>'
+    const root = document.querySelector('[data-input-backdrop]') as HTMLElement
+    const text = root.firstChild as Text
+    const nativeRect = Range.prototype.getBoundingClientRect
+    Range.prototype.getBoundingClientRect = function () {
+      if (this.startContainer === text && !this.collapsed) return rect(this.startOffset === 0 ? 80 : 10, this.startOffset === 0 ? 100 : 124, 10, 20)
+      return rect(0, 0, 0, 0)
+    }
+    try {
+      expect(visualCaretRectAtLogicalOffset(root, 1, 'backward')).toMatchObject({ left: 90, top: 100 })
+      expect(visualCaretRectAtLogicalOffset(root, 1, 'forward')).toMatchObject({ left: 10, top: 124 })
+    } finally {
+      Range.prototype.getBoundingClientRect = nativeRect
+    }
+  })
+
+  it('synthesizes the final empty-line caret after a trailing newline', () => {
+    document.body.innerHTML = '<div data-input-backdrop style="font-size:16px;line-height:24px;padding:4px 12px 0 16px">a\n</div>'
+    const root = document.querySelector('[data-input-backdrop]') as HTMLElement
+    root.getBoundingClientRect = () => rect(10, 100, 300, 52)
+    const nativeRect = Range.prototype.getBoundingClientRect
+    Range.prototype.getBoundingClientRect = () => rect(0, 0, 0, 0)
+    try {
+      expect(visualCaretRectAtLogicalOffset(root, 2)).toMatchObject({ left: 26, top: 128, height: 24 })
+    } finally {
+      Range.prototype.getBoundingClientRect = nativeRect
+    }
+  })
+
   it('selects visual words and atomic chips at their logical offsets', () => {
     const value = '\uFFFC ordinary words'
     expect(wordRangeAtLogicalOffset(value, 0)).toEqual({ start: 0, end: 1 })
     expect(wordRangeAtLogicalOffset(value, 1)).toEqual({ start: 0, end: 1 })
     expect(wordRangeAtLogicalOffset(value, 4)).toEqual({ start: 2, end: 10 })
     expect(wordRangeAtLogicalOffset(value, 13)).toEqual({ start: 11, end: 16 })
+    expect(wordRangeAtLogicalOffset('one...two', 4)).toEqual({ start: 4, end: 5 })
+    expect(wordRangeAtLogicalOffset('one   two', 4)).toEqual({ start: 3, end: 6 })
   })
 
   it('uses backdrop hit-testing for visual-line keyboard navigation', () => {
@@ -281,6 +313,185 @@ describe('plugin-owned DSH presentation overrides', () => {
       input.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowUp', bubbles: true, cancelable: true }))
       expect(input.selectionStart).toBe(3)
       expect(input.selectionEnd).toBe(3)
+    } finally {
+      dispose()
+      Range.prototype.getBoundingClientRect = nativeRect
+      if (point) Object.defineProperty(document, 'caretPositionFromPoint', point)
+      else delete (document as unknown as Record<string, unknown>).caretPositionFromPoint
+    }
+  })
+
+  it('uses the native active end when vertically moving an existing selection', () => {
+    document.body.innerHTML = '<div data-composer-card><div data-input-backdrop><span data-decoration="chip"><span>Long title</span></span>abcdefghij</div><textarea style="font-size:16px;line-height:24px">\uFFFCabcdefghij</textarea></div>'
+    const input = document.querySelector('textarea')!
+    const backdrop = document.querySelector('[data-input-backdrop]') as HTMLElement
+    const trailing = backdrop.lastChild as Text
+    const nativeRect = Range.prototype.getBoundingClientRect
+    Range.prototype.getBoundingClientRect = function () {
+      const offset = this.startContainer === trailing ? this.startOffset : 0
+      return rect(10 + offset * 8, 100 + Math.floor(offset / 4) * 24, 8, 20)
+    }
+    const point = Object.getOwnPropertyDescriptor(document, 'caretPositionFromPoint')
+    Object.defineProperty(document, 'caretPositionFromPoint', {
+      configurable: true,
+      value: (_x: number, y: number) => ({ offsetNode: trailing, offset: y < 112 ? 1 : y < 148 ? 5 : 9 }),
+    })
+    const dispose = adoptAdaptiveChipKeyboardNavigation()
+    try {
+      input.focus()
+      input.setSelectionRange(2, 6, 'forward')
+      input.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true, cancelable: true }))
+      expect(input.selectionStart).toBe(10)
+      expect(input.selectionEnd).toBe(10)
+      input.setSelectionRange(2, 6, 'backward')
+      input.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true, cancelable: true }))
+      expect(input.selectionStart).toBe(6)
+      expect(input.selectionEnd).toBe(6)
+      input.setSelectionRange(2, 6, 'backward')
+      input.dispatchEvent(new KeyboardEvent('keydown', { key: 'PageDown', bubbles: true, cancelable: true }))
+      expect(input.selectionStart).toBe(10)
+      expect(input.selectionEnd).toBe(10)
+    } finally {
+      dispose()
+      Range.prototype.getBoundingClientRect = nativeRect
+      if (point) Object.defineProperty(document, 'caretPositionFromPoint', point)
+      else delete (document as unknown as Record<string, unknown>).caretPositionFromPoint
+    }
+  })
+
+  it('selects vertically across visual lines with the primary pointer', () => {
+    document.body.innerHTML = '<div data-composer-card><div data-input-backdrop><span data-decoration="chip"><span>Ref</span></span>first\nsecond\nthird</div><textarea>\uFFFCfirst\nsecond\nthird</textarea></div>'
+    const input = document.querySelector('textarea')!
+    const text = document.querySelector('[data-input-backdrop]')!.lastChild as Text
+    const point = Object.getOwnPropertyDescriptor(document, 'caretPositionFromPoint')
+    Object.defineProperty(document, 'caretPositionFromPoint', {
+      configurable: true,
+      value: (_x: number, y: number) => ({ offsetNode: text, offset: y < 30 ? 2 : y < 54 ? 9 : 16 }),
+    })
+    const dispose = adoptAdaptiveChipHitTesting()
+    try {
+      input.dispatchEvent(new MouseEvent('pointerdown', { button: 0, clientX: 30, clientY: 12, bubbles: true, cancelable: true }))
+      document.dispatchEvent(new MouseEvent('pointermove', { clientX: 60, clientY: 62, bubbles: true, cancelable: true }))
+      document.dispatchEvent(new MouseEvent('pointerup', { button: 0, clientX: 60, clientY: 62, bubbles: true, cancelable: true }))
+      expect(input.selectionStart).toBe(3)
+      expect(input.selectionEnd).toBe(17)
+      expect(input.selectionDirection).toBe('forward')
+    } finally {
+      dispose()
+      if (point) Object.defineProperty(document, 'caretPositionFromPoint', point)
+      else delete (document as unknown as Record<string, unknown>).caretPositionFromPoint
+    }
+  })
+
+  it('continues pointer selection by whole words after a native double press', () => {
+    document.body.innerHTML = '<div data-composer-card><div data-input-backdrop><span data-decoration="chip"><span>Ref</span></span>one two three</div><textarea>\uFFFCone two three</textarea></div>'
+    const input = document.querySelector('textarea')!
+    const text = document.querySelector('[data-input-backdrop]')!.lastChild as Text
+    const point = Object.getOwnPropertyDescriptor(document, 'caretPositionFromPoint')
+    Object.defineProperty(document, 'caretPositionFromPoint', {
+      configurable: true,
+      value: (x: number) => ({ offsetNode: text, offset: x < 100 ? 5 : 10 }),
+    })
+    const dispose = adoptAdaptiveChipHitTesting()
+    try {
+      input.dispatchEvent(new MouseEvent('pointerdown', { button: 0, detail: 2, clientX: 40, clientY: 12, bubbles: true, cancelable: true }))
+      document.dispatchEvent(new MouseEvent('pointermove', { clientX: 160, clientY: 12, bubbles: true, cancelable: true }))
+      document.dispatchEvent(new MouseEvent('pointerup', { button: 0, detail: 2, clientX: 160, clientY: 12, bubbles: true, cancelable: true }))
+      input.dispatchEvent(new MouseEvent('dblclick', { button: 0, detail: 2, clientX: 160, clientY: 12, bubbles: true, cancelable: true }))
+      expect(input.value.slice(input.selectionStart, input.selectionEnd)).toBe('two three')
+    } finally {
+      dispose()
+      if (point) Object.defineProperty(document, 'caretPositionFromPoint', point)
+      else delete (document as unknown as Record<string, unknown>).caretPositionFromPoint
+    }
+  })
+
+  it('continues a triple press drag by complete visual lines including hard newlines', () => {
+    document.body.innerHTML = '<div data-composer-card><div data-input-backdrop style="font-size:16px;line-height:24px;padding:4px 12px 0 16px"><span data-decoration="chip"><span>Ref</span></span>one\nsecond\nthird</div><textarea style="font-size:16px;line-height:24px;padding:4px 12px 0 16px">\uFFFCone\nsecond\nthird</textarea></div>'
+    const input = document.querySelector('textarea')!
+    const backdrop = document.querySelector('[data-input-backdrop]') as HTMLElement
+    const chip = backdrop.firstChild as HTMLElement
+    const text = backdrop.lastChild as Text
+    backdrop.getBoundingClientRect = () => rect(0, 96, 300, 76)
+    chip.getBoundingClientRect = () => rect(16, 100, 30, 20)
+    const nativeRect = Range.prototype.getBoundingClientRect
+    Range.prototype.getBoundingClientRect = function () {
+      if (this.startContainer !== text) return rect(0, 0, 0, 0)
+      const at = this.startOffset
+      const lineStart = at <= 3 ? 0 : at <= 10 ? 4 : 11
+      const top = at <= 3 ? 100 : at <= 10 ? 124 : 148
+      return rect((at <= 3 ? 46 : 16) + (at - lineStart) * 10, top, 10, 20)
+    }
+    const point = Object.getOwnPropertyDescriptor(document, 'caretPositionFromPoint')
+    Object.defineProperty(document, 'caretPositionFromPoint', {
+      configurable: true,
+      value: (_x: number, y: number) => ({ offsetNode: text, offset: y < 124 ? 1 : y < 148 ? 6 : 13 }),
+    })
+    const dispose = adoptAdaptiveChipHitTesting()
+    try {
+      input.dispatchEvent(new MouseEvent('pointerdown', { button: 0, detail: 3, clientX: 70, clientY: 110, bubbles: true, cancelable: true }))
+      document.dispatchEvent(new MouseEvent('pointermove', { clientX: 90, clientY: 134, bubbles: true, cancelable: true }))
+      document.dispatchEvent(new MouseEvent('pointerup', { button: 0, detail: 3, clientX: 90, clientY: 134, bubbles: true, cancelable: true }))
+      expect(input.value.slice(input.selectionStart, input.selectionEnd)).toBe('\uFFFCone\nsecond\n')
+    } finally {
+      dispose()
+      Range.prototype.getBoundingClientRect = nativeRect
+      if (point) Object.defineProperty(document, 'caretPositionFromPoint', point)
+      else delete (document as unknown as Record<string, unknown>).caretPositionFromPoint
+    }
+  })
+
+  it('auto-scrolls the shared draft viewport while extending a pointer selection', async () => {
+    document.body.innerHTML = '<div data-composer-card><div data-input-scroll><div data-input-backdrop><span data-decoration="chip"><span>Ref</span></span>first\nsecond\nthird\nfourth</div><textarea>\uFFFCfirst\nsecond\nthird\nfourth</textarea></div></div>'
+    const input = document.querySelector('textarea')!
+    const scrollport = document.querySelector('[data-input-scroll]') as HTMLElement
+    const text = document.querySelector('[data-input-backdrop]')!.lastChild as Text
+    Object.defineProperty(scrollport, 'clientHeight', { configurable: true, value: 72 })
+    Object.defineProperty(scrollport, 'scrollHeight', { configurable: true, value: 240 })
+    Object.defineProperty(scrollport, 'scrollTop', { configurable: true, value: 0, writable: true })
+    scrollport.getBoundingClientRect = () => rect(0, 0, 300, 72)
+    const point = Object.getOwnPropertyDescriptor(document, 'caretPositionFromPoint')
+    Object.defineProperty(document, 'caretPositionFromPoint', {
+      configurable: true,
+      value: (_x: number, y: number) => ({ offsetNode: text, offset: y < 40 ? 1 : text.length }),
+    })
+    const dispose = adoptAdaptiveChipHitTesting()
+    try {
+      input.dispatchEvent(new MouseEvent('pointerdown', { button: 0, clientX: 20, clientY: 12, bubbles: true, cancelable: true }))
+      document.dispatchEvent(new MouseEvent('pointermove', { clientX: 80, clientY: 100, bubbles: true, cancelable: true }))
+      await new Promise<void>(resolve => { requestAnimationFrame(() => { resolve() }) })
+      expect(scrollport.scrollTop).toBeGreaterThan(0)
+      document.dispatchEvent(new MouseEvent('pointerup', { button: 0, clientX: 80, clientY: 100, bubbles: true, cancelable: true }))
+    } finally {
+      dispose()
+      if (point) Object.defineProperty(document, 'caretPositionFromPoint', point)
+      else delete (document as unknown as Record<string, unknown>).caretPositionFromPoint
+    }
+  })
+
+  it('hits the end of a very long draft without measuring every character', () => {
+    const tail = 'x'.repeat(20_000)
+    document.body.innerHTML = `<div data-composer-card><div data-input-backdrop><span data-decoration="chip"><span>Ref</span></span>${tail}</div><textarea>\uFFFC${tail}</textarea></div>`
+    const input = document.querySelector('textarea')!
+    const backdrop = document.querySelector('[data-input-backdrop]') as HTMLElement
+    const text = backdrop.lastChild as Text
+    backdrop.getBoundingClientRect = () => rect(0, 96, 320, 24)
+    const nativeRect = Range.prototype.getBoundingClientRect
+    let measurements = 0
+    Range.prototype.getBoundingClientRect = function () {
+      measurements++
+      if (this.startContainer === text) return rect(100, 100, 10, 20)
+      return rect(0, 0, 0, 0)
+    }
+    const point = Object.getOwnPropertyDescriptor(document, 'caretPositionFromPoint')
+    Object.defineProperty(document, 'caretPositionFromPoint', { configurable: true, value: () => ({ offsetNode: backdrop, offset: backdrop.childNodes.length }) })
+    const dispose = adoptAdaptiveChipHitTesting()
+    try {
+      input.dispatchEvent(new MouseEvent('pointerdown', { button: 0, clientX: 240, clientY: 110, bubbles: true }))
+      input.dispatchEvent(new MouseEvent('pointerup', { button: 0, clientX: 240, clientY: 110, bubbles: true }))
+      expect(input.selectionStart).toBe(input.value.length)
+      expect(input.selectionEnd).toBe(input.value.length)
+      expect(measurements).toBeLessThan(20)
     } finally {
       dispose()
       Range.prototype.getBoundingClientRect = nativeRect

@@ -26,6 +26,9 @@ export class ReferenceAnythingRemote extends TypertRemoteService {
   installOpenCli(signal: AbortSignal) { return this.ctx.referenceChatHistory.installOpenCli(signal) }
   installAdapter(signal: AbortSignal) { return this.ctx.referenceChatHistory.installAdapter(signal) }
   restartDaemon(signal: AbortSignal) { return this.ctx.referenceChatHistory.restartDaemon(signal) }
+  updateStatus(signal: AbortSignal) { return this.ctx.referenceChatHistory.updateStatus(signal) }
+  checkUpdate(signal: AbortSignal) { return this.ctx.referenceChatHistory.checkUpdate(signal) }
+  installUpdate(signal: AbortSignal) { return this.ctx.referenceChatHistory.installUpdate(signal) }
   stats() { return this.ctx.referenceChatHistory.stats() }
   syncStart(input: { providers: ChatProvider[]; mode: SyncMode }): string {
     return this.ctx.referenceChatHistory.sync.start(input.providers, input.mode)

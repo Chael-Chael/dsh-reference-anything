@@ -6,6 +6,7 @@ import { providerSchema, referenceAnythingDomainSpec, settingsRecordSchema } fro
 import { ConversationStore, type MatchedVia } from '../../store/store.ts'
 import { ConversationSyncManager } from '../../sync/index.ts'
 import { OpenCliError, OpenCliRunner, discoverOpenCli, installOpenCli as installOpenCliPackage, type OpenCliDiscovery } from '../../opencli.ts'
+import { PackageUpdateManager, type PackageUpdateResult, type PackageUpdateStatus } from '../../update.ts'
 import type { ProviderTurnRow } from '../../store/store.ts'
 import { ReferenceAnythingError } from '../../errors.ts'
 import { parseProviderQuery } from '../../search.ts'
@@ -69,6 +70,7 @@ export default class WebChatHistoryService extends Service implements ReferenceS
   private syncValue?: ConversationSyncManager
   private autoSyncInterval?: ReturnType<typeof setInterval>
   private autoSyncCatchUp?: ReturnType<typeof setTimeout>
+  private readonly packageUpdates = new PackageUpdateManager()
   private readonly liveAttachments = new Map<string, { attachment: ConversationAttachment & { locator?: string }; expiresAt: number }>()
 
   constructor(ctx: Context, private readonly config: Config = {}) { super(ctx, 'referenceChatHistory') }
@@ -89,6 +91,13 @@ export default class WebChatHistoryService extends Service implements ReferenceS
       timeoutMs: this.config.timeoutMs, maxStdoutBytes: this.config.maxStdoutBytes,
     }), this.ctx.logger)
     await this.store.collectExpired()
+    const updateAbort = new AbortController()
+    this.ctx.effect(() => () => { updateAbort.abort() }, 'reference-web-chat.updateCheckCleanup')
+    void this.packageUpdates.check(updateAbort.signal).then(status => {
+      if (status.updateAvailable) {
+        this.ctx.logger.info(`reference anything update available: ${status.currentVersion} -> ${status.latestVersion}`)
+      }
+    })
     this.ctx.references.registerSource(this)
     this.ctx.effect(() => () => { this.clearAutoSync() }, 'reference-web-chat.autoSyncCleanup')
     this.armAutoSync()
@@ -238,6 +247,12 @@ export default class WebChatHistoryService extends Service implements ReferenceS
   syncStates() { return this.store.syncStateSummary() }
 
   getSettings(): SettingsRecord { return this.store.settings }
+  updateStatus(signal?: AbortSignal): Promise<PackageUpdateStatus> { return this.packageUpdates.status(signal) }
+  checkUpdate(signal?: AbortSignal): Promise<PackageUpdateStatus> { return this.packageUpdates.check(signal) }
+  async installUpdate(signal?: AbortSignal): Promise<PackageUpdateResult> {
+    if (this.sync.isRunning()) throw new ReferenceAnythingError('wait for the current conversation sync to finish before updating', 'REFERENCE_SYNC_IN_PROGRESS')
+    return this.packageUpdates.update(signal)
+  }
   async restartDaemon(signal?: AbortSignal): Promise<boolean> { await this.runner().restartDaemon(signal); return true }
   async discoverOpenCli(signal?: AbortSignal): Promise<OpenCliDiscovery> {
     return discoverOpenCli(this.store.settings.opencliPath, signal)

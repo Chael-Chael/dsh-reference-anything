@@ -11,6 +11,7 @@ import { ConversationSettings, PAGE_SIZE, type SettingsSnapshot } from './compon
 import { adoptAdaptiveChipCaret, adoptAdaptiveChipHitTesting, adoptAdaptiveChipInsertionCaret, adoptAdaptiveChipKeyboardNavigation, adoptAdaptiveChipSelection, adoptAdaptiveComposerHeight, adoptConversationMentionProjection, adoptConversationSyncActionProjection, adoptMenuExpansionProjection, adoptMenuGroupTitleProjection, adoptReferenceIconProjection, adoptStyles } from './styles.ts'
 import { en, REFERENCE_ANYTHING_NS, zh } from './locale.ts'
 import { createSettingsOpenHealthCheck, runSetupSequence, setupReady, type SetupStage } from './health.ts'
+import { createAutoDismissNotice } from './notice.ts'
 
 // `ctx.remote.commands` is a separately injected Remote face. Declaring only
 // `remote` lets the @ source register, but its candidate request can fail and
@@ -33,9 +34,9 @@ export function apply(ctx: ClientContext): void {
   })
   let currentJob = ''
   let poll: ReturnType<typeof setInterval> | undefined
-  let settingsNoticeTimer: ReturnType<typeof setTimeout> | undefined
   let refreshGeneration = 0
   const t = ctx.locale.bind(REFERENCE_ANYTHING_NS)
+  const notices = createAutoDismissNotice(() => scope.getSnapshot(), value => { scope.set(value) })
   let applySources: ((picker: PickerSettings | undefined, renderMode?: InputRenderMode) => void) | undefined
   ctx.effect(() => ctx.locale.register(REFERENCE_ANYTHING_NS, { zh, en }), 'reference-anything.client.dictionaries')
   ctx.effect(() => adoptMenuGroupTitleProjection(t), 'reference-anything.client.menu-group-localization')
@@ -142,11 +143,25 @@ export function apply(ctx: ClientContext): void {
     }
   }
 
+  /** Read the Host's startup update check without delaying local settings. */
+  const refreshUpdateStatus = async (): Promise<void> => {
+    const activeRemote = remote
+    if (!activeRemote) return
+    try {
+      const update = unwrap(await activeRemote.updateStatus())
+      if (remote === activeRemote) {
+        if (update.updateAvailable) notices.show(t('notice.updateAvailable', { version: update.latestVersion }), { update })
+        else scope.set({ ...scope.getSnapshot(), update })
+      }
+    } catch { /* Update checks are advisory; the manual button can retry. */ }
+  }
+
   ctx.effect(async () => {
     const dispose = await ctx.remote.$mount(REFERENCE_ANYTHING_REMOTE)
     remote = (ctx.reflect as unknown as { get(name: string): unknown }).get('remote.referenceAnything') as ReferenceAnythingRemoteFace | undefined
     if (!remote) throw new Error('referenceAnything Remote did not mount')
     await refreshLocal()
+    void refreshUpdateStatus()
     return () => { remote = undefined; if (poll) clearInterval(poll); void dispose() }
   }, 'reference-anything.client.remote')
 
@@ -194,7 +209,7 @@ export function apply(ctx: ClientContext): void {
       await Promise.all([refreshStats(), refreshStorage()])
       const current = scope.getSnapshot().browse
       if (current) await browse(current.query, current.provider, 0)
-      scope.set({ ...scope.getSnapshot(), notice: t('notice.cleared', { count }), error: undefined })
+      notices.show(t('notice.cleared', { count }), { error: undefined })
     } catch (error) { scope.set({ ...scope.getSnapshot(), error: message(error) }) }
   }
   const clearOlder = async (days: number): Promise<void> => {
@@ -204,7 +219,7 @@ export function apply(ctx: ClientContext): void {
       await Promise.all([refreshStats(), refreshStorage()])
       const current = scope.getSnapshot().browse
       if (current) await browse(current.query, current.provider, 0)
-      scope.set({ ...scope.getSnapshot(), notice: t('notice.cleared', { count }), error: undefined })
+      notices.show(t('notice.cleared', { count }), { error: undefined })
     } catch (error) { scope.set({ ...scope.getSnapshot(), error: message(error) }) }
   }
   applySources = (picker, renderMode = 'pill') => {
@@ -228,14 +243,7 @@ export function apply(ctx: ClientContext): void {
     try {
       const value = unwrap(await remote.settingsUpdate(settings))
       applySources?.(value.picker, value.inputRenderMode)
-      const notice = t('notice.settingsSaved')
-      if (settingsNoticeTimer) clearTimeout(settingsNoticeTimer)
-      scope.set({ ...scope.getSnapshot(), settings: value, error: undefined, notice })
-      settingsNoticeTimer = setTimeout(() => {
-        const current = scope.getSnapshot()
-        if (current.notice === notice) scope.set({ ...current, notice: undefined })
-        settingsNoticeTimer = undefined
-      }, 2_400)
+      notices.show(t('notice.settingsSaved'), { settings: value, error: undefined })
     } catch (error) { scope.set({ ...scope.getSnapshot(), error: message(error), notice: undefined }) }
   }
   const setSetupStep = (setupStep: SetupStage) => { scope.set({ ...scope.getSnapshot(), setupStep }) }
@@ -246,7 +254,7 @@ export function apply(ctx: ClientContext): void {
       await Promise.all([refreshStats(), refreshStorage()])
       const current = scope.getSnapshot().browse
       if (current) await browse(current.query, current.provider, 0)
-      scope.set({ ...scope.getSnapshot(), notice: t('notice.cleared', { count }), error: undefined })
+      notices.show(t('notice.cleared', { count }), { error: undefined })
     } catch (error) { scope.set({ ...scope.getSnapshot(), error: message(error) }) }
   }
   const clearOldAccounts = async (): Promise<void> => {
@@ -256,10 +264,10 @@ export function apply(ctx: ClientContext): void {
       await Promise.all([refreshStats(), refreshStorage()])
       const current = scope.getSnapshot().browse
       if (current) await browse(current.query, current.provider, 0)
-      scope.set({ ...scope.getSnapshot(), notice: t('notice.cleared', { count }), error: undefined })
+      notices.show(t('notice.cleared', { count }), { error: undefined })
     } catch (error) { scope.set({ ...scope.getSnapshot(), error: message(error) }) }
   }
-  ctx.effect(() => () => { if (settingsNoticeTimer) clearTimeout(settingsNoticeTimer) }, 'reference-anything.client.settings-notice')
+  ctx.effect(() => () => { notices.dispose() }, 'reference-anything.client.settings-notice')
   const startSync = async (providers: ChatProvider[], mode: 'incremental' | 'full'): Promise<void> => {
     if (!remote) return
     try {
@@ -296,6 +304,24 @@ export function apply(ctx: ClientContext): void {
       hooks: { scope }, save, sync: startSync, refresh,
       refreshOnOpen: () => checkHealthOnSettingsOpen((scope.getSnapshot().settings.picker ?? defaultPickerSettings()).conversations.enabled),
       browse, deleteConversation, clearProvider, clearOlder, clearRemoteMissing, clearOldAccounts, refreshStats,
+      checkUpdate: async () => {
+        try {
+          if (!remote) return
+          const update = unwrap(await remote.checkUpdate())
+          notices.show(update.updateAvailable ? t('notice.updateAvailable', { version: update.latestVersion }) : t('notice.upToDate', { version: update.currentVersion }), { update, error: undefined })
+        } catch (error) { scope.set({ ...scope.getSnapshot(), error: message(error), notice: undefined }) }
+      },
+      installUpdate: async () => {
+        try {
+          if (!remote) return
+          const result = unwrap(await remote.installUpdate())
+          const previous = scope.getSnapshot().update
+          const update = {
+            currentVersion: result.version, latestVersion: result.version, updateAvailable: false, checkedAt: Date.now(),
+          }
+          notices.show(result.restartRequired ? t('notice.updateInstalled', { version: result.version }) : t('notice.upToDate', { version: previous?.currentVersion || result.version }), { update, error: undefined })
+        } catch (error) { scope.set({ ...scope.getSnapshot(), error: message(error), notice: undefined }) }
+      },
       setupAll: async (extensionPageOpened: boolean) => {
         if (!remote) return
         try {
@@ -316,11 +342,11 @@ export function apply(ctx: ClientContext): void {
           })
           if (!health?.version || !health.opencliCompatible) throw new Error(t('settings.opencliStillUnavailable'))
           if (setupReady(health)) {
-            scope.set({ ...scope.getSnapshot(), error: undefined, notice: t('notice.setupComplete'), setupStep: 'complete' })
+            notices.show(t('notice.setupComplete'), { error: undefined, setupStep: 'complete' })
           } else if (health?.extensionConnected && !health.connectivityOk) {
             scope.set({ ...scope.getSnapshot(), error: t('settings.connectivityStillUnavailable'), notice: undefined, setupStep: undefined })
           } else if (!health?.extensionConnected) {
-            scope.set({ ...scope.getSnapshot(), error: undefined, notice: extensionPageOpened ? t('notice.oneClickSetup') : t('notice.extensionStoreBlocked'), setupStep: 'extension' })
+            notices.show(extensionPageOpened ? t('notice.oneClickSetup') : t('notice.extensionStoreBlocked'), { error: undefined, setupStep: 'extension' })
           } else {
             scope.set({ ...scope.getSnapshot(), error: t('settings.setupIncomplete'), notice: undefined, setupStep: undefined })
           }
@@ -334,7 +360,7 @@ export function apply(ctx: ClientContext): void {
           const settings = scope.getSnapshot().settings
           unwrap(await remote.settingsUpdate({ ...settings, opencliPath: discovery.executable }))
           await refresh()
-          scope.set({ ...scope.getSnapshot(), error: undefined, notice: t('notice.opencliFound', { version: discovery.version }) })
+          notices.show(t('notice.opencliFound', { version: discovery.version }), { error: undefined })
         } catch (error) { scope.set({ ...scope.getSnapshot(), error: message(error), notice: undefined }) }
       },
       installOpenCli: async () => {
@@ -344,7 +370,7 @@ export function apply(ctx: ClientContext): void {
           await refresh()
           const health = scope.getSnapshot().health
           if (!health?.version || !health.opencliCompatible) throw new Error(t('settings.opencliStillUnavailable'))
-          scope.set({ ...scope.getSnapshot(), error: undefined, notice: t('notice.opencliInstalled', { version: discovery.version }) })
+          notices.show(t('notice.opencliInstalled', { version: discovery.version }), { error: undefined })
         } catch (error) { scope.set({ ...scope.getSnapshot(), error: message(error), notice: undefined }) }
       },
       useProfile: async (profile: string) => {
@@ -355,7 +381,7 @@ export function apply(ctx: ClientContext): void {
           await refresh()
           const health = scope.getSnapshot().health
           if (!health?.extensionConnected) throw new Error(t('settings.profileStillUnavailable'))
-          scope.set({ ...scope.getSnapshot(), error: undefined, notice: t('notice.profileSelected') })
+          notices.show(t('notice.profileSelected'), { error: undefined })
         } catch (error) { scope.set({ ...scope.getSnapshot(), error: message(error), notice: undefined }) }
       },
       install: async () => {
@@ -364,7 +390,7 @@ export function apply(ctx: ClientContext): void {
           unwrap(await remote.installAdapter()); await refresh()
           const health = scope.getSnapshot().health
           if (!health?.pluginInstalled || !health.adapterCompatible) throw new Error(t('settings.adapterStillUnavailable'))
-          scope.set({ ...scope.getSnapshot(), error: undefined, notice: t('notice.adapterInstalled') })
+          notices.show(t('notice.adapterInstalled'), { error: undefined })
         } catch (error) { scope.set({ ...scope.getSnapshot(), error: message(error), notice: undefined }) }
       },
       restartDaemon: async () => {
@@ -373,7 +399,7 @@ export function apply(ctx: ClientContext): void {
           unwrap(await remote.restartDaemon()); await refresh()
           const health = scope.getSnapshot().health
           if (!health?.daemonRunning || health.daemonStale) throw new Error(t('settings.daemonStillUnavailable'))
-          scope.set({ ...scope.getSnapshot(), error: undefined, notice: t('notice.daemonRestarted') })
+          notices.show(t('notice.daemonRestarted'), { error: undefined })
         } catch (error) { scope.set({ ...scope.getSnapshot(), error: message(error), notice: undefined }) }
       },
       cancel: async () => { try { if (remote && currentJob) unwrap(await remote.syncCancel({ jobId: currentJob })); await pollJob() } catch (error) { scope.set({ ...scope.getSnapshot(), error: message(error) }) } },
