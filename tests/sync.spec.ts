@@ -3,7 +3,7 @@ import type { Domain, KvTable } from '@deepseek-ai/dsh-storage-domain'
 import { OpenCliError, type OpenCliRunner } from '../src/opencli.ts'
 import { ConversationStore, type ProviderConversationRow, type ProviderTurnRow } from '../src/store/store.ts'
 import type { ChatProvider, referenceAnythingDomainSpec, SettingsRecord } from '../src/store/spec.ts'
-import { ConversationSyncManager, PROVIDER_START_STAGGER_MS } from '../src/sync/index.ts'
+import { ConversationSyncManager } from '../src/sync/index.ts'
 
 /** In-memory table that also counts writes, which is what the throttling tests assert on. */
 class Table<V> implements KvTable<string, V> {
@@ -58,7 +58,7 @@ function fakeRunner(overrides: Partial<OpenCliRunner> = {}): OpenCliRunner {
 }
 
 async function waitFor(predicate: () => boolean, what = 'background sync'): Promise<void> {
-  for (let attempt = 0; attempt < 400; attempt++) {
+  for (let attempt = 0; attempt < 800; attempt++) {
     if (predicate()) return
     await new Promise(resolve => setTimeout(resolve, 5))
   }
@@ -69,38 +69,48 @@ const settled = (manager: ConversationSyncManager, jobId: string) =>
   waitFor(() => manager.status(jobId)?.status !== 'running')
 
 describe('auto-sync resilience', () => {
-  it('staggers provider starts while keeping their work concurrent', async () => {
+  it('syncs providers serially', async () => {
     const db = store()
     let active = 0
     let peak = 0
-    let release = (): void => {}
-    const blocked = new Promise<void>(resolve => { release = resolve })
-    const starts: number[] = []
+    const events: string[] = []
+    const releases: Array<() => void> = []
+    const gates = Array.from({ length: 3 }, () => new Promise<void>(resolve => { releases.push(resolve) }))
+    let gate = 0
     const manager = new ConversationSyncManager(db, () => fakeRunner({
       whoami: async (provider: ChatProvider) => {
-        starts.push(Date.now())
+        const current = gate++
+        events.push(`start:${provider}`)
         active++
         peak = Math.max(peak, active)
-        await blocked
+        await gates[current]
         active--
+        events.push(`end:${provider}`)
         return `scope-${provider}`
       },
+      history: async () => [],
     }))
 
     const jobId = manager.start(['chatgpt', 'claude', 'gemini'], 'incremental')
-    await waitFor(() => starts.length === 3, 'all staggered providers to start')
-    try {
-      expect(peak).toBe(3)
-      expect(starts[1]! - starts[0]!).toBeGreaterThanOrEqual(PROVIDER_START_STAGGER_MS - 100)
-      expect(starts[2]! - starts[1]!).toBeGreaterThanOrEqual(PROVIDER_START_STAGGER_MS - 100)
-      expect(manager.isRunning()).toBe(true)
-    } finally {
-      release()
-    }
+    await waitFor(() => events.length === 1, 'the first provider to start')
+    expect(events).toEqual(['start:chatgpt'])
+    expect(manager.isRunning()).toBe(true)
+
+    releases[0]!()
+    await waitFor(() => events.includes('start:claude'), 'the second provider to start')
+    expect(events).toEqual(['start:chatgpt', 'end:chatgpt', 'start:claude'])
+
+    releases[1]!()
+    await waitFor(() => events.includes('start:gemini'), 'the third provider to start')
+    expect(events).toEqual(['start:chatgpt', 'end:chatgpt', 'start:claude', 'end:claude', 'start:gemini'])
+
+    releases[2]!()
     await settled(manager, jobId)
+    expect(peak).toBe(1)
+    expect(manager.status(jobId)?.status).toBe('complete')
   })
 
-  it('does not launch providers whose stagger slots have not arrived after cancellation', async () => {
+  it('does not launch later providers after cancellation', async () => {
     const db = store()
     const attempted: ChatProvider[] = []
     const manager = new ConversationSyncManager(db, () => fakeRunner({

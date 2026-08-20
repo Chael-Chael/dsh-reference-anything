@@ -49,6 +49,51 @@ function assertResult(result, domain, operation) {
   return result.rows
 }
 
+const PROVIDER_READY_TIMEOUT_MS = 1200
+const PROVIDER_READY_INITIAL_DELAY_MS = 50
+const PROVIDER_READY_MAX_DELAY_MS = 400
+
+function terminalProviderResult(result) {
+  return result?.ok === true || result?.code === 'AUTH' || result?.code === 'RATE_LIMIT'
+}
+
+function terminalIdentityResult(result) {
+  return result?.code === 'AUTH' || result?.code === 'RATE_LIMIT'
+    || (result?.ok === true && typeof result.identity === 'string' && result.identity.length > 0)
+}
+
+/**
+ * Run the provider API as the readiness probe. The happy path performs one
+ * evaluate immediately after navigation; transient bootstrap failures retry
+ * with bounded exponential backoff instead of waiting for the whole SPA DOM
+ * to become quiet first.
+ */
+export async function evaluateWhenProviderReady(page, script, args, operation, options = {}) {
+  const timeoutMs = options.timeoutMs ?? PROVIDER_READY_TIMEOUT_MS
+  const maxDelayMs = options.maxDelayMs ?? PROVIDER_READY_MAX_DELAY_MS
+  const accepts = options.accepts ?? terminalProviderResult
+  const deadline = Date.now() + timeoutMs
+  let delayMs = options.initialDelayMs ?? PROVIDER_READY_INITIAL_DELAY_MS
+  let lastResult
+  let lastError
+  for (;;) {
+    try {
+      lastResult = await evaluate(page, script, args, operation)
+      lastError = undefined
+      if (accepts(lastResult)) return lastResult
+    } catch (error) {
+      lastError = error
+    }
+    const remaining = deadline - Date.now()
+    if (remaining <= 0) {
+      if (lastError) throw lastError
+      return lastResult
+    }
+    await new Promise(resolve => setTimeout(resolve, Math.min(delayMs, remaining)))
+    delayMs = Math.min(Math.max(delayMs * 2, 1), maxDelayMs)
+  }
+}
+
 /**
  * Each command owns an ephemeral Browser Bridge tab. Close that tab after the
  * command finishes while preserving the provider result or failure.
@@ -81,8 +126,10 @@ export function registerProvider(config) {
     args: [],
     columns: ['identity'],
     func: async (page) => inTemporaryTab(page, async () => {
-      await page.goto(config.home, { settleMs: 500 })
-      const result = await evaluate(page, config.whoamiScript, {}, `${config.site} whoami`)
+      await page.goto(config.home, { waitUntil: 'none' })
+      const result = await evaluateWhenProviderReady(
+        page, config.whoamiScript, {}, `${config.site} whoami`, { accepts: terminalIdentityResult },
+      )
       if (result?.code === 'AUTH') throw new AuthRequiredError(config.domain)
       if (result?.ok !== true || typeof result.identity !== 'string' || !result.identity) {
         throw new CommandExecutionError(`${config.site} whoami: ${result?.message || 'stable account identity unavailable'}`)
@@ -109,8 +156,10 @@ export function registerProvider(config) {
     func: async (page, kwargs) => inTemporaryTab(page, async () => {
       const since = String(kwargs.since || '').trim()
       if (since && Number.isNaN(Date.parse(since))) throw new ArgumentError('since must be an ISO 8601 instant')
-      await page.goto(config.home, { settleMs: 1200 })
-      const identity = await evaluate(page, config.whoamiScript, {}, `${config.site} sync-index identity`)
+      await page.goto(config.home, { waitUntil: 'none' })
+      const identity = await evaluateWhenProviderReady(
+        page, config.whoamiScript, {}, `${config.site} sync-index identity`, { accepts: terminalIdentityResult },
+      )
       if (identity?.code === 'AUTH') throw new AuthRequiredError(config.domain)
       if (identity?.ok !== true || typeof identity.identity !== 'string' || !identity.identity) {
         throw new CommandExecutionError(`${config.site} sync-index: ${identity?.message || 'stable account identity unavailable'}`)
@@ -147,9 +196,9 @@ export function registerProvider(config) {
     func: async (page, kwargs) => inTemporaryTab(page, async () => {
       const since = String(kwargs.since || '').trim()
       if (since && Number.isNaN(Date.parse(since))) throw new ArgumentError('since must be an ISO 8601 instant')
-      await page.goto(config.home, { settleMs: 1200 })
+      await page.goto(config.home, { waitUntil: 'none' })
       const rows = assertResult(
-        await evaluate(page, config.historyScript, { since }, `${config.site} history-all`),
+        await evaluateWhenProviderReady(page, config.historyScript, { since }, `${config.site} history-all`),
         config.domain,
         `${config.site} history-all`,
       )

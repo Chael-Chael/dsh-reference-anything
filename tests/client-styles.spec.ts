@@ -4,6 +4,7 @@ import {
   adoptMenuGroupTitleProjection, adoptMenuViewportTracking, adoptReferenceIconProjection, adoptStyles,
   mutateActiveTriggerMenu, refreshActiveTriggerMenu,
 } from '../src/client/styles.ts'
+import { PROVIDER_ICON_PATH } from '../src/client/provider-icons.tsx'
 
 afterEach(() => {
   document.body.replaceChildren()
@@ -20,6 +21,8 @@ describe('reference DOM customization', () => {
     expect(text).toContain('[role="presentation"][data-source]:not(:first-child)')
     expect(text).toContain('[data-dsh-ref-menu-settling]{overflow-anchor:none!important}')
     expect(text).toContain('[aria-selected="false"]:hover{background:transparent!important}')
+    expect(text).toContain('[data-dsh-ref-menu-action]{color:var(--dsw-alias-label-tertiary')
+    expect(text).toContain('[data-dsh-ref-menu-action]>span:last-child:not(:first-child){display:none!important}')
     expect(text).toContain('.dsh_ref_projected_icon')
     expect(text).toContain('.dsh_ref_picker_icon')
     expect(text).toContain('.dsh_ref_settings')
@@ -117,6 +120,36 @@ describe('reference DOM customization', () => {
     dispose()
   })
 
+  it('reprojects the logo when a refreshed result reuses an indexed menu row', async () => {
+    document.body.innerHTML = `
+      <div data-composer-card><div role="listbox"><div id="viewport">
+        <button id="row" role="option"><span id="icon">\uE104</span><span>Older Grok row</span></button>
+      </div></div></div>
+    `
+    const viewport = document.getElementById('viewport') as HTMLElement
+    const row = document.getElementById('row')!
+    const icon = document.getElementById('icon')!
+    viewport.scrollTop = 48
+    const dispose = adoptReferenceIconProjection()
+
+    expect(icon.dataset.dshRefMenuIcon).toBe('grok')
+    expect(icon.querySelector('svg')).not.toBeNull()
+
+    // The host keeps the row and icon span, then writes the marker for the
+    // newly inserted first result into that existing icon span.
+    icon.replaceChildren(document.createTextNode('\uE100'))
+    row.children[1]!.textContent = 'New ChatGPT row'
+    await Promise.resolve()
+
+    expect(document.getElementById('row')).toBe(row)
+    expect(document.getElementById('icon')).toBe(icon)
+    expect(icon.dataset.dshRefMenuIcon).toBe('chatgpt')
+    expect(icon.textContent).toBe('')
+    expect(icon.querySelector('svg path')?.getAttribute('d')).toBe(PROVIDER_ICON_PATH.chatgpt)
+    expect(viewport.scrollTop).toBe(48)
+    dispose()
+  })
+
   it('localizes only plugin group headings inside the native @ menu', () => {
     document.body.innerHTML = `
       <div data-composer-card><div role="listbox">
@@ -130,6 +163,39 @@ describe('reference DOM customization', () => {
     expect(document.querySelector('[role="listbox"] [data-source="Files and folders"]')?.textContent).toBe('文件')
     expect(document.querySelector('[role="listbox"] [data-source="External conversations"]')?.textContent).toBe('外部对话')
     expect(document.body.lastElementChild?.textContent).toBe('Outside')
+    dispose()
+  })
+
+  it('shows expand and collapse as one muted label without their detail copy', async () => {
+    adoptStyles()
+    document.body.innerHTML = `
+      <div data-composer-card><div role="listbox">
+        <button id="expand" role="option"><span>Show 5 more</span><span>Expand this group</span></button>
+        <button id="collapse" role="option"><span>Collapse</span><span>Show the compact group</span></button>
+        <button id="ordinary" role="option"><span>Regular row</span><span>Description</span></button>
+      </div></div>
+    `
+    const t = ((key: string, params?: { count?: number }) => ({
+      'menu.collapse': 'Collapse',
+      'menu.collapseDetail': 'Show the compact group',
+      'menu.showMore': `Show ${String(params?.count)} more`,
+      'menu.showMoreDetail': 'Expand this group',
+    }[key] ?? key)) as never
+    const dispose = adoptMenuGroupTitleProjection(t)
+    const expand = document.getElementById('expand')!
+    const collapse = document.getElementById('collapse')!
+    const ordinary = document.getElementById('ordinary')!
+
+    expect(expand.dataset.dshRefMenuAction).toBe('')
+    expect(collapse.dataset.dshRefMenuAction).toBe('')
+    expect(ordinary.dataset.dshRefMenuAction).toBeUndefined()
+    expect(getComputedStyle(expand.lastElementChild!).display).toBe('none')
+    expect(getComputedStyle(collapse.lastElementChild!).display).toBe('none')
+    expand.replaceChildren(document.createElement('span'), document.createElement('span'))
+    expand.children[0]!.textContent = 'Regular row'
+    expand.children[1]!.textContent = 'Description'
+    await Promise.resolve()
+    expect(expand.dataset.dshRefMenuAction).toBeUndefined()
     dispose()
   })
 

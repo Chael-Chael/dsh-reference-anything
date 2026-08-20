@@ -6,7 +6,7 @@
 
 <h1>dsh-reference-anything</h1>
 
-Supercharge the DSH `@` menu with multiple reference sources.
+One `@` for them all.
 
 **English** · [简体中文](./README_zh-CN.md) · [📰 News](#-news) · [🧭 Roadmap](#-roadmap) · [📦 Installation](#-installation) · [🚀 Usage](#-usage) · [🐛 Report Bug][github-issues-link]
 
@@ -36,6 +36,24 @@ Use one `@` menu to reference:
 - Workspace files and folders
 - DSH session history
 - Historical conversations from ChatGPT, Claude, Gemini, DeepSeek, Grok, and Kimi
+
+Beyond extending what `@` can reference, Reference Anything also enhances the `@` menu itself:
+
+- Customize visible groups: enable or hide `Commands`, `Skills`, files, DSH sessions, and external conversations, then arrange them in any order
+- Customize result counts: set each group's collapsed row count and hard candidate cap independently
+- Choose how to browse: expand or collapse individual groups, or use DSH's native scrolling list
+- Enhanced visual icons: distinguish reference sources with type icons and platform logos, making menu items easier to identify
+
+<table>
+  <tr>
+    <th width="50%">Native DSH display</th>
+    <th width="50%">Reference Anything icon enhancements</th>
+  </tr>
+  <tr>
+    <td width="50%"><img src="./images/at-files-native-comparison.png" alt="Native DSH file list" width="100%" /></td>
+    <td width="50%"><img src="./images/at-files-enhanced-comparison.png" alt="Reference Anything file-type icon enhancements" width="100%" /></td>
+  </tr>
+</table>
 
 Type `@`, search across enabled sources, and insert the selected reference into the current task. Each source keeps its own access and loading behavior: files use DSH's permission-constrained tools, DSH sessions use the native session-reference protocol, and external conversation bodies are read on demand.
 
@@ -109,7 +127,7 @@ Reference Anything registers five sources in the native DSH `@` menu rather than
 The default **Read bodies on demand** mode stores only the title index locally and uses the browser when an agent calls `reference_read`. Choose **Store full bodies locally** for offline reading and full-text search; this mode keeps only the latest version of each conversation. The Composer uses native DSH reference occurrences for files, DSH sessions, and external conversations; Reference Anything adds source-specific logos without replacing native wrapping, caret, selection, deletion, draft, clipboard, or serialization behavior. The plugin checks npm for updates when it loads; restart DSH after installing an update from the settings page.
 
 > [!WARNING]
-> To protect your account and conversation data, external conversations are imported and synchronized through OpenCLI using your existing logged-in browser session. A browser window may temporarily open during use or synchronization, and it may display OpenCLI debugging information. This is expected—please do not be alarmed or close the window manually; wait for the operation to finish.
+> To protect your account and conversation data, external conversations are imported and synchronized through OpenCLI using your existing logged-in browser session. A browser window may temporarily open during use or synchronization. In most cases, leave it open in the background: the plugin will reuse it without interrupting your work. The window may also display OpenCLI debugging information. This is expected—please do not be alarmed or close it manually; wait for the operation to finish. Due to current OpenCLI limitations, we temporarily use slower serial synchronization to reduce how often browser windows open. Once the upstream OpenCLI repository is updated, we will switch to faster parallel synchronization.
 
 ### 🧩 One `@` menu, multiple sources
 

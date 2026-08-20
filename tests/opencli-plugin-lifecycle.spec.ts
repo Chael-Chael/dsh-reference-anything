@@ -1,5 +1,7 @@
 import { readFile } from 'node:fs/promises'
 import { describe, expect, it } from 'vitest'
+// @ts-expect-error -- plain JS adapter module, shipped to OpenCLI rather than compiled here.
+import { evaluateWhenProviderReady } from '../opencli-plugin/common.js'
 
 describe('OpenCLI sync browser lifecycle', () => {
   it('uses background one-shot tabs and closes every command-owned tab', async () => {
@@ -26,5 +28,55 @@ describe('OpenCLI sync browser lifecycle', () => {
     })
 
     expect(new Set(sites).size).toBe(providers.length)
+  })
+
+  it('uses provider API readiness instead of waiting for SPA DOM stability', async () => {
+    const source = await readFile(new URL('../opencli-plugin/common.js', import.meta.url), 'utf8')
+    expect(source.match(/page\.goto\(config\.home, \{ waitUntil: 'none' \}\)/g)).toHaveLength(3)
+    expect(source).not.toContain('settleMs: 1200')
+    // Detail and attachment paths are deliberately outside this optimization.
+    expect(source).toContain('settleMs: 600')
+    expect(source).toContain('settleMs: 500')
+  })
+
+  it('continues immediately when the first provider readiness probe succeeds', async () => {
+    let attempts = 0
+    const page = { evaluate: async () => {
+      attempts++
+      return JSON.stringify({ ok: true, identity: 'ready' })
+    } }
+
+    await expect(evaluateWhenProviderReady(page, 'async function () {}', {}, 'ready test'))
+      .resolves.toEqual({ ok: true, identity: 'ready' })
+    expect(attempts).toBe(1)
+  })
+
+  it('retries transient readiness failures with bounded backoff', async () => {
+    let attempts = 0
+    const page = { evaluate: async () => {
+      attempts++
+      return JSON.stringify(attempts < 3
+        ? { ok: false, message: 'booting' }
+        : { ok: true, rows: [] })
+    } }
+
+    await expect(evaluateWhenProviderReady(page, 'async function () {}', {}, 'retry test', {
+      timeoutMs: 100,
+      initialDelayMs: 1,
+      maxDelayMs: 2,
+    })).resolves.toEqual({ ok: true, rows: [] })
+    expect(attempts).toBe(3)
+  })
+
+  it('does not retry terminal authentication failures', async () => {
+    let attempts = 0
+    const page = { evaluate: async () => {
+      attempts++
+      return JSON.stringify({ ok: false, code: 'AUTH' })
+    } }
+
+    await expect(evaluateWhenProviderReady(page, 'async function () {}', {}, 'auth test'))
+      .resolves.toEqual({ ok: false, code: 'AUTH' })
+    expect(attempts).toBe(1)
   })
 })

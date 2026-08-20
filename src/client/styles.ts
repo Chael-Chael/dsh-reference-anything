@@ -16,6 +16,8 @@ const css = `
 [data-composer-card] [role="listbox"] [role="presentation"][data-source]:not(:first-child){margin-top:8px}
 [data-composer-card] [role="listbox"]>[data-dsh-ref-menu-settling]{overflow-anchor:none!important}
 [data-composer-card] [role="listbox"]>[data-dsh-ref-menu-settling] [role="option"][aria-selected="false"]:hover{background:transparent!important}
+[data-composer-card] [role="listbox"] [role="option"][data-dsh-ref-menu-action]{color:var(--dsw-alias-label-tertiary,#737780)!important}
+[data-composer-card] [role="listbox"] [role="option"][data-dsh-ref-menu-action]>span:last-child:not(:first-child){display:none!important}
 [data-composer-card] [role="listbox"] .dsh_ref_projected_icon,[data-composer-card] [role="listbox"] .dsh_ref_picker_icon{display:inline-flex!important;align-items:center!important;justify-content:center!important;flex:none;width:16px!important;height:16px!important;line-height:1!important;color:var(--dsw-alias-label-secondary,#5f636b)}
 [data-composer-card] [role="listbox"] :is(.dsh_ref_projected_icon,.dsh_ref_picker_icon)>svg{display:block;width:16px;height:16px;overflow:visible}
 [data-composer-card] [data-decoration="chip"][data-dsh-ref-chip-icon]>:first-child>svg{visibility:hidden!important}
@@ -181,17 +183,32 @@ export function adoptMenuGroupTitleProjection(t: TranslateNS<typeof REFERENCE_AN
     Commands: 'source.commands',
     Skills: 'source.skills',
   }
+  const normalizeLabel = (value: string): string => value.replace(/\s/gu, '')
+  const actionLabels = new Set([
+    normalizeLabel(`${t('menu.collapse')}${t('menu.collapseDetail')}`),
+    ...Array.from({ length: 5 }, (_, index) => normalizeLabel(`${t('menu.showMore', { count: index + 1 })}${t('menu.showMoreDetail')}`)),
+  ])
   let projecting = false
   const project = (root: ParentNode): void => {
     if (projecting) return
-    const selector = '[data-composer-card] [role="listbox"] [role="presentation"][data-source]'
-    const headings = root instanceof Element && root.matches(selector)
-      ? [root]
-      : Array.from(root.querySelectorAll(selector))
+    const menuSelector = '[data-composer-card] [role="listbox"]'
+    const menus = new Set<Element>()
+    if (root instanceof Element) {
+      if (root.matches(menuSelector)) menus.add(root)
+      const containingMenu = root.closest(menuSelector)
+      if (containingMenu !== null) menus.add(containingMenu)
+    }
+    for (const menu of Array.from(root.querySelectorAll(menuSelector))) menus.add(menu)
     projecting = true
-    for (const heading of headings) {
-      const key = keys[(heading as HTMLElement).dataset.source ?? '']
-      if (key !== undefined && heading.textContent !== t(key)) heading.textContent = t(key)
+    for (const menu of menus) {
+      for (const heading of Array.from(menu.querySelectorAll<HTMLElement>('[role="presentation"][data-source]'))) {
+        const key = keys[heading.dataset.source ?? '']
+        if (key !== undefined && heading.textContent !== t(key)) heading.textContent = t(key)
+      }
+      for (const option of Array.from(menu.querySelectorAll<HTMLElement>('[role="option"]'))) {
+        if (actionLabels.has(normalizeLabel(option.textContent ?? ''))) option.dataset.dshRefMenuAction = ''
+        else delete option.dataset.dshRefMenuAction
+      }
     }
     projecting = false
   }
@@ -498,17 +515,19 @@ export function adoptReferenceIconProjection(): () => void {
       const walker = document.createTreeWalker(menu, NodeFilter.SHOW_ELEMENT)
       let node = walker.nextNode()
       while (node !== null) {
-        if (node instanceof HTMLElement && node.childElementCount === 0 && node.dataset.dshRefMenuIcon === undefined) {
+        if (node instanceof HTMLElement && node.childElementCount === 0) {
           const text = node.textContent ?? ''
           const provider = providers.find(item => text.includes(PROVIDER_ICON_MARKER[item]))
           if (provider !== undefined) {
             node.replaceChildren(createProviderIcon(PROVIDER_ICON_PATH[provider]))
+            node.classList.remove('dsh_ref_picker_icon')
             node.classList.add('dsh_ref_projected_icon')
             node.dataset.dshRefMenuIcon = provider
           } else {
             const kind = pickerKinds.find(item => text.includes(PICKER_ICON_MARKER[item]))
             if (kind !== undefined) {
               node.replaceChildren(createPickerIcon(kind))
+              node.classList.remove('dsh_ref_projected_icon')
               node.classList.add('dsh_ref_picker_icon')
               node.dataset.dshRefMenuIcon = kind
             }
@@ -521,11 +540,20 @@ export function adoptReferenceIconProjection(): () => void {
   }
   project(document)
   const observer = new MutationObserver(records => {
-    for (const record of records) {
-      if (record.type === 'characterData' && record.target.parentElement !== null) project(record.target.parentElement)
-      if (record.type === 'attributes' && record.target instanceof Element) project(record.target)
-      for (const node of Array.from(record.addedNodes)) if (node instanceof Element) project(node)
+    const roots = new Set<ParentNode>()
+    const queueProjection = (element: Element): void => {
+      roots.add(element.closest('[data-composer-card] [role="listbox"]') ?? element)
     }
+    for (const record of records) {
+      if (record.type === 'characterData' && record.target.parentElement !== null) queueProjection(record.target.parentElement)
+      if (record.type === 'attributes' && record.target instanceof Element) queueProjection(record.target)
+      // React keys native menu rows by source + index. When refreshed results
+      // move to the front, it reuses the icon span and replaces our SVG with a
+      // marker Text node. Project the mutation target so that reused spans are
+      // reconciled before the next paint, even when no Element was added.
+      if (record.type === 'childList' && record.target instanceof Element) queueProjection(record.target)
+    }
+    for (const root of roots) project(root)
   })
   observer.observe(document.body, { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ['data-reference-appearance'] })
   return () => { observer.disconnect() }
