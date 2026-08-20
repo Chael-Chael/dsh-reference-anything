@@ -1,3 +1,6 @@
+> [!WARNING]
+> DSH `0.1.0-rc.8` introduces a native `@` menu, and we are actively migrating this plugin to the new integration. Until the migration is complete, users on DSH versions earlier than `0.1.0-rc.8` can continue using the current legacy plugin.
+
 <a name="readme-top"></a>
 
 <div align="center">
