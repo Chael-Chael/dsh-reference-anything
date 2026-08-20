@@ -3,29 +3,27 @@
 # A patch REPLACES a row's whole `config` rather than merging keys, so when you
 # override one of these in your profile's cordis.patch.yml, restate every key
 # the row needs.
-- insert:
-    # The harness's own cross-session resolver. It ships with dsh but no shipped
-    # composition mounts it, so `dsh-session:` mentions resolve to nothing until
-    # something does. Mounting it here is what makes the mention expander below
-    # able to serve both schemes.
-    - id: session-reference
-      name: '@deepseek-ai/dsh-session-reference'
+- id: ui-reference
+  # Reference Anything re-registers Files and DSH sessions as two independent
+  # sources over the same official Remotes.  Disabling only this Client source
+  # keeps the official file/session services and canonical mention semantics.
+  disabled: true
 
+- insert:
     # The registry every source registers into.
     - id: references
       name: 'dsh-reference-anything'
       config:
         listLimit: 20
 
-    # Expands `@[label](dsh-ref:…)` and `dsh-session:` mentions in a user's
-    # prompt into untrusted background, on every surface. It grants the agent
-    # the exact reference URI but does not fetch a transcript; the agent calls
-    # reference_read only when the current task needs one.
+    # Expands plugin-owned `@[label](dsh-ref:…)` mentions into untrusted
+    # metadata on every surface. Native file and `dsh-session:` references stay
+    # with DSH's official services. External transcripts are not prefetched;
+    # the agent calls reference_read only when the current task needs one.
     - id: reference-mention
       name: 'dsh-reference-anything/reference'
       config:
         maxReferences: 3
-        serveSessionScheme: true
 
     # Lets the model go looking on its own, and page backwards through a
     # conversation it has only seen the end of.

@@ -1,11 +1,6 @@
 import { z } from 'zod'
 import type { InvocationDescriptor } from '@deepseek-ai/dsh-typert-protocol'
-import { providerSchema, settingsRecordSchema } from './wire.ts'
-
-export const workspaceEntrySchema = z.object({ path: z.string(), kind: z.enum(['file', 'directory']) }).readonly()
-export const sessionCandidateSchema = z.object({ sessionId: z.string(), label: z.string(), cwd: z.string().optional(), createdAt: z.number() }).readonly()
-const agentLookup = { name: 'agent', wire: 'agentId', source: 'lookup' as const, lookup: 'agent' as const,
-  codec: { mode: 'strict' as const, typeSymbol: '@deepseek-ai/dsh-session/types#SessionId', schema: z.string().min(1) } }
+import { providerSchema, referenceUiModeSchema, settingsRecordSchema } from './wire.ts'
 
 export const searchInputSchema = z.object({
   query: z.string(), provider: providerSchema.optional(), limit: z.number().int().min(1).max(100),
@@ -22,7 +17,7 @@ export const healthSchema = z.object({
   daemonRunning: z.boolean(), extensionConnected: z.boolean(), extensionState: extensionStateSchema,
   extensionVersion: z.string().optional(), profileCount: z.number().int().nonnegative().optional(),
   opencliCompatible: z.boolean(), daemonVersion: z.string().optional(), daemonStale: z.boolean(),
-  connectivityOk: z.boolean(), pluginVersion: z.string().optional(), adapterCommandsReady: z.boolean(), adapterCompatible: z.boolean(),
+  connectivityOk: z.boolean(), connectivityChecked: z.boolean(), pluginVersion: z.string().optional(), adapterCommandsReady: z.boolean(), adapterCompatible: z.boolean(),
   versionError: z.string().optional(), daemonError: z.string().optional(), pluginError: z.string().optional(), doctorError: z.string().optional(),
 }).readonly()
 export const browserProfileSchema = z.object({ id: z.string(), alias: z.string().optional(), connected: z.boolean(), isDefault: z.boolean() }).readonly()
@@ -36,6 +31,8 @@ export const packageUpdateStatusSchema = z.object({
 export const packageUpdateResultSchema = z.object({
   version: z.string(), restartRequired: z.boolean(),
 }).readonly()
+export const referenceUiModeInputSchema = z.object({ mode: referenceUiModeSchema }).readonly()
+export const referenceUiSwitchResultSchema = z.object({ mode: referenceUiModeSchema, restartRequired: z.literal(false) }).readonly()
 export const providerStatsSchema = z.object({
   provider: providerSchema, conversations: z.number().int().nonnegative(), lastSyncedAt: z.string(),
   status: z.enum(['ready', 'syncing', 'error', 'empty']), error: z.string().optional(),
@@ -77,10 +74,9 @@ export const providerSyncStateSchema = z.object({
 }).readonly()
 
 export const REFERENCE_ANYTHING_INVOCATIONS: readonly InvocationDescriptor[] = [
-  descriptor('workspaceSearch', [agentLookup], strict('WorkspaceEntry[]', z.array(workspaceEntrySchema)), true),
-  descriptor('sessionSearch', [agentLookup, { name: 'input', wire: 'input', source: 'json', codec: strict('SessionSearchInput', z.object({ query: z.string(), limit: z.number().int().min(1).max(100) }).readonly()) }], strict('SessionCandidate[]', z.array(sessionCandidateSchema)), true),
   descriptor('search', [{ name: 'input', wire: 'input', source: 'json', codec: strict('SearchInput', searchInputSchema) }], strict('SearchResult[]', z.array(searchResultSchema)), true),
   descriptor('health', [], strict('Health', healthSchema), true),
+  descriptor('quickHealth', [], strict('Health', healthSchema), true),
   descriptor('profiles', [], strict('BrowserProfile[]', z.array(browserProfileSchema)), true),
   descriptor('discoverOpenCli', [], strict('OpenCliDiscovery', openCliDiscoverySchema), true),
   descriptor('installOpenCli', [], strict('OpenCliDiscovery', openCliDiscoverySchema), true),
@@ -89,6 +85,7 @@ export const REFERENCE_ANYTHING_INVOCATIONS: readonly InvocationDescriptor[] = [
   descriptor('updateStatus', [], strict('PackageUpdateStatus', packageUpdateStatusSchema), true),
   descriptor('checkUpdate', [], strict('PackageUpdateStatus', packageUpdateStatusSchema), true),
   descriptor('installUpdate', [], strict('PackageUpdateResult', packageUpdateResultSchema), true),
+  descriptor('switchReferenceUiMode', [{ name: 'input', wire: 'input', source: 'json', codec: strict('ReferenceUiModeInput', referenceUiModeInputSchema) }], strict('ReferenceUiSwitchResult', referenceUiSwitchResultSchema), true),
   descriptor('stats', [], strict('ProviderStats[]', z.array(providerStatsSchema))),
   descriptor('syncStart', [{ name: 'input', wire: 'input', source: 'json', codec: strict('SyncStart', syncStartSchema) }], strict('JobId', z.string())),
   descriptor('syncStatus', [{ name: 'input', wire: 'input', source: 'json', codec: strict('JobInput', jobInputSchema) }], strict('SyncStatus?', syncStatusSchema.optional())),

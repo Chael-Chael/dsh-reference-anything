@@ -285,6 +285,12 @@ export default class WebChatHistoryService extends Service implements ReferenceS
       timeoutMs: this.config.timeoutMs, maxStdoutBytes: this.config.maxStdoutBytes }).health(signal)
   }
 
+  quickHealth(signal?: AbortSignal) {
+    const settings = this.store.settings
+    return new OpenCliRunner({ executable: settings.opencliPath, profile: settings.profile,
+      timeoutMs: this.config.timeoutMs, maxStdoutBytes: this.config.maxStdoutBytes }).quickHealth(signal)
+  }
+
   profiles(signal?: AbortSignal) {
     const settings = this.store.settings
     return new OpenCliRunner({ executable: settings.opencliPath, profile: '',

@@ -2,12 +2,14 @@ import { readFile } from 'node:fs/promises'
 import { describe, expect, it } from 'vitest'
 
 describe('OpenCLI sync browser lifecycle', () => {
-  it('closes each task tab without releasing the reusable background window', async () => {
+  it('uses background one-shot tabs and closes every command-owned tab', async () => {
     const source = await readFile(new URL('../opencli-plugin/common.js', import.meta.url), 'utf8')
-    expect(source).toContain("siteSession: 'persistent'")
+    expect(source).toContain("siteSession: 'ephemeral'")
     expect(source).toContain("defaultWindowMode: 'background'")
-    expect(source).not.toContain("siteSession: 'ephemeral'")
+    expect(source).not.toContain("siteSession: 'persistent'")
+    expect(source).not.toContain("name: 'close-sync-tab'")
     expect(source).toContain('await page.closeTab?.()')
+    expect(source.match(/await page\.closeTab\?\.\(\)/g)).toHaveLength(1)
     expect(source).not.toContain('closeWindow')
     expect(source).not.toContain('destroyContainer')
   })

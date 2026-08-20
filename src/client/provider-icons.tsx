@@ -17,7 +17,7 @@ export const PROVIDER_ICON_MARKER: Readonly<Record<ChatProvider, string>> = {
 }
 
 export type PickerIconKind =
-  | 'command' | 'skill' | 'session'
+  | 'command' | 'skill' | 'session' | 'refresh'
   | 'folder' | 'file' | 'image' | 'text' | 'code' | 'data'
   | 'archive' | 'spreadsheet' | 'audio' | 'video' | 'presentation' | 'font'
 
@@ -26,6 +26,7 @@ export const PICKER_ICON_MARKER: Readonly<Record<PickerIconKind, string>> = {
   session: '\uE106', skill: '\uE107', command: '\uE108', folder: '\uE109', file: '\uE10A',
   image: '\uE10B', text: '\uE10C', code: '\uE10D', data: '\uE10E', archive: '\uE10F',
   spreadsheet: '\uE110', audio: '\uE111', video: '\uE112', presentation: '\uE113', font: '\uE114',
+  refresh: '\uE115',
 }
 export const SESSION_ICON_MARKER = PICKER_ICON_MARKER.session
 export const SKILL_ICON_MARKER = PICKER_ICON_MARKER.skill
@@ -48,6 +49,13 @@ export const PICKER_ICON_NODES = {
   ],
   // MessageCircle
   session: [{ tag: 'path', attrs: { d: 'M7.9 20A9 9 0 1 0 4 16.1L2 22Z' } }],
+  // RefreshCcw
+  refresh: [
+    { tag: 'path', attrs: { d: 'M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8' } },
+    { tag: 'path', attrs: { d: 'M3 3v5h5' } },
+    { tag: 'path', attrs: { d: 'M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16' } },
+    { tag: 'path', attrs: { d: 'M16 16h5v5' } },
+  ],
   // FolderClosed
   folder: [
     { tag: 'path', attrs: { d: 'M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z' } },

@@ -50,9 +50,8 @@ function assertResult(result, domain, operation) {
 }
 
 /**
- * Close only the tab used by this adapter command. The persistent site session
- * prevents OpenCLI from sending its `close-window` lease-release action, while
- * Browser Bridge can keep and reuse the background container window.
+ * Each command owns an ephemeral Browser Bridge tab. Close that tab after the
+ * command finishes while preserving the provider result or failure.
  */
 async function inTemporaryTab(page, task) {
   try {
@@ -250,13 +249,9 @@ export function registerProvider(config) {
   })
 }
 
-/**
- * Keep one stable, background Browser Bridge session per provider site.
- * Persistence suppresses OpenCLI's `close-window` action; inTemporaryTab closes
- * only the finished command's tab so the reusable container window stays alive.
- */
+/** Browser Bridge lifecycle shared by every web-chat command. */
 export const SYNC_BROWSER_SESSION = Object.freeze({
-  siteSession: 'persistent',
+  siteSession: 'ephemeral',
   defaultWindowMode: 'background',
 })
 

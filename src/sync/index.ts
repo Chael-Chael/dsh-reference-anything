@@ -72,6 +72,12 @@ const BACKOFF_MAX_MS = 24 * 60 * 60_000
 /** Conversation-level failures tolerated before the provider itself is called failed. */
 const MIN_TOLERATED_FAILURES = 10
 const FAILURE_TOLERANCE_RATIO = 0.25
+/**
+ * Spread provider browser-session creation without serializing provider work.
+ * Six enabled providers are all underway within two seconds, while Browser
+ * Bridge avoids receiving every ephemeral-tab request in the same instant.
+ */
+export const PROVIDER_START_STAGGER_MS = 400
 
 export class ConversationSyncManager {
   private readonly jobs = new Map<string, SyncJob>()
@@ -159,7 +165,12 @@ export class ConversationSyncManager {
     const failures = new Map<ChatProvider, string>()
     let succeeded = 0
     try {
-      await Promise.all(job.providers.map(async (provider) => {
+      await Promise.all(job.providers.map(async (provider, index) => {
+        // Keep the first provider on the original immediate path. Besides
+        // avoiding needless latency, this preserves the start()->cancel()
+        // contract: account discovery has installed its abort listener before
+        // start() returns. Only later providers wait for a launch slot.
+        if (index > 0 && !await waitForProviderStart(index * PROVIDER_START_STAGGER_MS, job.controller.signal)) return
         if (job.controller.signal.aborted) return
         const started = Date.now()
         try {
@@ -474,6 +485,21 @@ function isFatal(error: unknown): boolean {
   return error instanceof OpenCliError && (error.code === 'OPENCLI_CONFIGURATION'
     || error.code === 'PROVIDER_NOT_LOGGED_IN' || error.code === 'PROVIDER_ACCOUNT_MISMATCH'
     || error.code === 'EXTENSION_NOT_CONNECTED')
+}
+
+/** Wait for one provider's launch slot; cancellation skips it without rejecting sibling workers. */
+async function waitForProviderStart(delayMs: number, signal: AbortSignal): Promise<boolean> {
+  if (signal.aborted) return false
+  if (delayMs <= 0) return true
+  return new Promise(resolve => {
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const onAbort = (): void => { clearTimeout(timer); resolve(false) }
+    timer = setTimeout(() => {
+      signal.removeEventListener('abort', onAbort)
+      resolve(!signal.aborted)
+    }, delayMs)
+    signal.addEventListener('abort', onAbort, { once: true })
+  })
 }
 
 function summarize(failures: readonly string[]): string {

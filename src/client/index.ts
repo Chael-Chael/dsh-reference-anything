@@ -2,42 +2,45 @@ import type { ConnectionHandle } from '@deepseek-ai/dsh-api-remotes/client'
 import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
 import type {} from '@deepseek-ai/dsh-client-locale/client'
-import { createSnapshotStore, type ClientContext } from '@deepseek-ai/dsh-client-runtime/client'
+import { createSnapshotStore, type ClientContext, type ISessions } from '@deepseek-ai/dsh-client-runtime/client'
 import type { InputTriggerServiceContract } from '@deepseek-ai/dsh-client-ui-input-trigger/client'
-import { ALL_PROVIDERS, defaultPickerSettings, samePickerSettings, type ChatProvider, type InputRenderMode, type PickerSettings, type SettingsRecord } from '../wire.ts'
-import { REFERENCE_ANYTHING_REMOTE, type ReferenceAnythingRemoteFace, type SearchResult, type SessionCandidate, type SyncStatus } from './remote.ts'
-import { COMMAND_SOURCE, CONVERSATION_SOURCE, FILE_SOURCE, SESSION_SOURCE, SKILL_SOURCE, createCommandSource, createConversationSource, createSearchDebounce, createSessionSource, createSkillSource, createWorkspaceSource } from './source.ts'
+import { ALL_PROVIDERS, defaultPickerSettings, samePickerSettings, type ChatProvider, type PickerSettings, type ReferenceUiMode, type SettingsRecord } from '../wire.ts'
+import { REFERENCE_ANYTHING_REMOTE, type ReferenceAnythingRemoteFace, type SearchResult, type SyncStatus } from './remote.ts'
+import { createCommandSource, createConversationSource, createFileSource, createSearchDebounce, createSessionSource, createSkillSource, type RefreshablePickerSource } from './source.ts'
 import { ConversationSettings, PAGE_SIZE, type SettingsSnapshot } from './components.tsx'
-import { adoptAdaptiveChipCaret, adoptAdaptiveChipHitTesting, adoptAdaptiveChipInsertionCaret, adoptAdaptiveChipKeyboardNavigation, adoptAdaptiveChipSelection, adoptAdaptiveComposerHeight, adoptConversationMentionProjection, adoptConversationSyncActionProjection, adoptMenuExpansionProjection, adoptMenuGroupTitleProjection, adoptReferenceIconProjection, adoptStyles } from './styles.ts'
+import {
+  adoptMenuGroupTitleProjection, adoptMenuViewportTracking, adoptReferenceIconProjection, adoptStyles,
+} from './styles.ts'
+import { createPickerMenuActionGuard, createPickerMenuUpdater } from './menu-update.ts'
 import { en, REFERENCE_ANYTHING_NS, zh } from './locale.ts'
-import { createSettingsOpenHealthCheck, runSetupSequence, setupReady, type SetupStage } from './health.ts'
+import { runSetupSequence, setupReady, type SetupStage } from './health.ts'
 import { createAutoDismissNotice } from './notice.ts'
+import { runReferenceUiSwitchWithReload } from './reference-ui.ts'
 
 // `ctx.remote.commands` is a separately injected Remote face. Declaring only
 // `remote` lets the @ source register, but its candidate request can fail and
 // the input-trigger menu then removes the Commands group as a failed source.
-export const inject = ['inputTriggers', 'remote', 'remote.commands', 'slots', 'connection', 'locale']
+export const inject = [
+  'inputTriggers', 'remote', 'remote.commands', 'remote.fileReferences', 'remote.sessionReferenceResolver',
+  'slots', 'connection', 'locale', 'sessions',
+]
 
 export function apply(ctx: ClientContext): void {
   adoptStyles()
+  ctx.effect(() => adoptMenuViewportTracking(), 'reference-anything.client.menu-viewport-tracking')
   ctx.effect(() => adoptReferenceIconProjection(), 'reference-anything.client.icon-projection')
-  ctx.effect(() => adoptConversationMentionProjection(), 'reference-anything.client.message-projection')
-  ctx.effect(() => adoptAdaptiveComposerHeight(), 'reference-anything.client.adaptive-composer-height')
-  ctx.effect(() => adoptAdaptiveChipHitTesting(), 'reference-anything.client.adaptive-chip-hit-testing')
-  ctx.effect(() => adoptAdaptiveChipInsertionCaret(), 'reference-anything.client.adaptive-chip-insertion-caret')
-  ctx.effect(() => adoptAdaptiveChipKeyboardNavigation(), 'reference-anything.client.adaptive-chip-keyboard-navigation')
-  ctx.effect(() => adoptAdaptiveChipSelection(), 'reference-anything.client.adaptive-chip-selection')
-  ctx.effect(() => adoptAdaptiveChipCaret(), 'reference-anything.client.adaptive-chip-caret')
   let remote: ReferenceAnythingRemoteFace | undefined
   const scope = createSnapshotStore<SettingsSnapshot>({
     settings: { opencliPath: 'opencli', profile: '', detailConcurrency: 8, autoSync: false, syncOnStartup: false, autoSyncMinutes: 60, historyMode: 'metadata-only', enabledProviders: [...ALL_PROVIDERS], maxReadTurns: 10, inputRenderMode: 'pill' }, loading: true,
   })
   let currentJob = ''
+  let lastSyncFinishedAt: string | undefined
   let poll: ReturnType<typeof setInterval> | undefined
+  let activeConversationSource: RefreshablePickerSource | undefined
   let refreshGeneration = 0
   const t = ctx.locale.bind(REFERENCE_ANYTHING_NS)
   const notices = createAutoDismissNotice(() => scope.getSnapshot(), value => { scope.set(value) })
-  let applySources: ((picker: PickerSettings | undefined, renderMode?: InputRenderMode) => void) | undefined
+  let applySources: ((picker: PickerSettings | undefined, mode: ReferenceUiMode | undefined) => void) | undefined
   ctx.effect(() => ctx.locale.register(REFERENCE_ANYTHING_NS, { zh, en }), 'reference-anything.client.dictionaries')
   ctx.effect(() => adoptMenuGroupTitleProjection(t), 'reference-anything.client.menu-group-localization')
 
@@ -56,7 +59,7 @@ export function apply(ctx: ClientContext): void {
       try { stats = unwrap(await remote.stats()) } catch { statsUnavailable = true }
       if (generation !== refreshGeneration) return
       const currentSettings = unwrap(settings)
-      applySources?.(currentSettings.picker, currentSettings.inputRenderMode)
+      applySources?.(currentSettings.picker, currentSettings.referenceUiMode)
       scope.set({ ...scope.getSnapshot(), settings: currentSettings, stats, storage: unwrap(storageResult),
         error: statsUnavailable && !stats ? 'Local conversation statistics are unavailable until the DSH host is restarted.' : undefined, loading: false })
     } catch (error) {
@@ -77,14 +80,24 @@ export function apply(ctx: ClientContext): void {
       try { stats = unwrap(await remote.stats()) } catch { statsUnavailable = true }
       if (generation !== refreshGeneration) return
       const currentSettings = unwrap(settings)
-      applySources?.(currentSettings.picker, currentSettings.inputRenderMode)
+      applySources?.(currentSettings.picker, currentSettings.referenceUiMode)
       scope.set({ ...scope.getSnapshot(), settings: currentSettings, health: unwrap(health), profiles, stats, storage: unwrap(storageResult),
         error: statsUnavailable && !stats ? 'Local conversation statistics are unavailable until the DSH host is restarted.' : undefined, loading: false })
     } catch (error) {
       if (generation === refreshGeneration) scope.set({ ...scope.getSnapshot(), error: error instanceof Error ? error.message : String(error), loading: false })
     }
   }
-  const checkHealthOnSettingsOpen = createSettingsOpenHealthCheck(refresh)
+  let quickHealthAttempted = false
+  const quickRefreshOnOpen = async (): Promise<void> => {
+    if (!remote || quickHealthAttempted) return
+    const settings = scope.getSnapshot().settings
+    if ((settings.referenceUiMode ?? 'plugin') !== 'plugin' || !(settings.picker ?? defaultPickerSettings()).conversations.enabled) return
+    quickHealthAttempted = true
+    try {
+      const health = unwrap(await remote.quickHealth())
+      scope.set({ ...scope.getSnapshot(), health })
+    } catch (error) { scope.set({ ...scope.getSnapshot(), error: message(error) }) }
+  }
   /**
    * Re-read provider statistics only.
    *
@@ -95,7 +108,6 @@ export function apply(ctx: ClientContext): void {
    */
   // These defer rapid typing but deliberately retain no prior search rows.
   const conversationSearch = createSearchDebounce<SearchResult>()
-  const sessionSearch = createSearchDebounce<SessionCandidate>()
   const refreshStats = async (): Promise<void> => {
     if (!remote) return
     try {
@@ -129,13 +141,18 @@ export function apply(ctx: ClientContext): void {
     if (!remote || !currentJob) return
     try {
       const status = unwrap(await remote.syncStatus({ jobId: currentJob }))
-      if (status) scope.set({ ...scope.getSnapshot(), sync: status })
+      if (status) {
+        scope.set({ ...scope.getSnapshot(), sync: status })
+        void activeConversationSource?.refreshCachedMenu()
+      }
       if (!status || status.status !== 'running') {
+        if (status) lastSyncFinishedAt = new Date().toISOString()
         if (poll) clearInterval(poll)
         poll = undefined
         await refreshLocal()
         const current = scope.getSnapshot().browse
         if (current) await browse(current.query, current.provider, current.offset)
+        await activeConversationSource?.refreshCachedMenu({ refetch: true })
       }
     } catch (error) {
       if (poll) clearInterval(poll); poll = undefined
@@ -166,36 +183,64 @@ export function apply(ctx: ClientContext): void {
   }, 'reference-anything.client.remote')
 
   const inputTriggers = ctx.get('inputTriggers') as InputTriggerServiceContract
+  const sessions = (ctx as unknown as { sessions: ISessions }).sessions
+  const updateMenu = createPickerMenuUpdater(inputTriggers, sessions)
+  const guardMenuActions = createPickerMenuActionGuard(inputTriggers, sessions)
   const connection = ctx.get('connection') as ConnectionHandle
   let sourceDisposers: Array<() => void> = []
   let appliedPicker: PickerSettings | undefined
-  let appliedRenderMode: InputRenderMode | undefined
-  let menuPicker = defaultPickerSettings()
-  const registerSources = (picker: PickerSettings, renderMode: InputRenderMode) => {
-    menuPicker = picker
+  let appliedReferenceUiMode: ReferenceUiMode | undefined
+  const registerSources = (picker: PickerSettings) => {
+    const optionsFor = (key: Exclude<keyof PickerSettings, 'displayMode'>) => ({
+      order: picker[key].order,
+      limit: picker[key].limit,
+      maxCandidates: picker[key].maxCandidates,
+      displayMode: picker.displayMode,
+      updateMenu,
+      guardMenuActions,
+    })
     const source = createConversationSource((query, provider, signal, limit) =>
       conversationSearch.run(query, signal, async () => {
         // Re-read after the debounce: the Remote can unmount with its scope.
         if (!remote) return []
         return unwrap(await remote.search({ query, ...(provider ? { provider } : {}), limit }, signal))
-      }), t, { ...picker.conversations, renderMode })
+      }), t, optionsFor('conversations'), {
+        sync: () => startSync(scope.getSnapshot().settings.enabledProviders, 'incremental'),
+        status: () => scope.getSnapshot().sync,
+        lastSyncedAt: () => lastSyncFinishedAt ?? scope.getSnapshot().stats
+          ?.map(row => row.lastSyncedAt).filter(Boolean)
+          .sort((a, b) => Date.parse(b) - Date.parse(a))[0],
+        lastSourceResult: () => {
+          const snapshot = scope.getSnapshot()
+          if (snapshot.sync) return undefined
+          const enabled = snapshot.settings.enabledProviders
+          const stats = new Map(snapshot.stats?.map(row => [row.provider, row]))
+          return {
+            success: enabled.filter(provider => {
+              const row = stats.get(provider)
+              return row !== undefined && row.status !== 'error' && Boolean(row.lastSyncedAt)
+            }).length,
+            total: enabled.length,
+          }
+        },
+      })
+    activeConversationSource = source
     const disposers: Array<() => void> = []
     if (picker.conversations.enabled) disposers.push(inputTriggers.registerSource(source))
-    if (picker.commands.enabled) disposers.push(inputTriggers.registerSource(createCommandSource(async (sessionId, signal) => { signal.throwIfAborted(); return unwrap(await ctx.remote.commands.list(sessionId)) }, t, picker.commands)))
+    if (picker.commands.enabled) disposers.push(inputTriggers.registerSource(createCommandSource(async (sessionId, signal) => { signal.throwIfAborted(); return unwrap(await ctx.remote.commands.list(sessionId)) }, t, optionsFor('commands'))))
     if (picker.skills.enabled) disposers.push(inputTriggers.registerSource(createSkillSource(async (sessionId, signal) => {
         const { result } = await connection.api.skills.list({ sessionId }, signal)
         if (!result.ok) throw new Error(`${result.error.code}: ${result.error.message}`)
         return result.value.skills
-      }, t, picker.skills)))
-    if (picker.files.enabled) disposers.push(inputTriggers.registerSource(createWorkspaceSource(async (sessionId, signal) => {
-        if (!remote) return []
-        return unwrap(await remote.workspaceSearch(sessionId, signal))
-      }, t, { ...picker.files, renderMode })))
-    if (picker.sessions.enabled) disposers.push(inputTriggers.registerSource(createSessionSource((sessionId, query, signal) =>
-      sessionSearch.run(query, signal, async () => {
-        if (!remote) return []
-        return unwrap(await remote.sessionSearch(sessionId, { query, limit: 50 }, signal))
-      }), t, { ...picker.sessions, renderMode })))
+      }, t, optionsFor('skills'))))
+    if (picker.files.enabled) disposers.push(inputTriggers.registerSource(createFileSource(async (sessionId, query, signal) => {
+      const result = await ctx.remote.fileReferences.list(sessionId, query, signal)
+      return result.ok ? result.value : []
+    }, t, optionsFor('files'))))
+    if (picker.sessions.enabled) disposers.push(inputTriggers.registerSource(createSessionSource(async (sessionId, query, signal) => {
+      const result = await ctx.remote.sessionReferenceResolver.candidates(sessionId, query, signal)
+      return result.ok ? result.value : []
+    }, t, optionsFor('sessions'))))
     return disposers
   }
   const refreshStorage = async (): Promise<void> => {
@@ -222,27 +267,29 @@ export function apply(ctx: ClientContext): void {
       notices.show(t('notice.cleared', { count }), { error: undefined })
     } catch (error) { scope.set({ ...scope.getSnapshot(), error: message(error) }) }
   }
-  applySources = (picker, renderMode = 'pill') => {
+  applySources = (picker, mode) => {
     const next = picker ?? defaultPickerSettings()
+    const nextMode = mode ?? 'plugin'
     // Settings unrelated to the @ picker (for example Auto sync) use the
     // same save endpoint. Re-registering every input source for those saves
     // can dispose UI-owned registrations while the settings panel is still
     // rendering, leaving the panel blank. Only rebuild when picker behavior
     // actually changed.
-    if (appliedPicker !== undefined && samePickerSettings(appliedPicker, next) && appliedRenderMode === renderMode) return
+    if (appliedPicker !== undefined && samePickerSettings(appliedPicker, next) && appliedReferenceUiMode === nextMode) return
     for (const dispose of sourceDisposers) dispose()
-    sourceDisposers = registerSources(next, renderMode)
+    activeConversationSource = undefined
+    sourceDisposers = nextMode === 'plugin' ? registerSources(next) : []
     appliedPicker = next
-    appliedRenderMode = renderMode
+    appliedReferenceUiMode = nextMode
   }
-  applySources(undefined)
+  applySources(undefined, 'plugin')
   ctx.effect(() => () => { for (const dispose of sourceDisposers) dispose() }, 'reference-anything.client.sources')
 
   const save = async (settings: SettingsRecord): Promise<void> => {
     if (!remote) return
     try {
       const value = unwrap(await remote.settingsUpdate(settings))
-      applySources?.(value.picker, value.inputRenderMode)
+      applySources?.(value.picker, value.referenceUiMode)
       notices.show(t('notice.settingsSaved'), { settings: value, error: undefined })
     } catch (error) { scope.set({ ...scope.getSnapshot(), error: message(error), notice: undefined }) }
   }
@@ -277,32 +324,14 @@ export function apply(ctx: ClientContext): void {
         providerProgress: providers.map(provider => ({ provider, phase: 'listing', completed: 0, total: 0 })),
       }
       scope.set({ ...scope.getSnapshot(), sync: initial, error: undefined, notice: undefined })
+      void activeConversationSource?.refreshCachedMenu()
       if (poll) clearInterval(poll); poll = setInterval(() => { void pollJob() }, 1_000); await pollJob()
     } catch (error) { scope.set({ ...scope.getSnapshot(), error: message(error) }) }
   }
-  ctx.effect(() => adoptConversationSyncActionProjection({
-    source: CONVERSATION_SOURCE,
-    idleLabel: t('menu.syncAll'), listingLabel: (completed, total) => t('menu.syncListingProgress', { completed, total }),
-    progressLabel: (completed, total) => t('menu.syncProgress', { completed, total }),
-    completeLabel: t('sync.complete'), partialLabel: t('sync.partial'),
-    failedLabel: t('sync.failed'), cancelledLabel: t('sync.cancelled'),
-    start: () => startSync(scope.getSnapshot().settings.enabledProviders, 'incremental'),
-    getStatus: () => scope.getSnapshot().sync,
-    subscribe: listener => scope.subscribe(listener),
-  }), 'reference-anything.client.conversation-sync-action')
-  const menuSourceKeys: Readonly<Record<string, keyof PickerSettings>> = {
-    [COMMAND_SOURCE]: 'commands', [SKILL_SOURCE]: 'skills', [FILE_SOURCE]: 'files',
-    [SESSION_SOURCE]: 'sessions', [CONVERSATION_SOURCE]: 'conversations',
-  }
-  ctx.effect(() => adoptMenuExpansionProjection({
-    sources: Object.keys(menuSourceKeys), label: t('menu.expandAll'),
-    getVisibleLimit: source => menuPicker[menuSourceKeys[source] ?? 'conversations'].limit, batchSize: 5,
-  }), 'reference-anything.client.menu-expansion')
   ctx.slots.inject('settings.section', () => ctx.slots.register({
     name: 'settings.section', id: 'reference-anything', order: 56, label: () => t('settings.title'), locale: REFERENCE_ANYTHING_NS,
     inject: () => ({
-      hooks: { scope }, save, sync: startSync, refresh,
-      refreshOnOpen: () => checkHealthOnSettingsOpen((scope.getSnapshot().settings.picker ?? defaultPickerSettings()).conversations.enabled),
+      hooks: { scope }, save, sync: startSync, refresh, quickRefreshOnOpen,
       browse, deleteConversation, clearProvider, clearOlder, clearRemoteMissing, clearOldAccounts, refreshStats,
       checkUpdate: async () => {
         try {
@@ -320,6 +349,20 @@ export function apply(ctx: ClientContext): void {
             currentVersion: result.version, latestVersion: result.version, updateAvailable: false, checkedAt: Date.now(),
           }
           notices.show(result.restartRequired ? t('notice.updateInstalled', { version: result.version }) : t('notice.upToDate', { version: previous?.currentVersion || result.version }), { update, error: undefined })
+        } catch (error) { scope.set({ ...scope.getSnapshot(), error: message(error), notice: undefined }) }
+      },
+      switchReferenceUiMode: async () => {
+        try {
+          const activeRemote = remote
+          if (!activeRemote) return
+          await runReferenceUiSwitchWithReload(async () => {
+            const current = scope.getSnapshot().settings
+            const mode: ReferenceUiMode = (current.referenceUiMode ?? 'plugin') === 'plugin' ? 'official' : 'plugin'
+            const result = unwrap(await activeRemote.switchReferenceUiMode({ mode }))
+            const settings = { ...current, referenceUiMode: result.mode }
+            applySources?.(settings.picker, settings.referenceUiMode)
+            notices.show(t(result.mode === 'official' ? 'notice.referenceUiOfficial' : 'notice.referenceUiPlugin'), { settings, error: undefined })
+          })
         } catch (error) { scope.set({ ...scope.getSnapshot(), error: message(error), notice: undefined }) }
       },
       setupAll: async (extensionPageOpened: boolean) => {

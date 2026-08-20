@@ -196,19 +196,10 @@ describe('only the user can make a reference', () => {
   })
 })
 
-describe('session references', () => {
-  it('refuses a dsh-session: mention when the resolver is not mounted, rather than dropping it', async () => {
-    const result = await step(ctx, [userMessage('see dsh-session:InMxIg')])
-    const entered = (result as Extract<PreStepDecision, { kind: 'enter' }>).messages
-    expect(entered[0]?.source).toMatchObject({ kind: 'plugin', form: 'notice' })
-    expect(entered[0]?.content.flatMap(b => b.type === 'text' ? [b.text] : []).join(''))
-      .toContain('cross-session resolver is not mounted')
-  })
-
-  it('ignores the session scheme entirely when it is turned off', async () => {
-    const scoped = await mount({}, { serveSessionScheme: false })
-    const messages = [userMessage('see dsh-session:InMxIg')]
+describe('official reference ownership', () => {
+  it('does not intercept native dsh-session or file mention text', async () => {
+    const messages = [userMessage('see @[Other](dsh-session:InMxIg) and @src/index.ts')]
     const decision: PreStepDecision = { kind: 'enter', messages }
-    await expect(step(scoped, messages, { decision })).resolves.toBe(decision)
+    await expect(step(ctx, messages, { decision })).resolves.toBe(decision)
   })
 })

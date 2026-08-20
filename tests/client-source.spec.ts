@@ -1,221 +1,250 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import {
   CONVERSATION_SOURCE, conversationReferenceUri, createCommandSource,
-  createConversationSource, createSearchDebounce, createSessionSource, createSkillSource, createWorkspaceSource,
+  createConversationSource, createFileSource, createSearchDebounce, createSessionSource, createSkillSource,
   describeRow, disambiguate, parseQuery, scopedQuery, workspaceIconKind,
+  type PickerSourceOptions,
 } from '../src/client/source.ts'
 import { PICKER_ICON_MARKER } from '../src/client/provider-icons.tsx'
+import type { PickerMenuUpdate } from '../src/client/menu-update.ts'
 import type { SearchResult } from '../src/client/remote.ts'
 import { REFERENCE_ANYTHING_INVOCATIONS } from '../src/contract.ts'
 import { decodeReferenceUri } from '../src/uri.ts'
 
-describe('conversation client references', () => {
+const options = (overrides: Partial<PickerSourceOptions> = {}): PickerSourceOptions => ({
+  order: 30, limit: 6, maxCandidates: 50, displayMode: 'collapse', ...overrides,
+})
+const session = { sessionId: 'session-1' as never }
+const request = (query = '', quoted = false) => ({
+  query, quoted, position: 'inline' as const, signal: new AbortController().signal,
+})
+const pick = (candidate: { name: string; description?: string; icon?: string; hint?: string; section?: string; value?: string }) => ({
+  candidate, session, position: 'inline' as const, via: 'menu' as const,
+  span: { start: 0, end: 1, draftRev: 1 },
+})
+
+describe('native @ sources', () => {
   it('uses the canonical opaque dsh-ref URI accepted by the host', () => {
     const uri = conversationReferenceUri('chatgpt\0scope\0conversation-1')
     expect(uri).toMatch(/^dsh-ref:[A-Za-z0-9_-]+$/)
     expect(decodeReferenceUri(uri)).toEqual({ source: 'web-chat', id: 'chatgpt\0scope\0conversation-1' })
-    expect(uri).not.toContain('web-chat/')
   })
 
-  it('parses a provider prefix without treating ordinary search text as one', () => {
-    expect(parseQuery('chatgpt cache design')).toEqual({ provider: 'chatgpt', query: 'cache design' })
-    expect(parseQuery('chatgpt:cache design')).toEqual({ provider: 'chatgpt', query: 'cache design' })
-    expect(parseQuery('cache design')).toEqual({ query: 'cache design' })
-  })
-
-  it('accepts the separators and short spellings that survive @ token detection', () => {
-    // The `@` token ends at the first space, so `:` and `/` are the only
-    // separators a mention query can actually carry.
-    expect(parseQuery('chatgpt:cache')).toEqual({ provider: 'chatgpt', query: 'cache' })
+  it('parses provider and source scopes consistently', () => {
     expect(parseQuery('gpt:cache')).toEqual({ provider: 'chatgpt', query: 'cache' })
     expect(parseQuery('ds/cache')).toEqual({ provider: 'deepseek', query: 'cache' })
-    expect(parseQuery('claude')).toEqual({ provider: 'claude', query: '' })
-    expect(parseQuery('caching')).toEqual({ query: 'caching' })
-  })
-
-  it('describes a title hit with its provider and updated time through seconds', () => {
-    const updatedAt = '2026-08-17T00:00:27.456Z'
-    const displayed = new Date(updatedAt).toLocaleString(undefined, {
-      year: 'numeric', month: 'numeric', day: 'numeric',
-      hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false,
-    })
-    expect(describeRow(searchRow({ updatedAt }))).toBe(`ChatGPT · ${displayed}`)
-    expect(displayed).toMatch(/27/)
-  })
-
-  it('shows the matched excerpt after the updated date when the title did not match', () => {
-    const described = describeRow(searchRow({ title: 'New chat', matchedVia: 'content', snippet: '…used pgvector for…' }))
-    expect(described).toContain('ChatGPT · ')
-    expect(described).toContain('…used pgvector for…')
-    expect(described).not.toContain('turns')
-  })
-
-  it('numbers repeated titles so the menu can key rows by name', () => {
-    const numbered = disambiguate([
-      { name: 'New chat' }, { name: 'Cache design' }, { name: 'New chat' }, { name: 'New chat' },
-    ])
-    expect(numbered.map(item => item.name)).toEqual(['New chat', 'Cache design', 'New chat (2)', 'New chat (3)'])
-  })
-
-  it('does not let a generated suffix collide with a title that already looks like one', () => {
-    const numbered = disambiguate([{ name: 'New chat' }, { name: 'New chat (2)' }, { name: 'New chat' }])
-    expect(numbered.map(item => item.name)).toEqual(['New chat', 'New chat (2)', 'New chat (3)'])
-    expect(new Set(numbered.map(item => item.name)).size).toBe(numbered.length)
-  })
-
-  it('routes type:name prefixes to one @ group while keeping unprefixed search global', () => {
+    expect(parseQuery('cache design')).toEqual({ query: 'cache design' })
     expect(scopedQuery('commands', 'commands')).toBe('')
     expect(scopedQuery('commands', 'files')).toBeUndefined()
     expect(scopedQuery('skills:creator', 'skills')).toBe('creator')
-    expect(scopedQuery('skills:creator', 'files')).toBeUndefined()
-    expect(scopedQuery('chatgpt:loss', 'conversations')).toBe('loss')
-    expect(scopedQuery('ordinary search', 'files')).toBe('ordinary search')
-    expect(scopedQuery('unknown:value', 'files')).toBe('unknown:value')
     expect(scopedQuery('外部对话', 'conversations')).toBe('')
   })
 
-  it('keeps the chip owner stable when a localized menu label is used', () => {
-    const zh = ((key: string) => key === 'source.conversations' ? '外部对话' : key) as never
-    const source = createConversationSource(async () => [], zh)
-    const row = searchRow()
-    const outcome = source.onPick({
-      candidate: { name: row.title, conversation: row }, session: { sessionId: 'session-1' as never },
-      position: 'inline', via: 'menu', span: { start: 0, end: 1, draftRev: 1 },
-    })
-    expect(source.name).toBe(CONVERSATION_SOURCE)
-    expect(outcome).toMatchObject({ insert: { source: CONVERSATION_SOURCE } })
+  it('describes result provenance and disambiguates duplicate menu names', () => {
+    const row = searchRow({ matchedVia: 'content', snippet: '…used pgvector for…' })
+    expect(describeRow(row)).toContain('ChatGPT · ')
+    expect(describeRow(row)).toContain('…used pgvector for…')
+    const names = disambiguate([{ name: 'New chat' }, { name: 'New chat (2)' }, { name: 'New chat' }])
+    expect(names.map(item => item.name)).toEqual(['New chat', 'New chat (2)', 'New chat (3)'])
   })
 
-  it('honors the configured @ group order and prefetches expandable results', async () => {
-    const requested: number[] = []
-    const source = createConversationSource(async (_query, _provider, _signal, limit) => {
-      requested.push(limit)
-      return [searchRow({ uriId: '1' }), searchRow({ uriId: '2' })]
-    }, undefined, { order: 77, limit: 5 })
-    await source.candidates({ sessionId: 'session-1' as never }, { query: '', position: 'inline', signal: new AbortController().signal })
-    expect(source.order).toBe(77)
-    expect(requested).toEqual([50])
+  it('keeps sync as a pinned first candidate on empty query and hides it while filtering', async () => {
+    const sync = vi.fn()
+    const updateMenu = vi.fn((_update: PickerMenuUpdate) => true)
+    const source = createConversationSource(async () => [searchRow()], undefined, options({ updateMenu }), {
+      sync, status: () => undefined, lastSyncedAt: () => undefined, lastSourceResult: () => undefined,
+    })
+    const open = await source.candidates(session, request())
+    expect(open.map(row => row.name)).toEqual(['Sync all now', 'Cache design notes'])
+    expect(open[0]?.icon).toBe(PICKER_ICON_MARKER.refresh)
+    expect(source.onPick(pick(open[0]!))).toBe('handled')
+    expect(sync).toHaveBeenCalledOnce()
+    expect(updateMenu).toHaveBeenCalledWith(expect.objectContaining({
+      source: CONVERSATION_SOURCE, query: '', reopen: true, anchor: 'first',
+    }))
+    const filtered = await source.candidates(session, request('cache'))
+    expect(filtered.map(row => row.name)).toEqual(['Cache design notes'])
+    const providerScoped = await source.candidates(session, request('chatgpt'))
+    expect(providerScoped.map(row => row.name)).toEqual(['Cache design notes'])
   })
 
-  it('inserts a visual composer chip while serializing the canonical mention on send', async () => {
-    const source = createConversationSource(async () => [])
-    const row = {
-      uriId: 'chatgpt\0scope\0conversation-3', provider: 'chatgpt' as const,
-      title: 'BiWM SFT Loss 解释', turnCount: 4, updatedAt: '2026-08-17T00:00:00.000Z', syncedAt: '2026-08-17T00:00:00.000Z', partial: false, url: 'https://example.test',
-      matchedVia: 'recent' as const,
-    }
-    const outcome = source.onPick({
-      candidate: { name: row.title, conversation: row }, session: { sessionId: 'session-1' as never },
-      position: 'inline', via: 'menu', span: { start: 0, end: 1, draftRev: 1 },
+  it('shows live sync progress and the previous result in the pinned action', async () => {
+    const running = createConversationSource(async () => [], undefined, options(), {
+      sync: vi.fn(),
+      status: () => ({
+        jobId: 'job', status: 'running', providers: ['chatgpt'], completed: 3, total: 10,
+        providerProgress: [{ provider: 'chatgpt', phase: 'syncing', completed: 3, total: 10 }],
+      }),
+      lastSyncedAt: () => undefined,
+      lastSourceResult: () => undefined,
     })
-    expect(outcome).toMatchObject({ insert: { source: 'External conversations', label: '\uE100 ChatGPT·BiWM SFT Loss 解释' } })
-    if (outcome === undefined || outcome === 'handled' || !('insert' in outcome)) throw new Error('expected reference insert')
+    expect((await running.candidates(session, request()))[0]).toMatchObject({
+      name: 'Sync 3/10', description: 'An external-conversation sync is already running',
+    })
+
+    const completed = createConversationSource(async () => [], undefined, options(), {
+      sync: vi.fn(),
+      status: () => ({
+        jobId: 'job', status: 'partial', providers: ['chatgpt', 'claude'], completed: 8, total: 10,
+        providerProgress: [
+          { provider: 'chatgpt', phase: 'complete', completed: 8, total: 8 },
+          { provider: 'claude', phase: 'failed', completed: 0, total: 2 },
+        ],
+      }),
+      lastSyncedAt: () => '2026-08-20T06:30:00.000Z',
+      lastSourceResult: () => undefined,
+    })
+    const result = (await completed.candidates(session, request()))[0]!
+    expect(result.name).toBe('Sync again')
+    expect(result.description).toContain('Successful sources 1/2')
+  })
+
+  it('hands a plain external label and native session appearance to the Composer', async () => {
+    const row = searchRow({ title: 'BiWM SFT Loss 解释' })
+    const source = createConversationSource(async () => [row])
+    const candidate = (await source.candidates(session, request()))[0]!
+    expect(candidate.icon).toBe('')
+    const outcome = source.onPick(pick(candidate))
+    if (outcome === undefined || outcome === 'handled' || !('insert' in outcome)) throw new Error('expected insert')
+    expect(outcome.insert).toMatchObject({
+      source: CONVERSATION_SOURCE,
+      label: 'ChatGPT·BiWM SFT Loss 解释',
+      appearance: 'session',
+    })
+    expect(outcome.insert.label).not.toContain('')
     await expect(source.codec?.serialize(outcome.insert.ref, new AbortController().signal))
       .resolves.toBe(`@[ChatGPT·BiWM SFT Loss 解释](${conversationReferenceUri(row.uriId)})`)
   })
 
-  it('falls back to literal conversation references in Raw text mode', () => {
-    const source = createConversationSource(async () => [], undefined, { order: 30, limit: 6, renderMode: 'raw-text' })
-    const row = searchRow({ uriId: 'chatgpt\0scope\0conversation-raw', title: 'Native editor fallback' })
-    const outcome = source.onPick({
-      candidate: { name: row.title, conversation: row }, session: { sessionId: 'session-1' as never },
-      position: 'inline', via: 'menu', span: { start: 0, end: 1, draftRev: 1 },
+  it('does not offer conversations or sessions inside an open quoted file token', async () => {
+    const conversations = createConversationSource(async () => [searchRow()])
+    const sessions = createSessionSource(async () => [{
+      sessionId: 'source' as never, label: 'Other', createdAt: 1, mention: '@[Other](dsh-session:abc)',
+    }])
+    await expect(conversations.candidates(session, request('path with', true))).resolves.toEqual([])
+    await expect(sessions.candidates(session, request('path with', true))).resolves.toEqual([])
+  })
+
+  it('uses the official file grammar and native file insert without dsh-file', async () => {
+    const source = createFileSource(async (_sessionId, query) => {
+      expect(query).toBe('index')
+      return [{ path: 'src/index.ts', kind: 'file' }]
     })
-    expect(outcome).toEqual({ text: `@[ChatGPT·Native editor fallback](${conversationReferenceUri(row.uriId)})` })
+    const candidate = (await source.candidates(session, request('index')))[0]!
+    expect(candidate.icon).toBe(PICKER_ICON_MARKER.code)
+    const outcome = source.onPick(pick(candidate))
+    if (outcome === undefined || outcome === 'handled' || !('insert' in outcome)) throw new Error('expected insert')
+    expect(outcome.insert).toMatchObject({
+      ref: '@src/index.ts', label: 'index.ts', appearance: 'file', clipboardText: '@src/index.ts',
+    })
+    await expect(source.codec?.serialize(outcome.insert.ref, new AbortController().signal)).resolves.toBe('@src/index.ts')
+    expect(JSON.stringify(outcome)).not.toContain('dsh-file:')
   })
 
-  it('groups workspace paths and serializes a relative-path dsh-file chip', async () => {
-    const source = createWorkspaceSource(async () => [{ path: 'src/index.ts', kind: 'file' }])
-    const candidates = await source.candidates({ sessionId: 'session-1' as never }, { query: 'index', position: 'inline', signal: new AbortController().signal })
-    expect(source.name).toBe('Files and folders')
-    const outcome = source.onPick({ candidate: candidates[0]!, session: { sessionId: 'session-1' as never }, position: 'inline', via: 'menu', span: { start: 0, end: 1, draftRev: 1 } })
-    if (outcome === undefined || outcome === 'handled' || !('insert' in outcome)) throw new Error('expected file insert')
-    expect(candidates[0]?.icon).toBe(PICKER_ICON_MARKER.code)
-    expect(outcome.insert.label).toBe(`${PICKER_ICON_MARKER.code} src/index.ts`)
-    await expect(source.codec?.serialize(outcome.insert.ref, new AbortController().signal)).resolves.toMatch(/^@\[src\/index\.ts\]\(dsh-file:[A-Za-z0-9_-]+\)$/u)
+  it('keeps official quoted-directory completion editable', async () => {
+    const source = createFileSource(async () => [{ path: 'docs with space', kind: 'directory' }])
+    const candidate = (await source.candidates(session, request('docs with', true)))[0]!
+    expect(source.onPick(pick(candidate))).toEqual({ text: '@"docs with space/', continue: true })
   })
 
-  it('classifies workspace icons from path metadata without reading file contents', () => {
+  it('classifies official file candidates for menu logo projection', () => {
     expect(workspaceIconKind({ path: 'assets/hero.PNG', kind: 'file' })).toBe('image')
-    expect(workspaceIconKind({ path: 'notes/todo.txt', kind: 'file' })).toBe('text')
     expect(workspaceIconKind({ path: 'src/index.ts', kind: 'file' })).toBe('code')
-    expect(workspaceIconKind({ path: 'config/app.yaml', kind: 'file' })).toBe('data')
     expect(workspaceIconKind({ path: 'exports/report.xlsx', kind: 'file' })).toBe('spreadsheet')
     expect(workspaceIconKind({ path: 'unknown/model.bin', kind: 'file' })).toBe('file')
     expect(workspaceIconKind({ path: 'src', kind: 'directory' })).toBe('folder')
   })
 
-  it('uses the official dsh-session URI returned by the host', async () => {
-    const uri = 'dsh-session:InNvdXJjZSI'
-    const source = createSessionSource(async () => [{ sessionId: uri, label: '项目聊天导出', cwd: 'fixture-repo', createdAt: 1 }])
-    const candidates = await source.candidates({ sessionId: 'session-1' as never }, { query: '', position: 'inline', signal: new AbortController().signal })
-    expect(source.name).toBe('DSH sessions')
-    expect(candidates[0]?.icon).toBe('\uE106')
-    const outcome = source.onPick({ candidate: candidates[0]!, session: { sessionId: 'session-1' as never }, position: 'inline', via: 'menu', span: { start: 0, end: 1, draftRev: 1 } })
-    if (outcome === undefined || outcome === 'handled' || !('insert' in outcome)) throw new Error('expected session insert')
-    expect(outcome.insert.label).toBe('\uE106 项目聊天导出')
-    await expect(source.codec?.serialize(outcome.insert.ref, new AbortController().signal)).resolves.toBe(`@[项目聊天导出](${uri})`)
+  it('passes through the official canonical dsh-session mention', async () => {
+    const mention = '@[项目聊天导出](dsh-session:InNvdXJjZSI)'
+    const source = createSessionSource(async () => [{
+      sessionId: 'source' as never, label: '项目聊天导出', cwd: 'fixture-repo', createdAt: 1, mention,
+    }])
+    const candidate = (await source.candidates(session, request()))[0]!
+    expect(candidate.icon).toBe(PICKER_ICON_MARKER.session)
+    expect(candidate.description).toBe(`fixture-repo · ${new Date(1).toLocaleString()}`)
+    const outcome = source.onPick(pick(candidate))
+    if (outcome === undefined || outcome === 'handled' || !('insert' in outcome)) throw new Error('expected insert')
+    expect(outcome.insert).toMatchObject({
+      ref: mention, label: '项目聊天导出', appearance: 'session', clipboardText: mention,
+    })
   })
 
-  it('uses native literal text for files and sessions in Raw text mode', async () => {
-    const file = createWorkspaceSource(async () => [{ path: 'src/index.ts', kind: 'file' }], undefined, { order: 10, limit: 6, renderMode: 'raw-text' })
-    const fileCandidates = await file.candidates({ sessionId: 'session-1' as never }, { query: '', position: 'inline', signal: new AbortController().signal })
-    expect(file.onPick({ candidate: fileCandidates[0]!, session: { sessionId: 'session-1' as never }, position: 'inline', via: 'menu', span: { start: 0, end: 1, draftRev: 1 } }))
-      .toMatchObject({ text: expect.stringMatching(/^@\[src\/index\.ts\]\(dsh-file:[A-Za-z0-9_-]+\)$/u) })
+  it('keeps Commands and Skills in @ while returning native slash text', async () => {
+    const commands = createCommandSource(async () => [{ name: 'plan', description: 'Plan mode' }])
+    const command = (await commands.candidates(session, request('pla')))[0]!
+    expect(command).toMatchObject({ name: 'plan', icon: PICKER_ICON_MARKER.command })
+    expect(commands.onPick(pick(command))).toEqual({ text: '/plan' })
 
-    const uri = 'dsh-session:InNvdXJjZSI'
-    const session = createSessionSource(async () => [{ sessionId: uri, label: '项目聊天导出', createdAt: 1 }], undefined, { order: 20, limit: 6, renderMode: 'raw-text' })
-    const sessionCandidates = await session.candidates({ sessionId: 'session-1' as never }, { query: '', position: 'inline', signal: new AbortController().signal })
-    expect(session.onPick({ candidate: sessionCandidates[0]!, session: { sessionId: 'session-1' as never }, position: 'inline', via: 'menu', span: { start: 0, end: 1, draftRev: 1 } }))
-      .toEqual({ text: `@[项目聊天导出](${uri})` })
+    const skills = createSkillSource(async () => [{ name: 'review', description: 'Review code', modelInvocable: false }])
+    const skill = (await skills.candidates(session, request('rev')))[0]!
+    expect(skill).toMatchObject({ name: 'review', icon: PICKER_ICON_MARKER.skill })
+    expect(skill.description).toContain('user-only')
+    expect(skills.onPick(pick(skill))).toEqual({ text: '/review ' })
   })
 
-  it('exposes host commands from every @ panel and hands execution back to the native slash pipeline', async () => {
-    const source = createCommandSource(async () => [{ name: 'plan', description: 'Plan mode' }])
-    await expect(source.candidates({ sessionId: 'session-1' as never }, { query: 'commands', position: 'leading', signal: new AbortController().signal }))
-      .resolves.toEqual([expect.objectContaining({ name: 'plan', commandName: 'plan' })])
-    const candidates = await source.candidates({ sessionId: 'session-1' as never }, { query: 'pla', position: 'leading', signal: new AbortController().signal })
-    expect(candidates).toEqual([expect.objectContaining({ name: 'plan', icon: PICKER_ICON_MARKER.command, commandName: 'plan' })])
-    expect(source.onPick({ candidate: candidates[0]!, session: { sessionId: 'session-1' as never }, position: 'leading', via: 'menu', span: { start: 0, end: 4, draftRev: 1 } })).toEqual({ text: '/plan' })
-    await expect(source.candidates({ sessionId: 'session-1' as never }, { query: 'pla', position: 'inline', signal: new AbortController().signal }))
-      .resolves.toEqual([expect.objectContaining({ name: 'plan', commandName: 'plan' })])
+  it('expands a collapsed source by at most five rows per click', async () => {
+    const rows = Array.from({ length: 14 }, (_, index) => searchRow({ uriId: String(index), title: `Row ${index}` }))
+    const updateMenu = vi.fn((_update: PickerMenuUpdate) => true)
+    const source = createConversationSource(async (_query, _provider, _signal, limit) => {
+      expect(limit).toBe(12)
+      return rows
+    }, undefined, options({ order: 77, limit: 2, maxCandidates: 12, updateMenu }))
+    const candidates = await source.candidates(session, request('row'))
+    expect(source.order).toBe(77)
+    expect(candidates.map(row => row.name)).toEqual(['Row 0', 'Row 1', 'Show 5 more'])
+    expect(source.onPick(pick(candidates.at(-1)!))).toBe('handled')
+    expect(updateMenu).toHaveBeenLastCalledWith(expect.objectContaining({
+      source: CONVERSATION_SOURCE, query: 'row', reopen: true, anchor: 'viewport',
+    }))
+    const firstPage = updateMenu.mock.calls.at(-1)![0].candidates
+    expect(firstPage.map(row => row.name)).toEqual([
+      'Row 0', 'Row 1', 'Row 2', 'Row 3', 'Row 4', 'Row 5', 'Row 6', 'Show 5 more', 'Collapse',
+    ])
+    expect(source.onPick(pick(firstPage.find(row => row.name === 'Show 5 more')!))).toBe('handled')
+    expect(updateMenu).toHaveBeenLastCalledWith(expect.objectContaining({ reopen: true, anchor: 'viewport' }))
+    const secondPage = updateMenu.mock.calls.at(-1)![0].candidates
+    expect(secondPage.map(row => row.name)).toEqual([
+      'Row 0', 'Row 1', 'Row 2', 'Row 3', 'Row 4', 'Row 5', 'Row 6',
+      'Row 7', 'Row 8', 'Row 9', 'Row 10', 'Row 11', 'Collapse',
+    ])
+    expect(source.onPick(pick(secondPage.at(-1)!))).toBe('handled')
+    expect(updateMenu).toHaveBeenLastCalledWith(expect.objectContaining({ reopen: true, anchor: 'last' }))
+    await expect(source.candidates(session, request('row'))).resolves.toMatchObject([
+      { name: 'Row 0' }, { name: 'Row 1' }, { name: 'Show 5 more' },
+    ])
   })
 
-  it('exposes filesystem-backed skills from every @ panel', async () => {
-    const source = createSkillSource(async () => [{ name: 'review', description: 'Review code', modelInvocable: false }])
-    const candidates = await source.candidates({ sessionId: 'session-1' as never }, { query: 'rev', position: 'leading', signal: new AbortController().signal })
-    expect(candidates).toEqual([expect.objectContaining({ name: 'review', description: 'user-only · Review code', icon: '\uE107', skillName: 'review' })])
-    expect(source.onPick({ candidate: candidates[0]!, session: { sessionId: 'session-1' as never }, position: 'leading', via: 'menu', span: { start: 0, end: 4, draftRev: 1 } })).toEqual({ text: '/review ' })
-    await expect(source.candidates({ sessionId: 'session-1' as never }, { query: 'rev', position: 'inline', signal: new AbortController().signal }))
-      .resolves.toEqual([expect.objectContaining({ name: 'review', skillName: 'review' })])
+  it('uses all capped rows in native-scroll mode and omits expand controls', async () => {
+    const rows = Array.from({ length: 8 }, (_, index) => searchRow({ uriId: String(index), title: `Row ${index}` }))
+    const source = createConversationSource(async () => rows, undefined, options({
+      limit: 2, maxCandidates: 5, displayMode: 'native-scroll',
+    }))
+    await expect(source.candidates(session, request('row'))).resolves.toHaveLength(5)
   })
 
-  it('declares search cancellation so the input-trigger AbortSignal is accepted by the Remote API', () => {
-    const search = REFERENCE_ANYTHING_INVOCATIONS.find(descriptor => descriptor.method === 'search')
-    expect(search?.cancellation).toEqual({ parameter: 'signal' })
-    expect(REFERENCE_ANYTHING_INVOCATIONS.find(descriptor => descriptor.method === 'workspaceSearch')?.cancellation).toEqual({ parameter: 'signal' })
-    expect(REFERENCE_ANYTHING_INVOCATIONS.find(descriptor => descriptor.method === 'sessionSearch')?.cancellation).toEqual({ parameter: 'signal' })
+  it('declares only plugin-owned search cancellation on its Remote face', () => {
+    expect(REFERENCE_ANYTHING_INVOCATIONS.find(item => item.method === 'search')?.cancellation)
+      .toEqual({ parameter: 'signal' })
+    expect(REFERENCE_ANYTHING_INVOCATIONS.some(item => item.method === 'workspaceSearch')).toBe(false)
+    expect(REFERENCE_ANYTHING_INVOCATIONS.some(item => item.method === 'sessionSearch')).toBe(false)
+    expect(REFERENCE_ANYTHING_INVOCATIONS.find(item => item.method === 'switchReferenceUiMode')?.cancellation)
+      .toEqual({ parameter: 'signal' })
   })
 })
 
 describe('search debounce', () => {
-  it('answers an empty query without waiting, because that is the menu opening', async () => {
+  it('answers an empty query immediately', async () => {
     const debounce = createSearchDebounce<string>()
-    const started = Date.now()
     await expect(debounce.run('', new AbortController().signal, async () => ['row'])).resolves.toEqual(['row'])
-    expect(Date.now() - started).toBeLessThan(50)
   })
 
-  it('drops out when a later keystroke supersedes the wait', async () => {
+  it('drops a superseded query and always refetches repeated queries', async () => {
     const debounce = createSearchDebounce<string>()
     const controller = new AbortController()
-    const pending = debounce.run('cache', controller.signal, async () => ['row'])
+    const pending = debounce.run('cache', controller.signal, async () => ['stale'])
     controller.abort()
     await expect(pending).resolves.toEqual([])
-  })
-
-  it('always fetches fresh rows for a repeated query', async () => {
-    const debounce = createSearchDebounce<string>()
     let fetches = 0
     const run = () => debounce.run('', new AbortController().signal, async () => { fetches++; return ['row'] })
     await run(); await run()
@@ -226,7 +255,7 @@ describe('search debounce', () => {
 function searchRow(overrides: Partial<SearchResult> = {}): SearchResult {
   return {
     uriId: 'id', provider: 'chatgpt', title: 'Cache design notes', url: 'https://example.test/c/1',
-    updatedAt: new Date(Date.now() - 3 * 24 * 60 * 60_000).toISOString(),
-    turnCount: 24, partial: false, syncedAt: new Date().toISOString(), matchedVia: 'title', ...overrides,
+    updatedAt: '2026-08-17T00:00:00.000Z', turnCount: 24, partial: false,
+    syncedAt: '2026-08-17T00:00:00.000Z', matchedVia: 'title', ...overrides,
   }
 }

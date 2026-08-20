@@ -12,10 +12,12 @@ const pickerSourceSettingsSchema = z.object({
   enabled: z.boolean(),
   order: z.number().int().min(0).max(100),
   limit: z.number().int().min(1).max(50),
+  maxCandidates: z.number().int().min(1).max(50).default(50),
 })
 export type PickerSourceSettings = z.infer<typeof pickerSourceSettingsSchema>
 
 export const pickerSettingsSchema = z.object({
+  displayMode: z.enum(['collapse', 'native-scroll']).default('collapse'),
   commands: pickerSourceSettingsSchema,
   skills: pickerSourceSettingsSchema,
   files: pickerSourceSettingsSchema,
@@ -23,26 +25,32 @@ export const pickerSettingsSchema = z.object({
   conversations: pickerSourceSettingsSchema,
 })
 export type PickerSettings = z.infer<typeof pickerSettingsSchema>
+export type PickerDisplayMode = PickerSettings['displayMode']
 export const inputRenderModeSchema = z.enum(['pill', 'raw-text'])
 export type InputRenderMode = z.infer<typeof inputRenderModeSchema>
+export const referenceUiModeSchema = z.enum(['plugin', 'official'])
+export type ReferenceUiMode = z.infer<typeof referenceUiModeSchema>
 
 /** Defaults used before the user saves the General section. */
 export function defaultPickerSettings(): PickerSettings {
   return {
-    commands: { enabled: true, order: 0, limit: 6 },
-    skills: { enabled: true, order: 5, limit: 6 },
-    files: { enabled: true, order: 10, limit: 6 },
-    sessions: { enabled: true, order: 20, limit: 6 },
-    conversations: { enabled: true, order: 30, limit: 6 },
+    displayMode: 'collapse',
+    commands: { enabled: true, order: 0, limit: 6, maxCandidates: 50 },
+    skills: { enabled: true, order: 5, limit: 6, maxCandidates: 50 },
+    files: { enabled: true, order: 10, limit: 6, maxCandidates: 50 },
+    sessions: { enabled: true, order: 20, limit: 6, maxCandidates: 50 },
+    conversations: { enabled: true, order: 30, limit: 6, maxCandidates: 50 },
   }
 }
 
 /** Picker settings have a fixed schema, so explicit comparison is cheap and stable. */
 export function samePickerSettings(left: PickerSettings, right: PickerSettings): boolean {
-  return (Object.keys(left) as Array<keyof PickerSettings>).every(key =>
+  if (left.displayMode !== right.displayMode) return false
+  return pickerSourceSchema.options.every(key =>
     left[key].enabled === right[key].enabled &&
     left[key].order === right[key].order &&
-    left[key].limit === right[key].limit)
+    left[key].limit === right[key].limit &&
+    left[key].maxCandidates === right[key].maxCandidates)
 }
 
 export const settingsRecordSchema = z.object({
@@ -56,6 +64,8 @@ export const settingsRecordSchema = z.object({
   enabledProviders: z.array(providerSchema).default([...ALL_PROVIDERS]),
   maxReadTurns: z.number().int().min(1).max(100).default(10),
   inputRenderMode: inputRenderModeSchema.default('pill'),
+  // Optional keeps settings written by earlier plugin versions readable.
+  referenceUiMode: referenceUiModeSchema.optional(),
   // Optional keeps existing on-disk settings forward-compatible. The client
   // uses defaultPickerSettings() until the user saves the General section.
   picker: pickerSettingsSchema.optional(),

@@ -8,7 +8,7 @@ import type { ProviderConversationRow, ProviderTurnRow } from './store/store.ts'
 
 const execFile = promisify(nodeExecFile)
 export const MIN_OPENCLI_VERSION = '1.8.6'
-export const MIN_ADAPTER_VERSION = '0.2.1'
+export const MIN_ADAPTER_VERSION = '0.2.2'
 export const OPENCLI_NPM_PACKAGE = '@jackwener/opencli'
 const SITE: Record<ChatProvider, string> = {
   chatgpt: 'dsh-chatgpt', claude: 'dsh-claude', gemini: 'dsh-gemini',
@@ -16,14 +16,6 @@ const SITE: Record<ChatProvider, string> = {
 }
 const REQUIRED_ADAPTER_COMMANDS = ['chatgpt', 'claude', 'gemini', 'deepseek', 'grok', 'kimi'] as const
 const ADAPTER_PLUGIN_NAME = 'dsh-chat-history'
-
-/**
- * A persistent OpenCLI site session owns one mutable browser lease. Serialize
- * commands that target the same executable/profile/site across runner
- * instances so concurrent detail workers cannot navigate or close each
- * other's active tab. Different provider sites still run in parallel.
- */
-const SITE_COMMAND_TAILS = new Map<string, Promise<void>>()
 
 export type OpenCliErrorCode = 'EXTENSION_NOT_CONNECTED' | 'PROVIDER_TIMEOUT' | 'PROVIDER_NOT_LOGGED_IN'
   | 'PROVIDER_ACCOUNT_MISMATCH' | 'OPENCLI_CONFIGURATION' | 'OPENCLI_OUTPUT_TOO_LARGE' | 'OPENCLI_FAILED'
@@ -59,6 +51,7 @@ export interface OpenCliHealth {
   daemonVersion?: string
   daemonStale: boolean
   connectivityOk: boolean
+  connectivityChecked: boolean
   pluginVersion?: string
   adapterCommandsReady: boolean
   adapterCompatible: boolean
@@ -186,9 +179,18 @@ export class OpenCliRunner {
   }
 
   async health(signal?: AbortSignal): Promise<OpenCliHealth> {
+    return this.inspectHealth(true, signal)
+  }
+
+  /** Inspect local OpenCLI, daemon, extension and plugin state without an active connectivity probe. */
+  async quickHealth(signal?: AbortSignal): Promise<OpenCliHealth> {
+    return this.inspectHealth(false, signal)
+  }
+
+  private async inspectHealth(checkConnectivity: boolean, signal?: AbortSignal): Promise<OpenCliHealth> {
     const [version, daemon, plugins, doctor] = await Promise.all([
       this.probe(['--version'], signal), this.probe(['daemon', 'status'], signal), this.probe(['plugin', 'list'], signal),
-      this.probe(['doctor'], signal),
+      checkConnectivity ? this.probe(['doctor'], signal) : Promise.resolve({ value: '', diagnostic: '' }),
     ])
     const status = parseDaemonStatus(daemon.value)
     const cliVersion = normalizeVersion(version.value)
@@ -204,7 +206,7 @@ export class OpenCliRunner {
     return {
       version: cliVersion, daemon: daemon.value.trim(), pluginInstalled,
       daemonRunning: status.daemonRunning, extensionConnected: status.extensionConnected, extensionState: status.extensionState,
-      opencliCompatible, daemonStale, connectivityOk,
+      opencliCompatible, daemonStale, connectivityOk, connectivityChecked: checkConnectivity,
       ...(status.extensionVersion ? { extensionVersion: status.extensionVersion } : {}),
       ...(status.profileCount !== undefined ? { profileCount: status.profileCount } : {}),
       ...(daemonVersion ? { daemonVersion: normalizeVersion(daemonVersion) } : {}),
@@ -214,7 +216,7 @@ export class OpenCliRunner {
       ...(version.error ? { versionError: version.error } : {}),
       ...(daemon.error ? { daemonError: daemon.error } : {}),
       ...(plugins.error || adapterLoadError ? { pluginError: plugins.error || adapterLoadError } : {}),
-      ...(doctor.error ? { doctorError: doctor.error } : {}),
+      ...('error' in doctor && doctor.error ? { doctorError: doctor.error } : {}),
     }
   }
 
@@ -279,23 +281,19 @@ export class OpenCliRunner {
   }
 
   private async json(site: string, operation: string, args: string[], signal?: AbortSignal): Promise<Record<string, unknown>[]> {
-    const queueKey = [this.executable, ...this.prefixArgs, this.profile, site].join('\0')
-    return serializeSiteCommand(queueKey, async () => {
-      // Pin adapter traffic to one persistent background session. Persistence
-      // suppresses OpenCLI's close-window action; the adapter closes only its
-      // completed task tab and leaves the background container reusable.
-      const stdout = await this.raw([
-        site, operation, ...args,
-        '--site-session', 'persistent', '--window', 'background', '-f', 'json',
-      ], signal)
-      try {
-        const parsed: unknown = JSON.parse(stdout)
-        if (!Array.isArray(parsed) || parsed.some(row => !row || typeof row !== 'object' || Array.isArray(row))) throw new Error('expected object array')
-        return parsed as Record<string, unknown>[]
-      } catch (error) {
-        throw new OpenCliError('OpenCLI returned malformed JSON', 'OPENCLI_CONFIGURATION', { cause: error })
-      }
-    })
+    // Match the sync-index lifecycle: every command gets its own temporary
+    // background tab, so providers and detail workers can run independently.
+    const stdout = await this.raw([
+      site, operation, ...args,
+      '--site-session', 'ephemeral', '--window', 'background', '-f', 'json',
+    ], signal)
+    try {
+      const parsed: unknown = JSON.parse(stdout)
+      if (!Array.isArray(parsed) || parsed.some(row => !row || typeof row !== 'object' || Array.isArray(row))) throw new Error('expected object array')
+      return parsed as Record<string, unknown>[]
+    } catch (error) {
+      throw new OpenCliError('OpenCLI returned malformed JSON', 'OPENCLI_CONFIGURATION', { cause: error })
+    }
   }
 
   private async raw(args: string[], signal?: AbortSignal): Promise<string> {
@@ -331,18 +329,6 @@ function adapterPluginLoadError(diagnostic = ''): string {
     .map(line => line.trim())
     .filter(line => /Plugin dsh-chat-history\//i.test(line))
   return [...new Set(lines)].join('\n').slice(0, 2_000)
-}
-
-async function serializeSiteCommand<T>(key: string, task: () => Promise<T>): Promise<T> {
-  const previous = SITE_COMMAND_TAILS.get(key) ?? Promise.resolve()
-  const current = previous.then(task, task)
-  const settled = current.then(() => undefined, () => undefined)
-  SITE_COMMAND_TAILS.set(key, settled)
-  try {
-    return await current
-  } finally {
-    if (SITE_COMMAND_TAILS.get(key) === settled) SITE_COMMAND_TAILS.delete(key)
-  }
 }
 
 /** Locate a working OpenCLI without asking a command-line newcomer for PATH details. */

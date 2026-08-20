@@ -1,6 +1,6 @@
 import type { RemoteResult, TypertRemoteContribution } from '@deepseek-ai/dsh-typert-protocol'
 import { REFERENCE_ANYTHING_INVOCATIONS } from '../contract.ts'
-import type { ChatProvider, SettingsRecord } from '../wire.ts'
+import type { ChatProvider, ReferenceUiMode, SettingsRecord } from '../wire.ts'
 
 /** The stored facts about one mirrored conversation, shared by both list surfaces. */
 export interface ConversationRow {
@@ -13,15 +13,13 @@ export interface SearchResult extends ConversationRow {
   /** Excerpt around a body hit; shown in the menu, never sent to the model. */
   snippet?: string
 }
-export interface WorkspaceEntry { path: string; kind: 'file' | 'directory' }
-export interface SessionCandidate { sessionId: string; label: string; cwd?: string; createdAt: number }
 export type ExtensionState = 'connected' | 'disconnected' | 'profile-required' | 'profile-disconnected' | 'daemon-offline'
 export interface Health {
   version: string; daemon: string; pluginInstalled: boolean
   daemonRunning: boolean; extensionConnected: boolean; extensionState: ExtensionState
   extensionVersion?: string; profileCount?: number
   opencliCompatible: boolean; daemonVersion?: string; daemonStale: boolean
-  connectivityOk: boolean; pluginVersion?: string; adapterCommandsReady: boolean; adapterCompatible: boolean
+  connectivityOk: boolean; connectivityChecked: boolean; pluginVersion?: string; adapterCommandsReady: boolean; adapterCompatible: boolean
   versionError?: string; daemonError?: string; pluginError?: string; doctorError?: string
 }
 export interface BrowserProfile { id: string; alias?: string; connected: boolean; isDefault: boolean }
@@ -30,6 +28,7 @@ export interface PackageUpdateStatus {
   currentVersion: string; latestVersion: string; updateAvailable: boolean; checkedAt: number; error?: string
 }
 export interface PackageUpdateResult { version: string; restartRequired: boolean }
+export interface ReferenceUiSwitchResult { mode: ReferenceUiMode; restartRequired: false }
 export interface ProviderStats {
   provider: ChatProvider; conversations: number; lastSyncedAt: string
   status: 'ready' | 'syncing' | 'error' | 'empty'; error?: string
@@ -83,10 +82,9 @@ export const REFERENCE_ANYTHING_REMOTE: TypertRemoteContribution = {
 }
 
 export interface ReferenceAnythingRemoteFace {
-  workspaceSearch(agentId: string, signal?: AbortSignal): Promise<RemoteResult<readonly WorkspaceEntry[]>>
-  sessionSearch(agentId: string, input: { query: string; limit: number }, signal?: AbortSignal): Promise<RemoteResult<readonly SessionCandidate[]>>
   search(input: { query: string; provider?: ChatProvider; limit: number }, signal?: AbortSignal): Promise<RemoteResult<readonly SearchResult[]>>
   health(signal?: AbortSignal): Promise<RemoteResult<Health>>
+  quickHealth(signal?: AbortSignal): Promise<RemoteResult<Health>>
   profiles(signal?: AbortSignal): Promise<RemoteResult<readonly BrowserProfile[]>>
   discoverOpenCli(signal?: AbortSignal): Promise<RemoteResult<OpenCliDiscovery>>
   installOpenCli(signal?: AbortSignal): Promise<RemoteResult<OpenCliDiscovery>>
@@ -95,6 +93,7 @@ export interface ReferenceAnythingRemoteFace {
   updateStatus(signal?: AbortSignal): Promise<RemoteResult<PackageUpdateStatus>>
   checkUpdate(signal?: AbortSignal): Promise<RemoteResult<PackageUpdateStatus>>
   installUpdate(signal?: AbortSignal): Promise<RemoteResult<PackageUpdateResult>>
+  switchReferenceUiMode(input: { mode: ReferenceUiMode }, signal?: AbortSignal): Promise<RemoteResult<ReferenceUiSwitchResult>>
   stats(): Promise<RemoteResult<readonly ProviderStats[]>>
   syncStart(input: { providers: ChatProvider[]; mode: 'incremental' | 'full' }): Promise<RemoteResult<string>>
   syncStatus(input: { jobId: string }): Promise<RemoteResult<SyncStatus | undefined>>

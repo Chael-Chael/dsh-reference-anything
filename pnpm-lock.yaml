@@ -51,6 +51,9 @@ importers:
       '@deepseek-ai/dsh-client-ui-slots':
         specifier: link:../deepseek-harness/packages/client/ui-slots
         version: link:../deepseek-harness/packages/client/ui-slots
+      '@deepseek-ai/dsh-file-reference':
+        specifier: link:../deepseek-harness/packages/context/file-reference
+        version: link:../deepseek-harness/packages/context/file-reference
       '@deepseek-ai/dsh-llm':
         specifier: link:../deepseek-harness/packages/llm/llm
         version: link:../deepseek-harness/packages/llm/llm

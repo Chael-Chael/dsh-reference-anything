@@ -8,11 +8,9 @@
  * the loop durably appends, so injected material is logged by construction and
  * a replay reconstructs the request exactly.
  *
- * Two schemes are expanded. `dsh-ref:` names material outside the harness and
- * is resolved through `ctx.references`. `dsh-session:` names another harness
- * session and is delegated to `ctx.sessionReferenceResolver`, which owns
- * session-surface semantics — compaction folding, shadowed events, cited event
- * seqs — that do not generalize to an outside conversation.
+ * This plugin owns only `dsh-ref:`, which names material outside the harness
+ * and is resolved through `ctx.references`. Native file and DSH-session
+ * references are owned end-to-end by their official DSH services.
  *
  * @module dsh-reference-anything/reference
  */
@@ -22,17 +20,11 @@ import z from '@deepseek-ai/schemastery'
 import type { Agent, PreStepDecision } from '@deepseek-ai/dsh-agent'
 import { boundContextSummary, createUserMessage, freezeMessage } from '@deepseek-ai/dsh-llm'
 import type { ContentBlock, UserMessage } from '@deepseek-ai/dsh-llm'
-import {
-  SESSION_REFERENCE_SCHEME,
-  parseSessionReferenceText,
-  type SessionReferenceInput,
-} from '@deepseek-ai/dsh-session-reference'
 import { ReferenceAnythingError } from './errors.ts'
 import { renderDeferredReferences } from './render.ts'
 import type { ReferenceContextSource, ReferenceInput } from './types.ts'
 import { mayContainReference, parseReferenceText } from './uri.ts'
 import type {} from './index.ts'
-import { WORKSPACE_REFERENCE_SCHEME, parseWorkspaceReferenceText, renderWorkspaceReferences, type WorkspaceReference } from './workspace.ts'
 
 /** Cordis plugin name used by loader diagnostics. */
 export const name = 'reference-mention'
@@ -51,26 +43,17 @@ export interface Config {
    * background, and the byte budget multiplies by the same factor.
    */
   maxReferences?: number
-  /**
-   * Also expand `dsh-session:` mentions. Deployments that deliberately do not
-   * mount the cross-session resolver set this false, so such a mention is
-   * refused as unsupported rather than probed for on every message.
-   */
-  serveSessionScheme?: boolean
 }
 
 /** Runtime schema for {@link Config}. */
 export const Config: z<Config> = z.object({
   maxReferences: z.number().step(1).min(1).max(MAX_REFERENCES).default(MAX_REFERENCES),
-  serveSessionScheme: z.boolean().default(true),
 })
 
 /** One message with its mentions made readable, and what they named. */
 interface ParsedMessage {
   readonly message: UserMessage
   readonly references: readonly ReferenceInput[]
-  readonly sessionReferences: readonly SessionReferenceInput[]
-  readonly workspaceReferences: readonly WorkspaceReference[]
 }
 
 /**
@@ -80,7 +63,6 @@ interface ParsedMessage {
  */
 export function apply(ctx: Context, config: Config = {}): void {
   const maxReferences = Math.min(config.maxReferences ?? MAX_REFERENCES, MAX_REFERENCES)
-  const serveSessionScheme = config.serveSessionScheme ?? true
 
   ctx.on('agent/pre-step', async ({ agent, signal }, next): Promise<PreStepDecision> => {
     const decision = await next()
@@ -90,7 +72,7 @@ export function apply(ctx: Context, config: Config = {}): void {
     // this runs on every step of every turn. Screening with substring scans
     // before any parsing keeps that case free.
     const target = decision.messages.findIndex(candidate =>
-      candidate.source.kind === 'user' && messageText(candidate).some(text => mentions(text, serveSessionScheme)))
+      candidate.source.kind === 'user' && messageText(candidate).some(mayContainReference))
     if (target < 0) return decision
 
     const original = decision.messages[target]
@@ -98,7 +80,7 @@ export function apply(ctx: Context, config: Config = {}): void {
 
     let parsed: ParsedMessage
     try {
-      parsed = parseMessage(original, serveSessionScheme)
+      parsed = parseMessage(original)
     } catch (error: unknown) {
       // A malformed URI inside an explicit mention is the user asking for
       // something that does not exist. Saying so beats sending a prompt whose
@@ -106,7 +88,7 @@ export function apply(ctx: Context, config: Config = {}): void {
       return entered(decision, target, [notice(describe(error))], original)
     }
 
-    if (parsed.references.length === 0 && parsed.sessionReferences.length === 0 && parsed.workspaceReferences.length === 0) return decision
+    if (parsed.references.length === 0) return decision
 
     let contexts: UserMessage[]
     try {
@@ -114,7 +96,7 @@ export function apply(ctx: Context, config: Config = {}): void {
         ctx,
         agent,
         parsed,
-        { maxReferences, serveSessionScheme },
+        maxReferences,
         signal,
       )
     } catch (error: unknown) {
@@ -127,11 +109,6 @@ export function apply(ctx: Context, config: Config = {}): void {
   }, { prepend: true })
 }
 
-interface Limits {
-  readonly maxReferences: number
-  readonly serveSessionScheme: boolean
-}
-
 /**
  * Authorize and render the named references without reading their bodies.
  * The agent decides whether the current request warrants `reference_read`.
@@ -140,36 +117,17 @@ async function resolve(
   ctx: Context,
   agent: Agent,
   parsed: ParsedMessage,
-  limits: Limits,
+  maxReferences: number,
   signal: AbortSignal,
 ): Promise<UserMessage[]> {
   const contexts: UserMessage[] = []
 
-  if (parsed.workspaceReferences.length > 0) {
-    contexts.push(createUserMessage({
-      content: [{ type: 'text', text: await renderWorkspaceReferences(agent, parsed.workspaceReferences) }],
-      source: { kind: 'plugin', plugin: name, form: 'recall' },
-    }))
-  }
-
-  if (parsed.sessionReferences.length > 0) {
-    const resolver = ctx.get('sessionReferenceResolver')
-    if (resolver === undefined) {
-      throw new ReferenceAnythingError(
-        'this deployment cannot reference other harness sessions: the cross-session resolver is not mounted',
-        'SOURCE_UNAVAILABLE',
-      )
-    }
-    const prepared = await resolver.prepare(agent, contentOf(parsed.message), [...parsed.sessionReferences], signal)
-    if (prepared.additionalContext !== undefined) contexts.push(prepared.additionalContext)
-  }
-
   if (parsed.references.length > 0) {
     const inputs = dedupe(parsed.references)
-    if (inputs.length > limits.maxReferences) {
+    if (inputs.length > maxReferences) {
       throw new ReferenceAnythingError(
-        `a message may reference at most ${limits.maxReferences} outside conversation`
-        + `${limits.maxReferences === 1 ? '' : 's'}; this one named ${inputs.length}`,
+        `a message may reference at most ${maxReferences} outside conversation`
+        + `${maxReferences === 1 ? '' : 's'}; this one named ${inputs.length}`,
         'REFERENCE_TOO_MANY',
       )
     }
@@ -206,27 +164,15 @@ function entered(
   return { kind: 'enter', messages: replaced.toSpliced(target, 0, ...contexts) }
 }
 
-/** Rewrite both schemes' mentions to readable text, preserving message identity. */
-function parseMessage(message: UserMessage, serveSessionScheme: boolean): ParsedMessage {
+/** Rewrite external-conversation mentions to readable text, preserving message identity. */
+function parseMessage(message: UserMessage): ParsedMessage {
   const references: ReferenceInput[] = []
-  const sessionReferences: SessionReferenceInput[] = []
-  const workspaceReferences: WorkspaceReference[] = []
   let changed = false
   const content: ContentBlock[] = message.content.map((block) => {
     if (block.type !== 'text') return block
     const own = parseReferenceText(block.text)
     references.push(...own.references)
-    let text = own.text
-    if (text.includes(WORKSPACE_REFERENCE_SCHEME)) {
-      const workspace = parseWorkspaceReferenceText(text)
-      workspaceReferences.push(...workspace.references)
-      text = workspace.text
-    }
-    if (serveSessionScheme && text.includes(SESSION_REFERENCE_SCHEME)) {
-      const session = parseSessionReferenceText(text)
-      sessionReferences.push(...session.references)
-      text = session.text
-    }
+    const text = own.text
     if (text === block.text) return block
     changed = true
     return { ...block, text }
@@ -236,8 +182,6 @@ function parseMessage(message: UserMessage, serveSessionScheme: boolean): Parsed
   return {
     message: changed ? freezeMessage({ ...message, content }) : message,
     references,
-    sessionReferences,
-    workspaceReferences,
   }
 }
 
@@ -254,16 +198,8 @@ function dedupe(references: readonly ReferenceInput[]): ReferenceInput[] {
   return unique
 }
 
-function mentions(text: string, serveSessionScheme: boolean): boolean {
-  return mayContainReference(text) || text.includes(WORKSPACE_REFERENCE_SCHEME) || (serveSessionScheme && text.includes(SESSION_REFERENCE_SCHEME))
-}
-
 function messageText(message: UserMessage): string[] {
   return message.content.flatMap(block => block.type === 'text' ? [block.text] : [])
-}
-
-function contentOf(message: UserMessage): ContentBlock[] {
-  return message.content.map(block => ({ ...block }))
 }
 
 function notice(summary: string): UserMessage {

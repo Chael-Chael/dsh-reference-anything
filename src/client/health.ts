@@ -8,16 +8,6 @@ import type { Health, OpenCliDiscovery } from './remote.ts'
  */
 export const OPENCLI_EXTENSION_STORE_URL = 'https://chromewebstore.google.com/detail/opencli/ildkmabpimmkaediidaifkhjpohdnifk'
 
-/** Keep the automatic viability probe to one attempt for one client-plugin lifetime. */
-export function createSettingsOpenHealthCheck(check: () => Promise<void>): (enabled: boolean) => Promise<void> {
-  let attempted = false
-  return async enabled => {
-    if (!enabled || attempted) return
-    attempted = true
-    await check()
-  }
-}
-
 /** The viability panel is green only when every bridge prerequisite is satisfied. */
 export function setupReady(health?: Health): boolean {
   return Boolean(health && health.version && health.opencliCompatible && health.daemonRunning && !health.daemonStale

@@ -1,29 +1,22 @@
 import { describe, expect, it } from 'vitest'
 import { defaultPickerSettings, samePickerSettings, settingsRecordSchema } from '../src/wire.ts'
-import { createSettingsOpenHealthCheck, OPENCLI_EXTENSION_STORE_URL, runSetupSequence, setupReady } from '../src/client/health.ts'
+import { OPENCLI_EXTENSION_STORE_URL, runSetupSequence, setupReady } from '../src/client/health.ts'
 import type { Health } from '../src/client/remote.ts'
 
 const healthy: Health = {
   version: '1.8.6', daemon: 'Daemon: running (PID 1)', pluginInstalled: true,
   daemonRunning: true, extensionConnected: true, extensionState: 'connected',
-  opencliCompatible: true, daemonStale: false, connectivityOk: true, adapterCommandsReady: true, adapterCompatible: true,
+  opencliCompatible: true, daemonStale: false, connectivityOk: true, connectivityChecked: true, adapterCommandsReady: true, adapterCompatible: true,
 }
 
 describe('settings source registration guard', () => {
-  it('runs the automatic health check only once per plugin lifetime', async () => {
-    let checks = 0
-    const checkOnOpen = createSettingsOpenHealthCheck(async () => { checks++ })
-
-    await checkOnOpen(false)
-    await checkOnOpen(true)
-    await checkOnOpen(true)
-
-    expect(checks).toBe(1)
-  })
-
   it('defaults every @ source to six visible items', () => {
     const picker = defaultPickerSettings()
-    expect(Object.values(picker).map(source => source.limit)).toEqual([6, 6, 6, 6, 6])
+    expect([picker.commands, picker.skills, picker.files, picker.sessions, picker.conversations].map(source => source.limit))
+      .toEqual([6, 6, 6, 6, 6])
+    expect(picker.displayMode).toBe('collapse')
+    expect([picker.commands, picker.skills, picker.files, picker.sessions, picker.conversations].map(source => source.maxCandidates))
+      .toEqual([50, 50, 50, 50, 50])
   })
 
   it('migrates an older settings record to the new safe defaults', () => {
@@ -32,6 +25,7 @@ describe('settings source registration guard', () => {
       autoSyncMinutes: 60, historyMode: 'metadata-only',
     })
     expect(value).toMatchObject({ syncOnStartup: false, maxReadTurns: 10, inputRenderMode: 'pill' })
+    expect(value.referenceUiMode).toBeUndefined()
     expect(value.enabledProviders).toEqual(['chatgpt', 'claude', 'gemini', 'deepseek', 'grok', 'kimi'])
   })
   it('treats an unchanged picker returned by an unrelated settings save as equal', () => {
@@ -47,6 +41,7 @@ describe('settings source registration guard', () => {
     changed.conversations.enabled = false
 
     expect(samePickerSettings(original, changed)).toBe(false)
+    expect(samePickerSettings(original, { ...original, displayMode: 'native-scroll' })).toBe(false)
   })
 })
 

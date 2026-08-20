@@ -17,7 +17,7 @@ export interface SettingsInjected {
   sync(providers: ChatProvider[], mode: 'incremental' | 'full'): Promise<void>
   cancel(): Promise<void>
   refresh(): Promise<void>
-  refreshOnOpen(): Promise<void>
+  quickRefreshOnOpen?(): Promise<void>
   setupAll(extensionPageOpened: boolean): Promise<void>
   discoverOpenCli(): Promise<void>
   installOpenCli(): Promise<void>
@@ -26,6 +26,7 @@ export interface SettingsInjected {
   restartDaemon(): Promise<void>
   checkUpdate(): Promise<void>
   installUpdate(): Promise<void>
+  switchReferenceUiMode(): Promise<void>
   browse(query: string, provider: ChatProvider | undefined, offset: number): Promise<void>
   deleteConversation(uriId: string): Promise<void>
   clearProvider(provider: ChatProvider): Promise<void>
@@ -62,14 +63,13 @@ const PICKER_SOURCES: ReadonlyArray<{ id: PickerSource; label: keyof typeof SOUR
 const SOURCE_KEYS = { commands: 'source.commands', skills: 'source.skills', files: 'source.files', sessions: 'source.sessions', conversations: 'source.conversations' } as const
 const REFERENCE_ANYTHING_LOGO = '__REFERENCE_ANYTHING_LOGO_DATA_URI__'
 const GITHUB_REPOSITORY_URL = 'https://github.com/Chael-Chael/dsh-reference-anything'
-export function ConversationSettings({ useScope, save, sync, cancel, refresh, refreshOnOpen, setupAll, discoverOpenCli, installOpenCli, useProfile, install, restartDaemon, checkUpdate, installUpdate, browse, deleteConversation, clearProvider, clearOlder, clearRemoteMissing, clearOldAccounts, refreshStats, t }: SettingsProps) {
+export function ConversationSettings({ useScope, save, sync, cancel, refresh, quickRefreshOnOpen, setupAll, discoverOpenCli, installOpenCli, useProfile, install, restartDaemon, checkUpdate, installUpdate, switchReferenceUiMode, browse, deleteConversation, clearProvider, clearOlder, clearRemoteMissing, clearOldAccounts, refreshStats, t }: SettingsProps) {
   const state = useScope(value => value)
   const settings = state.settings
   const picker = settings.picker ?? defaultPickerSettings()
+  const referenceUiMode = settings.referenceUiMode ?? 'plugin'
   const [busyAction, setBusyAction] = useState<string>()
   const busyActionRef = useRef(false)
-  const automaticRefresh = useRef(refreshOnOpen)
-  const checkedWhileEnabled = useRef(false)
   const [storeBlocked, setStoreBlocked] = useState(false)
   const [opencliPath, setOpencliPath] = useState(settings.opencliPath)
   const [profile, setProfile] = useState(settings.profile)
@@ -79,18 +79,15 @@ export function ConversationSettings({ useScope, save, sync, cancel, refresh, re
   const [maxReadTurns, setMaxReadTurns] = useState(String(settings.maxReadTurns))
   const [repairProfile, setRepairProfile] = useState('')
   const [pickerLimits, setPickerLimits] = useState<Record<PickerSource, string>>(() => pickerLimitDrafts(picker))
+  const [pickerMaxCandidates, setPickerMaxCandidates] = useState<Record<PickerSource, string>>(() => pickerMaxCandidateDrafts(picker))
+  const automaticQuickRefresh = useRef(quickRefreshOnOpen)
   useEffect(() => { setOpencliPath(settings.opencliPath); setProfile(settings.profile); setDetailConcurrency(String(settings.detailConcurrency)); setAutoSyncMinutes(String(settings.autoSyncMinutes)); setMaxReadTurns(String(settings.maxReadTurns)) }, [settings.opencliPath, settings.profile, settings.detailConcurrency, settings.autoSyncMinutes, settings.maxReadTurns])
   useEffect(() => { setPickerLimits(pickerLimitDrafts(picker)) }, [picker.commands.limit, picker.skills.limit, picker.files.limit, picker.sessions.limit, picker.conversations.limit])
-  automaticRefresh.current = refreshOnOpen
+  useEffect(() => { setPickerMaxCandidates(pickerMaxCandidateDrafts(picker)) }, [picker.commands.maxCandidates, picker.skills.maxCandidates, picker.files.maxCandidates, picker.sessions.maxCandidates, picker.conversations.maxCandidates])
+  automaticQuickRefresh.current = quickRefreshOnOpen
   useEffect(() => {
-    if (!picker.conversations.enabled) {
-      checkedWhileEnabled.current = false
-      return
-    }
-    if (state.loading || checkedWhileEnabled.current) return
-    checkedWhileEnabled.current = true
-    void automaticRefresh.current()
-  }, [picker.conversations.enabled, state.loading])
+    if (!state.loading) void automaticQuickRefresh.current?.()
+  }, [state.loading])
   const connectedProfiles = state.profiles?.filter(item => item.connected) ?? []
   useEffect(() => {
     if (!connectedProfiles.some(item => item.id === repairProfile)) setRepairProfile(connectedProfiles[0]?.id ?? '')
@@ -121,6 +118,7 @@ export function ConversationSettings({ useScope, save, sync, cancel, refresh, re
   const opencliReady = Boolean(state.health?.version && state.health.opencliCompatible)
   const daemonReady = Boolean(state.health?.daemonRunning && !state.health.daemonStale)
   const extensionReady = Boolean(state.health?.extensionConnected && state.health.connectivityOk)
+  const extensionUnverified = Boolean(state.health?.extensionConnected && !state.health.connectivityChecked)
   const adapterReady = Boolean(state.health?.pluginInstalled && state.health.adapterCompatible)
   const adapterNeedsRepair = Boolean(state.health?.pluginInstalled && !adapterReady)
   const runAction = (name: string, action: () => Promise<void>) => {
@@ -145,7 +143,7 @@ export function ConversationSettings({ useScope, save, sync, cancel, refresh, re
   let extensionAction: (() => void) | undefined
   if (!opencliReady) {
     extensionActionLabel = t('settings.installOpenCli'); extensionAction = () => { runAction('opencli', installOpenCli) }
-  } else if (!daemonReady || Boolean(state.health?.extensionConnected && !state.health.connectivityOk)) {
+  } else if (!daemonReady || Boolean(state.health?.extensionConnected && state.health.connectivityChecked && !state.health.connectivityOk)) {
     extensionActionLabel = t('settings.restartDaemon'); extensionAction = () => { runAction('daemon', restartDaemon) }
   } else if (state.health?.extensionState === 'disconnected' || (needsProfileRecovery && !profileControl)) {
     extensionActionLabel = t('settings.openExtensionStore'); extensionAction = () => { runAction('extension', async () => { openStore() }) }
@@ -168,6 +166,15 @@ export function ConversationSettings({ useScope, save, sync, cancel, refresh, re
     }
     setPickerLimits(current => ({ ...current, [id]: String(picker[id].limit) }))
   }
+  const commitPickerMaxCandidates = (id: PickerSource) => {
+    const value = Number(pickerMaxCandidates[id])
+    if (Number.isInteger(value) && value >= 1 && value <= 50) {
+      setPickerMaxCandidates(current => ({ ...current, [id]: String(value) }))
+      if (value !== picker[id].maxCandidates) patchPicker(id, { maxCandidates: value })
+      return
+    }
+    setPickerMaxCandidates(current => ({ ...current, [id]: String(picker[id].maxCandidates) }))
+  }
   const movePicker = (id: PickerSource, direction: -1 | 1) => {
     const ids = [...PICKER_SOURCES].sort((a, b) => picker[a.id].order - picker[b.id].order).map(row => row.id)
     const index = ids.indexOf(id); const other = ids[index + direction]
@@ -187,13 +194,17 @@ export function ConversationSettings({ useScope, save, sync, cancel, refresh, re
         <a className="dsh_ref_button" href={GITHUB_REPOSITORY_URL} target="_blank" rel="noreferrer">{t('settings.github')}</a>
       </div>
     </section>
+    <div className="dsh_ref_official_reference"><span><b>{t(referenceUiMode === 'official' ? 'settings.pluginReferenceTitle' : 'settings.officialReferenceTitle')}</b><small>{t(referenceUiMode === 'official' ? 'settings.pluginReferenceDetail' : 'settings.officialReferenceDetail')}</small></span><button className={`dsh_ref_official_reference_action${referenceUiMode === 'official' ? ' is_enable' : ''}`} type="button" disabled={Boolean(busyAction) || Boolean(state.loading)} onClick={() => {
+      if (window.confirm(t(referenceUiMode === 'official' ? 'settings.pluginReferenceConfirm' : 'settings.officialReferenceConfirm'))) runAction('reference-ui-mode', switchReferenceUiMode)
+    }}>{busyAction === 'reference-ui-mode' ? t('settings.referenceUiSwitching') : t(referenceUiMode === 'official' ? 'settings.pluginReferenceAction' : 'settings.officialReferenceAction')}</button></div>
     <div className="dsh_ref_workspace">
     {state.error && <div className="dsh_ref_error" role="alert"><strong>{t('settings.actionFailed')}</strong><span>{state.error}</span></div>}
     <section className="dsh_ref_panel dsh_ref_general_settings"><div className="dsh_ref_section_head"><div><h3>{t('settings.general')}</h3><p>{t('settings.generalDetail')}</p></div></div>
-      <label className="dsh_ref_render_mode"><span><b>{t('settings.inputRenderMode')}</b><small>{t('settings.inputRenderModeDetail')}</small></span><select value={settings.inputRenderMode} onChange={event => { void save({ ...settings, inputRenderMode: event.target.value as SettingsRecord['inputRenderMode'] }) }}><option value="pill">{t('settings.inputRenderPill')}</option><option value="raw-text">{t('settings.inputRenderRaw')}</option></select></label>
+      <label className="dsh_ref_render_mode"><span><b>{t('settings.pickerDisplayMode')}</b><small>{t('settings.pickerDisplayModeDetail')}</small></span><select value={picker.displayMode} onChange={event => { savePicker({ ...picker, displayMode: event.target.value as PickerSettings['displayMode'] }) }}><option value="collapse">{t('settings.pickerDisplayCollapse')}</option><option value="native-scroll">{t('settings.pickerDisplayNative')}</option></select></label>
       <div className="dsh_ref_picker_list">{[...PICKER_SOURCES].sort((a, b) => picker[a.id].order - picker[b.id].order).map((row, index, rows) => <div className="dsh_ref_picker_row" key={row.id}>
         <label className="dsh_ref_toggle dsh_ref_picker_toggle"><input type="checkbox" checked={picker[row.id].enabled} onChange={event => { patchPicker(row.id, { enabled: event.target.checked }) }} /><span/><b>{t(SOURCE_KEYS[row.label])}</b></label>
-        <label className="dsh_ref_picker_limit"><span>{t('settings.maxItems')}</span><input type="number" min={1} max={50} inputMode="numeric" value={pickerLimits[row.id]} aria-invalid={pickerLimits[row.id] !== '' && !validPickerLimit(pickerLimits[row.id])} onChange={event => { setPickerLimits(current => ({ ...current, [row.id]: event.target.value })) }} onBlur={() => { commitPickerLimit(row.id) }} onKeyDown={event => { if (event.key === 'Enter') event.currentTarget.blur() }} /></label>
+        <label className="dsh_ref_picker_limit"><span>{t('settings.collapsedItems')}</span><input type="number" min={1} max={50} inputMode="numeric" value={pickerLimits[row.id]} aria-invalid={pickerLimits[row.id] !== '' && !validPickerLimit(pickerLimits[row.id])} onChange={event => { setPickerLimits(current => ({ ...current, [row.id]: event.target.value })) }} onBlur={() => { commitPickerLimit(row.id) }} onKeyDown={event => { if (event.key === 'Enter') event.currentTarget.blur() }} /></label>
+        <label className="dsh_ref_picker_limit"><span>{t('settings.maxCandidates')}</span><input type="number" min={1} max={50} inputMode="numeric" value={pickerMaxCandidates[row.id]} aria-invalid={pickerMaxCandidates[row.id] !== '' && !validPickerLimit(pickerMaxCandidates[row.id])} onChange={event => { setPickerMaxCandidates(current => ({ ...current, [row.id]: event.target.value })) }} onBlur={() => { commitPickerMaxCandidates(row.id) }} onKeyDown={event => { if (event.key === 'Enter') event.currentTarget.blur() }} /></label>
         <div className="dsh_ref_picker_order"><button type="button" disabled={index === 0} aria-label={t('settings.moveUp', { item: t(SOURCE_KEYS[row.label]) })} onClick={() => { movePicker(row.id, -1) }}>↑</button><button type="button" disabled={index === rows.length - 1} aria-label={t('settings.moveDown', { item: t(SOURCE_KEYS[row.label]) })} onClick={() => { movePicker(row.id, 1) }}>↓</button></div>
       </div>)}</div>
     </section>
@@ -205,7 +216,7 @@ export function ConversationSettings({ useScope, save, sync, cancel, refresh, re
             secondaryLabel={t('settings.findOpenCli')} onSecondary={() => { runAction('discover', discoverOpenCli) }} />
           <CheckRow label={t('check.browserBridge')} detail={daemonStateDetail(state.health, t)} ready={daemonReady}
             actionLabel={!opencliReady ? t('settings.installOpenCli') : t('settings.restartDaemon')} actionBusy={busyAction === 'daemon'} actionDisabled={Boolean(busyAction)} onAction={() => { runAction(!opencliReady ? 'opencli' : 'daemon', !opencliReady ? installOpenCli : restartDaemon) }} />
-          <CheckRow label={t('check.browserExtension')} detail={extensionStateDetail(state.health, t)} ready={extensionReady}
+          <CheckRow label={t('check.browserExtension')} detail={extensionStateDetail(state.health, t)} ready={extensionReady} neutral={extensionUnverified}
             actionLabel={extensionActionLabel} actionBusy={busyAction === 'extension' || busyAction === 'daemon' || busyAction === 'opencli'} actionDisabled={Boolean(busyAction)} onAction={extensionAction}
             secondaryLabel={extensionSecondaryLabel} onSecondary={extensionSecondaryLabel ? () => { runAction('daemon', restartDaemon) } : undefined}
             control={needsProfileRecovery ? profileControl : undefined} />
@@ -327,11 +338,15 @@ export function ManageConversations({ state, syncing, browse, deleteConversation
             </div>
             <span className="dsh_ref_manage_meta">{t('manage.updated', { date: formatUpdatedDate(item.updatedAt, t) })}</span>
           </div>
-          <button type="button" className="is_danger" disabled={syncing}
-            title={syncing ? t('manage.deleteDisabled') : undefined}
-            onClick={() => {
-              if (window.confirm(t('manage.deleteConfirm', { title: item.title }))) void deleteConversation(item.uriId)
-            }}>{t('manage.delete')}</button>
+          <div className="dsh_ref_manage_row_actions">
+            <a className={item.url ? undefined : 'is_disabled'} href={item.url || undefined} target="_blank" rel="noopener noreferrer"
+              aria-disabled={!item.url} onClick={event => { if (!item.url) event.preventDefault() }}>{t('manage.open')}</a>
+            <button type="button" className="is_danger" disabled={syncing}
+              title={syncing ? t('manage.deleteDisabled') : undefined}
+              onClick={() => {
+                if (window.confirm(t('manage.deleteConfirm', { title: item.title }))) void deleteConversation(item.uriId)
+              }}>{t('manage.delete')}</button>
+          </div>
         </li>)}
       </ul>}
     <div className="dsh_ref_pagination">
@@ -347,11 +362,12 @@ function formatUpdatedDate(value: string, t: T): string {
   return Number.isNaN(date.getTime()) ? t('conversation.unknownDate') : date.toLocaleDateString()
 }
 
-function CheckRow({ label, detail, ready, actionLabel, secondaryLabel, actionBusy, actionDisabled, onAction, onSecondary, control }: {
-  label: string; detail: string; ready: boolean; actionLabel?: string; secondaryLabel?: string
+function CheckRow({ label, detail, ready, neutral = false, actionLabel, secondaryLabel, actionBusy, actionDisabled, onAction, onSecondary, control }: {
+  label: string; detail: string; ready: boolean; neutral?: boolean; actionLabel?: string; secondaryLabel?: string
   actionBusy?: boolean; actionDisabled?: boolean; onAction?: () => void; onSecondary?: () => void; control?: ReactNode
 }) {
-  return <div className="dsh_ref_check"><span className={ready ? 'is_ready' : 'is_error'}>{ready ? '✓' : '×'}</span><div className="dsh_ref_check_body"><strong>{label}</strong><small className={ready ? undefined : 'is_warning'}>{detail}</small>{!ready && (control || onAction || onSecondary) && <div className="dsh_ref_check_actions">{control}{onAction && actionLabel && <button type="button" aria-busy={actionBusy} disabled={actionDisabled} onClick={onAction}>{actionBusy ? `${actionLabel}…` : actionLabel}</button>}{onSecondary && secondaryLabel && <button type="button" disabled={actionDisabled} onClick={onSecondary}>{secondaryLabel}</button>}</div>}</div></div>
+  const stateClass = ready ? 'is_ready' : neutral ? 'is_neutral' : 'is_error'
+  return <div className="dsh_ref_check"><span className={stateClass}>{ready ? '✓' : neutral ? '•' : '×'}</span><div className="dsh_ref_check_body"><strong>{label}</strong><small className={!ready && !neutral ? 'is_warning' : undefined}>{detail}</small>{!ready && !neutral && (control || onAction || onSecondary) && <div className="dsh_ref_check_actions">{control}{onAction && actionLabel && <button type="button" aria-busy={actionBusy} disabled={actionDisabled} onClick={onAction}>{actionBusy ? `${actionLabel}…` : actionLabel}</button>}{onSecondary && secondaryLabel && <button type="button" disabled={actionDisabled} onClick={onSecondary}>{secondaryLabel}</button>}</div>}</div></div>
 }
 
 function updateTitle(update: PackageUpdateStatus | undefined, t: T): string {
@@ -370,6 +386,10 @@ function updateDetail(update: PackageUpdateStatus | undefined, t: T): string {
 
 function pickerLimitDrafts(picker: PickerSettings): Record<PickerSource, string> {
   return { commands: String(picker.commands.limit), skills: String(picker.skills.limit), files: String(picker.files.limit), sessions: String(picker.sessions.limit), conversations: String(picker.conversations.limit) }
+}
+
+function pickerMaxCandidateDrafts(picker: PickerSettings): Record<PickerSource, string> {
+  return { commands: String(picker.commands.maxCandidates), skills: String(picker.skills.maxCandidates), files: String(picker.files.maxCandidates), sessions: String(picker.sessions.maxCandidates), conversations: String(picker.conversations.maxCandidates) }
 }
 
 export function validPickerLimit(value: string): boolean {
@@ -399,6 +419,7 @@ function adapterStateDetail(health: Health | undefined, t: T): string {
 
 function extensionStateDetail(health: Health | undefined, t: T): string {
   if (!health) return t('settings.extensionDisconnected')
+  if (health.extensionConnected && !health.connectivityChecked) return t('settings.extensionConnectivityUnchecked')
   if (health.extensionConnected && !health.connectivityOk) return health.doctorError || t('settings.extensionConnectivityFailed')
   switch (health.extensionState) {
     case 'connected': return health.extensionVersion ? t('settings.extensionConnected', { version: health.extensionVersion }) : t('settings.extensionConnectedUnknown')
