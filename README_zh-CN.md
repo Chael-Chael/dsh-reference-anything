@@ -18,7 +18,8 @@
 [![][github-stars-shield]][github-stars-link]
 [![][github-forks-shield]][github-forks-link]
 [![][github-issues-shield]][github-issues-link]
-[![][github-license-shield]][github-license-link]
+[![][github-license-shield]][github-license-link]<br/>
+![awesome · DSH plugin](https://awesome-dsh-plugin.com/badge.svg)
 
 </div>
 

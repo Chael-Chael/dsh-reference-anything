@@ -18,7 +18,8 @@ One `@` for them all.
 [![][github-stars-shield]][github-stars-link]
 [![][github-forks-shield]][github-forks-link]
 [![][github-issues-shield]][github-issues-link]
-[![][github-license-shield]][github-license-link]
+[![][github-license-shield]][github-license-link]<br/>
+![awesome · DSH plugin](https://awesome-dsh-plugin.com/badge.svg)
 
 </div>
 
@@ -75,7 +76,8 @@ This plugin uses OpenCLI to access historical conversations through AI chat sess
 
 ## 🧭 Roadmap
 
-- [ ] Support referencing historical conversations from other local agents
+- [ ] Support referencing historical conversations from other local agents (in progress)
+- [ ] Support referencing files from cloud drives and performing operations on them (in progress)
 - [ ] Support more keyword matching rules, including blacklists and whitelists, especially for file search
 - [ ] Support more AI conversation platforms
 - [ ] Provide a quieter AI conversation synchronization mechanism
@@ -151,7 +153,7 @@ Type `@files:` in the input box to browse files and folders through DSH's offici
 
 <p align="center"><img src="./images/at-files.png" alt="Browse workspace files and folders from the @ menu" width="800" /></p>
 
-Features:
+**Features:**
 - Uses the official `@path` / `@"path with spaces"` grammar and canonical file candidate service
 - Files become native atomic references; selecting a directory keeps the path editable and continues completion
 - The plugin no longer creates or parses a custom `dsh-file:` scheme
