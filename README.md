@@ -6,7 +6,7 @@
 
 <h1>dsh-reference-anything</h1>
 
-One `@` to reference them all.
+Supercharge the DSH `@` menu with multiple reference sources.
 
 **English** · [简体中文](./README_zh-CN.md) · [News](#news) · [Roadmap](#roadmap) · [Installation](#installation) · [Usage](#usage) · [Report Bug][github-issues-link]
 
@@ -28,7 +28,16 @@ One `@` to reference them all.
 
 </div>
 
-Within an unified `@` menu of DeepSeek Harness (DSH), reference commands, Skills, workspace files/folders, DSH sessions, and historical conversations from ChatGPT, Claude, Gemini, DeepSeek, Grok, and Kimi.
+**Reference Anything is an enhancement for the DeepSeek Harness (DSH) `@` menu.** It brings multiple reference sources into one searchable menu, so you can mention the context you need without switching tools or copying content manually.
+
+Use one `@` menu to reference:
+
+- DSH commands and Skills
+- Workspace files and folders
+- DSH session history
+- Historical conversations from ChatGPT, Claude, Gemini, DeepSeek, Grok, and Kimi
+
+Type `@`, search across enabled sources, and insert the selected reference into the current task. Each source keeps its own access and loading behavior: files use DSH's permission-constrained tools, DSH sessions use the native session-reference protocol, and external conversation bodies are read on demand.
 
 This plugin uses OpenCLI to access historical conversations through AI chat sessions that are already logged in. By default, only conversation titles are stored locally, and the agent fetches remote content on demand. An optional offline-mirror mode stores the latest complete conversation bodies locally.
 
@@ -88,6 +97,8 @@ Replace `C:/path/to/dsh-reference-anything` with the repository location. Browse
 
 ## Usage
 
+Reference Anything extends the DSH composer rather than introducing a separate search interface. The enhanced `@` menu combines multiple sources, while settings let you choose which groups appear, their order, and how many results each group returns.
+
 1. Open `Settings → Reference Anything` in DSH Web.
 2. Under **Availability check**, confirm that OpenCLI, Browser Bridge, the browser extension, and the conversation adapter are ready.
 3. Under **External conversation sync settings**, choose a connected browser Profile, history storage mode, and sync mode. Then click **Sync enabled sources now**, or sync an individual Provider from its card.
@@ -99,7 +110,7 @@ The default **Read bodies on demand** mode stores only the title index locally a
 > [!WARNING]
 > To protect your account and conversation data, external conversations are imported and synchronized through OpenCLI using your existing logged-in browser session. A browser window may temporarily open during use or synchronization, and it may display OpenCLI debugging information. This is expected—please do not be alarmed or close the window manually; wait for the operation to finish.
 
-### Search
+### One `@` menu, multiple sources
 
 The `@` menu contains five groups: `Commands`, `Skills`, `Files and folders`, `DSH sessions`, and `External conversations`. The first two appear only when `@` is at the beginning of the draft. Each group shows up to six results by default. Under `Settings → Reference Anything → General`, you can enable or disable groups, reorder them, and set each limit from 1 to 50.
 

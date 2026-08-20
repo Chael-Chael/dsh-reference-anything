@@ -6,7 +6,7 @@
 
 <h1>dsh-reference-anything</h1>
 
-One `@` to reference them all.
+增强 DSH 的 `@` 菜单，一处引用多种来源。
 
 [English](./README.md) · **简体中文** · [新闻](#新闻) · [Roadmap](#Roadmap) · [安装](#安装) · [使用](#使用) · [报告问题][github-issues-link]
 
@@ -28,7 +28,16 @@ One `@` to reference them all.
 
 </div>
 
-在 DeepSeek Harness（DSH）的统一 `@` 菜单里引用命令、Skills、工作区文件/文件夹、DSH 会话，以及来自 ChatGPT、Claude、Gemini、DeepSeek、Grok 和 Kimi 的历史对话。
+**Reference Anything 是 DeepSeek Harness（DSH）的 `@` 菜单增强插件。** 它把多种引用来源集中到一个可搜索的菜单中，无需切换工具或手动复制内容，即可为当前任务补充所需上下文。
+
+通过同一个 `@` 菜单，可以引用：
+
+- DSH 命令与 Skills
+- 工作区文件和文件夹
+- DSH 历史会话
+- 来自 ChatGPT、Claude、Gemini、DeepSeek、Grok 和 Kimi 的历史对话
+
+输入 `@`，即可跨已启用的来源搜索并把选中的引用加入当前任务。不同来源仍保留各自的访问与加载方式：文件通过 DSH 受权限约束的工具读取，DSH 会话沿用原生 session-reference 协议，外部对话正文则由 Agent 按需读取。
 
 本插件通过 OpenCLI 复用用户已登录的 AI 对话窗口来获取历史对话。默认仅在本地保存对话标题；当需要查看正文时，Agent 会根据任务需求按需获取远端内容。用户也可以切换至离线镜像模式，在本地保存最新的完整正文。
 
@@ -91,10 +100,12 @@ opencli daemon restart
 
 ## 使用
 
+Reference Anything 直接增强 DSH 输入框，不会引入一套割裂的搜索界面。增强后的 `@` 菜单汇集多种来源；你可以在设置中决定显示哪些分组、调整分组顺序，并设置每组的结果数量。
+
 1. 打开 DSH Web 的 `Settings → Reference Anything`。
 2. 在“可用性检查”中确认 OpenCLI、Browser Bridge、浏览器扩展和对话适配器均已就绪。
 3. 在“@ 外部对话同步设置”中选择已连接的浏览器 Profile、正文保存方式与同步方式，然后点击“立即同步已启用来源”，或在平台卡片上单独同步一个 Provider。
-4. 在输入框键入 `@`，从 `Files and folders`、`DSH sessions` 或 `External conversations` 分组选择来源。
+4. 在输入框键入 `@`，从 `Commands`、`Skills`、`Files and folders`、`DSH sessions` 或 `External conversations` 分组选择来源。
 5. 键入关键词过滤候选，例如 `@缓存设计`。
 
 默认使用“按需读取正文”模式：本地只保存标题索引，Agent 引用时才通过浏览器读取正文。若需要离线读取和正文检索，请选择“在本地保存完整正文”；该模式只保留每条对话的最新版本。设置页还可以启用或关闭各个 `@` 分组、调整顺序和最多显示条数（默认每组 6 条），并在 Pill 与 Raw text 两种输入框渲染方式之间切换。插件会在加载时检查 npm 新版本；从设置页完成更新后，需要重启 DSH 才能生效。
@@ -102,7 +113,7 @@ opencli daemon restart
 > [!WARNING]
 > 为保障账号和对话数据安全，外部对话的导入与同步通过 OpenCLI 复用已登录的浏览器会话完成。在使用或同步过程中，系统可能会临时弹出浏览器窗口（大部分情况下，保持弹出窗口在后台不要关闭就行，插件会复用这个窗口，不会打扰你），浏览器窗口上也可能显示 OpenCLI 的调试信息；这是正常现象，无须惊讶或手动关闭，请等待操作完成。
 
-### 检索
+### 一个 `@` 菜单，多种来源
 
 `@` 菜单包含五个分组：`Commands`、`Skills`、`Files and folders`、`DSH sessions`、`External conversations`。前两个分组只在 `@` 位于草稿开头时出现。各分组默认最多显示 6 条，可在 `Settings → Reference Anything → 通用设置` 中分别启用或关闭、调整顺序，并将上限设置为 1–50 条。
 
