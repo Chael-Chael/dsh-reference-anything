@@ -1,6 +1,3 @@
-> [!WARNING]
-> DSH `0.1.0-rc.8` introduces a native `@` menu, and we are actively migrating this plugin to the new integration. Until the migration is complete, users on DSH versions earlier than `0.1.0-rc.8` can continue using the current legacy plugin.
-
 <a name="readme-top"></a>
 
 <div align="center">
@@ -34,6 +31,9 @@ One `@` to reference them all.
 Within an unified `@` menu of DeepSeek Harness (DSH), reference commands, Skills, workspace files/folders, DSH sessions, and historical conversations from ChatGPT, Claude, Gemini, DeepSeek, Grok, and Kimi.
 
 This plugin uses OpenCLI to access historical conversations through AI chat sessions that are already logged in. By default, only conversation titles are stored locally, and the agent fetches remote content on demand. An optional offline-mirror mode stores the latest complete conversation bodies locally.
+
+> [!WARNING]
+> DSH `0.1.0-rc.8` introduces a native `@` menu, and we are actively migrating this plugin to the new integration. Until the migration is complete, users on DSH versions earlier than `0.1.0-rc.8` can continue using the current legacy plugin.
 
 > [!NOTE]
 > DSH is currently in Beta, so its underlying capabilities and interfaces may change as it evolves. This plugin will adapt alongside those changes. Because of some current DSH limitations, parts of the implementation may not yet be ideal; we will continue to follow DSH updates and improve the plugin over time. See the relevant sections below for specific limitations and usage notes.
