@@ -5,7 +5,7 @@ export const providerSchema = z.enum(['chatgpt', 'claude', 'gemini', 'deepseek',
 export type ChatProvider = z.infer<typeof providerSchema>
 export const ALL_PROVIDERS: readonly ChatProvider[] = providerSchema.options
 
-export const pickerSourceSchema = z.enum(['commands', 'skills', 'files', 'sessions', 'conversations'])
+export const pickerSourceSchema = z.enum(['commands', 'skills', 'files', 'sessions', 'agents', 'conversations'])
 export type PickerSource = z.infer<typeof pickerSourceSchema>
 
 const pickerSourceSettingsSchema = z.object({
@@ -22,6 +22,12 @@ export const pickerSettingsSchema = z.object({
   skills: pickerSourceSettingsSchema,
   files: pickerSourceSettingsSchema,
   sessions: pickerSourceSettingsSchema,
+  // Defaulted, unlike its neighbours, because this key arrived after settings
+  // were already on disk. `settingsRecordSchema` is the durable read boundary:
+  // a saved record that has `picker` but predates this key would fail the whole
+  // parse without it, and the medium — every setting in it — would be rejected.
+  // Any key added here from now on needs the same treatment.
+  agents: pickerSourceSettingsSchema.default({ enabled: true, order: 25, limit: 6, maxCandidates: 50 }),
   conversations: pickerSourceSettingsSchema,
 })
 export type PickerSettings = z.infer<typeof pickerSettingsSchema>
@@ -39,6 +45,7 @@ export function defaultPickerSettings(): PickerSettings {
     skills: { enabled: true, order: 5, limit: 6, maxCandidates: 50 },
     files: { enabled: true, order: 10, limit: 6, maxCandidates: 50 },
     sessions: { enabled: true, order: 20, limit: 6, maxCandidates: 50 },
+    agents: { enabled: true, order: 25, limit: 6, maxCandidates: 50 },
     conversations: { enabled: true, order: 30, limit: 6, maxCandidates: 50 },
   }
 }

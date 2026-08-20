@@ -1,13 +1,13 @@
 import { describe, expect, it, vi } from 'vitest'
 import {
-  CONVERSATION_SOURCE, conversationReferenceUri, createCommandSource,
-  createConversationSource, createFileSource, createSearchDebounce, createSessionSource, createSkillSource,
+  AGENT_SOURCE, CONVERSATION_SOURCE, agentReferenceUri, conversationReferenceUri, createCommandSource,
+  createConversationSource, createFileSource, createLocalAgentSource, createSearchDebounce, createSessionSource, createSkillSource,
   describeRow, disambiguate, parseQuery, scopedQuery, workspaceIconKind,
   type PickerSourceOptions,
 } from '../src/client/source.ts'
-import { PICKER_ICON_MARKER } from '../src/client/provider-icons.tsx'
+import { AGENT_ICON_MARKER, PICKER_ICON_MARKER } from '../src/client/provider-icons.tsx'
 import type { PickerMenuUpdate } from '../src/client/menu-update.ts'
-import type { SearchResult } from '../src/client/remote.ts'
+import type { AgentCandidate, SearchResult } from '../src/client/remote.ts'
 import { REFERENCE_ANYTHING_INVOCATIONS } from '../src/contract.ts'
 import { decodeReferenceUri } from '../src/uri.ts'
 
@@ -228,8 +228,101 @@ describe('native @ sources', () => {
       .toEqual({ parameter: 'signal' })
     expect(REFERENCE_ANYTHING_INVOCATIONS.some(item => item.method === 'workspaceSearch')).toBe(false)
     expect(REFERENCE_ANYTHING_INVOCATIONS.some(item => item.method === 'sessionSearch')).toBe(false)
+    expect(REFERENCE_ANYTHING_INVOCATIONS.find(item => item.method === 'agentSearch')?.cancellation)
+      .toEqual({ parameter: 'signal' })
     expect(REFERENCE_ANYTHING_INVOCATIONS.find(item => item.method === 'switchReferenceUiMode')?.cancellation)
       .toEqual({ parameter: 'signal' })
+  })
+})
+
+describe('local agent conversations', () => {
+  const agentRow = (over: Partial<AgentCandidate> = {}): AgentCandidate => ({
+    id: 'codex:2026/08/rollout-a.jsonl', label: 'Refactor the scan probe',
+    provider: 'Codex', updatedAt: Date.UTC(2026, 7, 17), ...over,
+  })
+
+  it('uses the canonical opaque dsh-ref URI, so the host dispatches to the local-agent source', () => {
+    const uri = agentReferenceUri('claude-code:project-a/session.jsonl')
+    expect(uri).toMatch(/^dsh-ref:[A-Za-z0-9_-]+$/)
+    expect(decodeReferenceUri(uri)).toEqual({ source: 'local-agent', id: 'claude-code:project-a/session.jsonl' })
+    // The transcript path never appears verbatim in the URI a mention carries.
+    expect(uri).not.toContain('project-a')
+  })
+
+  it('routes hyphenated agent spellings here while bare provider names keep meaning the browser chat', () => {
+    expect(scopedQuery('agents', 'agents')).toBe('')
+    expect(scopedQuery('codex:probe', 'agents')).toBe('probe')
+    expect(scopedQuery('claude-code:probe', 'agents')).toBe('probe')
+    expect(scopedQuery('codex:probe', 'conversations')).toBeUndefined()
+    // The near-collision that makes this group risky: `claude` and `gemini`
+    // were already taken by External conversations and must stay taken.
+    expect(scopedQuery('claude:probe', 'conversations')).toBe('probe')
+    expect(scopedQuery('claude:probe', 'agents')).toBeUndefined()
+    expect(scopedQuery('gemini:probe', 'agents')).toBeUndefined()
+    expect(scopedQuery('gemini-cli:probe', 'agents')).toBe('probe')
+    expect(scopedQuery('grok:probe', 'conversations')).toBe('probe')
+    expect(scopedQuery('grok:probe', 'agents')).toBeUndefined()
+    expect(scopedQuery('grokbuild:probe', 'agents')).toBe('probe')
+    expect(scopedQuery('kimi:probe', 'conversations')).toBe('probe')
+    expect(scopedQuery('kimi:probe', 'agents')).toBeUndefined()
+    expect(scopedQuery('kimi-cli:probe', 'agents')).toBe('probe')
+    expect(scopedQuery('本地对话', 'agents')).toBe('')
+  })
+
+  it('gives every format whose name is not already taken a prefix of its own', () => {
+    for (const prefix of ['cursor', 'qoder', 'reasonix', 'openclaw', 'hermes', 'pi', 'opencode', 'mimocode', 'zcode']) {
+      expect(scopedQuery(`${prefix}:probe`, 'agents')).toBe('probe')
+      expect(scopedQuery(`${prefix}:probe`, 'files')).toBeUndefined()
+    }
+  })
+
+  it('names the writing agent on the row and numbers transcripts that share a title', async () => {
+    const source = createLocalAgentSource(async () => [
+      agentRow(),
+      agentRow({ id: 'codex:2026/08/rollout-b.jsonl' }),
+      agentRow({ id: 'claude-code:p/x.jsonl', label: '', provider: 'Claude Code', updatedAt: undefined }),
+    ], undefined, options({ order: 25 }))
+    const candidates = await source.candidates(session, request('agents'))
+    expect(source.name).toBe(AGENT_SOURCE)
+    expect(candidates.map(row => row.name)).toEqual(['Refactor the scan probe', 'Refactor the scan probe (2)', 'Untitled'])
+    expect(candidates[0]?.icon).toBe(AGENT_ICON_MARKER)
+    expect(candidates[0]?.description).toContain('Codex')
+    // A transcript whose mtime the host could not report still gets a row; the
+    // date is the only part that goes missing.
+    expect(candidates[2]?.description).toBe('Claude Code')
+  })
+
+  it('inserts a native session chip while serializing the canonical mention on send', async () => {
+    const row = agentRow()
+    const source = createLocalAgentSource(async () => [row], undefined, options({ order: 25 }))
+    const candidate = (await source.candidates(session, request()))[0]!
+    const outcome = source.onPick(pick(candidate))
+    if (outcome === undefined || outcome === 'handled' || !('insert' in outcome)) throw new Error('expected insert')
+    expect(outcome.insert).toMatchObject({
+      source: AGENT_SOURCE, label: 'Codex·Refactor the scan probe', appearance: 'session',
+    })
+    // The separator stays adjacent, and the marker stays out of the label, so
+    // the user-bubble renderer does not re-project `Codex` as a pill of its own.
+    expect(outcome.insert.label).not.toContain(AGENT_ICON_MARKER)
+    await expect(source.codec?.serialize(outcome.insert.ref, new AbortController().signal))
+      .resolves.toBe(`@[Codex·Refactor the scan probe](${agentReferenceUri(row.id)})`)
+    expect(source.codec?.clipboardText(outcome.insert.ref)).toBe(`@[Codex·Refactor the scan probe](${agentReferenceUri(row.id)})`)
+  })
+
+  it('escapes a title that would otherwise break out of the mention it is written into', async () => {
+    const row = agentRow({ label: 'why does ](evil) fail', provider: '' })
+    const source = createLocalAgentSource(async () => [row], undefined, options({ order: 25 }))
+    const candidate = (await source.candidates(session, request()))[0]!
+    const outcome = source.onPick(pick(candidate))
+    if (outcome === undefined || outcome === 'handled' || !('insert' in outcome)) throw new Error('expected insert')
+    await expect(source.codec?.serialize(outcome.insert.ref, new AbortController().signal))
+      .resolves.toBe(`@[why does (evil) fail](${agentReferenceUri(row.id)})`)
+  })
+
+  it('stays out of a query scoped to another group and out of an open quoted file token', async () => {
+    const source = createLocalAgentSource(async () => [agentRow()], undefined, options({ order: 25 }))
+    await expect(source.candidates(session, request('files:index'))).resolves.toEqual([])
+    await expect(source.candidates(session, request('path with', true))).resolves.toEqual([])
   })
 })
 

@@ -115,25 +115,48 @@ describe('read', () => {
   })
 })
 
-describe('task-local Web conversation grants', () => {
+describe('task-local grants', () => {
   const web = { source: 'web-chat', id: 'conversation-1' }
+  const NOT_GRANTED = expect.objectContaining({ code: 'CONVERSATION_REFERENCE_NOT_GRANTED' })
+
+  beforeEach(() => {
+    ctx.references.registerSource(stubSource('web-chat', { requiresGrant: true }))
+    ctx.references.registerSource(stubSource('file', { requiresGrant: false }))
+  })
 
   it('allows only the task that mentioned or discovered the conversation', () => {
     ctx.references.grant('task-a', web)
     expect(() => ctx.references.assertGranted('task-a', web)).not.toThrow()
-    expect(() => ctx.references.assertGranted('task-b', web))
-      .toThrow(expect.objectContaining({ code: 'CONVERSATION_REFERENCE_NOT_GRANTED' }))
+    expect(() => ctx.references.assertGranted('task-b', web)).toThrow(NOT_GRANTED)
   })
 
-  it('revokes all Web conversation grants for a completed task', () => {
+  it('revokes all grants for a completed task', () => {
     ctx.references.grant('task-a', web)
     ctx.references.revoke('task-a')
-    expect(() => ctx.references.assertGranted('task-a', web))
-      .toThrow(expect.objectContaining({ code: 'CONVERSATION_REFERENCE_NOT_GRANTED' }))
+    expect(() => ctx.references.assertGranted('task-a', web)).toThrow(NOT_GRANTED)
   })
 
-  it('does not impose Web authorization on generic reference sources', () => {
+  it('does not impose authorization on a source that opted out', () => {
     expect(() => ctx.references.assertGranted(undefined, { source: 'file', id: 'chat.json' })).not.toThrow()
+  })
+
+  it('gates every source that opts in, not only web-chat', () => {
+    ctx.references.registerSource(stubSource('local-agent', { requiresGrant: true }))
+    const transcript = { source: 'local-agent', id: 'rollout-1' }
+    expect(() => ctx.references.assertGranted('task-a', transcript)).toThrow(NOT_GRANTED)
+    ctx.references.grant('task-a', transcript)
+    expect(() => ctx.references.assertGranted('task-a', transcript)).not.toThrow()
+  })
+
+  it('does not let one source’s grant authorize the same id under another', () => {
+    ctx.references.registerSource(stubSource('local-agent', { requiresGrant: true }))
+    ctx.references.grant('task-a', { source: 'web-chat', id: 'shared-id' })
+    expect(() => ctx.references.assertGranted('task-a', { source: 'local-agent', id: 'shared-id' }))
+      .toThrow(NOT_GRANTED)
+  })
+
+  it('fails closed for an unregistered source rather than trusting it', () => {
+    expect(() => ctx.references.assertGranted('task-a', { source: 'ghost', id: 'x' })).toThrow(NOT_GRANTED)
   })
 })
 

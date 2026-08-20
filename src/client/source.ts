@@ -9,9 +9,9 @@ import type { TranslateNS } from '@deepseek-ai/dsh-client-locale/client'
 import type { ChatProvider, PickerDisplayMode } from '../wire.ts'
 import { parseProviderQuery } from '../search.ts'
 import { encodeReferenceUri } from '../uri-codec.ts'
-import type { SearchResult, SyncStatus } from './remote.ts'
+import type { AgentCandidate, SearchResult, SyncStatus } from './remote.ts'
 import {
-  COMMAND_ICON_MARKER, PICKER_ICON_MARKER, PROVIDER_ICON_MARKER, SESSION_ICON_MARKER, SKILL_ICON_MARKER,
+  AGENT_ICON_MARKER, COMMAND_ICON_MARKER, PICKER_ICON_MARKER, PROVIDER_ICON_MARKER, SESSION_ICON_MARKER, SKILL_ICON_MARKER,
   type PickerIconKind,
 } from './provider-icons.tsx'
 import type { REFERENCE_ANYTHING_NS } from './locale.ts'
@@ -27,6 +27,7 @@ type T = TranslateNS<typeof REFERENCE_ANYTHING_NS>
 export const CONVERSATION_SOURCE = 'External conversations'
 export const FILE_SOURCE = 'Files and folders'
 export const SESSION_SOURCE = 'DSH sessions'
+export const AGENT_SOURCE = 'Local agent conversations'
 export const COMMAND_SOURCE = 'Commands'
 export const SKILL_SOURCE = 'Skills'
 
@@ -82,7 +83,7 @@ export function workspacePathIconKind(path: string, kind: FileReferenceCandidate
   return WORKSPACE_EXTENSION_KIND[extension] ?? 'file'
 }
 
-type SourceScope = 'commands' | 'skills' | 'files' | 'sessions' | 'conversations'
+type SourceScope = 'commands' | 'skills' | 'files' | 'sessions' | 'agents' | 'conversations'
 export interface PickerSourceOptions {
   order: number
   /** Rows shown before the source-owned expand action. */
@@ -120,6 +121,16 @@ const PREFIX_SCOPE: Readonly<Record<string, SourceScope>> = {
   skill: 'skills', skills: 'skills',
   file: 'files', files: 'files', folder: 'files', folders: 'files', path: 'files',
   session: 'sessions', sessions: 'sessions', dsh: 'sessions',
+  // Bare `claude`, `gemini`, `grok`, and `kimi` stay with External
+  // conversations below, because those are the browser platforms a person
+  // means by the bare word; only the qualified CLI names route to the on-disk
+  // transcripts of the same brand.
+  agent: 'agents', agents: 'agents', transcript: 'agents', transcripts: 'agents',
+  cc: 'agents', 'claude-code': 'agents', codex: 'agents', cursor: 'agents', 'gemini-cli': 'agents',
+  qoder: 'agents', reasonix: 'agents', openclaw: 'agents', hermes: 'agents', pi: 'agents',
+  grokbuild: 'agents', 'grok-build': 'agents', 'kimi-cli': 'agents', 'kimi-code': 'agents',
+  opencode: 'agents', mimocode: 'agents', mimo: 'agents', zcode: 'agents',
+  '本地对话': 'agents', '本地记录': 'agents',
   chat: 'conversations', conversation: 'conversations', conversations: 'conversations',
   '外部对话': 'conversations', '外部对话记录': 'conversations',
   chatgpt: 'conversations', claude: 'conversations', gemini: 'conversations', deepseek: 'conversations', grok: 'conversations', kimi: 'conversations',
@@ -148,11 +159,13 @@ function settle(ms: number, signal: AbortSignal): Promise<boolean> {
 }
 
 interface ConversationReference { uriId: string; label: string }
+interface AgentReference { id: string; label: string }
 
 type CandidateValue =
   | { kind: 'conversation'; reference: ConversationReference }
   | { kind: 'file'; fileKind: FileReferenceCandidate['kind']; label: string; mention: string }
   | { kind: 'session'; label: string; mention: string }
+  | { kind: 'agent'; reference: AgentReference }
   | { kind: 'command'; name: string }
   | { kind: 'skill'; name: string }
   | { kind: 'action'; action: 'sync' | 'expand' | 'collapse'; query?: string }
@@ -346,6 +359,88 @@ export function createSessionSource(
   return withDisplayPolicy(source, options, t)
 }
 
+/**
+ * The `@` group for transcripts other coding agents left on this machine.
+ *
+ * Rows carry the transcript's id, never a body excerpt: the Host ranks on title
+ * and opening prompt alone, so nothing the user has not named can reach the
+ * model through a menu row. Picking one inserts a pointer; the turns are read
+ * later, and only for the task that asked.
+ * @param search - Host-side discovery, scoped to the session's own workspace.
+ * @param t - translator for the row's dimmed second line.
+ * @param options - order, visible limit, and the shared display policy.
+ * @returns the source to register on `ctx.inputTriggers`.
+ */
+export function createLocalAgentSource(
+  search: (sessionId: SessionId, query: string, signal: AbortSignal, limit: number) => Promise<readonly AgentCandidate[]>,
+  t: T = fallback,
+  options: PickerSourceOptions = { ...DEFAULT_SOURCE_OPTIONS, order: 25 },
+): RefreshablePickerSource {
+  const source: InputTriggerSource = {
+    trigger: '@', name: AGENT_SOURCE, order: options.order,
+    async candidates(session, { query, quoted, signal }) {
+      // A quoted query is a path completion in progress; a transcript pointer
+      // is not a path, so this group stays out of the way.
+      if (quoted === true) return []
+      const scoped = scopedQuery(query, 'agents')
+      if (scoped === undefined) return []
+      const rows = await search(session.sessionId, scoped, signal, options.maxCandidates)
+      // Agent sessions go untitled far more often than browser chats do, and
+      // several in a row can share an opening prompt, so numbering matters.
+      return disambiguate(rows.map((row): InputTriggerCandidate => {
+        const title = row.label.trim() || 'Untitled'
+        // Same separator rule as web chats: a spaced `@Codex · Title` is
+        // otherwise re-projected by the user-bubble renderer as a native pill.
+        const label = (row.provider ? `${row.provider}·${title}` : title).replace(/[\[\]]/gu, '')
+        return {
+          name: title,
+          description: describeAgentRow(row, t),
+          icon: AGENT_ICON_MARKER,
+          value: encodeCandidate({ kind: 'agent', reference: { id: row.id, label } }),
+        }
+      }))
+    },
+    onPick({ candidate }) {
+      const value = decodeCandidate(candidate.value)
+      if (value?.kind !== 'agent') return undefined
+      const reference = value.reference
+      return {
+        insert: {
+          source: AGENT_SOURCE,
+          ref: encodeAgentReference(reference),
+          label: reference.label,
+          appearance: 'session',
+          clipboardText: formatAgentMention(reference),
+        },
+      }
+    },
+    codec: {
+      clipboardText: ref => formatAgentMention(decodeAgentReference(ref)),
+      serialize: ref => Promise.resolve(formatAgentMention(decodeAgentReference(ref))),
+    },
+  }
+  return withDisplayPolicy(source, options, t)
+}
+
+/** The dimmed second line: which agent wrote it, and when it last moved. */
+function describeAgentRow(row: AgentCandidate, t: T): string {
+  const provider = row.provider || t('source.agents')
+  if (row.updatedAt === undefined) return provider
+  return t('conversation.description', { provider, date: formatDate(new Date(row.updatedAt).toISOString(), t) })
+}
+
+function encodeAgentReference(reference: AgentReference): string { return JSON.stringify(reference) }
+function decodeAgentReference(value: string): AgentReference {
+  const parsed: unknown = JSON.parse(value)
+  if (parsed === null || typeof parsed !== 'object') throw new Error('invalid agent reference')
+  const { id, label } = parsed as { id?: unknown; label?: unknown }
+  if (typeof id !== 'string' || typeof label !== 'string') throw new Error('invalid agent reference')
+  return { id, label }
+}
+function formatAgentMention(reference: AgentReference): string {
+  return `@[${escapeLabel(reference.label)}](${agentReferenceUri(reference.id)})`
+}
+
 interface CommandCandidate { name: string; description?: string; input?: { hint?: string } }
 interface SkillCandidate { name: string; description: string; modelInvocable?: boolean }
 
@@ -534,6 +629,17 @@ export function conversationReferenceUri(uriId: string): string {
   return encodeReferenceUri({ source: 'web-chat', id: uriId })
 }
 
+/**
+ * Wrap a transcript id as the `dsh-ref:` URI the Host will dispatch on.
+ *
+ * The `'local-agent'` source string is hardcoded here rather than sent over the
+ * wire, the way `conversationReferenceUri` hardcodes `'web-chat'`: one place
+ * owns the mapping from a menu group to the Host source that reads it.
+ */
+export function agentReferenceUri(id: string): string {
+  return encodeReferenceUri({ source: 'local-agent', id })
+}
+
 export function parseQuery(value: string): { query: string; provider?: ChatProvider } {
   return parseProviderQuery(value)
 }
@@ -578,7 +684,7 @@ function formatDate(value: string, t: T): string {
 
 const fallback: T = (key, params) => {
   const dictionary: Record<string, string> = {
-    'source.conversations': 'External conversations', 'source.files': 'Files and folders', 'source.sessions': 'DSH sessions', 'source.commands': 'Commands', 'source.skills': 'Skills',
+    'source.conversations': 'External conversations', 'source.files': 'Files and folders', 'source.sessions': 'DSH sessions', 'source.agents': 'Local agent conversations', 'source.commands': 'Commands', 'source.skills': 'Skills',
     'conversation.description': '{provider} · {date}', 'conversation.unknownDate': 'unknown date', 'skill.userOnly': 'user-only · ',
     'menu.syncAll': 'Sync all now', 'menu.syncAllDetail': 'Refresh the local external-conversation index',
     'menu.syncRunning': 'Syncing…', 'menu.syncRunningDetail': 'An external-conversation sync is already running',

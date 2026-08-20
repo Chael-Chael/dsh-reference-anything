@@ -36,11 +36,12 @@
 - DSH 命令与 Skills
 - 工作区文件和文件夹
 - DSH 历史会话
+- 本地其他 Agent CLI 留在磁盘上的历史对话（Claude Code、Codex、Cursor 等共 14 种）
 - 来自 ChatGPT、Claude、Gemini、DeepSeek、Grok 和 Kimi 的历史对话
 
 在扩展 `@` 的能力之外，我们还支持一些对于 `@` 菜单界面的增强：
 
-- 自定义展示分组：按需启用或隐藏 `Commands`、`Skills`、文件、DSH 会话和外部对话，并调整分组顺序
+- 自定义展示分组：按需启用或隐藏 `Commands`、`Skills`、文件、DSH 会话、本地 Agent 对话和外部对话，并调整分组顺序
 - 自定义展示数量：分别设置各组折叠时的条目数和候选数量上限
 - 两种浏览方式：使用逐组展开/折叠，或切换至 DSH 原生滚动列表
 - 图标可视化增强：通过类型图标和平台 Logo 区分不同引用来源，让菜单内容更易识别
@@ -56,9 +57,9 @@
   </tr>
 </table>
 
-输入 `@`，即可跨已启用的来源搜索并把选中的引用加入当前任务。不同来源仍保留各自的访问与加载方式：文件通过 DSH 受权限约束的工具读取，DSH 会话沿用原生 session-reference 协议，外部对话正文则由 Agent 按需读取。
+输入 `@`，即可跨已启用的来源搜索并把选中的引用加入当前任务。不同来源仍保留各自的访问与加载方式：文件通过 DSH 受权限约束的工具读取，DSH 会话沿用原生 session-reference 协议，本地 Agent 对话直接从磁盘流式读取，外部对话正文则由 Agent 按需读取。
 
-本插件通过 OpenCLI 复用用户已登录的 AI 对话窗口来获取历史对话。默认仅在本地保存对话标题；当需要查看正文时，Agent 会根据任务需求按需获取远端内容。用户也可以切换至离线镜像模式，在本地保存最新的完整正文。
+**只有「外部对话」这一组**通过 OpenCLI 复用用户已登录的 AI 对话窗口来获取历史对话：默认仅在本地保存对话标题，正文由 Agent 按需获取远端内容；也可以切换至离线镜像模式，在本地保存最新的完整正文。**「本地 Agent 对话」不需要这一整套**——那些记录本来就是你自己磁盘上的文件，这一组直接读取，不开浏览器、不经过 OpenCLI、也不做任何镜像。
 
 
 > [!IMPORTANT]
@@ -69,6 +70,7 @@
 
 ## 📰 新闻
 
+- **2026-08-20 · v0.3.1** — 新增第六个 `@` 分组「本地 Agent 对话」：其他 14 种 Agent CLI 留在磁盘上的会话——Claude Code、Codex、Cursor、Qoder、Reasonix、OpenClaw、Kimi、Grok Build、Hermes、Gemini CLI、Pi，以及三种以 SQLite 存储的 opencode、mimocode、zcode——现在可以像其他来源一样列举和引用。**只做引用**：不向 DSH 会话库导入任何内容，只有模型调用 `reference_read` 时才会流式读取对应记录。读取有明确上界，默认按工作目录收窄，并复用与外部对话相同的按任务授权门禁——该门禁现已按来源限定，不再硬编码在单一来源上。
 - **2026-08-20 · v0.3.0** — 完成 DSH 原生 `@` 整合：五个来源可独立配置，文件与 DSH 会话复用官方 Remote，原生 Composer 引用支持来源 Logo，展开/折叠与同步操作均在菜单原位更新，并可一键在 Reference Anything 与 DSH 官方 `@` 列表之间切换；同时删除旧 `dsh-file:` 协议和自建 Composer 交互层。
 - **2026-08-19 · v0.2.4** — 新增插件版本自动检查与设置页内更新，提供 Pill/Raw text 两种输入框渲染方式，并通过可复用的后台浏览器会话提升 OpenCLI 同步稳定性及输入交互兼容性。
 - **2026-08-18 · v0.2.0** — 全新 Reference Anything 设置页，支持本地会话统计、分页管理、Provider/Profile 选择与同步状态检查。
@@ -77,7 +79,7 @@
 
 ## 🧭 Roadmap
 
-- [ ] 支持引用本地其他 Agent 的历史对话（开发中）
+- [x] 支持引用本地其他 Agent 的历史对话
 - [ ] 支持引用来自网盘的文件，并对网盘进行操作（开发中）
 - [ ] 更多的关键词搜索匹配规则，黑名单、白名单等（特别对于file search）
 - [ ] 支持引用更多 AI 对话平台消息
@@ -119,12 +121,12 @@ opencli daemon restart
 
 ## 🚀 使用
 
-Reference Anything 直接向 DSH 原生 `@` 菜单注册五个来源，不会引入一套割裂的搜索界面。设置中可以决定显示哪些分组、调整顺序、分别配置折叠条目数和候选硬上限，并选择插件的展开/折叠模式或 DSH 原生滚动列表。设置页还提供一键切换：可以只把可见 Picker 恢复为 DSH 官方文件/会话列表，而插件、同步服务、本地数据和模型侧工具继续运行；需要时可从同一位置重新启用 Reference Anything `@`。
+Reference Anything 直接向 DSH 原生 `@` 菜单注册六个来源，不会引入一套割裂的搜索界面。设置中可以决定显示哪些分组、调整顺序、分别配置折叠条目数和候选硬上限，并选择插件的展开/折叠模式或 DSH 原生滚动列表。设置页还提供一键切换：可以只把可见 Picker 恢复为 DSH 官方文件/会话列表，而插件、同步服务、本地数据和模型侧工具继续运行；需要时可从同一位置重新启用 Reference Anything `@`。
 
 1. 打开 DSH Web 的 `Settings → Reference Anything`。
 2. 在“可用性检查”中确认 OpenCLI、Browser Bridge、浏览器扩展和对话适配器均已就绪。
 3. 在“@ 外部对话同步设置”中选择已连接的浏览器 Profile、正文保存方式与同步方式，然后点击“立即同步已启用来源”，或在平台卡片上单独同步一个 Provider。
-4. 在输入框键入 `@`，从 `Commands`、`Skills`、`Files and folders`、`DSH sessions` 或 `External conversations` 分组选择来源。
+4. 在输入框键入 `@`，从 `Commands`、`Skills`、`Files and folders`、`DSH sessions`、`Local agent conversations` 或 `External conversations` 分组选择来源。
 5. 键入关键词过滤候选，例如 `@缓存设计`。
 
 默认使用“按需读取正文”模式：本地只保存标题索引，Agent 调用 `reference_read` 时才通过浏览器读取正文。若需要离线读取和正文检索，请选择“在本地保存完整正文”；该模式只保留每条对话的最新版本。文件、DSH 会话和外部对话都使用 DSH 原生引用 occurrence；Reference Anything 只补充对应来源 Logo，不替换原生换行、光标、选区、整段删除、草稿、剪贴板和序列化行为。插件会在加载时检查 npm 新版本；从设置页完成更新后，需要重启 DSH 才能生效。
@@ -134,7 +136,7 @@ Reference Anything 直接向 DSH 原生 `@` 菜单注册五个来源，不会引
 
 ### 🧩 一个 `@` 菜单，多种来源
 
-`@` 菜单包含五个分组：`Commands`、`Skills`、`Files and folders`、`DSH sessions`、`External conversations`。每组默认先显示 6 条，并可分别设置 1–50 的候选硬上限。在展开/折叠模式下，每次展开追加 5 条且菜单保持当前滚动位置，折叠则恢复到配置的紧凑条目数；外部对话的同步入口固定在分组最前面，同步开始、进行和完成时都会原位更新菜单与可见结果。可在 `Settings → Reference Anything → 通用设置` 中启用或关闭分组、调整顺序，并选择“展开/折叠”或“DSH 原生滚动”。
+`@` 菜单包含六个分组：`Commands`、`Skills`、`Files and folders`、`DSH sessions`、`Local agent conversations`、`External conversations`。每组默认先显示 6 条，并可分别设置 1–50 的候选硬上限。在展开/折叠模式下，每次展开追加 5 条且菜单保持当前滚动位置，折叠则恢复到配置的紧凑条目数；外部对话的同步入口固定在分组最前面，同步开始、进行和完成时都会原位更新菜单与可见结果。可在 `Settings → Reference Anything → 通用设置` 中启用或关闭分组、调整顺序，并选择“展开/折叠”或“DSH 原生滚动”。
 
 #### ⌨️ @Commands — DSH 原生命令
 
@@ -167,6 +169,54 @@ Reference Anything 直接向 DSH 原生 `@` 菜单注册五个来源，不会引
 
 选中的会话使用 DSH 规范 `dsh-session:` mention 和原生 session 外观；快照准备与解析继续由 DSH 官方服务负责，而不是由本插件复制实现。
 
+#### 🖥️ @Local agent conversations — 本地其他 Agent 留在磁盘上的对话
+
+键入 `@agents:` 即可浏览本地其他 Agent CLI 已经写在用户目录下的历史会话，引用方式与引用 DSH 会话完全一致。
+
+<p align="center"><img src="./images/at-local-agents.png" alt="从 @ 菜单浏览本地其他 Agent 的历史会话" width="800" /></p>
+
+这个分组**只做引用**：不向 DSH 会话库导入任何内容，也不转换或改写原始记录。候选中只有指针，只有模型调用 `reference_read` 时才会去流式读取磁盘上的文件。序列化形式与其他引用分组一致：
+
+```text
+@[Codex·对话标题](dsh-ref:<opaque-base64url>)
+```
+
+**已支持的格式：**
+
+| 格式 | 前缀 | 默认目录 |
+| --- | --- | --- |
+| Claude Code | `@claude-code:` `@cc:` | `~/.claude/projects` |
+| Codex | `@codex:` | `~/.codex/sessions` |
+| Cursor | `@cursor:` | `~/.cursor/projects` |
+| Qoder | `@qoder:` | `~/.qoder/projects` |
+| Reasonix | `@reasonix:` | `~/.reasonix/sessions` |
+| OpenClaw | `@openclaw:` | `~/.openclaw/agents` |
+| Kimi | `@kimi-cli:` `@kimi-code:` | `~/.kimi/sessions`、`~/.kimi-code/sessions` |
+| Grok Build | `@grokbuild:` `@grok-build:` | `~/.grok/sessions`、`~/.grok/archived_sessions` |
+| Hermes | `@hermes:` | `~/.hermes/sessions` |
+| Gemini CLI | `@gemini-cli:` | `~/.gemini/history` |
+| Pi | `@pi:` | `~/.pi/agent/sessions` |
+| opencode | `@opencode:` | `~/.local/share/opencode` |
+| mimocode | `@mimocode:` `@mimo:` | `~/.local/share/mimocode` |
+| zcode | `@zcode:` | `~/.zcode/cli/db` |
+
+目录不存在会被当作“没装这个 Agent”，菜单里直接不显示，而不是报错。可以通过 `extraRoots` 追加目录并指定其格式；目录一律写成 `~/` 相对形式，方便配置在不同机器之间迁移。
+
+**最后三种是数据库，不是文件。** opencode、mimocode 和 zcode 把跑过的每个会话都放在同一个 SQLite 文件里，而不是一条对话一个文件，所以每条对话单独列出，其引用 id 同时指明数据库和里面的会话（`opencode:opencode.db#ses_…`）。读取它们需要 Node 自带的 `node:sqlite`，该模块从 Node 22.5 起提供；在更老的运行时上这三种格式直接不出现。设置 `sqlite: false` 可以让驱动完全不进入进程——这几类目录根本不会被解析，也就永远不会打开数据库。数据库的读取由 `maxSessionRecords`（2000 条消息，从最新往前数）限制，而不是 `maxScanBytes`，因为数据库没法像 JSONL 那样流式读。
+
+> [!NOTE]
+> **只有 Claude Code 和 Codex 是对着真实语料验证过的**（开发所在机器上分别有 541 和 212 个会话）。其余十二种适配器根据格式文档实现，只有合成用例覆盖：九种文件格式在 `tests/local-agent-converters.spec.ts`，三种数据库在 `tests/local-agent-sqlite.spec.ts`——后者按文档中的表结构写出真正的 SQLite 文件，足以钉住查询本身，但仍然不是真实语料。它们默认启用，但如果结果不符合预期，请当成待反馈的 bug，而不是“这个会话本来就是空的”。
+
+**与外部对话分组的前缀冲突：** 单独的 `@claude:`、`@gemini:`、`@grok:`、`@kimi:` 仍然表示浏览器平台，因为多数人说到这几个词时指的就是网页端。同名品牌的本地 CLI 记录只能通过带限定的前缀访问——`@claude-code:`、`@gemini-cli:`、`@grokbuild:`、`@kimi-cli:`。
+
+**范围：** 默认只列出记录的工作目录与当前会话一致的对话，所以在某个项目里按 `@` 不会把整台机器上的对话全部翻出来。需要放宽时设置 `scope: 'all'`，或直接键入 `@agents:all`。
+
+**读取：** 相邻的 assistant 记录会合并成一轮，工具结果会被丢弃，所以这里的轮数和原 Agent 自己界面上显示的条数并不相同。思考内容默认丢弃，需要 `includeThinking` 才保留；工具调用在默认的 `toolCalls: 'elide'` 下渲染成 `[tool: Bash]`；超过 `maxScanBytes`（32 MiB）的会话按文件尾部锚定读取并标记为不完整，而不是悄悄截断。附件以文本注记内联，本分组不产出附件句柄。
+
+**目前仍有两种格式没有纳入：**
+- **ChatGPT 网页导出** —— 理由已经不是原来那条了。一个 `conversations.json` 里装着很多条对话，而上面三种数据库正是这样，为它们建立的 `文件#id` 方案同样能承载它。剩下的问题是：导出文件需要用户手动生成、想更新还得再导一次，而同一份历史在 `External conversations` 分组里本来就是实时可读的。也就是说技术上已经够得着，只是还没做。
+- **DSH 自己的 `~/.dsh/sessions`** —— 已经能通过 `DSH sessions` 分组以 `dsh-session:` 访问。放进来只会让同一条对话在菜单里以两种协议出现两次。
+
 #### 🌐 @External conversations — 外部对话平台
 
 支持 ChatGPT、Claude、Gemini、DeepSeek、Grok 和 Kimi 的历史对话。
@@ -197,6 +247,7 @@ Reference Anything 直接向 DSH 原生 `@` 菜单注册五个来源，不会引
 - 分隔符用 `:` 或 `/` 而不是空格：`@` 的候选 token 遇到空格即终止，所以 `@chatgpt 关键词` 会在按下空格时关闭菜单。多词搜索请写成 `@cachedesign` 或 `@cache-design`。
 - 没有类型前缀时，仍同时搜索所有分组
 - 命令和 Skills 选择后由 DSH 原生斜杠命令流程处理，原生 `/` 面板仍可继续使用
+- 把 Picker 切回 DSH 官方文件/会话列表后，所有插件分组都会隐藏，`Local agent conversations` 也不例外。宿主侧来源仍然注册着，已经插入的引用照常展开、`reference_read` 照常可用，只是菜单入口在切回来之前不再出现
 
 ## 🔄 @外部对话的实现方式
 
@@ -267,6 +318,7 @@ metadata-only 模式下，读取引用正文时会在同一次 detail 浏览器�
 
 - 文件候选与 mention 格式使用官方 `@deepseek-ai/dsh-file-reference` 包和 DSH Remote。
 - 跨会话候选与规范 `dsh-session:` mention 使用官方 `@deepseek-ai/dsh-session-reference` 包和 DSH Remote。
+- 「本地 Agent 对话」分组所读取的记录格式，来自 [`Nwflower/dsh-chat-import`](https://github.com/Nwflower/dsh-chat-import)（MIT）——对于本机没有语料可验证的那十二种格式，它的转换器就是格式文档本身。本项目未复制其代码（该项目把记录导入 DSH，本项目只在原地读取），但格式知识确实借用自它。
 
 ## 📄 来源与许可
 

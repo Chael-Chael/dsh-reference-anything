@@ -140,6 +140,15 @@ export interface ReferenceSource {
   /** Stable registry key, also the `source` half of every {@link ReferenceRef} it owns. */
   readonly id: string
   /**
+   * Whether reading this source's items needs a per-task grant.
+   *
+   * Sources whose items live outside the task's own workspace — another
+   * assistant's transcript, a remote drive — opt in, so the model can only
+   * read what its user actually named. Omitting it means ungated, which is
+   * right only when the material is already inside the task's scope.
+   */
+  readonly requiresGrant?: boolean
+  /**
    * Whether this source can currently be used. Must stay cheap and local —
    * no network calls, no subprocess launches — because discovery calls it on
    * every source before fanning out.

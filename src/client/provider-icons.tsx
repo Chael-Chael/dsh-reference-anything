@@ -17,7 +17,7 @@ export const PROVIDER_ICON_MARKER: Readonly<Record<ChatProvider, string>> = {
 }
 
 export type PickerIconKind =
-  | 'command' | 'skill' | 'session' | 'refresh'
+  | 'command' | 'skill' | 'session' | 'refresh' | 'agent'
   | 'folder' | 'file' | 'image' | 'text' | 'code' | 'data'
   | 'archive' | 'spreadsheet' | 'audio' | 'video' | 'presentation' | 'font'
 
@@ -26,11 +26,12 @@ export const PICKER_ICON_MARKER: Readonly<Record<PickerIconKind, string>> = {
   session: '\uE106', skill: '\uE107', command: '\uE108', folder: '\uE109', file: '\uE10A',
   image: '\uE10B', text: '\uE10C', code: '\uE10D', data: '\uE10E', archive: '\uE10F',
   spreadsheet: '\uE110', audio: '\uE111', video: '\uE112', presentation: '\uE113', font: '\uE114',
-  refresh: '\uE115',
+  refresh: '\uE115', agent: '\uE116',
 }
 export const SESSION_ICON_MARKER = PICKER_ICON_MARKER.session
 export const SKILL_ICON_MARKER = PICKER_ICON_MARKER.skill
 export const COMMAND_ICON_MARKER = PICKER_ICON_MARKER.command
+export const AGENT_ICON_MARKER = PICKER_ICON_MARKER.agent
 
 type PickerIconNode = Readonly<{
   tag: 'path' | 'rect' | 'circle'
@@ -49,6 +50,14 @@ export const PICKER_ICON_NODES = {
   ],
   // MessageCircle
   session: [{ tag: 'path', attrs: { d: 'M7.9 20A9 9 0 1 0 4 16.1L2 22Z' } }],
+  // Bot — another assistant's transcript, kept visually distinct from the
+  // MessageCircle that marks DSH's own sessions.
+  agent: [
+    { tag: 'path', attrs: { d: 'M12 8V4H8' } },
+    { tag: 'rect', attrs: { width: '16', height: '12', x: '4', y: '8', rx: '2' } },
+    { tag: 'path', attrs: { d: 'M2 14h2' } }, { tag: 'path', attrs: { d: 'M20 14h2' } },
+    { tag: 'path', attrs: { d: 'M15 13v2' } }, { tag: 'path', attrs: { d: 'M9 13v2' } },
+  ],
   // RefreshCcw
   refresh: [
     { tag: 'path', attrs: { d: 'M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8' } },

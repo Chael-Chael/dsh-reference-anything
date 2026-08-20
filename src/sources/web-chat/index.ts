@@ -68,6 +68,8 @@ export default class WebChatHistoryService extends Service implements ReferenceS
   static inject = inject
   static Config = Config
   readonly id = 'web-chat'
+  /** Mirrored browser chats are outside the task's workspace: read only what the user named. */
+  readonly requiresGrant = true
   private storeValue?: ConversationStore
   private syncValue?: ConversationSyncManager
   private autoSyncInterval?: ReturnType<typeof setInterval>

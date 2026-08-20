@@ -2,6 +2,25 @@ import { z } from 'zod'
 import type { InvocationDescriptor } from '@deepseek-ai/dsh-typert-protocol'
 import { providerSchema, referenceUiModeSchema, settingsRecordSchema } from './wire.ts'
 
+/**
+ * One local-agent transcript as the `@` menu sees it.
+ *
+ * `id` is the source-scoped `kind:relPath`, not a `dsh-ref:` URI — the client
+ * wraps it, the way it does for web chats, so the `'local-agent'` source string
+ * stays hardcoded in exactly one place. Deliberately carries no `origin`: the
+ * absolute path adds nothing a menu row can use and everything a screen-share
+ * leaks.
+ */
+export const agentCandidateSchema = z.object({ id: z.string(), label: z.string(), provider: z.string(), updatedAt: z.number().optional() }).readonly()
+
+/**
+ * Binds the calling session to the invocation, so the Host can scope a search
+ * to the session's cwd. Reintroduced here after 0.3.0 handed file and session
+ * lookup back to DSH's native Remotes and removed its last other caller.
+ */
+const agentLookup = { name: 'agent', wire: 'agentId', source: 'lookup' as const, lookup: 'agent' as const,
+  codec: { mode: 'strict' as const, typeSymbol: '@deepseek-ai/dsh-session/types#SessionId', schema: z.string().min(1) } }
+
 export const searchInputSchema = z.object({
   query: z.string(), provider: providerSchema.optional(), limit: z.number().int().min(1).max(100),
 }).readonly()
@@ -74,6 +93,7 @@ export const providerSyncStateSchema = z.object({
 }).readonly()
 
 export const REFERENCE_ANYTHING_INVOCATIONS: readonly InvocationDescriptor[] = [
+  descriptor('agentSearch', [agentLookup, { name: 'input', wire: 'input', source: 'json', codec: strict('AgentSearchInput', z.object({ query: z.string(), limit: z.number().int().min(1).max(100) }).readonly()) }], strict('AgentCandidate[]', z.array(agentCandidateSchema)), true),
   descriptor('search', [{ name: 'input', wire: 'input', source: 'json', codec: strict('SearchInput', searchInputSchema) }], strict('SearchResult[]', z.array(searchResultSchema)), true),
   descriptor('health', [], strict('Health', healthSchema), true),
   descriptor('quickHealth', [], strict('Health', healthSchema), true),

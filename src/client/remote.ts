@@ -13,6 +13,8 @@ export interface SearchResult extends ConversationRow {
   /** Excerpt around a body hit; shown in the menu, never sent to the model. */
   snippet?: string
 }
+/** One local-agent transcript offered by the `@` menu; `id` is source-scoped, not a URI. */
+export interface AgentCandidate { id: string; label: string; provider: string; updatedAt?: number }
 export type ExtensionState = 'connected' | 'disconnected' | 'profile-required' | 'profile-disconnected' | 'daemon-offline'
 export interface Health {
   version: string; daemon: string; pluginInstalled: boolean
@@ -82,6 +84,7 @@ export const REFERENCE_ANYTHING_REMOTE: TypertRemoteContribution = {
 }
 
 export interface ReferenceAnythingRemoteFace {
+  agentSearch(agentId: string, input: { query: string; limit: number }, signal?: AbortSignal): Promise<RemoteResult<readonly AgentCandidate[]>>
   search(input: { query: string; provider?: ChatProvider; limit: number }, signal?: AbortSignal): Promise<RemoteResult<readonly SearchResult[]>>
   health(signal?: AbortSignal): Promise<RemoteResult<Health>>
   quickHealth(signal?: AbortSignal): Promise<RemoteResult<Health>>

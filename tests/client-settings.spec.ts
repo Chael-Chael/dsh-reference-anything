@@ -12,11 +12,15 @@ const healthy: Health = {
 describe('settings source registration guard', () => {
   it('defaults every @ source to six visible items', () => {
     const picker = defaultPickerSettings()
-    expect([picker.commands, picker.skills, picker.files, picker.sessions, picker.conversations].map(source => source.limit))
-      .toEqual([6, 6, 6, 6, 6])
+    // Keyed rather than positional so adding a group does not require editing a
+    // literal, and so a failure names the group that broke the rule.
+    const groups = Object.entries(picker)
+      .flatMap(([key, source]) => typeof source === 'object' ? [[key, source] as const] : [])
+    expect(groups.map(([key, source]) => [key, source.limit]))
+      .toEqual(groups.map(([key]) => [key, 6]))
     expect(picker.displayMode).toBe('collapse')
-    expect([picker.commands, picker.skills, picker.files, picker.sessions, picker.conversations].map(source => source.maxCandidates))
-      .toEqual([50, 50, 50, 50, 50])
+    expect(groups.map(([key, source]) => [key, source.maxCandidates]))
+      .toEqual(groups.map(([key]) => [key, 50]))
   })
 
   it('migrates an older settings record to the new safe defaults', () => {
@@ -28,6 +32,21 @@ describe('settings source registration guard', () => {
     expect(value.referenceUiMode).toBeUndefined()
     expect(value.enabledProviders).toEqual(['chatgpt', 'claude', 'gemini', 'deepseek', 'grok', 'kimi'])
   })
+  it('fills in a picker key that arrived after the record was written', () => {
+    // `settingsRecordSchema` is the durable read boundary for the domain global,
+    // so a missing key does not degrade one group — it rejects the whole medium
+    // and takes every other setting with it. Any @ group added from now on needs
+    // the same `.default()` and belongs in this list.
+    const saved = defaultPickerSettings() as Record<string, unknown>
+    delete saved['agents']
+    const value = settingsRecordSchema.parse({
+      opencliPath: 'opencli', profile: '', detailConcurrency: 2, autoSync: false,
+      autoSyncMinutes: 60, historyMode: 'metadata-only', picker: saved,
+    })
+    expect(value.picker?.agents).toEqual({ enabled: true, order: 25, limit: 6, maxCandidates: 50 })
+    expect(value.picker?.conversations).toEqual(defaultPickerSettings().conversations)
+  })
+
   it('treats an unchanged picker returned by an unrelated settings save as equal', () => {
     const original = defaultPickerSettings()
     const roundTripped = structuredClone(original)

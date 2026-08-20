@@ -102,18 +102,40 @@ export default class ReferenceRuntime extends Service {
     return [...this.sources.keys()]
   }
 
-  /** Authorize one task to read a Web conversation named by its user or discovery tool. */
+  /**
+   * Whether a source's items may only be read after an explicit grant.
+   *
+   * An unregistered source fails closed: registration order must never decide
+   * authorization, and `read()` would reject it as `SOURCE_UNKNOWN` a moment
+   * later anyway.
+   */
+  private gated(source: string): boolean {
+    const registered = this.sources.get(source)
+    return registered === undefined || registered.requiresGrant === true
+  }
+
+  /**
+   * Qualify the grant by source.
+   *
+   * Two sources can mint the same opaque id, and an unqualified key would let
+   * a grant for one silently authorize the other. NUL cannot occur in either
+   * half, so the join is unambiguous.
+   */
+  private static grantKey(ref: ReferenceRef): string { return `${ref.source}\u0000${ref.id}` }
+
+  /** Authorize one task to read a gated reference named by its user or discovery tool. */
   grant(sessionId: string, ref: ReferenceRef): void {
-    if (ref.source !== 'web-chat') return
+    // Recorded unconditionally: a source may register after the mention that
+    // named it, and a grant for an ungated source is merely inert.
     const values = this.grants.get(sessionId) ?? new Set<string>()
-    values.add(ref.id)
+    values.add(ReferenceRuntime.grantKey(ref))
     this.grants.set(sessionId, values)
   }
 
-  /** Enforce that a Web conversation URI originated in this task's mention/list surface. */
+  /** Enforce that a gated URI originated in this task's mention/list surface. */
   assertGranted(sessionId: string | undefined, ref: ReferenceRef): void {
-    if (ref.source !== 'web-chat') return
-    if (!sessionId || !this.grants.get(sessionId)?.has(ref.id)) {
+    if (!this.gated(ref.source)) return
+    if (!sessionId || !this.grants.get(sessionId)?.has(ReferenceRuntime.grantKey(ref))) {
       throw new ReferenceAnythingError(
         'this task has not been granted access to that conversation reference',
         'CONVERSATION_REFERENCE_NOT_GRANTED',

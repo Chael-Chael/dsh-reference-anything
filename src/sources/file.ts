@@ -70,6 +70,8 @@ interface ExportDocument {
 /** Reads exported conversations out of a fixed set of directories. */
 export class FileReferenceSource implements ReferenceSource {
   readonly id = FILE_SOURCE_ID
+  /** Ungated on purpose: the configured roots are already inside the task's scope. */
+  readonly requiresGrant = false
 
   /**
    * @param roots - absolute or process-relative directories to search.

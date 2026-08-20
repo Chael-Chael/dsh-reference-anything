@@ -20,6 +20,8 @@ export type ReferenceErrorCode =
   | 'REFERENCE_ACCOUNT_MISMATCH'
   /** The source failed while reading; its own error is the `cause`. */
   | 'REFERENCE_READ_FAILED'
+  /** A transcript whose format must be read whole is larger than the scan budget. */
+  | 'REFERENCE_TRANSCRIPT_TOO_LARGE'
   /** The caller cancelled before the read settled. */
   | 'REFERENCE_CANCELLED'
   /** A `dsh-ref:` URI was malformed, non-canonical, or not a reference at all. */

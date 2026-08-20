@@ -59,3 +59,44 @@
         # a references/ directory; users may override it with absolute roots.
         roots: ['references']
         extensions: ['.json']
+
+    # Transcripts other coding agents leave on disk, listed by title and read a
+    # window at a time. Reading one needs a per-task grant: these are other
+    # sessions' conversations, so the model may only open what its user named.
+    - id: reference-local-agent
+      name: 'dsh-reference-anything/local-agent'
+      config:
+        # Every format this package reads, at each agent's own default location
+        # under $HOME. An agent that is not installed simply has no directory,
+        # which is not an error. Ordered by how well the format is validated:
+        # the first two were built against real corpora, the rest from format
+        # documentation and synthetic fixtures. Drop the unvalidated ones from
+        # this list to run on the two that were measured.
+        agents: ['claude-code', 'codex', 'cursor', 'qoder', 'reasonix', 'openclaw',
+                 'kimi', 'grokbuild', 'hermes', 'gemini-cli', 'pi',
+                 'opencode', 'mimocode', 'zcode']
+        extraRoots: []
+        # Only sessions recorded in this workspace. `all` lists every transcript
+        # on the machine, which is a lot of other projects' titles.
+        scope: 'workspace'
+        maxTranscripts: 200
+        maxReadTurns: 20
+        maxScanBytes: 33554432
+        headLines: 40
+        tailLines: 20
+        maxProbeBytes: 2097152
+        maxLineBytes: 1048576
+        directoryTtlMs: 5000
+        includeThinking: false
+        toolCalls: 'elide'
+        includeSidechains: false
+        stripEnvironmentPreamble: true
+        # The last three formats keep every conversation in one SQLite database
+        # rather than a file apiece, so reading them needs `node:sqlite`. Set
+        # this to false and the driver is never imported at all: no root of
+        # those kinds is resolved, so no database is ever opened.
+        sqlite: true
+        # Most message rows to materialize from one database-backed session,
+        # counted from the newest. A database cannot be streamed the way a JSONL
+        # file can, so this is what bounds the memory a read costs.
+        maxSessionRecords: 2000

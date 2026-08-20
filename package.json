@@ -1,7 +1,7 @@
 {
   "name": "dsh-reference-anything",
-  "version": "0.3.0",
-  "description": "Reference locally mirrored ChatGPT, Claude, Gemini, DeepSeek, Grok, and Kimi conversations from DeepSeek Harness",
+  "version": "0.3.1",
+  "description": "Reference commands, skills, workspace files, DSH sessions, other local agent CLIs' transcripts, and mirrored ChatGPT/Claude/Gemini/DeepSeek/Grok/Kimi conversations from one DeepSeek Harness @ menu",
   "license": "MIT",
   "publishConfig": {
     "access": "public"
@@ -29,6 +29,10 @@
     "./file": {
       "types": "./lib/sources/file.d.ts",
       "default": "./lib/sources/file.js"
+    },
+    "./local-agent": {
+      "types": "./lib/sources/local-agent/index.d.ts",
+      "default": "./lib/sources/local-agent/index.js"
     },
     "./web-chat": {
       "types": "./lib/sources/web-chat/index.d.ts",
@@ -167,6 +171,7 @@
     "@deepseek-ai/dsh-session": "link:../deepseek-harness/packages/core/session",
     "@deepseek-ai/dsh-session-reference": "link:../deepseek-harness/packages/context/session-reference",
     "@deepseek-ai/dsh-settings": "link:../deepseek-harness/packages/settings/settings",
+    "@deepseek-ai/dsh-storage": "link:../deepseek-harness/packages/storage/storage",
     "@deepseek-ai/dsh-storage-domain": "link:../deepseek-harness/packages/storage/storage-domain",
     "@deepseek-ai/dsh-system-prompt": "link:../deepseek-harness/packages/core/system-prompt",
     "@deepseek-ai/dsh-tools": "link:../deepseek-harness/packages/core/tools",

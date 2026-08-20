@@ -4,10 +4,36 @@ import type { ChatProvider, SettingsRecord } from './store/spec.ts'
 import type { ReferenceUiMode } from './wire.ts'
 import type { SyncMode } from './sync/index.ts'
 import type {} from './sources/web-chat/index.ts'
+import type {} from './sources/local-agent/index.ts'
+import type { Agent } from '@deepseek-ai/dsh-agent'
 import { switchReferenceUiMode as switchProfileReferenceUiMode } from './profile-mode.ts'
 
 export class ReferenceAnythingRemote extends TypertRemoteService {
   constructor(ctx: Context) { super(ctx, 'referenceAnything') }
+
+  /**
+   * Discovery for the `@` menu's local-agent group.
+   *
+   * Resolved optionally rather than injected: `reference-anything-web` must
+   * still load in a profile where the local-agent plugin is switched off, and an
+   * absent service means an empty group, not a broken composer. Workspace
+   * scoping takes the session's own cwd, so a Web server serving projects from
+   * anywhere still scopes to the project the user is in.
+   */
+  async agentSearch(agent: Agent, input: { query: string; limit: number }, signal: AbortSignal) {
+    const agents = this.ctx.get('referenceLocalAgents')
+    if (agents === undefined) return []
+    // A session with no cwd of its own is rare and has no workspace to scope
+    // to; falling back to the process's directory is the same guess the
+    // `ReferenceSource.list` seam makes, rather than an empty group.
+    const rows = await agents.listForWorkspace(input.query, input.limit, agent.session.header.cwd ?? process.cwd(), signal)
+    return rows.map(row => ({
+      id: row.ref.id,
+      label: row.label,
+      provider: row.provider ?? '',
+      ...row.updatedAt === undefined ? {} : { updatedAt: row.updatedAt },
+    }))
+  }
 
   search(input: { query: string; provider?: ChatProvider; limit: number }, signal: AbortSignal) {
     signal.throwIfAborted()
