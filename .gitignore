@@ -1,6 +1,7 @@
 node_modules/
 lib/
 tools/
+social/
 *.tgz
 *.log
 .DS_Store

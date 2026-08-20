@@ -12,7 +12,7 @@ One `@` for them all.
 
 <!-- SHIELD GROUP -->
 
-[![][github-version-shield]][github-releases-link]
+[![][github-version-shield]][github-version-link]
 [![][typescript-shield]][typescript-link]
 [![][dsh-plugin-shield]][repository-link]<br/>
 [![][github-stars-shield]][github-stars-link]
@@ -30,6 +30,8 @@ One `@` for them all.
 </div>
 
 **Reference Anything is an enhancement for the DeepSeek Harness (DSH) `@` menu.** It brings multiple reference sources into one searchable menu, so you can mention the context you need without switching tools or copying content manually.
+
+After typing `@`, you can browse and click items in the menu with your mouse, or use the keyboard to enter text, search, and narrow down the results.
 
 Use one `@` menu to reference:
 
@@ -276,8 +278,8 @@ This project is licensed under the [MIT License](./LICENSE). Third-party copyrig
 [typescript-link]: https://www.typescriptlang.org/
 [typescript-shield]: https://img.shields.io/badge/TypeScript-3178C6?labelColor=black&logo=typescript&logoColor=white&style=flat-square
 [dsh-plugin-shield]: https://img.shields.io/badge/DSH-plugin-ffffff?labelColor=black&style=flat-square
-[github-version-shield]: https://img.shields.io/github/package-json/v/Chael-Chael/dsh-reference-anything?color=369eff&label=version&labelColor=black&style=flat-square
-[github-releases-link]: https://github.com/Chael-Chael/dsh-reference-anything/releases
+[github-version-shield]: https://img.shields.io/github/package-json/v/Chael-Chael/dsh-reference-anything/main?color=369eff&label=version&labelColor=black&style=flat-square
+[github-version-link]: https://github.com/Chael-Chael/dsh-reference-anything/blob/main/package.json
 [github-stars-link]: https://github.com/Chael-Chael/dsh-reference-anything/stargazers
 [github-stars-shield]: https://img.shields.io/github/stars/Chael-Chael/dsh-reference-anything?color=ffcb47&labelColor=black&style=flat-square
 [github-forks-link]: https://github.com/Chael-Chael/dsh-reference-anything/forks
