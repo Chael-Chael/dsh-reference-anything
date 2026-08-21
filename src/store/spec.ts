@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import { defineDomain, domainTable } from '@deepseek-ai/dsh-storage-domain'
-import { providerSchema, settingsRecordSchema } from '../wire.ts'
+import { ALL_LOCAL_AGENTS, providerSchema, settingsRecordSchema } from '../wire.ts'
 import type { ChatProvider, SettingsRecord } from '../wire.ts'
 
 export { providerSchema, settingsRecordSchema }
@@ -100,7 +100,7 @@ export const referenceAnythingDomainSpec = defineDomain({
   version: 1,
   global: {
     schema: settingsRecordSchema,
-    initial: { opencliPath: 'opencli', profile: '', detailConcurrency: 8, autoSync: false, syncOnStartup: false, autoSyncMinutes: 60, historyMode: 'metadata-only' as const, enabledProviders: [...providerSchema.options], maxReadTurns: 10, inputRenderMode: 'pill' as const },
+    initial: { opencliPath: 'opencli', profile: '', detailConcurrency: 8, autoSync: false, syncOnStartup: false, autoSyncMinutes: 60, historyMode: 'metadata-only' as const, enabledProviders: [...providerSchema.options], enabledAgents: [...ALL_LOCAL_AGENTS], maxReadTurns: 10, inputRenderMode: 'pill' as const },
   },
   tables: {
     conversations: domainTable<string, ConversationRecord>(conversationRecordSchema),

@@ -5,6 +5,15 @@ export const providerSchema = z.enum(['chatgpt', 'claude', 'gemini', 'deepseek',
 export type ChatProvider = z.infer<typeof providerSchema>
 export const ALL_PROVIDERS: readonly ChatProvider[] = providerSchema.options
 
+export const localAgentSchema = z.enum(['claude-code', 'codex', 'cursor', 'qoder', 'reasonix', 'openclaw', 'kimi', 'grokbuild', 'hermes', 'gemini-cli', 'pi', 'opencode', 'mimocode', 'zcode'])
+export type LocalAgent = z.infer<typeof localAgentSchema>
+export const ALL_LOCAL_AGENTS: readonly LocalAgent[] = localAgentSchema.options
+export const LOCAL_AGENT_LABEL: Readonly<Record<LocalAgent, string>> = {
+  'claude-code': 'Claude Code', codex: 'Codex', cursor: 'Cursor', qoder: 'Qoder', reasonix: 'Reasonix',
+  openclaw: 'OpenClaw', kimi: 'Kimi', grokbuild: 'Grok Build', hermes: 'Hermes', 'gemini-cli': 'Gemini CLI',
+  pi: 'Pi', opencode: 'opencode', mimocode: 'mimocode', zcode: 'zcode',
+}
+
 export const pickerSourceSchema = z.enum(['commands', 'skills', 'files', 'sessions', 'agents', 'conversations'])
 export type PickerSource = z.infer<typeof pickerSourceSchema>
 
@@ -69,6 +78,7 @@ export const settingsRecordSchema = z.object({
   autoSyncMinutes: z.number().int().min(15).max(1440).default(60),
   historyMode: z.enum(['metadata-only', 'offline-mirror']).default('metadata-only'),
   enabledProviders: z.array(providerSchema).default([...ALL_PROVIDERS]),
+  enabledAgents: z.array(localAgentSchema).default([...ALL_LOCAL_AGENTS]),
   maxReadTurns: z.number().int().min(1).max(100).default(10),
   inputRenderMode: inputRenderModeSchema.default('pill'),
   // Optional keeps settings written by earlier plugin versions readable.

@@ -14,7 +14,7 @@ export interface SearchResult extends ConversationRow {
   snippet?: string
 }
 /** One local-agent transcript offered by the `@` menu; `id` is source-scoped, not a URI. */
-export interface AgentCandidate { id: string; label: string; provider: string; updatedAt?: number }
+export interface AgentCandidate { id: string; kind: string; label: string; provider: string; updatedAt?: number }
 export type ExtensionState = 'connected' | 'disconnected' | 'profile-required' | 'profile-disconnected' | 'daemon-offline'
 export interface Health {
   version: string; daemon: string; pluginInstalled: boolean

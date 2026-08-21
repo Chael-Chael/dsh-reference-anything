@@ -252,7 +252,8 @@ export class LocalAgentService extends Service implements ReferenceSource {
 
   private async listIn(query: string, limit: number, cwd: string, signal?: AbortSignal): Promise<ReferenceSummary[]> {
     signal?.throwIfAborted()
-    const entries = await this.scan(signal)
+    const enabled = this.enabledAgentKinds()
+    const entries = (await this.scan(signal)).filter(entry => enabled.has(entry.kind))
     const known = await this.describe(entries, signal)
     const workspace = this.settings.scope === 'workspace' ? cwd : undefined
     const needle = query.trim()
@@ -282,6 +283,13 @@ export class LocalAgentService extends Service implements ReferenceSource {
       return right.mtimeMs - left.mtimeMs
     })
     return ranked.slice(0, limit).map(entry => entry.summary)
+  }
+
+  /** Durable discovery policy. Reads stay independent so granted old refs work. */
+  private enabledAgentKinds(): ReadonlySet<AgentKind> {
+    const history = this.ctx.get('referenceChatHistory')
+    const configured = history?.store.settings.enabledAgents ?? AGENT_KINDS
+    return new Set(configured)
   }
 
   /**

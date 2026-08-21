@@ -176,6 +176,8 @@ Selected sessions use DSH's canonical `dsh-session:` mention and native session 
 
 Type `@agents:` to browse the sessions other agent CLIs have already written into your home directory, and reference one the same way you reference a DSH session.
 
+In `Settings → Reference Anything`, the fourteen local Agent cards sit alongside the ChatGPT, Gemini, and other conversation-provider cards. Each Agent can be enabled or disabled independently; disabling one removes its sessions from new `@agents:` searches without invalidating references that are already in a draft or an existing conversation. Selected local-Agent references use a small robot icon in the composer, while browser conversation references keep their Provider logos.
+
 <p align="center"><img src="./images/at-local-agents.png" alt="Browse other local agents' transcripts from the @ menu" width="800" /></p>
 
 This group is **reference-only**. Nothing is copied into DSH's session store and no transcript is converted or rewritten: candidates carry a pointer, and the file on disk is streamed only when the model calls `reference_read`. Its serialized form matches the other reference groups:

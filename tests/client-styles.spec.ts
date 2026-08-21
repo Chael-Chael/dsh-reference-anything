@@ -90,6 +90,17 @@ describe('reference DOM customization', () => {
     dispose()
   })
 
+  it('projects local-agent chips as bots without confusing same-named Web providers', () => {
+    document.body.innerHTML = `<div data-composer-card>
+      <span id="agent" data-decoration="chip" data-reference-appearance="session"><span><svg/></span><span>Kimi CLI·Agent task</span></span>
+      <span id="web" data-decoration="chip" data-reference-appearance="session" data-reference-source="Web conversations"><span><svg/></span><span>Kimi·Web chat</span></span>
+    </div>`
+    const dispose = adoptReferenceIconProjection()
+    expect(document.getElementById('agent')?.dataset.dshRefChipIcon).toBe('agent')
+    expect(document.getElementById('web')?.dataset.dshRefChipIcon).toBe('kimi')
+    dispose()
+  })
+
   it('projects a file chip added after the observer starts', async () => {
     document.body.innerHTML = '<div data-composer-card></div>'
     const dispose = adoptReferenceIconProjection()

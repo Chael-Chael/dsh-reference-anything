@@ -237,7 +237,7 @@ describe('native @ sources', () => {
 
 describe('local agent conversations', () => {
   const agentRow = (over: Partial<AgentCandidate> = {}): AgentCandidate => ({
-    id: 'codex:2026/08/rollout-a.jsonl', label: 'Refactor the scan probe',
+    id: 'codex:2026/08/rollout-a.jsonl', kind: 'codex', label: 'Refactor the scan probe',
     provider: 'Codex', updatedAt: Date.UTC(2026, 7, 17), ...over,
   })
 

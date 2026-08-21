@@ -11,7 +11,7 @@ import { providerSchema, referenceUiModeSchema, settingsRecordSchema } from './w
  * absolute path adds nothing a menu row can use and everything a screen-share
  * leaks.
  */
-export const agentCandidateSchema = z.object({ id: z.string(), label: z.string(), provider: z.string(), updatedAt: z.number().optional() }).readonly()
+export const agentCandidateSchema = z.object({ id: z.string(), kind: z.string(), label: z.string(), provider: z.string(), updatedAt: z.number().optional() }).readonly()
 
 /**
  * Binds the calling session to the invocation, so the Host can scope a search

@@ -136,9 +136,10 @@ afterEach(async () => {
  * `~/.claude` and `~/.codex`, and a suite that reads those is neither fast nor
  * the same twice.
  */
-async function mount(over: Config = {}): Promise<{ ctx: Context; dispose: () => Promise<void> }> {
+async function mount(over: Config = {}, enabledAgents?: readonly string[]): Promise<{ ctx: Context; dispose: () => Promise<void> }> {
   const ctx = new Context()
   ctx.provide('storageDomain', memoryStorage())
+  if (enabledAgents !== undefined) ctx.provide('referenceChatHistory', { store: { settings: { enabledAgents } } } as never)
   await ctx.plugin(ReferenceRuntime, {})
   const fiber = await ctx.plugin(localAgent, {
     agents: [],
@@ -162,6 +163,15 @@ function reply(index: number): string {
 }
 
 describe('discovery', () => {
+  it('filters disabled kinds at the ReferenceSource boundary before applying limit', async () => {
+    const { ctx, dispose } = await mount({}, ['codex'])
+    const found = await ctx.references.list('', 1)
+    expect(found.map(entry => entry.ref.id)).toEqual(['codex:rollout-1.jsonl'])
+    // The read path intentionally remains available for a previously granted ref.
+    ctx.references.grant('task-existing', CLAUDE_REF)
+    await expect(ctx.references.read(CLAUDE_REF, WINDOW)).resolves.toMatchObject({ ref: CLAUDE_REF })
+    await dispose()
+  })
   it('lists transcripts from every configured root', async () => {
     const { ctx, dispose } = await mount()
     const found = await ctx.references.list('', 10)

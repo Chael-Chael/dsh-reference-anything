@@ -4,6 +4,7 @@ import { OpenCliError, type OpenCliRunner } from '../src/opencli.ts'
 import { ConversationStore, type ProviderConversationRow, type ProviderTurnRow } from '../src/store/store.ts'
 import type { ChatProvider, referenceAnythingDomainSpec, SettingsRecord } from '../src/store/spec.ts'
 import { ConversationSyncManager } from '../src/sync/index.ts'
+import { ALL_LOCAL_AGENTS } from '../src/wire.ts'
 
 /** In-memory table that also counts writes, which is what the throttling tests assert on. */
 class Table<V> implements KvTable<string, V> {
@@ -21,7 +22,7 @@ class Table<V> implements KvTable<string, V> {
 function store(overrides: Partial<SettingsRecord> = {}) {
   const tables = new Map<string, Table<never>>()
   let settings: SettingsRecord = {
-    opencliPath: 'opencli', profile: '', detailConcurrency: 8, autoSync: false, syncOnStartup: false, autoSyncMinutes: 60, historyMode: 'offline-mirror', enabledProviders: ['chatgpt', 'claude', 'gemini', 'deepseek', 'grok', 'kimi'], maxReadTurns: 10, ...overrides,
+    opencliPath: 'opencli', profile: '', detailConcurrency: 8, autoSync: false, syncOnStartup: false, autoSyncMinutes: 60, historyMode: 'offline-mirror', enabledProviders: ['chatgpt', 'claude', 'gemini', 'deepseek', 'grok', 'kimi'], enabledAgents: [...ALL_LOCAL_AGENTS], maxReadTurns: 10, ...overrides,
     inputRenderMode: overrides.inputRenderMode ?? 'pill',
   }
   const domain = {

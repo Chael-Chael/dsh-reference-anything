@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest'
 import { defaultPickerSettings, samePickerSettings, settingsRecordSchema } from '../src/wire.ts'
 import { OPENCLI_EXTENSION_STORE_URL, runSetupSequence, setupReady } from '../src/client/health.ts'
 import type { Health } from '../src/client/remote.ts'
+import { AGENT_KINDS } from '../src/sources/local-agent/registry.ts'
+import { ALL_LOCAL_AGENTS } from '../src/wire.ts'
 
 const healthy: Health = {
   version: '1.8.6', daemon: 'Daemon: running (PID 1)', pluginInstalled: true,
@@ -10,6 +12,9 @@ const healthy: Health = {
 }
 
 describe('settings source registration guard', () => {
+  it('keeps the durable local-agent enum identical to the runtime registry', () => {
+    expect(ALL_LOCAL_AGENTS).toEqual(AGENT_KINDS)
+  })
   it('defaults every @ source to six visible items', () => {
     const picker = defaultPickerSettings()
     // Keyed rather than positional so adding a group does not require editing a
@@ -31,6 +36,7 @@ describe('settings source registration guard', () => {
     expect(value).toMatchObject({ syncOnStartup: false, maxReadTurns: 10, inputRenderMode: 'pill' })
     expect(value.referenceUiMode).toBeUndefined()
     expect(value.enabledProviders).toEqual(['chatgpt', 'claude', 'gemini', 'deepseek', 'grok', 'kimi'])
+    expect(value.enabledAgents).toEqual(['claude-code', 'codex', 'cursor', 'qoder', 'reasonix', 'openclaw', 'kimi', 'grokbuild', 'hermes', 'gemini-cli', 'pi', 'opencode', 'mimocode', 'zcode'])
   })
   it('fills in a picker key that arrived after the record was written', () => {
     // `settingsRecordSchema` is the durable read boundary for the domain global,

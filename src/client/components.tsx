@@ -1,9 +1,9 @@
 import type { InjectFace, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import type { ObservableSnapshot } from '@deepseek-ai/dsh-client-runtime/client'
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react'
-import { defaultPickerSettings, type ChatProvider, type PickerSettings, type PickerSource, type SettingsRecord } from '../wire.ts'
+import { ALL_LOCAL_AGENTS, LOCAL_AGENT_LABEL, defaultPickerSettings, type ChatProvider, type LocalAgent, type PickerSettings, type PickerSource, type SettingsRecord } from '../wire.ts'
 import { syncProgressFraction, type BrowsePage, type BrowserProfile, type Health, type PackageUpdateStatus, type ProviderStats, type StorageStats, type SyncStatus } from './remote.ts'
-import { ProviderLogo } from './provider-icons.tsx'
+import { AgentLogo, ProviderLogo } from './provider-icons.tsx'
 import { type REFERENCE_ANYTHING_NS } from './locale.ts'
 import type { TranslateNS } from '@deepseek-ai/dsh-client-locale/client'
 import { OPENCLI_EXTENSION_STORE_URL, openExtensionStore, setupReady, type SetupStage } from './health.ts'
@@ -116,6 +116,7 @@ export function ConversationSettings({ useScope, save, sync, cancel, refresh, qu
   const hasValidAutoSyncMinutes = Number.isInteger(autoSyncMinutesValue) && autoSyncMinutesValue >= 15 && autoSyncMinutesValue <= 1440
   const syncMode = settings.autoSync ? 'interval' : settings.syncOnStartup ? 'startup' : 'manual'
   const enabled = new Set(settings.enabledProviders)
+  const enabledAgents = new Set(settings.enabledAgents)
   const opencliReady = Boolean(state.health?.version && state.health.opencliCompatible)
   const daemonReady = Boolean(state.health?.daemonRunning && !state.health.daemonStale)
   const extensionReady = Boolean(state.health?.extensionConnected && state.health.connectivityOk)
@@ -153,6 +154,10 @@ export function ConversationSettings({ useScope, save, sync, cancel, refresh, qu
   const setProviderEnabled = (provider: ChatProvider, value: boolean) => {
     const next = value ? [...new Set([...settings.enabledProviders, provider])] : settings.enabledProviders.filter(item => item !== provider)
     void save({ ...settings, enabledProviders: next })
+  }
+  const setAgentEnabled = (agent: LocalAgent, value: boolean) => {
+    const next = value ? [...new Set([...settings.enabledAgents, agent])] : settings.enabledAgents.filter(item => item !== agent)
+    void save({ ...settings, enabledAgents: next })
   }
   const savePicker = (next: PickerSettings) => { void save({ ...settings, picker: next }) }
   const patchPicker = (id: PickerSource, patch: Partial<PickerSettings[PickerSource]>) => {
@@ -231,6 +236,9 @@ export function ConversationSettings({ useScope, save, sync, cancel, refresh, qu
       </section>
       <div className="dsh_ref_chat_divider" />
       <div className="dsh_ref_provider_grid">{PROVIDERS.map((provider, index) => <ProviderCard key={provider} provider={provider} index={index} stats={state.stats?.find(row => row.provider === provider)} busy={state.sync?.status === 'running'} autoSync={settings.autoSync} enabled={enabled.has(provider)} onEnabled={value => { setProviderEnabled(provider, value) }} onSync={(mode) => { void sync([provider], mode) }} onClear={() => { if (window.confirm(t('storage.clearProviderConfirm', { provider: PROVIDER_LABEL[provider] }))) void clearProvider(provider) }} t={t} />)}</div>
+      <div className="dsh_ref_chat_divider" />
+      <div className="dsh_ref_section_head dsh_ref_agent_heading"><div><h3>{t('settings.localAgents')}</h3><p>{t('settings.localAgentsDetail')}</p></div></div>
+      <div className="dsh_ref_provider_grid dsh_ref_agent_grid">{ALL_LOCAL_AGENTS.map((agent, index) => <AgentCard key={agent} agent={agent} index={index} enabled={enabledAgents.has(agent)} onEnabled={value => { setAgentEnabled(agent, value) }} t={t} />)}</div>
       {!state.loading && state.stats?.every(item => item.conversations === 0) && <div className="dsh_ref_empty">{t('settings.empty')}</div>}
       <div className="dsh_ref_chat_divider" />
       <div className="dsh_ref_sync_settings"><div className="dsh_ref_section_head"><div><h3>{t('settings.syncSettings')}</h3><p>{t('settings.syncSettingsDetail')}</p></div></div>
@@ -435,6 +443,10 @@ function ProviderCard({ provider, stats, busy, autoSync, enabled, onEnabled, onS
   const label = PROVIDER_LABEL[provider]
   const date = stats?.lastSyncedAt ? new Date(stats.lastSyncedAt).toLocaleString() : t('provider.neverSynced')
   return <article className={`dsh_ref_provider dsh_ref_provider_${provider}`} style={{ '--dsh-ref-index': index } as CSSProperties}><span className="dsh_ref_provider_mark"><ProviderLogo provider={provider} /></span><div className="dsh_ref_provider_content"><div className="dsh_ref_provider_summary"><h4>{label}</h4><strong>{stats?.conversations ?? 0}<span>{t('provider.localConversations')}</span></strong><small>{t('provider.lastUpdated', { date })}</small></div><div className="dsh_ref_provider_controls"><label className="dsh_ref_toggle"><input type="checkbox" checked={enabled} onChange={event => { onEnabled(event.target.checked) }} /><span/><b>{t('provider.enabled')}</b></label><div className="dsh_ref_provider_actions"><button type="button" disabled={busy} onClick={() => { onSync('incremental') }}>{t('provider.syncNow')}</button><button type="button" disabled={busy} onClick={() => { if (window.confirm(t('provider.fullConfirm', { provider: label }))) onSync('full') }}>{t('provider.fullResync')}</button><button className="is_danger" type="button" disabled={busy || !stats?.conversations} onClick={onClear}>{t('storage.clearProvider')}</button></div></div>{stats?.error && <em className="dsh_ref_provider_error">{stats.error}</em>}</div></article>
+}
+
+function AgentCard({ agent, enabled, onEnabled, index, t }: { agent: LocalAgent; enabled: boolean; onEnabled(value: boolean): void; index: number; t: T }) {
+  return <article className="dsh_ref_provider dsh_ref_agent_provider" data-local-agent={agent} style={{ '--dsh-ref-index': index } as CSSProperties}><span className="dsh_ref_provider_mark"><AgentLogo /></span><div className="dsh_ref_provider_content"><div className="dsh_ref_provider_summary"><h4>{LOCAL_AGENT_LABEL[agent]}</h4><small>{t('settings.localAgentOnDisk')}</small></div><div className="dsh_ref_provider_controls"><label className="dsh_ref_toggle"><input type="checkbox" checked={enabled} onChange={event => { onEnabled(event.target.checked) }} /><span/><b>{t('provider.enabled')}</b></label></div></div></article>
 }
 
 function formatBytes(bytes: number): string {

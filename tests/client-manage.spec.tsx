@@ -5,13 +5,13 @@ import { createRoot, type Root } from 'react-dom/client'
 import { ConversationSettings, ManageConversations, PAGE_SIZE, type BrowseState, type SettingsSnapshot } from '../src/client/components.tsx'
 import type { Health, ManagedConversation } from '../src/client/remote.ts'
 import { en } from '../src/client/locale.ts'
-import { defaultPickerSettings, type SettingsRecord } from '../src/wire.ts'
+import { ALL_LOCAL_AGENTS, defaultPickerSettings, type SettingsRecord } from '../src/wire.ts'
 
 // React only flushes effects synchronously inside act() when it is told it is
 // in a test environment; without this every act() call warns and defers.
 ;(globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
-const settings = { opencliPath: 'opencli', profile: '', detailConcurrency: 8, autoSync: false, syncOnStartup: false, autoSyncMinutes: 60, historyMode: 'metadata-only' as const, enabledProviders: ['chatgpt', 'claude', 'gemini', 'deepseek', 'grok', 'kimi'] as Array<'chatgpt' | 'claude' | 'gemini' | 'deepseek' | 'grok' | 'kimi'>, maxReadTurns: 10, inputRenderMode: 'pill' as const }
+const settings = { opencliPath: 'opencli', profile: '', detailConcurrency: 8, autoSync: false, syncOnStartup: false, autoSyncMinutes: 60, historyMode: 'metadata-only' as const, enabledProviders: ['chatgpt', 'claude', 'gemini', 'deepseek', 'grok', 'kimi'] as Array<'chatgpt' | 'claude' | 'gemini' | 'deepseek' | 'grok' | 'kimi'>, enabledAgents: [...ALL_LOCAL_AGENTS], maxReadTurns: 10, inputRenderMode: 'pill' as const }
 const t = ((key: keyof typeof en, values?: Record<string, string | number>) => Object.entries(values ?? {}).reduce((text, [name, value]) => text.replace(`{${name}}`, String(value)), en[key])) as never
 
 function conversation(overrides: Partial<ManagedConversation> = {}): ManagedConversation {
@@ -48,6 +48,7 @@ afterEach(() => {
 })
 
 function renderSettings(current: SettingsSnapshot, actions: {
+  save?: (value: SettingsRecord) => Promise<void>
   setupAll?: (opened: boolean) => Promise<void>; discoverOpenCli?: () => Promise<void>; installOpenCli?: () => Promise<void>
   useProfile?: (profile: string) => Promise<void>; install?: () => Promise<void>; refresh?: () => Promise<void>
   checkUpdate?: () => Promise<void>; installUpdate?: () => Promise<void>
@@ -57,11 +58,24 @@ function renderSettings(current: SettingsSnapshot, actions: {
   const noop = async () => {}
   const useScope = ((selector: (value: SettingsSnapshot) => unknown) => selector(current)) as never
   return render(<ConversationSettings close={() => {}} useSessions={(() => []) as never} useWorkspaces={(() => []) as never}
-    useScope={useScope} save={noop} sync={noop} cancel={noop} refresh={actions.refresh ?? noop} quickRefreshOnOpen={actions.quickRefreshOnOpen ?? noop}
+    useScope={useScope} save={actions.save ?? noop} sync={noop} cancel={noop} refresh={actions.refresh ?? noop} quickRefreshOnOpen={actions.quickRefreshOnOpen ?? noop}
     setupAll={actions.setupAll ?? noop} discoverOpenCli={actions.discoverOpenCli ?? noop} installOpenCli={actions.installOpenCli ?? noop}
     useProfile={actions.useProfile ?? noop} install={actions.install ?? noop} restartDaemon={noop} checkUpdate={actions.checkUpdate ?? noop} installUpdate={actions.installUpdate ?? noop} switchReferenceUiMode={actions.switchReferenceUiMode ?? noop} browse={noop} deleteConversation={noop}
     clearProvider={noop} clearOlder={noop} refreshStats={noop} t={t} />)
 }
+
+describe('local agent settings', () => {
+  it('renders all 14 agents beside provider settings and saves an individual toggle', async () => {
+    const save = vi.fn(async (_value: SettingsRecord) => {})
+    const el = renderSettings({ settings }, { save })
+    const cards = el.querySelectorAll('[data-local-agent]')
+    expect(cards).toHaveLength(14)
+    expect(Array.from(cards).map(card => card.getAttribute('data-local-agent'))).toContain('codex')
+    const codex = el.querySelector('[data-local-agent="codex"] input') as HTMLInputElement
+    await act(async () => { codex.click() })
+    expect(save).toHaveBeenCalledWith(expect.objectContaining({ enabledAgents: expect.not.arrayContaining(['codex']) }))
+  })
+})
 
 describe('settings update bar', () => {
   const currentUpdate = { currentVersion: '0.2.1', latestVersion: '0.2.1', updateAvailable: false, checkedAt: Date.now() }

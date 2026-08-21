@@ -4,7 +4,7 @@ import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
 import type {} from '@deepseek-ai/dsh-client-locale/client'
 import { createSnapshotStore, type ClientContext, type ISessions } from '@deepseek-ai/dsh-client-runtime/client'
 import type { InputTriggerServiceContract } from '@deepseek-ai/dsh-client-ui-input-trigger/client'
-import { ALL_PROVIDERS, defaultPickerSettings, samePickerSettings, type ChatProvider, type PickerSettings, type ReferenceUiMode, type SettingsRecord } from '../wire.ts'
+import { ALL_LOCAL_AGENTS, ALL_PROVIDERS, defaultPickerSettings, samePickerSettings, type ChatProvider, type PickerSettings, type ReferenceUiMode, type SettingsRecord } from '../wire.ts'
 import { REFERENCE_ANYTHING_REMOTE, type AgentCandidate, type ReferenceAnythingRemoteFace, type SearchResult, type SyncStatus } from './remote.ts'
 import { createCommandSource, createConversationSource, createFileSource, createLocalAgentSource, createSearchDebounce, createSessionSource, createSkillSource, type RefreshablePickerSource } from './source.ts'
 import { ConversationSettings, PAGE_SIZE, type SettingsSnapshot } from './components.tsx'
@@ -31,7 +31,7 @@ export function apply(ctx: ClientContext): void {
   ctx.effect(() => adoptReferenceIconProjection(), 'reference-anything.client.icon-projection')
   let remote: ReferenceAnythingRemoteFace | undefined
   const scope = createSnapshotStore<SettingsSnapshot>({
-    settings: { opencliPath: 'opencli', profile: '', detailConcurrency: 8, autoSync: false, syncOnStartup: false, autoSyncMinutes: 60, historyMode: 'metadata-only', enabledProviders: [...ALL_PROVIDERS], maxReadTurns: 10, inputRenderMode: 'pill' }, loading: true,
+    settings: { opencliPath: 'opencli', profile: '', detailConcurrency: 8, autoSync: false, syncOnStartup: false, autoSyncMinutes: 60, historyMode: 'metadata-only', enabledProviders: [...ALL_PROVIDERS], enabledAgents: [...ALL_LOCAL_AGENTS], maxReadTurns: 10, inputRenderMode: 'pill' }, loading: true,
   })
   let currentJob = ''
   let lastSyncFinishedAt: string | undefined
@@ -246,7 +246,9 @@ export function apply(ctx: ClientContext): void {
       agentSearch.run(query, signal, async () => {
         // Re-read after the debounce, as the conversation source does above.
         if (!remote) return []
-        return unwrap(await remote.agentSearch(sessionId, { query, limit }, signal))
+        const rows = unwrap(await remote.agentSearch(sessionId, { query, limit }, signal))
+        const enabledKinds = new Set(scope.getSnapshot().settings.enabledAgents)
+        return rows.filter(row => enabledKinds.has(row.kind as typeof ALL_LOCAL_AGENTS[number]))
       }), t, optionsFor('agents'))))
     return disposers
   }

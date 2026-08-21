@@ -391,7 +391,11 @@ export function createLocalAgentSource(
         const title = row.label.trim() || 'Untitled'
         // Same separator rule as web chats: a spaced `@Codex · Title` is
         // otherwise re-projected by the user-bubble renderer as a native pill.
-        const label = (row.provider ? `${row.provider}·${title}` : title).replace(/[\[\]]/gu, '')
+        // Kimi also names a Web provider. Give its local CLI transcript a
+        // distinct chip label so DOM projection remains source-safe even on a
+        // Host build that does not expose the insertion source as a data attr.
+        const chipProvider = row.provider === 'Kimi' ? 'Kimi CLI' : row.provider
+        const label = (chipProvider ? `${chipProvider}·${title}` : title).replace(/[\[\]]/gu, '')
         return {
           name: title,
           description: describeAgentRow(row, t),

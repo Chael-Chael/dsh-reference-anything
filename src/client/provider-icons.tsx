@@ -146,3 +146,10 @@ export const PICKER_ICON_STROKE_WIDTH = 2
 export function ProviderLogo({ provider, size = 22 }: { provider: ChatProvider; size?: number }) {
   return <svg fill="currentColor" fillRule="evenodd" width={size} height={size} viewBox="0 0 24 24" aria-hidden><path d={PROVIDER_ICON_PATH[provider]} /></svg>
 }
+
+export function AgentLogo({ size = 22 }: { size?: number }) {
+  return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={PICKER_ICON_STROKE_WIDTH} strokeLinecap="round" strokeLinejoin="round" aria-hidden>{PICKER_ICON_NODES.agent.map((node, index) => {
+    const Tag = node.tag
+    return <Tag key={index} {...node.attrs} />
+  })}</svg>
+}

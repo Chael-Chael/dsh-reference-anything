@@ -29,6 +29,7 @@ export class ReferenceAnythingRemote extends TypertRemoteService {
     const rows = await agents.listForWorkspace(input.query, input.limit, agent.session.header.cwd ?? process.cwd(), signal)
     return rows.map(row => ({
       id: row.ref.id,
+      kind: row.ref.id.slice(0, row.ref.id.indexOf(':')),
       label: row.label,
       provider: row.provider ?? '',
       ...row.updatedAt === undefined ? {} : { updatedAt: row.updatedAt },
