@@ -106,6 +106,9 @@ For development, the repository can still be installed from a local path:
 dsh plugin --profile web add .
 ```
 
+> [!NOTE]
+> To restore DSH's original `@` menu appearance, simply uninstall this plugin.
+
 After installing the DSH plugin, open `Settings → Reference Anything → Availability check` in DSH Web (restart DSH first if this settings entry is not yet visible), then click **One-click setup**. It discovers OpenCLI; installs or upgrades it globally through npm when it is missing or older than `1.8.6`; installs the bundled adapters for all six platforms; starts or refreshes Browser Bridge; and opens the OpenCLI Browser Bridge page in the [Chrome Web Store](https://chromewebstore.google.com/detail/opencli/ildkmabpimmkaediidaifkhjpohdnifk). Confirm the extension installation, then return and click **Recheck setup**. Any remaining failed check displays its own recovery action.
 
 You can also install OpenCLI and the conversation adapter manually, then start Browser Bridge:

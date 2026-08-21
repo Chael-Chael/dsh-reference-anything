@@ -107,6 +107,9 @@ dsh plugin --profile web add dsh-reference-anything
 dsh plugin --profile web add .
 ```
 
+> [!NOTE]
+> 如需恢复 DSH 原有的 `@` 菜单样式，卸载本插件即可。
+
 安装 DSH 插件后，打开 DSH Web 的 `Settings → Reference Anything → 可用性检查`（如果尚未出现该设置项，请先重启 DSH），点击**「一键安装」**：它会自动查找 OpenCLI；若未找到 OpenCLI 或版本低于 `1.8.6`，则通过 npm 全局安装或升级；随后安装插件包内附带的六个平台适配器，启动或刷新 Browser Bridge，并打开 OpenCLI Browser Bridge 扩展的 [Chrome Web Store 安装页](https://chromewebstore.google.com/detail/opencli/ildkmabpimmkaediidaifkhjpohdnifk)。在商店页确认安装后，回到设置页点击「重新检查」；每个仍未通过的检查项旁都会显示对应的恢复操作。
 
 也可以手动安装 OpenCLI 和对话适配器，并启动 Browser Bridge：
