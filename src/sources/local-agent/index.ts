@@ -764,7 +764,9 @@ function labelFor(descriptor: TranscriptDescriptor, bookmark: AgentBookmark | un
 function inWorkspace(cwd: string, workspace: string): boolean {
   if (cwd === '') return false
   const normalized = resolve(cwd)
-  return normalized === workspace || normalized.startsWith(workspace.endsWith(sep) ? workspace : `${workspace}${sep}`)
+  const normalizedWorkspace = resolve(workspace)
+  return normalized === normalizedWorkspace
+    || normalized.startsWith(normalizedWorkspace.endsWith(sep) ? normalizedWorkspace : `${normalizedWorkspace}${sep}`)
 }
 
 /** The schema's own defaults, as a plain object. */

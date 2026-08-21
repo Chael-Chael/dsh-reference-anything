@@ -1,3 +1,4 @@
+import { isAbsolute, join, normalize } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { claudeCodeAdapter } from '../src/sources/local-agent/adapters/claude-code.ts'
 import { codexAdapter } from '../src/sources/local-agent/adapters/codex.ts'
@@ -809,7 +810,7 @@ describe('registry', () => {
     for (const adapter of AGENT_ADAPTERS) {
       expect(adapter.displayName).not.toBe('')
       expect(adapter.defaultRoots('/home/u').length).toBeGreaterThan(0)
-      for (const root of adapter.defaultRoots('/home/u')) expect(root.startsWith('/home/u')).toBe(true)
+      for (const root of adapter.defaultRoots('/home/u')) expect(isAbsolute(root)).toBe(true)
     }
   })
 
@@ -829,16 +830,16 @@ describe('registry', () => {
   })
 
   it('expands a portable root and refuses one that has no fixed meaning', () => {
-    expect(expandRoot('~/.codex/sessions', '/home/u')).toBe('/home/u/.codex/sessions')
+    expect(expandRoot('~/.codex/sessions', '/home/u')).toBe(normalize(join('/home/u', '.codex/sessions')))
     expect(expandRoot('~', '/home/u')).toBe('/home/u')
-    expect(expandRoot('/srv/logs', '/home/u')).toBe('/srv/logs')
+    expect(expandRoot('/srv/logs', '/home/u')).toBe(normalize('/srv/logs'))
     expect(expandRoot('relative/path', '/home/u')).toBeUndefined()
     expect(expandRoot('   ', '/home/u')).toBeUndefined()
   })
 
   it('claims its own default roots and only jsonl files', () => {
-    expect(claudeCodeAdapter.defaultRoots('/home/u')).toEqual(['/home/u/.claude/projects'])
-    expect(codexAdapter.defaultRoots('/home/u')).toEqual(['/home/u/.codex/sessions'])
+    expect(claudeCodeAdapter.defaultRoots('/home/u')).toEqual([join('/home/u', '.claude', 'projects')])
+    expect(codexAdapter.defaultRoots('/home/u')).toEqual([join('/home/u', '.codex', 'sessions')])
     expect(claudeCodeAdapter.matches('a/b.jsonl')).toBe(true)
     expect(claudeCodeAdapter.matches('a/b.json')).toBe(false)
   })
