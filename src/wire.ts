@@ -5,7 +5,7 @@ export const providerSchema = z.enum(['chatgpt', 'claude', 'gemini', 'deepseek',
 export type ChatProvider = z.infer<typeof providerSchema>
 export const ALL_PROVIDERS: readonly ChatProvider[] = providerSchema.options
 
-export const pickerSourceSchema = z.enum(['commands', 'skills', 'files', 'sessions', 'agents', 'conversations'])
+export const pickerSourceSchema = z.enum(['commands', 'skills', 'files', 'sessions', 'agents', 'conversations', 'drives'])
 export type PickerSource = z.infer<typeof pickerSourceSchema>
 
 const pickerSourceSettingsSchema = z.object({
@@ -29,6 +29,8 @@ export const pickerSettingsSchema = z.object({
   // Any key added here from now on needs the same treatment.
   agents: pickerSourceSettingsSchema.default({ enabled: true, order: 25, limit: 6, maxCandidates: 50 }),
   conversations: pickerSourceSettingsSchema,
+  // Defaulted for the same reason as `agents` above: it arrived later still.
+  drives: pickerSourceSettingsSchema.default({ enabled: true, order: 35, limit: 6, maxCandidates: 50 }),
 })
 export type PickerSettings = z.infer<typeof pickerSettingsSchema>
 export type PickerDisplayMode = PickerSettings['displayMode']
@@ -47,6 +49,7 @@ export function defaultPickerSettings(): PickerSettings {
     sessions: { enabled: true, order: 20, limit: 6, maxCandidates: 50 },
     agents: { enabled: true, order: 25, limit: 6, maxCandidates: 50 },
     conversations: { enabled: true, order: 30, limit: 6, maxCandidates: 50 },
+    drives: { enabled: true, order: 35, limit: 6, maxCandidates: 50 },
   }
 }
 

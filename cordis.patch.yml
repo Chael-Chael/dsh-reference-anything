@@ -60,6 +60,31 @@
         roots: ['references']
         extensions: ['.json']
 
+    # Text files in the user's own cloud drives, listed by name and read a
+    # window at a time. Reading one needs a per-task grant: these are personal
+    # remote files, so the model may only open what its user named. Inert
+    # without a credential — a drive that has never been logged into simply
+    # reports unavailable, so the default is safe.
+    - id: reference-cloud-drive
+      name: 'dsh-reference-anything/cloud-drive'
+      config:
+        # Only 百度网盘 has a transport today. 'pds' is reserved in the
+        # vocabulary so adding it later changes no reference and no setting,
+        # but configuring it now is a startup error rather than a silent
+        # empty group.
+        drives: ['baidu']
+        # Baidu confines an app to /apps/bdpan/; leave this empty to use that
+        # sandbox root, or name a subdirectory of it to narrow the listing.
+        root: ''
+        listTtlMs: 30000
+        # 64 KiB at 4000 characters a block is at most 17 blocks, which fits
+        # inside maxReadTurns — so an ordinary text file is returned whole,
+        # from its beginning. Raising this buys reach at the cost of a first
+        # page that lands at the end of the file.
+        maxReadBytes: 65536
+        maxReadTurns: 20
+        blockChars: 4000
+
     # Transcripts other coding agents leave on disk, listed by title and read a
     # window at a time. Reading one needs a per-task grant: these are other
     # sessions' conversations, so the model may only open what its user named.

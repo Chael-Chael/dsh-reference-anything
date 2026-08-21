@@ -1,13 +1,14 @@
 import { describe, expect, it, vi } from 'vitest'
 import {
-  AGENT_SOURCE, CONVERSATION_SOURCE, agentReferenceUri, conversationReferenceUri, createCommandSource,
-  createConversationSource, createFileSource, createLocalAgentSource, createSearchDebounce, createSessionSource, createSkillSource,
+  AGENT_SOURCE, CONVERSATION_SOURCE, DRIVE_SOURCE, agentReferenceUri, conversationReferenceUri, createCloudDriveSource,
+  createCommandSource, createConversationSource, createFileSource, createLocalAgentSource, createSearchDebounce,
+  createSessionSource, createSkillSource, driveReferenceUri,
   describeRow, disambiguate, parseQuery, scopedQuery, workspaceIconKind,
   type PickerSourceOptions,
 } from '../src/client/source.ts'
-import { AGENT_ICON_MARKER, PICKER_ICON_MARKER } from '../src/client/provider-icons.tsx'
+import { AGENT_ICON_MARKER, DRIVE_ICON_MARKER, PICKER_ICON_MARKER } from '../src/client/provider-icons.tsx'
 import type { PickerMenuUpdate } from '../src/client/menu-update.ts'
-import type { AgentCandidate, SearchResult } from '../src/client/remote.ts'
+import type { AgentCandidate, DriveCandidate, SearchResult } from '../src/client/remote.ts'
 import { REFERENCE_ANYTHING_INVOCATIONS } from '../src/contract.ts'
 import { decodeReferenceUri } from '../src/uri.ts'
 
@@ -323,6 +324,90 @@ describe('local agent conversations', () => {
     const source = createLocalAgentSource(async () => [agentRow()], undefined, options({ order: 25 }))
     await expect(source.candidates(session, request('files:index'))).resolves.toEqual([])
     await expect(source.candidates(session, request('path with', true))).resolves.toEqual([])
+  })
+})
+
+describe('cloud drive files', () => {
+  const driveRow = (over: Partial<DriveCandidate> = {}): DriveCandidate => ({
+    id: 'baidu:412093', label: 'quarterly-notes.md',
+    provider: '百度网盘', origin: '/apps/bdpan/notes', ...over,
+  })
+
+  it('uses the canonical opaque dsh-ref URI, so the host dispatches to the cloud-drive source', () => {
+    const uri = driveReferenceUri('baidu:412093')
+    expect(uri).toMatch(/^dsh-ref:[A-Za-z0-9_-]+$/)
+    expect(decodeReferenceUri(uri)).toEqual({ source: 'cloud-drive', id: 'baidu:412093' })
+  })
+
+  it('answers to drive words in both scripts without taking a prefix another group already owns', () => {
+    for (const prefix of ['drive', 'drives', 'cloud', 'netdisk', 'baidu', 'bdpan', 'pds', 'aliyun']) {
+      expect(scopedQuery(`${prefix}:notes`, 'drives')).toBe('notes')
+      expect(scopedQuery(`${prefix}:notes`, 'files')).toBeUndefined()
+    }
+    // `scopedQuery`'s prefix pattern is ASCII, so the CJK spellings only ever
+    // reach the map through its bare-word branch — which is why they carry no
+    // colon here.
+    for (const word of ['网盘', '百度', '百度网盘', '阿里', '阿里云盘']) {
+      expect(scopedQuery(word, 'drives')).toBe('')
+      expect(scopedQuery(word, 'files')).toBeUndefined()
+    }
+    // `file`/`files` stayed with the workspace, which is why a drive needed
+    // words of its own.
+    expect(scopedQuery('files:notes', 'drives')).toBeUndefined()
+  })
+
+  it('names the holding drive and its path, and numbers files that share a name', async () => {
+    const source = createCloudDriveSource(async () => [
+      driveRow(),
+      driveRow({ id: 'baidu:412094', origin: '/apps/bdpan/archive' }),
+      driveRow({ id: 'pds:99', label: '', provider: '', origin: undefined }),
+    ], undefined, options({ order: 35 }))
+    const candidates = await source.candidates(session, request('drives'))
+    expect(source.name).toBe(DRIVE_SOURCE)
+    expect(candidates.map(row => row.name)).toEqual(['quarterly-notes.md', 'quarterly-notes.md (2)', 'Untitled'])
+    expect(candidates[0]?.icon).toBe(DRIVE_ICON_MARKER)
+    expect(candidates[0]?.description).toBe('百度网盘 · /apps/bdpan/notes')
+    // Neither the drive nor the folder is known for this one; the group's own
+    // name is the honest fallback.
+    expect(candidates[2]?.description).toBe('Cloud drive files')
+  })
+
+  it('inserts a file chip while serializing the canonical mention on send', async () => {
+    const row = driveRow()
+    const source = createCloudDriveSource(async () => [row], undefined, options({ order: 35 }))
+    const candidate = (await source.candidates(session, request()))[0]!
+    const outcome = source.onPick(pick(candidate))
+    if (outcome === undefined || outcome === 'handled' || !('insert' in outcome)) throw new Error('expected insert')
+    expect(outcome.insert).toMatchObject({
+      source: DRIVE_SOURCE, label: '百度网盘·quarterly-notes.md', appearance: 'file',
+    })
+    expect(outcome.insert.label).not.toContain(DRIVE_ICON_MARKER)
+    const mention = `@[百度网盘·quarterly-notes.md](${driveReferenceUri(row.id)})`
+    await expect(source.codec?.serialize(outcome.insert.ref, new AbortController().signal)).resolves.toBe(mention)
+    expect(source.codec?.clipboardText(outcome.insert.ref)).toBe(mention)
+    // The ref the chip carries is the plugin's own, never the drive's path —
+    // and never anything the account signed.
+    expect(outcome.insert.ref).not.toContain('/apps/bdpan')
+  })
+
+  it('escapes a filename that would otherwise break out of the mention it is written into', async () => {
+    const row = driveRow({ label: 'why ](evil).md', provider: '' })
+    const source = createCloudDriveSource(async () => [row], undefined, options({ order: 35 }))
+    const candidate = (await source.candidates(session, request()))[0]!
+    const outcome = source.onPick(pick(candidate))
+    if (outcome === undefined || outcome === 'handled' || !('insert' in outcome)) throw new Error('expected insert')
+    await expect(source.codec?.serialize(outcome.insert.ref, new AbortController().signal))
+      .resolves.toBe(`@[why (evil).md](${driveReferenceUri(row.id)})`)
+  })
+
+  it('stays out of a query scoped to another group and out of an open quoted file token', async () => {
+    const search = vi.fn(async () => [driveRow()])
+    const source = createCloudDriveSource(search, undefined, options({ order: 35 }))
+    await expect(source.candidates(session, request('agents:probe'))).resolves.toEqual([])
+    // A quoted token is a workspace path completion, and a remote file is not
+    // on this filesystem — so this group asks the host nothing at all.
+    await expect(source.candidates(session, request('path with', true))).resolves.toEqual([])
+    expect(search).not.toHaveBeenCalled()
   })
 })
 

@@ -32,19 +32,33 @@ describe('settings source registration guard', () => {
     expect(value.referenceUiMode).toBeUndefined()
     expect(value.enabledProviders).toEqual(['chatgpt', 'claude', 'gemini', 'deepseek', 'grok', 'kimi'])
   })
-  it('fills in a picker key that arrived after the record was written', () => {
-    // `settingsRecordSchema` is the durable read boundary for the domain global,
-    // so a missing key does not degrade one group — it rejects the whole medium
-    // and takes every other setting with it. Any @ group added from now on needs
-    // the same `.default()` and belongs in this list.
+  // `settingsRecordSchema` is the durable read boundary for the domain global,
+  // so a missing key does not degrade one group — it rejects the whole medium
+  // and takes every other setting with it. Any @ group added from now on needs
+  // the same `.default()` and belongs in this list.
+  it.each([
+    ['agents', { enabled: true, order: 25, limit: 6, maxCandidates: 50 }],
+    ['drives', { enabled: true, order: 35, limit: 6, maxCandidates: 50 }],
+  ] as const)('fills in the %s picker key when it arrived after the record was written', (key, expected) => {
     const saved = defaultPickerSettings() as Record<string, unknown>
-    delete saved['agents']
+    delete saved[key]
     const value = settingsRecordSchema.parse({
       opencliPath: 'opencli', profile: '', detailConcurrency: 2, autoSync: false,
       autoSyncMinutes: 60, historyMode: 'metadata-only', picker: saved,
     })
-    expect(value.picker?.agents).toEqual({ enabled: true, order: 25, limit: 6, maxCandidates: 50 })
+    expect(value.picker?.[key]).toEqual(expected)
     expect(value.picker?.conversations).toEqual(defaultPickerSettings().conversations)
+  })
+
+  it('rejects nothing when both late keys are missing at once, which is what an rc.7 record looks like', () => {
+    const saved = defaultPickerSettings() as Record<string, unknown>
+    delete saved['agents']
+    delete saved['drives']
+    const value = settingsRecordSchema.parse({
+      opencliPath: 'opencli', profile: '', detailConcurrency: 2, autoSync: false,
+      autoSyncMinutes: 60, historyMode: 'metadata-only', picker: saved,
+    })
+    expect(value.picker).toEqual(defaultPickerSettings())
   })
 
   it('treats an unchanged picker returned by an unrelated settings save as equal', () => {

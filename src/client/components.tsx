@@ -59,9 +59,10 @@ const PICKER_SOURCES: ReadonlyArray<{ id: PickerSource; label: keyof typeof SOUR
   { id: 'files', label: 'files' },
   { id: 'sessions', label: 'sessions' },
   { id: 'agents', label: 'agents' },
+  { id: 'drives', label: 'drives' },
   { id: 'conversations', label: 'conversations' },
 ]
-const SOURCE_KEYS = { commands: 'source.commands', skills: 'source.skills', files: 'source.files', sessions: 'source.sessions', agents: 'source.agents', conversations: 'source.conversations' } as const
+const SOURCE_KEYS = { commands: 'source.commands', skills: 'source.skills', files: 'source.files', sessions: 'source.sessions', agents: 'source.agents', conversations: 'source.conversations', drives: 'source.drives' } as const
 const REFERENCE_ANYTHING_LOGO = '__REFERENCE_ANYTHING_LOGO_DATA_URI__'
 const GITHUB_REPOSITORY_URL = 'https://github.com/Chael-Chael/dsh-reference-anything'
 export function ConversationSettings({ useScope, save, sync, cancel, refresh, quickRefreshOnOpen, setupAll, discoverOpenCli, installOpenCli, useProfile, install, restartDaemon, checkUpdate, installUpdate, switchReferenceUiMode, browse, deleteConversation, clearProvider, clearOlder, clearRemoteMissing, clearOldAccounts, refreshStats, t }: SettingsProps) {
@@ -83,8 +84,8 @@ export function ConversationSettings({ useScope, save, sync, cancel, refresh, qu
   const [pickerMaxCandidates, setPickerMaxCandidates] = useState<Record<PickerSource, string>>(() => pickerMaxCandidateDrafts(picker))
   const automaticQuickRefresh = useRef(quickRefreshOnOpen)
   useEffect(() => { setOpencliPath(settings.opencliPath); setProfile(settings.profile); setDetailConcurrency(String(settings.detailConcurrency)); setAutoSyncMinutes(String(settings.autoSyncMinutes)); setMaxReadTurns(String(settings.maxReadTurns)) }, [settings.opencliPath, settings.profile, settings.detailConcurrency, settings.autoSyncMinutes, settings.maxReadTurns])
-  useEffect(() => { setPickerLimits(pickerLimitDrafts(picker)) }, [picker.commands.limit, picker.skills.limit, picker.files.limit, picker.sessions.limit, picker.agents.limit, picker.conversations.limit])
-  useEffect(() => { setPickerMaxCandidates(pickerMaxCandidateDrafts(picker)) }, [picker.commands.maxCandidates, picker.skills.maxCandidates, picker.files.maxCandidates, picker.sessions.maxCandidates, picker.agents.maxCandidates, picker.conversations.maxCandidates])
+  useEffect(() => { setPickerLimits(pickerLimitDrafts(picker)) }, [picker.commands.limit, picker.skills.limit, picker.files.limit, picker.sessions.limit, picker.agents.limit, picker.conversations.limit, picker.drives.limit])
+  useEffect(() => { setPickerMaxCandidates(pickerMaxCandidateDrafts(picker)) }, [picker.commands.maxCandidates, picker.skills.maxCandidates, picker.files.maxCandidates, picker.sessions.maxCandidates, picker.agents.maxCandidates, picker.conversations.maxCandidates, picker.drives.maxCandidates])
   automaticQuickRefresh.current = quickRefreshOnOpen
   useEffect(() => {
     if (!state.loading) void automaticQuickRefresh.current?.()
@@ -386,11 +387,11 @@ function updateDetail(update: PackageUpdateStatus | undefined, t: T): string {
 }
 
 function pickerLimitDrafts(picker: PickerSettings): Record<PickerSource, string> {
-  return { commands: String(picker.commands.limit), skills: String(picker.skills.limit), files: String(picker.files.limit), sessions: String(picker.sessions.limit), agents: String(picker.agents.limit), conversations: String(picker.conversations.limit) }
+  return { commands: String(picker.commands.limit), skills: String(picker.skills.limit), files: String(picker.files.limit), sessions: String(picker.sessions.limit), agents: String(picker.agents.limit), conversations: String(picker.conversations.limit), drives: String(picker.drives.limit) }
 }
 
 function pickerMaxCandidateDrafts(picker: PickerSettings): Record<PickerSource, string> {
-  return { commands: String(picker.commands.maxCandidates), skills: String(picker.skills.maxCandidates), files: String(picker.files.maxCandidates), sessions: String(picker.sessions.maxCandidates), agents: String(picker.agents.maxCandidates), conversations: String(picker.conversations.maxCandidates) }
+  return { commands: String(picker.commands.maxCandidates), skills: String(picker.skills.maxCandidates), files: String(picker.files.maxCandidates), sessions: String(picker.sessions.maxCandidates), agents: String(picker.agents.maxCandidates), conversations: String(picker.conversations.maxCandidates), drives: String(picker.drives.maxCandidates) }
 }
 
 export function validPickerLimit(value: string): boolean {

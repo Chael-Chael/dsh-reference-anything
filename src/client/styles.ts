@@ -176,11 +176,12 @@ export function adoptMenuViewportTracking(): () => void {
  * rendered inside the native @ menu.
  */
 export function adoptMenuGroupTitleProjection(t: TranslateNS<typeof REFERENCE_ANYTHING_NS>): () => void {
-  const keys: Readonly<Record<string, 'source.conversations' | 'source.files' | 'source.sessions' | 'source.agents' | 'source.commands' | 'source.skills'>> = {
+  const keys: Readonly<Record<string, 'source.conversations' | 'source.files' | 'source.sessions' | 'source.agents' | 'source.drives' | 'source.commands' | 'source.skills'>> = {
     'External conversations': 'source.conversations',
     'Files and folders': 'source.files',
     'DSH sessions': 'source.sessions',
     'Local agent conversations': 'source.agents',
+    'Cloud drive files': 'source.drives',
     Commands: 'source.commands',
     Skills: 'source.skills',
   }

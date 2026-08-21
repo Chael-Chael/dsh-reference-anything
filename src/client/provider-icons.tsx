@@ -17,7 +17,7 @@ export const PROVIDER_ICON_MARKER: Readonly<Record<ChatProvider, string>> = {
 }
 
 export type PickerIconKind =
-  | 'command' | 'skill' | 'session' | 'refresh' | 'agent'
+  | 'command' | 'skill' | 'session' | 'refresh' | 'agent' | 'drive'
   | 'folder' | 'file' | 'image' | 'text' | 'code' | 'data'
   | 'archive' | 'spreadsheet' | 'audio' | 'video' | 'presentation' | 'font'
 
@@ -26,12 +26,13 @@ export const PICKER_ICON_MARKER: Readonly<Record<PickerIconKind, string>> = {
   session: '\uE106', skill: '\uE107', command: '\uE108', folder: '\uE109', file: '\uE10A',
   image: '\uE10B', text: '\uE10C', code: '\uE10D', data: '\uE10E', archive: '\uE10F',
   spreadsheet: '\uE110', audio: '\uE111', video: '\uE112', presentation: '\uE113', font: '\uE114',
-  refresh: '\uE115', agent: '\uE116',
+  refresh: '\uE115', agent: '\uE116', drive: '\uE117',
 }
 export const SESSION_ICON_MARKER = PICKER_ICON_MARKER.session
 export const SKILL_ICON_MARKER = PICKER_ICON_MARKER.skill
 export const COMMAND_ICON_MARKER = PICKER_ICON_MARKER.command
 export const AGENT_ICON_MARKER = PICKER_ICON_MARKER.agent
+export const DRIVE_ICON_MARKER = PICKER_ICON_MARKER.drive
 
 type PickerIconNode = Readonly<{
   tag: 'path' | 'rect' | 'circle'
@@ -58,6 +59,9 @@ export const PICKER_ICON_NODES = {
     { tag: 'path', attrs: { d: 'M2 14h2' } }, { tag: 'path', attrs: { d: 'M20 14h2' } },
     { tag: 'path', attrs: { d: 'M15 13v2' } }, { tag: 'path', attrs: { d: 'M9 13v2' } },
   ],
+  // Cloud — a file that lives on someone's drive rather than on this machine,
+  // so neither the workspace File nor the local Bot mark would be honest.
+  drive: [{ tag: 'path', attrs: { d: 'M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z' } }],
   // RefreshCcw
   refresh: [
     { tag: 'path', attrs: { d: 'M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8' } },

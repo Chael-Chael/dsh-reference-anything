@@ -12,6 +12,13 @@ import { providerSchema, referenceUiModeSchema, settingsRecordSchema } from './w
  * leaks.
  */
 export const agentCandidateSchema = z.object({ id: z.string(), label: z.string(), provider: z.string(), updatedAt: z.number().optional() }).readonly()
+// `origin` is the drive's own display path, shown under the candidate. It is
+// never a download URL: those are signed with the account's credential and
+// must not cross this wire.
+export const driveCandidateSchema = z.object({
+  id: z.string(), label: z.string(), provider: z.string(),
+  origin: z.string().optional(), updatedAt: z.number().optional(),
+}).readonly()
 
 /**
  * Binds the calling session to the invocation, so the Host can scope a search
@@ -94,6 +101,9 @@ export const providerSyncStateSchema = z.object({
 
 export const REFERENCE_ANYTHING_INVOCATIONS: readonly InvocationDescriptor[] = [
   descriptor('agentSearch', [agentLookup, { name: 'input', wire: 'input', source: 'json', codec: strict('AgentSearchInput', z.object({ query: z.string(), limit: z.number().int().min(1).max(100) }).readonly()) }], strict('AgentCandidate[]', z.array(agentCandidateSchema)), true),
+  // No session lookup, unlike `agentSearch`: a drive is the same drive from
+  // every workspace, so there is nothing to scope the query to.
+  descriptor('driveSearch', [{ name: 'input', wire: 'input', source: 'json', codec: strict('DriveSearchInput', z.object({ query: z.string(), limit: z.number().int().min(1).max(100) }).readonly()) }], strict('DriveCandidate[]', z.array(driveCandidateSchema)), true),
   descriptor('search', [{ name: 'input', wire: 'input', source: 'json', codec: strict('SearchInput', searchInputSchema) }], strict('SearchResult[]', z.array(searchResultSchema)), true),
   descriptor('health', [], strict('Health', healthSchema), true),
   descriptor('quickHealth', [], strict('Health', healthSchema), true),

@@ -5,8 +5,8 @@ import type {} from '@deepseek-ai/dsh-client-locale/client'
 import { createSnapshotStore, type ClientContext, type ISessions } from '@deepseek-ai/dsh-client-runtime/client'
 import type { InputTriggerServiceContract } from '@deepseek-ai/dsh-client-ui-input-trigger/client'
 import { ALL_PROVIDERS, defaultPickerSettings, samePickerSettings, type ChatProvider, type PickerSettings, type ReferenceUiMode, type SettingsRecord } from '../wire.ts'
-import { REFERENCE_ANYTHING_REMOTE, type AgentCandidate, type ReferenceAnythingRemoteFace, type SearchResult, type SyncStatus } from './remote.ts'
-import { createCommandSource, createConversationSource, createFileSource, createLocalAgentSource, createSearchDebounce, createSessionSource, createSkillSource, type RefreshablePickerSource } from './source.ts'
+import { REFERENCE_ANYTHING_REMOTE, type AgentCandidate, type DriveCandidate, type ReferenceAnythingRemoteFace, type SearchResult, type SyncStatus } from './remote.ts'
+import { createCloudDriveSource, createCommandSource, createConversationSource, createFileSource, createLocalAgentSource, createSearchDebounce, createSessionSource, createSkillSource, type RefreshablePickerSource } from './source.ts'
 import { ConversationSettings, PAGE_SIZE, type SettingsSnapshot } from './components.tsx'
 import {
   adoptMenuGroupTitleProjection, adoptMenuViewportTracking, adoptReferenceIconProjection, adoptStyles,
@@ -109,6 +109,7 @@ export function apply(ctx: ClientContext): void {
   // These defer rapid typing but deliberately retain no prior search rows.
   const conversationSearch = createSearchDebounce<SearchResult>()
   const agentSearch = createSearchDebounce<AgentCandidate>()
+  const driveSearch = createSearchDebounce<DriveCandidate>()
   const refreshStats = async (): Promise<void> => {
     if (!remote) return
     try {
@@ -248,6 +249,12 @@ export function apply(ctx: ClientContext): void {
         if (!remote) return []
         return unwrap(await remote.agentSearch(sessionId, { query, limit }, signal))
       }), t, optionsFor('agents'))))
+    if (picker.drives.enabled) disposers.push(inputTriggers.registerSource(createCloudDriveSource((query, signal, limit) =>
+      driveSearch.run(query, signal, async () => {
+        // Re-read after the debounce, as the two sources above do.
+        if (!remote) return []
+        return unwrap(await remote.driveSearch({ query, limit }, signal))
+      }), t, optionsFor('drives'))))
     return disposers
   }
   const refreshStorage = async (): Promise<void> => {

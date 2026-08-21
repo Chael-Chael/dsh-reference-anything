@@ -34,6 +34,10 @@
       "types": "./lib/sources/local-agent/index.d.ts",
       "default": "./lib/sources/local-agent/index.js"
     },
+    "./cloud-drive": {
+      "types": "./lib/sources/cloud-drive/index.d.ts",
+      "default": "./lib/sources/cloud-drive/index.js"
+    },
     "./web-chat": {
       "types": "./lib/sources/web-chat/index.d.ts",
       "default": "./lib/sources/web-chat/index.js"

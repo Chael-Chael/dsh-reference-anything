@@ -57,7 +57,7 @@ Beyond extending what `@` can reference, Reference Anything also enhances the `@
   </tr>
 </table>
 
-Type `@`, search across enabled sources, and insert the selected reference into the current task. Each source keeps its own access and loading behavior: files use DSH's permission-constrained tools, DSH sessions use the native session-reference protocol, local agent transcripts are streamed straight off disk, and external conversation bodies are read on demand.
+Type `@`, search across enabled sources, and insert the selected reference into the current task. Each source keeps its own access and loading behavior: files use DSH's permission-constrained tools, DSH sessions use the native session-reference protocol, local agent transcripts are streamed straight off disk, cloud-drive files are fetched a window at a time over the drive's own API, and external conversation bodies are read on demand.
 
 **The External conversations group** — and only that group — uses OpenCLI to reach AI chat sessions you are already logged into. By default it stores conversation titles locally and the agent fetches remote content on demand; an optional offline-mirror mode stores the latest complete bodies locally instead. **Local agent conversations need none of that**: those transcripts are already files on your own disk, so that group reads them directly, with no browser, no OpenCLI, and nothing mirrored.
 
@@ -120,12 +120,12 @@ Replace `C:/path/to/dsh-reference-anything` with the repository location. Browse
 
 ## 🚀 Usage
 
-Reference Anything registers six sources in the native DSH `@` menu rather than introducing a separate search interface. Settings let you choose which groups appear, their order, their collapsed row count, their hard candidate cap, and whether groups use plugin-owned collapse actions or the native scrolling list. A separate one-click control switches the visible picker back to DSH's official file/session list without stopping the plugin, synchronization service, local data, or model-facing tools; the same control restores the Reference Anything picker at any time.
+Reference Anything registers seven sources in the native DSH `@` menu rather than introducing a separate search interface. Settings let you choose which groups appear, their order, their collapsed row count, their hard candidate cap, and whether groups use plugin-owned collapse actions or the native scrolling list. A separate one-click control switches the visible picker back to DSH's official file/session list without stopping the plugin, synchronization service, local data, or model-facing tools; the same control restores the Reference Anything picker at any time.
 
 1. Open `Settings → Reference Anything` in DSH Web.
 2. Under **Availability check**, confirm that OpenCLI, Browser Bridge, the browser extension, and the conversation adapter are ready.
 3. Under **External conversation sync settings**, choose a connected browser Profile, history storage mode, and sync mode. Then click **Sync enabled sources now**, or sync an individual Provider from its card.
-4. Type `@` in the input box and choose from the `Commands`, `Skills`, `Files and folders`, `DSH sessions`, `Local agent conversations`, or `External conversations` groups.
+4. Type `@` in the input box and choose from the `Commands`, `Skills`, `Files and folders`, `DSH sessions`, `Local agent conversations`, `External conversations`, or `Cloud drive files` groups.
 5. Type a keyword to filter candidates, for example `@cache-design`.
 
 The default **Read bodies on demand** mode stores only the title index locally and uses the browser when an agent calls `reference_read`. Choose **Store full bodies locally** for offline reading and full-text search; this mode keeps only the latest version of each conversation. The Composer uses native DSH reference occurrences for files, DSH sessions, and external conversations; Reference Anything adds source-specific logos without replacing native wrapping, caret, selection, deletion, draft, clipboard, or serialization behavior. The plugin checks npm for updates when it loads; restart DSH after installing an update from the settings page.
@@ -135,7 +135,7 @@ The default **Read bodies on demand** mode stores only the title index locally a
 
 ### 🧩 One `@` menu, multiple sources
 
-The `@` menu contains six groups: `Commands`, `Skills`, `Files and folders`, `DSH sessions`, `Local agent conversations`, and `External conversations`. Each group shows six rows before its expand action by default and accepts a separate hard candidate cap from 1 to 50. In collapse mode, each expand action reveals five more rows and updates the mounted menu without jumping back to the top; collapse restores the configured compact count. The external-conversation group keeps its sync action first and updates that row and the visible results in place while synchronization runs and completes. Under `Settings → Reference Anything → General`, you can enable or disable groups, reorder them, and choose **Collapse / expand** or **Native DSH scrolling**.
+The `@` menu contains seven groups: `Commands`, `Skills`, `Files and folders`, `DSH sessions`, `Local agent conversations`, `External conversations`, and `Cloud drive files`. Each group shows six rows before its expand action by default and accepts a separate hard candidate cap from 1 to 50. In collapse mode, each expand action reveals five more rows and updates the mounted menu without jumping back to the top; collapse restores the configured compact count. The external-conversation group keeps its sync action first and updates that row and the visible results in place while synchronization runs and completes. Under `Settings → Reference Anything → General`, you can enable or disable groups, reorder them, and choose **Collapse / expand** or **Native DSH scrolling**.
 
 #### ⌨️ @Commands — DSH native commands
 
@@ -240,13 +240,39 @@ Supports historical conversations from ChatGPT, Claude, Gemini, DeepSeek, Grok, 
 
 Opening the source URL happens only in the UI; the URL is never injected into model context. The initial reference contains only a safe pointer; if the model needs the body, it calls `reference_read` on demand.
 
+#### ☁️ @Cloud drive files — text files in your own 网盘
+
+Type `@drive:` — or `@baidu:`, `@cloud:`, `@网盘` — to search the files you keep in a cloud drive and reference one without downloading it into the workspace first.
+
+Reference Anything speaks the drive's REST API directly rather than shelling out to a CLI, because the `@` menu runs a query per keystroke and a subprocess per keystroke is not a budget that exists. It reuses the credential the official skill already minted; nothing is copied into this plugin's storage, and a drive that has never been logged into simply reports itself unavailable, so the group is inert until you opt in.
+
+```text
+@[百度网盘·quarterly-notes.md](dsh-ref:<opaque-base64url>)
+```
+
+**Setup (百度网盘):** install the official [`baidu-drive`](https://github.com/baidu-netdisk/bdpan-storage/tree/main/skills/baidu-drive) skill and run its `login.sh` once. That mints a token at `~/.config/bdpan/config.json`, which this group reads and never writes, logs, or repeats back in an error message.
+
+> [!IMPORTANT]
+> **百度网盘 confines an app to `/apps/bdpan/`.** This is Baidu's own sandbox, not a limitation of this plugin: a token minted through `bdpan` cannot see the rest of your drive at all. So the group lists what you have put under `我的应用数据/bdpan` (`/apps/bdpan/` in API terms) and nothing else. An empty group on a drive full of files usually means the files are outside that directory, not that discovery failed. Set `root` to a subdirectory of it to narrow the listing further.
+
+**Reading asks for the document, and settles for an extract only if it must.** A read requests the first `maxReadBytes` (64 KiB by default) as a byte range. If the drive answers with the whole file instead of the range it was asked for, the provider notices, demotes itself permanently, and keeps honouring the cap rather than absorbing a multi-gigabyte body; nothing about that is hard-coded, the first ranged request settles it. Only when the download cannot happen at all does the read fall back to the passage the drive's own search index extracted — labelled in the returned text as an extract the provider chose rather than the document, because answering "read this file" with a search snippet is answering a different question. Either way a truncated read is reported as partial rather than cut silently.
+
+At 4000 characters a block, 64 KiB is at most seventeen blocks, which fits inside one `reference_read` page — so an ordinary text file comes back whole, from its beginning. Raising `maxReadBytes` buys reach at the cost of a first page that lands at the *end* of the file and pages backwards: the right shape for a conversation, an awkward one for a document.
+
+**Text only.** A drive holds plenty the model cannot use. Files whose extension is not on the `extensions` allowlist are kept out of the menu entirely, and a read whose bytes turn out to be binary anyway is refused with a clear error instead of emitting mojibake. Directories are dropped by the same rule: neither a folder nor a `.zip` has text to read, so offering one would only produce a reference that fails.
+
+**Authorization.** These are your personal remote files, so this group uses the same per-task gate as the external conversations: the model may read a drive file only after you named it in the current task. A signed download URL never leaves the host — it appears in no candidate, no reference summary, and no error text.
+
+> [!NOTE]
+> **阿里云盘 (PDS) is reserved but not built.** `pds` is accepted in the drive vocabulary so that adding it later changes no existing reference and no saved setting, but configuring it today is a startup error rather than a silently empty group. 夸克网盘 is not planned: it exposes no directory listing and no ranged read, and its skill forbids reading the bundle that would have to be ported.
+
 ---
 
 **General notes:**
 - Use `:` or `/` as the separator instead of a space: the `@` candidate token ends at a space, so `@chatgpt keyword` closes the menu as soon as you press the space. For multi-word searches, write `@cachedesign` or `@cache-design`.
 - Without a type prefix, all groups are searched at once.
 - Commands and Skills are handed back to DSH's native slash-command handling after selection; the native `/` panel remains available.
-- Switching the picker back to DSH's official file/session list hides every plugin-owned group, including `Local agent conversations`. The host source stays registered, so an already-inserted reference still expands and `reference_read` still works; only the menu entry is gone until you switch back.
+- Switching the picker back to DSH's official file/session list hides every plugin-owned group, including `Local agent conversations` and `Cloud drive files`. The host source stays registered, so an already-inserted reference still expands and `reference_read` still works; only the menu entry is gone until you switch back.
 
 ## 🔄 How External Conversation References Work
 

@@ -5,6 +5,7 @@ import type { ReferenceUiMode } from './wire.ts'
 import type { SyncMode } from './sync/index.ts'
 import type {} from './sources/web-chat/index.ts'
 import type {} from './sources/local-agent/index.ts'
+import type {} from './sources/cloud-drive/index.ts'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import { switchReferenceUiMode as switchProfileReferenceUiMode } from './profile-mode.ts'
 
@@ -31,6 +32,27 @@ export class ReferenceAnythingRemote extends TypertRemoteService {
       id: row.ref.id,
       label: row.label,
       provider: row.provider ?? '',
+      ...row.updatedAt === undefined ? {} : { updatedAt: row.updatedAt },
+    }))
+  }
+
+  /**
+   * Discovery for the `@` menu's cloud-drive group.
+   *
+   * Optional for the same reason as `agentSearch` above. It takes no session:
+   * a drive is not scoped to a workspace, so there is nothing a cwd could
+   * narrow. `list` already refuses to name a download URL, so what comes back
+   * here is a label and a display path.
+   */
+  async driveSearch(input: { query: string; limit: number }, signal: AbortSignal) {
+    const drives = this.ctx.get('referenceCloudDrive')
+    if (drives === undefined) return []
+    const rows = await drives.list(input.query, input.limit, signal)
+    return rows.map(row => ({
+      id: row.ref.id,
+      label: row.label,
+      provider: row.provider ?? '',
+      ...row.origin === undefined ? {} : { origin: row.origin },
       ...row.updatedAt === undefined ? {} : { updatedAt: row.updatedAt },
     }))
   }

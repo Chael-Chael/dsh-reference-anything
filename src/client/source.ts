@@ -9,9 +9,9 @@ import type { TranslateNS } from '@deepseek-ai/dsh-client-locale/client'
 import type { ChatProvider, PickerDisplayMode } from '../wire.ts'
 import { parseProviderQuery } from '../search.ts'
 import { encodeReferenceUri } from '../uri-codec.ts'
-import type { AgentCandidate, SearchResult, SyncStatus } from './remote.ts'
+import type { AgentCandidate, DriveCandidate, SearchResult, SyncStatus } from './remote.ts'
 import {
-  AGENT_ICON_MARKER, COMMAND_ICON_MARKER, PICKER_ICON_MARKER, PROVIDER_ICON_MARKER, SESSION_ICON_MARKER, SKILL_ICON_MARKER,
+  AGENT_ICON_MARKER, COMMAND_ICON_MARKER, DRIVE_ICON_MARKER, PICKER_ICON_MARKER, PROVIDER_ICON_MARKER, SESSION_ICON_MARKER, SKILL_ICON_MARKER,
   type PickerIconKind,
 } from './provider-icons.tsx'
 import type { REFERENCE_ANYTHING_NS } from './locale.ts'
@@ -28,6 +28,7 @@ export const CONVERSATION_SOURCE = 'External conversations'
 export const FILE_SOURCE = 'Files and folders'
 export const SESSION_SOURCE = 'DSH sessions'
 export const AGENT_SOURCE = 'Local agent conversations'
+export const DRIVE_SOURCE = 'Cloud drive files'
 export const COMMAND_SOURCE = 'Commands'
 export const SKILL_SOURCE = 'Skills'
 
@@ -83,7 +84,7 @@ export function workspacePathIconKind(path: string, kind: FileReferenceCandidate
   return WORKSPACE_EXTENSION_KIND[extension] ?? 'file'
 }
 
-type SourceScope = 'commands' | 'skills' | 'files' | 'sessions' | 'agents' | 'conversations'
+type SourceScope = 'commands' | 'skills' | 'files' | 'sessions' | 'agents' | 'conversations' | 'drives'
 export interface PickerSourceOptions {
   order: number
   /** Rows shown before the source-owned expand action. */
@@ -134,6 +135,12 @@ const PREFIX_SCOPE: Readonly<Record<string, SourceScope>> = {
   chat: 'conversations', conversation: 'conversations', conversations: 'conversations',
   '外部对话': 'conversations', '外部对话记录': 'conversations',
   chatgpt: 'conversations', claude: 'conversations', gemini: 'conversations', deepseek: 'conversations', grok: 'conversations', kimi: 'conversations',
+  // `file`/`files` above already belong to the workspace, so a drive needs
+  // its own words. The bare CJK ones only reach the map through the
+  // no-colon branch of `scopedQuery` — its prefix pattern is ASCII.
+  drive: 'drives', drives: 'drives', cloud: 'drives', netdisk: 'drives',
+  baidu: 'drives', bdpan: 'drives', pds: 'drives', aliyun: 'drives',
+  '网盘': 'drives', '百度': 'drives', '百度网盘': 'drives', '阿里': 'drives', '阿里云盘': 'drives',
 }
 
 export interface SearchDebounce<V> {
@@ -160,12 +167,14 @@ function settle(ms: number, signal: AbortSignal): Promise<boolean> {
 
 interface ConversationReference { uriId: string; label: string }
 interface AgentReference { id: string; label: string }
+interface DriveReference { id: string; label: string }
 
 type CandidateValue =
   | { kind: 'conversation'; reference: ConversationReference }
   | { kind: 'file'; fileKind: FileReferenceCandidate['kind']; label: string; mention: string }
   | { kind: 'session'; label: string; mention: string }
   | { kind: 'agent'; reference: AgentReference }
+  | { kind: 'drive'; reference: DriveReference }
   | { kind: 'command'; name: string }
   | { kind: 'skill'; name: string }
   | { kind: 'action'; action: 'sync' | 'expand' | 'collapse'; query?: string }
@@ -441,6 +450,88 @@ function formatAgentMention(reference: AgentReference): string {
   return `@[${escapeLabel(reference.label)}](${agentReferenceUri(reference.id)})`
 }
 
+/**
+ * Files in the user's own cloud drives.
+ *
+ * Unlike every other group here this one has no session parameter: a drive is
+ * the same drive from any workspace, so there is nothing for the host to scope
+ * a search to.
+ */
+export function createCloudDriveSource(
+  search: (query: string, signal: AbortSignal, limit: number) => Promise<readonly DriveCandidate[]>,
+  t: T = fallback,
+  options: PickerSourceOptions = { ...DEFAULT_SOURCE_OPTIONS, order: 35 },
+): RefreshablePickerSource {
+  const source: InputTriggerSource = {
+    trigger: '@', name: DRIVE_SOURCE, order: options.order,
+    async candidates(_session, { query, quoted, signal }) {
+      // A quoted query is a workspace path completion; a remote file is not on
+      // this filesystem, so this group stays out of the way.
+      if (quoted === true) return []
+      const scoped = scopedQuery(query, 'drives')
+      if (scoped === undefined) return []
+      const rows = await search(scoped, signal, options.maxCandidates)
+      // Two drives can hold files of the same name, and one drive can hold the
+      // same name in two folders, so the ordinal suffix earns its place here.
+      return disambiguate(rows.map((row): InputTriggerCandidate => {
+        const name = row.label.trim() || 'Untitled'
+        return {
+          name,
+          description: describeDriveRow(row, t),
+          icon: DRIVE_ICON_MARKER,
+          value: encodeCandidate({
+            kind: 'drive',
+            // Same separator rule as the other pointer groups: a spaced
+            // `@Drive · Name` is re-projected as a native pill by the
+            // user-bubble renderer.
+            reference: { id: row.id, label: (row.provider ? `${row.provider}·${name}` : name).replace(/[\[\]]/gu, '') },
+          }),
+        }
+      }))
+    },
+    onPick({ candidate }) {
+      const value = decodeCandidate(candidate.value)
+      if (value?.kind !== 'drive') return undefined
+      const reference = value.reference
+      return {
+        insert: {
+          source: DRIVE_SOURCE,
+          ref: encodeDriveReference(reference),
+          label: reference.label,
+          // A document, so it wears the file chip rather than the conversation
+          // one — the ref stays ours either way; appearance is only style.
+          appearance: 'file',
+          clipboardText: formatDriveMention(reference),
+        },
+      }
+    },
+    codec: {
+      clipboardText: ref => formatDriveMention(decodeDriveReference(ref)),
+      serialize: ref => Promise.resolve(formatDriveMention(decodeDriveReference(ref))),
+    },
+  }
+  return withDisplayPolicy(source, options, t)
+}
+
+/** The dimmed second line: which drive holds it, and where in that drive. */
+function describeDriveRow(row: DriveCandidate, t: T): string {
+  const provider = row.provider || t('source.drives')
+  if (!row.origin) return provider
+  return t('drive.description', { provider, path: row.origin })
+}
+
+function encodeDriveReference(reference: DriveReference): string { return JSON.stringify(reference) }
+function decodeDriveReference(value: string): DriveReference {
+  const parsed: unknown = JSON.parse(value)
+  if (parsed === null || typeof parsed !== 'object') throw new Error('invalid drive reference')
+  const { id, label } = parsed as { id?: unknown; label?: unknown }
+  if (typeof id !== 'string' || typeof label !== 'string') throw new Error('invalid drive reference')
+  return { id, label }
+}
+function formatDriveMention(reference: DriveReference): string {
+  return `@[${escapeLabel(reference.label)}](${driveReferenceUri(reference.id)})`
+}
+
 interface CommandCandidate { name: string; description?: string; input?: { hint?: string } }
 interface SkillCandidate { name: string; description: string; modelInvocable?: boolean }
 
@@ -640,6 +731,11 @@ export function agentReferenceUri(id: string): string {
   return encodeReferenceUri({ source: 'local-agent', id })
 }
 
+/** The client owns this source string too, for the same reason as the two above. */
+export function driveReferenceUri(id: string): string {
+  return encodeReferenceUri({ source: 'cloud-drive', id })
+}
+
 export function parseQuery(value: string): { query: string; provider?: ChatProvider } {
   return parseProviderQuery(value)
 }
@@ -684,8 +780,8 @@ function formatDate(value: string, t: T): string {
 
 const fallback: T = (key, params) => {
   const dictionary: Record<string, string> = {
-    'source.conversations': 'External conversations', 'source.files': 'Files and folders', 'source.sessions': 'DSH sessions', 'source.agents': 'Local agent conversations', 'source.commands': 'Commands', 'source.skills': 'Skills',
-    'conversation.description': '{provider} · {date}', 'conversation.unknownDate': 'unknown date', 'skill.userOnly': 'user-only · ',
+    'source.conversations': 'External conversations', 'source.files': 'Files and folders', 'source.sessions': 'DSH sessions', 'source.agents': 'Local agent conversations', 'source.drives': 'Cloud drive files', 'source.commands': 'Commands', 'source.skills': 'Skills',
+    'conversation.description': '{provider} · {date}', 'drive.description': '{provider} · {path}', 'conversation.unknownDate': 'unknown date', 'skill.userOnly': 'user-only · ',
     'menu.syncAll': 'Sync all now', 'menu.syncAllDetail': 'Refresh the local external-conversation index',
     'menu.syncRunning': 'Syncing…', 'menu.syncRunningDetail': 'An external-conversation sync is already running',
     'menu.syncAgain': 'Sync again', 'menu.syncLastResult': 'Last synced {time} · Successful sources {success}/{total}',
