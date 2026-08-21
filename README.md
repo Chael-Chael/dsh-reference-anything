@@ -71,7 +71,7 @@ Type `@`, search across enabled sources, and insert the selected reference into 
 
 ## 📰 News
 
-- **2026-08-20 · v0.3.1** — Added a sixth `@` group, `Local agent conversations`: the sessions fourteen other agent CLIs leave on disk — Claude Code, Codex, Cursor, Qoder, Reasonix, OpenClaw, Kimi, Grok Build, Hermes, Gemini CLI, Pi, and the three SQLite-backed ones (opencode, mimocode, zcode) — are now listed and referenced like any other source. Reference-only: nothing is imported into DSH's session store, and a transcript is streamed only when the model calls `reference_read`. Reads are bounded, workspace-scoped by default, and gated by the same per-task authorization the external conversations use, which is now source-qualified rather than hard-coded to one source.
+- **2026-08-20 · v0.3.1** — Added a sixth `@` group, `Local agent conversations`: the sessions fourteen other agent CLIs leave on disk — Claude Code, Codex, Cursor, Qoder, Reasonix, OpenClaw, Kimi, Grok Build, Hermes, Gemini CLI, Pi, and the three SQLite-backed ones (opencode, mimocode, zcode) — are now listed and referenced like any other source. Reference-only: nothing is imported into DSH's session store, and a transcript is streamed only when the model calls `reference_read`. Reads are bounded, workspace-scoped by default, and gated by the same per-task authorization the external conversations use, which is now source-qualified rather than hard-coded to one source. The rc.8 build now resolves its development SDKs from published packages, and workspace scoping normalizes both sides of a path comparison for reliable Windows matching.
 - **2026-08-20 · v0.3.0** — Completed the native DSH `@` integration: five independently configurable sources, official file/session Remotes, native Composer references with source logos, in-place expand/collapse and sync actions, and a one-click switch between Reference Anything and the official DSH `@` list. The legacy `dsh-file:` protocol and custom Composer interaction layer were removed.
 - **2026-08-19 · v0.2.4** — Added automatic version checks and in-settings updates, Pill/Raw text input rendering modes, and reusable background browser sessions for more reliable OpenCLI synchronization and input interactions.
 - **2026-08-18 · v0.2.0** — A redesigned Reference Anything settings page with local session statistics, paginated management, Provider/Profile selection, and sync status checks.
@@ -101,10 +101,12 @@ Install the DSH plugin from npm:
 dsh plugin --profile web add dsh-reference-anything
 ```
 
-For development, the repository can still be installed from a local path:
+For development, install the published DSH rc.8 SDK dependencies, run the verification gate, then install the repository from a local path:
 
 ```powershell
 # Run from the repository root
+pnpm install
+pnpm run check
 dsh plugin --profile web add .
 ```
 
