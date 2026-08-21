@@ -190,7 +190,14 @@ export function apply(ctx: Context, config: Config = {}): void {
               type: 'object',
               additionalProperties: false,
               properties: {
-                role: { type: 'string', required: true, enum: ['user', 'assistant'] },
+                role: {
+                  type: 'string',
+                  required: true,
+                  enum: ['user', 'assistant', 'document'],
+                  description:
+                    'Who produced the text. `document` means it is file content rather than '
+                    + 'anything anyone said, so it carries no speaker\'s authority at all.',
+                },
                 text: { type: 'string', required: true },
               },
             },

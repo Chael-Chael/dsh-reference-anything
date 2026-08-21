@@ -37,8 +37,8 @@ describe('tag-safe serialization', () => {
 describe('renderReferences', () => {
   it('frames the block with the untrusted warning and closes the data region', () => {
     const rendered = renderReferences([{ snapshot: snapshot(talk) }], 65_536)
-    expect(rendered.text).toContain('## Referenced conversations')
-    expect(rendered.text).toContain('untrusted reference to a conversation')
+    expect(rendered.text).toContain('## Referenced material')
+    expect(rendered.text).toContain('untrusted reference to something the user keeps')
     expect(rendered.text).toContain('<referenced-conversations>')
     expect(rendered.text.endsWith(REFERENCE_BLOCK_SUFFIX)).toBe(true)
     expect(rendered.text).toContain('how should we key the cache?')

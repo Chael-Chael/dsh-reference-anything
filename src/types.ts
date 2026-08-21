@@ -48,9 +48,20 @@ export interface ReferenceSummary {
   readonly syncedAt?: number
 }
 
-/** One projected turn of a referenced conversation. */
+/** One projected turn of a referenced conversation, or one block of a referenced file. */
 export interface ConversationItem {
-  readonly role: 'user' | 'assistant'
+  /**
+   * Who produced this text.
+   *
+   * `document` exists because not every referent is a conversation. A file
+   * pulled from a cloud drive has an author, but not one of these two, and
+   * labelling its contents `assistant` would assert that some model said them
+   * while labelling it `user` would assert the current user did — the second
+   * being the more dangerous lie, since text that appears to come from the
+   * user reads as instruction rather than as data. A third value states the
+   * provenance instead of picking the least-wrong falsehood.
+   */
+  readonly role: 'user' | 'assistant' | 'document'
   /** Visible text of that turn. Tool calls, reasoning, and injected context are not projected. */
   readonly text: string
   /** Attachment metadata only; bytes stay behind an explicit authorized read. */

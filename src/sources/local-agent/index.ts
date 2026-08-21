@@ -374,7 +374,12 @@ export class LocalAgentService extends Service implements ReferenceSource {
       descriptor.path, adapter, sessionId, this.convert, this.settings.maxSessionRecords, signal,
     )
     const slice = sliceTurns(session.items, { limit, ...before === undefined ? {} : { before } })
-    const items = slice.items.map(item => ({ role: item.role, text: item.text } satisfies ParsedTurn))
+    // `sliceTurns` speaks the package's wider wire type, which now admits
+    // `document` for file referents. A transcript never produces one — these
+    // items are the ParsedTurns handed in a line above — so the guard is a
+    // narrowing, not a filter with real work to do.
+    const items = slice.items.flatMap(item =>
+      item.role === 'document' ? [] : [{ role: item.role, text: item.text } satisfies ParsedTurn])
     return {
       items,
       startIndex: slice.startIndex,

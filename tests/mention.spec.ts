@@ -98,7 +98,7 @@ describe('expansion', () => {
     const result = await step(ctx, [userMessage(`see ${formatReferenceMention(ref, 'Cache design')}`)])
     const context = (result as Extract<PreStepDecision, { kind: 'enter' }>).messages[0]
     const text = context?.content.flatMap(block => block.type === 'text' ? [block.text] : []).join('')
-    expect(text).toContain('untrusted reference to a conversation')
+    expect(text).toContain('untrusted reference to something the user keeps')
     expect(text).toContain('bodies were not fetched')
     expect(text).toContain('sync that provider')
     expect(text).toContain(encodeReferenceUri(ref))

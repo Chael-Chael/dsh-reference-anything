@@ -135,7 +135,7 @@ describe('reference_read', () => {
     const result = await run(ctx, 'reference_read', { uri: encodeReferenceUri(ref) })
     expect(result.isError).toBeFalsy()
     const text = textOf(result)
-    expect(text).toContain('untrusted reference to a conversation')
+    expect(text).toContain('untrusted reference to something the user keeps')
     expect(text).toContain('by request hash')
     expect(text).toContain('</referenced-conversations>')
     // The footer states the window and, here, that there is nothing older.
