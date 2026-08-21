@@ -14,12 +14,14 @@ One `@` for them all.
 
 [![][github-version-shield]][github-version-link]
 [![][typescript-shield]][typescript-link]
-[![][dsh-plugin-shield]][repository-link]<br/>
+[![][dsh-plugin-shield]][repository-link]
+<br/>
 [![][github-stars-shield]][github-stars-link]
 [![][github-forks-shield]][github-forks-link]
 [![][github-issues-shield]][github-issues-link]
 [![][github-license-shield]][github-license-link]<br/>
 ![awesome · DSH plugin](https://awesome-dsh-plugin.com/badge.svg)
+[![][npm-downloads-shield]][npm-package-link]
 
 </div>
 
@@ -283,6 +285,8 @@ This project is licensed under the [MIT License](./LICENSE). Third-party copyrig
 [dsh-plugin-shield]: https://img.shields.io/badge/DSH-plugin-ffffff?labelColor=black&style=flat-square
 [github-version-shield]: https://img.shields.io/github/package-json/v/Chael-Chael/dsh-reference-anything/main?color=369eff&label=version&labelColor=black&style=flat-square
 [github-version-link]: https://github.com/Chael-Chael/dsh-reference-anything/blob/main/package.json
+[npm-downloads-shield]: https://img.shields.io/npm/dt/dsh-reference-anything?color=cb3837&label=downloads&labelColor=black&style=flat-square
+[npm-package-link]: https://www.npmjs.com/package/dsh-reference-anything
 [github-stars-link]: https://github.com/Chael-Chael/dsh-reference-anything/stargazers
 [github-stars-shield]: https://img.shields.io/github/stars/Chael-Chael/dsh-reference-anything?color=ffcb47&labelColor=black&style=flat-square
 [github-forks-link]: https://github.com/Chael-Chael/dsh-reference-anything/forks
