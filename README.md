@@ -38,7 +38,7 @@ Use one `@` menu to reference:
 - DSH commands and Skills
 - Workspace files and folders
 - DSH session history
-- Historical conversations from ChatGPT, Claude, Gemini, DeepSeek, Grok, and Kimi
+- ✨ **NEW: Historical conversations from online chatbots like ChatGPT, Claude, Gemini, DeepSeek, Grok, and Kimi**
 
 Beyond extending what `@` can reference, Reference Anything also enhances the `@` menu itself:
 

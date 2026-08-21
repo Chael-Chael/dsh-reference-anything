@@ -38,7 +38,7 @@
 - DSH 命令与 Skills
 - 工作区文件和文件夹
 - DSH 历史会话
-- 来自 ChatGPT、Claude、Gemini、DeepSeek、Grok 和 Kimi 的历史对话
+- ✨ **新增：来自 ChatGPT、Claude、Gemini、DeepSeek、Grok 和 Kimi 这些网页端 Chatbot 的历史对话**
 
 在扩展 `@` 的能力之外，我们还支持一些对于 `@` 菜单界面的增强：
 
