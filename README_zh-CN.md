@@ -12,7 +12,7 @@
 
 <!-- SHIELD GROUP -->
 
-[![][github-version-shield]][github-releases-link]
+[![][github-version-shield]][github-version-link]
 [![][typescript-shield]][typescript-link]
 [![][dsh-plugin-shield]][repository-link]<br/>
 [![][github-stars-shield]][github-stars-link]
@@ -30,6 +30,8 @@
 </div>
 
 **Reference Anything 是 DeepSeek Harness（DSH）的 `@` 菜单增强插件。** 它把多种引用来源集中到一个可搜索的菜单中，无需切换工具或手动复制内容，即可为当前任务补充所需上下文。
+
+输入 `@` 后，既可以用鼠标浏览并点击菜单中的条目，也可以直接用键盘输入文本进行搜索，缩小结果范围。
 
 通过同一个 `@` 菜单，可以引用：
 
@@ -330,8 +332,8 @@ metadata-only 模式下，读取引用正文时会在同一次 detail 浏览器�
 [typescript-link]: https://www.typescriptlang.org/
 [typescript-shield]: https://img.shields.io/badge/TypeScript-3178C6?labelColor=black&logo=typescript&logoColor=white&style=flat-square
 [dsh-plugin-shield]: https://img.shields.io/badge/DSH-plugin-ffffff?labelColor=black&style=flat-square
-[github-version-shield]: https://img.shields.io/github/package-json/v/Chael-Chael/dsh-reference-anything?color=369eff&label=version&labelColor=black&style=flat-square
-[github-releases-link]: https://github.com/Chael-Chael/dsh-reference-anything/releases
+[github-version-shield]: https://img.shields.io/github/package-json/v/Chael-Chael/dsh-reference-anything/main?color=369eff&label=version&labelColor=black&style=flat-square
+[github-version-link]: https://github.com/Chael-Chael/dsh-reference-anything/blob/main/package.json
 [github-stars-link]: https://github.com/Chael-Chael/dsh-reference-anything/stargazers
 [github-stars-shield]: https://img.shields.io/github/stars/Chael-Chael/dsh-reference-anything?color=ffcb47&labelColor=black&style=flat-square
 [github-forks-link]: https://github.com/Chael-Chael/dsh-reference-anything/forks
