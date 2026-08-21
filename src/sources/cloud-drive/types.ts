@@ -15,6 +15,8 @@
  * @module dsh-reference-anything/cloud-drive/types
  */
 
+import type { FetchLike } from './providers/http.ts'
+
 /**
  * One supported drive product.
  *
@@ -100,6 +102,26 @@ export interface DriveReadResult {
  * semantics before either one is working produces an abstraction that fits
  * neither.
  */
+/**
+ * Construction-time seams every provider accepts.
+ *
+ * Uniform across drives even though the fields mean different things in each:
+ * `root` is a sandbox path for 百度网盘 and a folder id (or an absolute path to
+ * resolve into one) for PDS. Keeping one shape lets the registry build any
+ * provider from one config row, and the divergence is documented on each
+ * implementation rather than encoded in the type.
+ */
+export interface DriveProviderOptions {
+  /** Where listing starts when the user has typed no query. */
+  readonly root?: string
+  /** HTTP transport; defaults to the global `fetch`. */
+  readonly fetch?: FetchLike
+  /** Clock in epoch milliseconds, for credential expiry and signed-URL aging. */
+  readonly now?: () => number
+  /** Credential location; defaults to the drive's own CLI config path. */
+  readonly configPath?: string
+}
+
 export interface DriveProvider {
   readonly kind: DriveKind
   /** Product name for menus and error text. */

@@ -242,7 +242,7 @@ Opening the source URL happens only in the UI; the URL is never injected into mo
 
 #### ☁️ @Cloud drive files — text files in your own 网盘
 
-Type `@drive:` — or `@baidu:`, `@cloud:`, `@网盘` — to search the files you keep in a cloud drive and reference one without downloading it into the workspace first.
+Type `@drive:` — or `@baidu:`, `@pds:`, `@cloud:`, `@网盘` — to search the files you keep in a cloud drive and reference one without downloading it into the workspace first. 百度网盘 and 阿里云盘 (PDS) are both supported, and both are searched at once when you do not name one.
 
 Reference Anything speaks the drive's REST API directly rather than shelling out to a CLI, because the `@` menu runs a query per keystroke and a subprocess per keystroke is not a budget that exists. It reuses the credential the official skill already minted; nothing is copied into this plugin's storage, and a drive that has never been logged into simply reports itself unavailable, so the group is inert until you opt in.
 
@@ -252,8 +252,13 @@ Reference Anything speaks the drive's REST API directly rather than shelling out
 
 **Setup (百度网盘):** install the official [`baidu-drive`](https://github.com/baidu-netdisk/bdpan-storage/tree/main/skills/baidu-drive) skill and run its `login.sh` once. That mints a token at `~/.config/bdpan/config.json`, which this group reads and never writes, logs, or repeats back in an error message.
 
+**Setup (阿里云盘 / PDS):** install the `aliyun` CLI's `pds` plugin and run `aliyun pds login` once. That mints a token at `~/.aliyun/pds_config.json`, read on the same terms. If you keep more than one profile there, the one named by `current` is the one this group uses — the same profile the CLI itself would act on.
+
 > [!IMPORTANT]
 > **百度网盘 confines an app to `/apps/bdpan/`.** This is Baidu's own sandbox, not a limitation of this plugin: a token minted through `bdpan` cannot see the rest of your drive at all. So the group lists what you have put under `我的应用数据/bdpan` (`/apps/bdpan/` in API terms) and nothing else. An empty group on a drive full of files usually means the files are outside that directory, not that discovery failed. Set `root` to a subdirectory of it to narrow the listing further.
+
+> [!IMPORTANT]
+> **阿里云盘 has no such sandbox, which cuts the other way.** A PDS token sees the whole drive it was minted for. `root` (or a per-drive entry in `roots`) confines the *directory listing* to one folder — give it a folder id, or an absolute path this group resolves to one — but search stays drive-wide by design, because PDS filters a search by immediate parent only: scoping it to a folder would hide every nested hit rather than narrow the results honestly. So an empty query lists your chosen folder, and a typed query reaches everything you own.
 
 **Reading asks for the document, and settles for an extract only if it must.** A read requests the first `maxReadBytes` (64 KiB by default) as a byte range. If the drive answers with the whole file instead of the range it was asked for, the provider notices, demotes itself permanently, and keeps honouring the cap rather than absorbing a multi-gigabyte body; nothing about that is hard-coded, the first ranged request settles it. Only when the download cannot happen at all does the read fall back to the passage the drive's own search index extracted — labelled in the returned text as an extract the provider chose rather than the document, because answering "read this file" with a search snippet is answering a different question. Either way a truncated read is reported as partial rather than cut silently.
 
@@ -264,7 +269,7 @@ At 4000 characters a block, 64 KiB is at most seventeen blocks, which fits insid
 **Authorization.** These are your personal remote files, so this group uses the same per-task gate as the external conversations: the model may read a drive file only after you named it in the current task. A signed download URL never leaves the host — it appears in no candidate, no reference summary, and no error text.
 
 > [!NOTE]
-> **阿里云盘 (PDS) is reserved but not built.** `pds` is accepted in the drive vocabulary so that adding it later changes no existing reference and no saved setting, but configuring it today is a startup error rather than a silently empty group. 夸克网盘 is not planned: it exposes no directory listing and no ranged read, and its skill forbids reading the bundle that would have to be ported.
+> **夸克网盘 is not planned.** It exposes no directory listing and no ranged read, and its skill forbids reading the bundle that would have to be ported. The two drives above are what this group speaks; a drive name with no transport in the build you are running is a startup error rather than a silently empty group, so a typo in `drives` says so immediately.
 
 ---
 

@@ -205,6 +205,28 @@ describe('the source', () => {
     }
   })
 
+  it('skips a configured drive that has never been logged into', async () => {
+    // Both drives ship enabled, so the ordinary state of a machine is one
+    // credential and one absence. The absent one must cost nothing rather than
+    // fail a request per keystroke — and the presence of the other is what
+    // makes that visible, since `available()` speaks for the source as a whole
+    // and would otherwise take the group out of discovery entirely.
+    const absent = new StubDrive({ credential: false, entries: [entry({ id: '1', name: 'secret.md' })] })
+    const present = new StubDrive({ entries: [entry({ id: '2', name: 'notes.md' })] })
+    const restore = DRIVE_PROVIDERS.pds
+    DRIVE_PROVIDERS.pds = () => absent
+    const { ctx, dispose } = await mount(present, { drives: ['baidu', 'pds'] })
+    try {
+      const listed = await ctx.references.list('', 10)
+      expect(listed.map(item => item.label)).toEqual(['notes.md'])
+      expect(absent.calls.list).toEqual([])
+      expect(present.calls.list).toEqual([''])
+    } finally {
+      await dispose()
+      DRIVE_PROVIDERS.pds = restore
+    }
+  })
+
   it('requires a grant, because these are the user\'s own remote files', async () => {
     const { ctx, dispose } = await mount(new StubDrive())
     try {
@@ -419,15 +441,25 @@ describe('the source', () => {
     }
   })
 
-  it('refuses to mount a drive that has no transport yet', async () => {
-    const ctx = new Context()
-    await ctx.plugin(ReferenceRuntime, {})
-    // Caught rather than matched with `.rejects`, which would try to render
-    // the resolved fiber and fail inside the formatter instead of here.
-    const thrown = await ctx.plugin(cloudDrive, { drives: ['pds'] }).then(() => undefined, (cause: unknown) => cause)
-    expect(thrown).toBeInstanceOf(ReferenceAnythingError)
-    expect((thrown as ReferenceAnythingError).code).toBe('REFERENCE_INVALID_CONFIG')
-    expect(ctx.references.sourceIds()).not.toContain(CLOUD_DRIVE_SOURCE_ID)
+  it('refuses to mount a drive this build has no transport for', async () => {
+    // Both kinds in the vocabulary have a transport today, so the condition is
+    // staged by removing one. That is the real shape of the failure: the
+    // vocabulary outlives any one build, so a name can lose its transport
+    // without ceasing to name a drive that stored references still point at.
+    const restore = DRIVE_PROVIDERS.pds
+    delete DRIVE_PROVIDERS.pds
+    try {
+      const ctx = new Context()
+      await ctx.plugin(ReferenceRuntime, {})
+      // Caught rather than matched with `.rejects`, which would try to render
+      // the resolved fiber and fail inside the formatter instead of here.
+      const thrown = await ctx.plugin(cloudDrive, { drives: ['pds'] }).then(() => undefined, (cause: unknown) => cause)
+      expect(thrown).toBeInstanceOf(ReferenceAnythingError)
+      expect((thrown as ReferenceAnythingError).code).toBe('REFERENCE_INVALID_CONFIG')
+      expect(ctx.references.sourceIds()).not.toContain(CLOUD_DRIVE_SOURCE_ID)
+    } finally {
+      DRIVE_PROVIDERS.pds = restore
+    }
   })
 
   it('unregisters the source when its fiber is disposed', async () => {

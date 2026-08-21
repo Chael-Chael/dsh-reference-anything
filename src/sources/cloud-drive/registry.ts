@@ -8,8 +8,9 @@
  */
 
 import { ReferenceAnythingError } from '../../errors.ts'
-import { BaiduDriveProvider, type BaiduProviderOptions } from './providers/baidu.ts'
-import type { DriveKind, DriveProvider } from './types.ts'
+import { BaiduDriveProvider } from './providers/baidu.ts'
+import { PdsDriveProvider } from './providers/pds.ts'
+import type { DriveKind, DriveProvider, DriveProviderOptions } from './types.ts'
 
 /** Every drive named in the design, whether or not it is implemented yet. */
 export const DRIVE_KINDS: readonly DriveKind[] = ['baidu', 'pds']
@@ -17,13 +18,15 @@ export const DRIVE_KINDS: readonly DriveKind[] = ['baidu', 'pds']
 /**
  * Constructors for the drives that actually work.
  *
- * Deliberately narrower than {@link DRIVE_KINDS}: `pds` is in the vocabulary
- * because the reference format and the config schema must not change when it
- * lands, but it has no transport yet. Configuring it produces a clear error
- * rather than a menu group that silently returns nothing.
+ * Still `Partial`, and deliberately so: {@link DRIVE_KINDS} is the reference
+ * vocabulary, which must keep naming a drive whose transport is removed or not
+ * yet written so that stored references and saved settings survive. Configuring
+ * a kind that is absent here produces a clear startup error rather than a menu
+ * group that silently returns nothing.
  */
-export const DRIVE_PROVIDERS: Partial<Record<DriveKind, (options?: BaiduProviderOptions) => DriveProvider>> = {
+export const DRIVE_PROVIDERS: Partial<Record<DriveKind, (options?: DriveProviderOptions) => DriveProvider>> = {
   baidu: options => new BaiduDriveProvider(options),
+  pds: options => new PdsDriveProvider(options),
 }
 
 /**
@@ -35,7 +38,7 @@ export const DRIVE_PROVIDERS: Partial<Record<DriveKind, (options?: BaiduProvider
  */
 export function providerFor(
   kind: DriveKind,
-  options?: BaiduProviderOptions,
+  options?: DriveProviderOptions,
 ): DriveProvider | undefined {
   return DRIVE_PROVIDERS[kind]?.(options)
 }

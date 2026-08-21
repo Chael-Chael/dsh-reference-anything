@@ -25,8 +25,9 @@
  */
 
 import { ReferenceAnythingError } from '../../../errors.ts'
-import type { DriveEntry, DriveProvider, DriveReadResult } from '../types.ts'
+import type { DriveEntry, DriveProvider, DriveProviderOptions, DriveReadResult } from '../types.ts'
 import { type BdpanToken, bdpanTokenStatus, readBdpanToken } from './bdpan-config.ts'
+import { drain, type FetchLike, isEntry, totalFromResponse } from './http.ts'
 
 /** API host for listing, search, and metadata. */
 const API_BASE = 'https://pan.baidu.com'
@@ -50,21 +51,6 @@ const MAX_FSIDS_PER_CALL = 100
 
 /** Search scene string the SDK sends; the endpoint rejects other values. */
 const SEARCH_SCENE = 'mcpserver'
-
-/** Minimal injectable `fetch`, so tests need no network and no global patching. */
-export type FetchLike = (input: string, init?: RequestInit) => Promise<Response>
-
-/** Construction-time seams. Every field has a production default. */
-export interface BaiduProviderOptions {
-  /** Directory listed when the user has typed no query. */
-  readonly root?: string
-  /** HTTP transport; defaults to the global `fetch`. */
-  readonly fetch?: FetchLike
-  /** Clock in epoch milliseconds, for credential expiry and `dlink` aging. */
-  readonly now?: () => number
-  /** Credential location; defaults to the `bdpan` CLI's own config path. */
-  readonly configPath?: string
-}
 
 /** One `dlink` and when it stops being worth reusing. */
 interface CachedDlink {
@@ -147,7 +133,7 @@ export class BaiduDriveProvider implements DriveProvider {
   private readonly excerpts = new Map<string, string>()
 
   /** @param options - transport and clock seams; all optional in production. */
-  constructor(options: BaiduProviderOptions = {}) {
+  constructor(options: DriveProviderOptions = {}) {
     this.root = options.root ?? BAIDU_SANDBOX_ROOT
     this.fetchImpl = options.fetch ?? ((input, init) => fetch(input, init))
     this.now = options.now ?? (() => Date.now())
@@ -582,11 +568,6 @@ interface UniSearchBody {
   readonly data?: readonly { readonly list?: readonly RawSearchHit[] }[]
 }
 
-/** Narrowing predicate for `Array.prototype.filter`. */
-function isEntry(entry: DriveEntry | undefined): entry is DriveEntry {
-  return entry !== undefined
-}
-
 /** Baidu reports times in Unix seconds; the package speaks milliseconds. */
 function secondsToMs(value: number | undefined): number | undefined {
   return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value * 1000 : undefined
@@ -603,54 +584,4 @@ function withToken(url: string, accessToken: string): string {
   const parsed = new URL(url)
   parsed.searchParams.set('access_token', accessToken)
   return parsed.toString()
-}
-
-/** Total size from `Content-Range`, falling back to `Content-Length`. */
-function totalFromResponse(response: Response): number | undefined {
-  const range = response.headers.get('content-range')
-  const slash = range?.lastIndexOf('/') ?? -1
-  if (range !== null && slash !== -1) {
-    const total = Number(range.slice(slash + 1))
-    if (Number.isFinite(total) && total > 0) return total
-  }
-  const length = Number(response.headers.get('content-length'))
-  return Number.isFinite(length) && length > 0 ? length : undefined
-}
-
-/**
- * Read at most `limit` bytes, then abandon the rest of the body.
- *
- * The cap is the whole point: when the CDN ignores `Range` it answers with the
- * entire file, and a caller that awaited `arrayBuffer()` would buffer all of it
- * before discovering the range was refused.
- *
- * @param response - a response whose body has not been consumed.
- * @param limit - maximum bytes to retain.
- */
-async function drain(response: Response, limit: number): Promise<Uint8Array> {
-  const stream = response.body
-  if (stream === null) return new Uint8Array(0)
-  const reader = stream.getReader()
-  const chunks: Uint8Array[] = []
-  let total = 0
-  try {
-    while (total < limit) {
-      const { done, value } = await reader.read()
-      if (done) break
-      if (value === undefined) continue
-      const take = Math.min(value.byteLength, limit - total)
-      chunks.push(take === value.byteLength ? value : value.subarray(0, take))
-      total += take
-    }
-  } finally {
-    // Releases the connection instead of letting the remainder stream in.
-    await reader.cancel().catch(() => {})
-  }
-  const out = new Uint8Array(total)
-  let offset = 0
-  for (const chunk of chunks) {
-    out.set(chunk, offset)
-    offset += chunk.byteLength
-  }
-  return out
 }

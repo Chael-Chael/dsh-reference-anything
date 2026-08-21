@@ -15,31 +15,24 @@
  * @module dsh-reference-anything/cloud-drive/providers/bdpan-config
  */
 
-import { readFile } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
+import {
+  EXPIRY_MARGIN_MS,
+  type JsonValue,
+  normalizeExpiry,
+  readJsonConfig,
+  type TokenFileProblem,
+} from './token-file.ts'
 
 /** Where `bdpan` keeps its configuration, per the CLI's own default. */
 export const BDPAN_CONFIG_PATH = join(homedir(), '.config', 'bdpan', 'config.json')
 
-/** Largest config file worth parsing; a bigger one is not a credential file. */
-const MAX_CONFIG_BYTES = 1024 * 1024
-
-/**
- * Treat a credential as spent this long before its stated expiry.
- *
- * A token that expires during the round-trip it authorizes fails as a `401`
- * the caller cannot distinguish from a revoked login, so the margin buys a
- * clean "please log in again" instead.
- */
-const EXPIRY_MARGIN_MS = 60_000
-
 /** Why a credential is not usable, in terms a user can act on. */
 export type BdpanTokenProblem =
-  /** No config file — the user has not run the skill's `login.sh` yet. */
-  | 'missing'
-  /** The file exists but is not JSON, or is implausibly large. */
-  | 'unreadable'
+  /** No config file, or one that is not JSON — the user has not run the
+   *  skill's `login.sh` yet, or the login it produced was damaged. */
+  | TokenFileProblem
   /** Valid JSON with no `access_token` anywhere in it, encrypted or otherwise. */
   | 'no-token'
   /** A token is present but its stated expiry has passed. */
@@ -64,36 +57,6 @@ export interface BdpanToken {
    * `dirs: [{uk, path}]` and silently searches the whole drive without it.
    */
   readonly uk?: string
-}
-
-/** Anything a JSON document can hold, walked structurally rather than by schema. */
-type JsonValue = string | number | boolean | null | JsonValue[] | { [key: string]: JsonValue }
-
-/**
- * Normalize the several shapes an expiry can arrive in.
- *
- * `bdpan` declares both `expires_at` and `expires_in`, and the units are not
- * documented. Rather than guess one, accept what is unambiguous and treat
- * everything else as "no stated expiry" — which degrades to trying the token
- * and getting a clean auth failure, not to using a dead credential silently.
- *
- * @param raw - the value found beside an `access_token`.
- * @param now - current time in epoch milliseconds, injectable for tests.
- * @returns epoch milliseconds, or `undefined` when the value says nothing usable.
- */
-export function normalizeExpiry(raw: JsonValue | undefined, now: number): number | undefined {
-  if (typeof raw === 'number' && Number.isFinite(raw) && raw > 0) {
-    // Seconds and milliseconds are told apart by magnitude: any epoch-seconds
-    // value for a date this century is far below the millisecond threshold.
-    return raw < 1e12 ? raw * 1000 : raw
-  }
-  if (typeof raw === 'string' && raw !== '') {
-    const numeric = Number(raw)
-    if (Number.isFinite(numeric) && numeric > 0) return normalizeExpiry(numeric, now)
-    const parsed = Date.parse(raw)
-    if (Number.isFinite(parsed)) return parsed
-  }
-  return undefined
 }
 
 /**
@@ -193,25 +156,10 @@ export async function readBdpanToken(
  * failure out of stack traces, which are the usual way a secret escapes.
  */
 async function loadTokenNode(path: string): Promise<Record<string, JsonValue> | BdpanTokenProblem> {
-  let text: string
-  try {
-    const raw = await readFile(path)
-    if (raw.byteLength > MAX_CONFIG_BYTES) return 'unreadable'
-    text = raw.toString('utf8')
-  } catch {
-    // Deliberately opaque: a missing file and an unreadable one are the same
-    // instruction to the user, and the caught error may name the path.
-    return 'missing'
-  }
+  const parsed = await readJsonConfig(path)
+  if (!parsed.ok) return parsed.problem
 
-  let parsed: JsonValue
-  try {
-    parsed = JSON.parse(text) as JsonValue
-  } catch {
-    return 'unreadable'
-  }
-
-  const node = findTokenNode(parsed)
+  const node = findTokenNode(parsed.value)
   // An encrypted config parses fine and simply has no `access_token`, which is
   // why this is one branch rather than a separate cipher-detection path.
   return node ?? 'no-token'

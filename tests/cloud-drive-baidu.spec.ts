@@ -3,7 +3,8 @@ import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { BaiduDriveProvider, quoteBigIds } from '../src/sources/cloud-drive/providers/baidu.ts'
-import { bdpanTokenStatus, normalizeExpiry, readBdpanToken } from '../src/sources/cloud-drive/providers/bdpan-config.ts'
+import { bdpanTokenStatus, readBdpanToken } from '../src/sources/cloud-drive/providers/bdpan-config.ts'
+import { normalizeExpiry } from '../src/sources/cloud-drive/providers/token-file.ts'
 
 /** A credential that must never appear in any output this suite inspects. */
 const SECRET = '121.SECRET-ACCESS-TOKEN-do-not-log.abcdef'

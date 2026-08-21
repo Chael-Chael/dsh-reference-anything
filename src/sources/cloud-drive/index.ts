@@ -78,10 +78,30 @@ const RECALL_NOTICE
 
 /** Deployment settings for the cloud drive source. */
 export interface Config {
-  /** Drives to search. A drive with no credential is simply absent from the menu. */
+  /**
+   * Drives to search.
+   *
+   * Both ship enabled because enabling one costs nothing until it is logged
+   * into: a drive with no credential on disk is skipped, so it is absent from
+   * the menu rather than an empty group or a recurring warning.
+   */
   drives?: DriveKind[]
-  /** Directory inside the drive that listing is confined to, when the drive has one. */
+  /**
+   * Where listing starts, for every drive that has no entry in {@link Config.roots}.
+   *
+   * Means different things per drive — a path under `/apps/bdpan/` for 百度网盘,
+   * a folder id or absolute path for 阿里云盘 — so it is only safe to share when
+   * it is empty, which is why the default is `''` and {@link Config.roots}
+   * exists.
+   */
   root?: string
+  /**
+   * Per-drive override of {@link Config.root}, keyed by drive name.
+   *
+   * Needed as soon as two drives are enabled at once: the two products address
+   * a folder differently, so one string cannot name a real folder in both.
+   */
+  roots?: Record<string, string>
   /** How long one listing is reused across a typing burst. */
   listTtlMs?: number
   /** Bytes one read may transfer, however large the file is. */
@@ -106,8 +126,9 @@ export interface Config {
  * for a conversation and an awkward one for a document.
  */
 export const Config: z<Config> = z.object({
-  drives: z.array(z.union(DRIVE_KINDS)).default(['baidu']),
+  drives: z.array(z.union(DRIVE_KINDS)).default(['baidu', 'pds']),
   root: z.string().default(''),
+  roots: z.dict(z.string()).default({}),
   listTtlMs: z.natural().default(30_000),
   maxReadBytes: z.natural().default(64 * 1024),
   maxReadTurns: z.natural().default(20),
@@ -140,13 +161,13 @@ export class CloudDriveService extends Service implements ReferenceSource {
   constructor(ctx: Context, config: Config = {}) {
     super(ctx, 'referenceCloudDrive')
     this.settings = { ...defaults(), ...definedOnly(config) }
-    const options = this.settings.root === '' ? {} : { root: this.settings.root }
     const built = new Map<DriveKind, DriveProvider>()
     for (const kind of this.settings.drives) {
-      const provider = providerFor(kind, options)
+      const root = this.settings.roots[kind] ?? this.settings.root
+      const provider = providerFor(kind, root === '' ? {} : { root })
       if (provider === undefined) {
         throw new ReferenceAnythingError(
-          `reference-cloud-drive: "${kind}" has no implementation yet; remove it from "drives"`,
+          `reference-cloud-drive: "${kind}" has no transport in this build; remove it from "drives"`,
           'REFERENCE_INVALID_CONFIG',
         )
       }
@@ -204,6 +225,13 @@ export class CloudDriveService extends Service implements ReferenceSource {
         return
       }
       try {
+        // A drive that has never been logged into is absent rather than
+        // broken. Worth a branch of its own now that two drives ship enabled:
+        // `available()` speaks for the source as a whole, so one credentialed
+        // drive keeps the group alive and the other would otherwise warn on
+        // every keystroke. Local by contract, and behind the cache, so it
+        // costs a stat only when a listing is actually about to happen.
+        if (!await provider.credentialed()) return
         const entries = await provider.list(trimmed, bounded, signal)
         const files = entries.filter(entry => !entry.isDirectory && this.readable(entry))
         this.cache.remember(key, files)
@@ -378,12 +406,13 @@ export function apply(ctx: Context, config: Config = {}): void {
   // Checked here as well as in the constructor, because only here does it reach
   // the person who wrote the config: `ctx.plugin` starts a fiber of its own, and
   // a constructor that throws inside it fails that fiber quietly rather than
-  // this one. A drive named in a profile but not implemented should stop
-  // startup, which is what the config comment promises.
+  // this one. `DRIVE_KINDS` is the durable reference vocabulary and stays wider
+  // than the set of transports, so a drive this build cannot reach should stop
+  // startup rather than become an empty menu group.
   for (const kind of drives) {
     if (providerFor(kind) === undefined) {
       throw new ReferenceAnythingError(
-        `reference-cloud-drive: "${kind}" has no implementation yet; remove it from "drives"`,
+        `reference-cloud-drive: "${kind}" has no transport in this build; remove it from "drives"`,
         'REFERENCE_INVALID_CONFIG',
       )
     }

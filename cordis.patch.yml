@@ -68,14 +68,19 @@
     - id: reference-cloud-drive
       name: 'dsh-reference-anything/cloud-drive'
       config:
-        # Only 百度网盘 has a transport today. 'pds' is reserved in the
-        # vocabulary so adding it later changes no reference and no setting,
-        # but configuring it now is a startup error rather than a silent
-        # empty group.
-        drives: ['baidu']
-        # Baidu confines an app to /apps/bdpan/; leave this empty to use that
-        # sandbox root, or name a subdirectory of it to narrow the listing.
+        # Both drives are listed because listing one costs nothing until it is
+        # logged into: with no credential on disk a drive is skipped outright,
+        # so it is absent from the menu rather than an empty group. Removing a
+        # name here stops that drive being reached even if its CLI is logged in.
+        drives: ['baidu', 'pds']
+        # Where listing starts, for any drive with no entry in `roots` below.
+        # Only safe to share while it is empty, because the two products do not
+        # address a folder the same way: Baidu takes a path under its /apps/bdpan/
+        # sandbox, PDS takes a folder id or an absolute path in the whole drive.
         root: ''
+        # Per-drive roots, e.g. {baidu: '/notes', pds: '/工作/报告'}. Needed as
+        # soon as you want to narrow more than one drive at once.
+        roots: {}
         listTtlMs: 30000
         # 64 KiB at 4000 characters a block is at most 17 blocks, which fits
         # inside maxReadTurns — so an ordinary text file is returned whole,
