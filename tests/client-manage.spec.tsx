@@ -51,7 +51,6 @@ function renderSettings(current: SettingsSnapshot, actions: {
   setupAll?: (opened: boolean) => Promise<void>; discoverOpenCli?: () => Promise<void>; installOpenCli?: () => Promise<void>
   useProfile?: (profile: string) => Promise<void>; install?: () => Promise<void>; refresh?: () => Promise<void>
   checkUpdate?: () => Promise<void>; installUpdate?: () => Promise<void>
-  switchReferenceUiMode?: () => Promise<void>
   quickRefreshOnOpen?: () => Promise<void>
 } = {}): HTMLElement {
   const noop = async () => {}
@@ -59,24 +58,21 @@ function renderSettings(current: SettingsSnapshot, actions: {
   return render(<ConversationSettings close={() => {}} useSessions={(() => []) as never} useWorkspaces={(() => []) as never}
     useScope={useScope} save={noop} sync={noop} cancel={noop} refresh={actions.refresh ?? noop} quickRefreshOnOpen={actions.quickRefreshOnOpen ?? noop}
     setupAll={actions.setupAll ?? noop} discoverOpenCli={actions.discoverOpenCli ?? noop} installOpenCli={actions.installOpenCli ?? noop}
-    useProfile={actions.useProfile ?? noop} install={actions.install ?? noop} restartDaemon={noop} checkUpdate={actions.checkUpdate ?? noop} installUpdate={actions.installUpdate ?? noop} switchReferenceUiMode={actions.switchReferenceUiMode ?? noop} browse={noop} deleteConversation={noop}
+    useProfile={actions.useProfile ?? noop} install={actions.install ?? noop} restartDaemon={noop} checkUpdate={actions.checkUpdate ?? noop} installUpdate={actions.installUpdate ?? noop} browse={noop} deleteConversation={noop}
     clearProvider={noop} clearOlder={noop} refreshStats={noop} t={t} />)
 }
 
 describe('settings update bar', () => {
   const currentUpdate = { currentVersion: '0.2.1', latestVersion: '0.2.1', updateAvailable: false, checkedAt: Date.now() }
 
-  it('places the official @ transition directly below updates and above general settings', () => {
+  it('places the settings workspace directly below the update bar', () => {
     const el = renderSettings({ settings, update: currentUpdate })
     const header = el.querySelector('.dsh_ref_header')!
     const update = el.querySelector('.dsh_ref_update_bar')!
-    const official = el.querySelector('.dsh_ref_official_reference')!
-    const general = el.querySelector('.dsh_ref_general_settings')!
+    const workspace = el.querySelector('.dsh_ref_workspace')!
 
     expect(header.compareDocumentPosition(update) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0)
-    expect(update.nextElementSibling).toBe(official)
-    expect(official.compareDocumentPosition(general) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0)
-    expect(official.querySelector('button')?.classList.contains('dsh_ref_official_reference_action')).toBe(true)
+    expect(update.nextElementSibling).toBe(workspace)
   })
 
   it('puts the GitHub repository link immediately to the right of check updates', async () => {
@@ -245,7 +241,7 @@ describe('general settings editing', () => {
     const saved: SettingsRecord[] = []
     const current: SettingsSnapshot = { settings: { ...settings, picker: defaultPickerSettings() }, loading: true }
     const useScope = ((selector: (value: SettingsSnapshot) => unknown) => selector(current)) as never
-    const el = render(<ConversationSettings close={() => {}} useSessions={(() => []) as never} useWorkspaces={(() => []) as never} useScope={useScope} save={async value => { saved.push(value) }} sync={noop} cancel={noop} refresh={noop} setupAll={noop} discoverOpenCli={noop} installOpenCli={noop} useProfile={noop} install={noop} restartDaemon={noop} checkUpdate={noop} installUpdate={noop} switchReferenceUiMode={noop} browse={noop} deleteConversation={noop} clearProvider={noop} clearOlder={noop} refreshStats={noop} t={t} />)
+    const el = render(<ConversationSettings close={() => {}} useSessions={(() => []) as never} useWorkspaces={(() => []) as never} useScope={useScope} save={async value => { saved.push(value) }} sync={noop} cancel={noop} refresh={noop} setupAll={noop} discoverOpenCli={noop} installOpenCli={noop} useProfile={noop} install={noop} restartDaemon={noop} checkUpdate={noop} installUpdate={noop} browse={noop} deleteConversation={noop} clearProvider={noop} clearOlder={noop} refreshStats={noop} t={t} />)
     const input = el.querySelector('.dsh_ref_picker_limit input') as HTMLInputElement
 
     act(() => { setNativeValue(input, ''); input.dispatchEvent(new Event('input', { bubbles: true })) })
@@ -264,56 +260,13 @@ describe('general settings editing', () => {
     const saved: SettingsRecord[] = []
     const current: SettingsSnapshot = { settings: { ...settings, picker: defaultPickerSettings() }, loading: true }
     const useScope = ((selector: (value: SettingsSnapshot) => unknown) => selector(current)) as never
-    const el = render(<ConversationSettings close={() => {}} useSessions={(() => []) as never} useWorkspaces={(() => []) as never} useScope={useScope} save={async value => { saved.push(value) }} sync={noop} cancel={noop} refresh={noop} setupAll={noop} discoverOpenCli={noop} installOpenCli={noop} useProfile={noop} install={noop} restartDaemon={noop} checkUpdate={noop} installUpdate={noop} switchReferenceUiMode={noop} browse={noop} deleteConversation={noop} clearProvider={noop} clearOlder={noop} refreshStats={noop} t={t} />)
+    const el = render(<ConversationSettings close={() => {}} useSessions={(() => []) as never} useWorkspaces={(() => []) as never} useScope={useScope} save={async value => { saved.push(value) }} sync={noop} cancel={noop} refresh={noop} setupAll={noop} discoverOpenCli={noop} installOpenCli={noop} useProfile={noop} install={noop} restartDaemon={noop} checkUpdate={noop} installUpdate={noop} browse={noop} deleteConversation={noop} clearProvider={noop} clearOlder={noop} refreshStats={noop} t={t} />)
     const select = el.querySelector('.dsh_ref_render_mode select') as HTMLSelectElement
 
     act(() => { setNativeValue(select, 'native-scroll'); select.dispatchEvent(new Event('change', { bubbles: true })) })
     expect(saved.at(-1)?.picker?.displayMode).toBe('native-scroll')
   })
 
-  it('switches to the official @ mode only after confirmation', async () => {
-    const switchReferenceUiMode = vi.fn(async () => {})
-    const confirmation = vi.spyOn(window, 'confirm').mockReturnValueOnce(false).mockReturnValueOnce(true)
-    const el = renderSettings({ settings }, { switchReferenceUiMode })
-    const button = Array.from(el.querySelectorAll('.dsh_ref_official_reference button'))[0] as HTMLButtonElement
-
-    expect(button.textContent).toBe('Switch to official @')
-    expect(button.classList.contains('is_enable')).toBe(false)
-    await act(async () => { button.click() })
-    expect(switchReferenceUiMode).not.toHaveBeenCalled()
-    await act(async () => { button.click() })
-    expect(switchReferenceUiMode).toHaveBeenCalledOnce()
-    expect(confirmation).toHaveBeenCalledTimes(2)
-  })
-
-  it('turns the same control into an enable action in official mode', async () => {
-    const switchReferenceUiMode = vi.fn(async () => {})
-    vi.spyOn(window, 'confirm').mockReturnValue(true)
-    const officialSettings = { ...settings, referenceUiMode: 'official' as const }
-    const el = renderSettings({ settings: officialSettings }, { switchReferenceUiMode })
-    const row = el.querySelector('.dsh_ref_official_reference') as HTMLElement
-    const button = row.querySelector('button') as HTMLButtonElement
-
-    expect(row.textContent).toContain('DSH official @ mode')
-    expect(button.textContent).toBe('Enable Reference Anything @')
-    expect(button.classList.contains('is_enable')).toBe(true)
-    await act(async () => { button.click() })
-    expect(switchReferenceUiMode).toHaveBeenCalledOnce()
-  })
-
-  it('shows and locks the official @ transition while its profile patch is being written', async () => {
-    let release: (() => void) | undefined
-    const pending = new Promise<void>(resolve => { release = resolve })
-    const el = renderSettings({ settings }, { switchReferenceUiMode: async () => pending })
-    const button = Array.from(el.querySelectorAll('.dsh_ref_official_reference button'))[0] as HTMLButtonElement
-    vi.spyOn(window, 'confirm').mockReturnValue(true)
-
-    act(() => { button.click() })
-    expect(button.disabled).toBe(true)
-    expect(button.textContent).toBe('Switching…')
-    await act(async () => { release?.(); await pending })
-    expect(button.disabled).toBe(false)
-  })
 })
 
 describe('viability recovery actions', () => {

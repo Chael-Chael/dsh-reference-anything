@@ -28,8 +28,6 @@ export type PickerSettings = z.infer<typeof pickerSettingsSchema>
 export type PickerDisplayMode = PickerSettings['displayMode']
 export const inputRenderModeSchema = z.enum(['pill', 'raw-text'])
 export type InputRenderMode = z.infer<typeof inputRenderModeSchema>
-export const referenceUiModeSchema = z.enum(['plugin', 'official'])
-export type ReferenceUiMode = z.infer<typeof referenceUiModeSchema>
 
 /** Defaults used before the user saves the General section. */
 export function defaultPickerSettings(): PickerSettings {
@@ -64,8 +62,6 @@ export const settingsRecordSchema = z.object({
   enabledProviders: z.array(providerSchema).default([...ALL_PROVIDERS]),
   maxReadTurns: z.number().int().min(1).max(100).default(10),
   inputRenderMode: inputRenderModeSchema.default('pill'),
-  // Optional keeps settings written by earlier plugin versions readable.
-  referenceUiMode: referenceUiModeSchema.optional(),
   // Optional keeps existing on-disk settings forward-compatible. The client
   // uses defaultPickerSettings() until the user saves the General section.
   picker: pickerSettingsSchema.optional(),

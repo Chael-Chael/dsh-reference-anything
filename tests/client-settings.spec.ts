@@ -22,10 +22,10 @@ describe('settings source registration guard', () => {
   it('migrates an older settings record to the new safe defaults', () => {
     const value = settingsRecordSchema.parse({
       opencliPath: 'opencli', profile: '', detailConcurrency: 2, autoSync: false,
-      autoSyncMinutes: 60, historyMode: 'metadata-only',
+      autoSyncMinutes: 60, historyMode: 'metadata-only', referenceUiMode: 'official',
     })
     expect(value).toMatchObject({ syncOnStartup: false, maxReadTurns: 10, inputRenderMode: 'pill' })
-    expect(value.referenceUiMode).toBeUndefined()
+    expect(value).not.toHaveProperty('referenceUiMode')
     expect(value.enabledProviders).toEqual(['chatgpt', 'claude', 'gemini', 'deepseek', 'grok', 'kimi'])
   })
   it('treats an unchanged picker returned by an unrelated settings save as equal', () => {

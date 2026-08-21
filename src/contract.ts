@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import type { InvocationDescriptor } from '@deepseek-ai/dsh-typert-protocol'
-import { providerSchema, referenceUiModeSchema, settingsRecordSchema } from './wire.ts'
+import { providerSchema, settingsRecordSchema } from './wire.ts'
 
 export const searchInputSchema = z.object({
   query: z.string(), provider: providerSchema.optional(), limit: z.number().int().min(1).max(100),
@@ -31,8 +31,6 @@ export const packageUpdateStatusSchema = z.object({
 export const packageUpdateResultSchema = z.object({
   version: z.string(), restartRequired: z.boolean(),
 }).readonly()
-export const referenceUiModeInputSchema = z.object({ mode: referenceUiModeSchema }).readonly()
-export const referenceUiSwitchResultSchema = z.object({ mode: referenceUiModeSchema, restartRequired: z.literal(false) }).readonly()
 export const providerStatsSchema = z.object({
   provider: providerSchema, conversations: z.number().int().nonnegative(), lastSyncedAt: z.string(),
   status: z.enum(['ready', 'syncing', 'error', 'empty']), error: z.string().optional(),
@@ -85,7 +83,6 @@ export const REFERENCE_ANYTHING_INVOCATIONS: readonly InvocationDescriptor[] = [
   descriptor('updateStatus', [], strict('PackageUpdateStatus', packageUpdateStatusSchema), true),
   descriptor('checkUpdate', [], strict('PackageUpdateStatus', packageUpdateStatusSchema), true),
   descriptor('installUpdate', [], strict('PackageUpdateResult', packageUpdateResultSchema), true),
-  descriptor('switchReferenceUiMode', [{ name: 'input', wire: 'input', source: 'json', codec: strict('ReferenceUiModeInput', referenceUiModeInputSchema) }], strict('ReferenceUiSwitchResult', referenceUiSwitchResultSchema), true),
   descriptor('stats', [], strict('ProviderStats[]', z.array(providerStatsSchema))),
   descriptor('syncStart', [{ name: 'input', wire: 'input', source: 'json', codec: strict('SyncStart', syncStartSchema) }], strict('JobId', z.string())),
   descriptor('syncStatus', [{ name: 'input', wire: 'input', source: 'json', codec: strict('JobInput', jobInputSchema) }], strict('SyncStatus?', syncStatusSchema.optional())),

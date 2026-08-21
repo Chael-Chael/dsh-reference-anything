@@ -4,7 +4,7 @@ import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
 import type {} from '@deepseek-ai/dsh-client-locale/client'
 import { createSnapshotStore, type ClientContext, type ISessions } from '@deepseek-ai/dsh-client-runtime/client'
 import type { InputTriggerServiceContract } from '@deepseek-ai/dsh-client-ui-input-trigger/client'
-import { ALL_PROVIDERS, defaultPickerSettings, samePickerSettings, type ChatProvider, type PickerSettings, type ReferenceUiMode, type SettingsRecord } from '../wire.ts'
+import { ALL_PROVIDERS, defaultPickerSettings, samePickerSettings, type ChatProvider, type PickerSettings, type SettingsRecord } from '../wire.ts'
 import { REFERENCE_ANYTHING_REMOTE, type ReferenceAnythingRemoteFace, type SearchResult, type SyncStatus } from './remote.ts'
 import { createCommandSource, createConversationSource, createFileSource, createSearchDebounce, createSessionSource, createSkillSource, type RefreshablePickerSource } from './source.ts'
 import { ConversationSettings, PAGE_SIZE, type SettingsSnapshot } from './components.tsx'
@@ -15,7 +15,6 @@ import { createPickerMenuActionGuard, createPickerMenuUpdater } from './menu-upd
 import { en, REFERENCE_ANYTHING_NS, zh } from './locale.ts'
 import { runSetupSequence, setupReady, type SetupStage } from './health.ts'
 import { createAutoDismissNotice } from './notice.ts'
-import { runReferenceUiSwitchWithReload } from './reference-ui.ts'
 
 // `ctx.remote.commands` is a separately injected Remote face. Declaring only
 // `remote` lets the @ source register, but its candidate request can fail and
@@ -40,7 +39,7 @@ export function apply(ctx: ClientContext): void {
   let refreshGeneration = 0
   const t = ctx.locale.bind(REFERENCE_ANYTHING_NS)
   const notices = createAutoDismissNotice(() => scope.getSnapshot(), value => { scope.set(value) })
-  let applySources: ((picker: PickerSettings | undefined, mode: ReferenceUiMode | undefined) => void) | undefined
+  let applySources: ((picker: PickerSettings | undefined) => void) | undefined
   ctx.effect(() => ctx.locale.register(REFERENCE_ANYTHING_NS, { zh, en }), 'reference-anything.client.dictionaries')
   ctx.effect(() => adoptMenuGroupTitleProjection(t), 'reference-anything.client.menu-group-localization')
 
@@ -59,7 +58,7 @@ export function apply(ctx: ClientContext): void {
       try { stats = unwrap(await remote.stats()) } catch { statsUnavailable = true }
       if (generation !== refreshGeneration) return
       const currentSettings = unwrap(settings)
-      applySources?.(currentSettings.picker, currentSettings.referenceUiMode)
+      applySources?.(currentSettings.picker)
       scope.set({ ...scope.getSnapshot(), settings: currentSettings, stats, storage: unwrap(storageResult),
         error: statsUnavailable && !stats ? 'Local conversation statistics are unavailable until the DSH host is restarted.' : undefined, loading: false })
     } catch (error) {
@@ -80,7 +79,7 @@ export function apply(ctx: ClientContext): void {
       try { stats = unwrap(await remote.stats()) } catch { statsUnavailable = true }
       if (generation !== refreshGeneration) return
       const currentSettings = unwrap(settings)
-      applySources?.(currentSettings.picker, currentSettings.referenceUiMode)
+      applySources?.(currentSettings.picker)
       scope.set({ ...scope.getSnapshot(), settings: currentSettings, health: unwrap(health), profiles, stats, storage: unwrap(storageResult),
         error: statsUnavailable && !stats ? 'Local conversation statistics are unavailable until the DSH host is restarted.' : undefined, loading: false })
     } catch (error) {
@@ -91,7 +90,7 @@ export function apply(ctx: ClientContext): void {
   const quickRefreshOnOpen = async (): Promise<void> => {
     if (!remote || quickHealthAttempted) return
     const settings = scope.getSnapshot().settings
-    if ((settings.referenceUiMode ?? 'plugin') !== 'plugin' || !(settings.picker ?? defaultPickerSettings()).conversations.enabled) return
+    if (!(settings.picker ?? defaultPickerSettings()).conversations.enabled) return
     quickHealthAttempted = true
     try {
       const health = unwrap(await remote.quickHealth())
@@ -189,7 +188,6 @@ export function apply(ctx: ClientContext): void {
   const connection = ctx.get('connection') as ConnectionHandle
   let sourceDisposers: Array<() => void> = []
   let appliedPicker: PickerSettings | undefined
-  let appliedReferenceUiMode: ReferenceUiMode | undefined
   const registerSources = (picker: PickerSettings) => {
     const optionsFor = (key: Exclude<keyof PickerSettings, 'displayMode'>) => ({
       order: picker[key].order,
@@ -267,29 +265,27 @@ export function apply(ctx: ClientContext): void {
       notices.show(t('notice.cleared', { count }), { error: undefined })
     } catch (error) { scope.set({ ...scope.getSnapshot(), error: message(error) }) }
   }
-  applySources = (picker, mode) => {
+  applySources = (picker) => {
     const next = picker ?? defaultPickerSettings()
-    const nextMode = mode ?? 'plugin'
     // Settings unrelated to the @ picker (for example Auto sync) use the
     // same save endpoint. Re-registering every input source for those saves
     // can dispose UI-owned registrations while the settings panel is still
     // rendering, leaving the panel blank. Only rebuild when picker behavior
     // actually changed.
-    if (appliedPicker !== undefined && samePickerSettings(appliedPicker, next) && appliedReferenceUiMode === nextMode) return
+    if (appliedPicker !== undefined && samePickerSettings(appliedPicker, next)) return
     for (const dispose of sourceDisposers) dispose()
     activeConversationSource = undefined
-    sourceDisposers = nextMode === 'plugin' ? registerSources(next) : []
+    sourceDisposers = registerSources(next)
     appliedPicker = next
-    appliedReferenceUiMode = nextMode
   }
-  applySources(undefined, 'plugin')
+  applySources(undefined)
   ctx.effect(() => () => { for (const dispose of sourceDisposers) dispose() }, 'reference-anything.client.sources')
 
   const save = async (settings: SettingsRecord): Promise<void> => {
     if (!remote) return
     try {
       const value = unwrap(await remote.settingsUpdate(settings))
-      applySources?.(value.picker, value.referenceUiMode)
+      applySources?.(value.picker)
       notices.show(t('notice.settingsSaved'), { settings: value, error: undefined })
     } catch (error) { scope.set({ ...scope.getSnapshot(), error: message(error), notice: undefined }) }
   }
@@ -349,20 +345,6 @@ export function apply(ctx: ClientContext): void {
             currentVersion: result.version, latestVersion: result.version, updateAvailable: false, checkedAt: Date.now(),
           }
           notices.show(result.restartRequired ? t('notice.updateInstalled', { version: result.version }) : t('notice.upToDate', { version: previous?.currentVersion || result.version }), { update, error: undefined })
-        } catch (error) { scope.set({ ...scope.getSnapshot(), error: message(error), notice: undefined }) }
-      },
-      switchReferenceUiMode: async () => {
-        try {
-          const activeRemote = remote
-          if (!activeRemote) return
-          await runReferenceUiSwitchWithReload(async () => {
-            const current = scope.getSnapshot().settings
-            const mode: ReferenceUiMode = (current.referenceUiMode ?? 'plugin') === 'plugin' ? 'official' : 'plugin'
-            const result = unwrap(await activeRemote.switchReferenceUiMode({ mode }))
-            const settings = { ...current, referenceUiMode: result.mode }
-            applySources?.(settings.picker, settings.referenceUiMode)
-            notices.show(t(result.mode === 'official' ? 'notice.referenceUiOfficial' : 'notice.referenceUiPlugin'), { settings, error: undefined })
-          })
         } catch (error) { scope.set({ ...scope.getSnapshot(), error: message(error), notice: undefined }) }
       },
       setupAll: async (extensionPageOpened: boolean) => {
