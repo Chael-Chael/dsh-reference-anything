@@ -18,7 +18,7 @@
  * @module dsh-reference-anything/local-agent/adapters/grokbuild
  */
 
-import { join } from 'node:path'
+import { joinLocalPath } from '../path.ts'
 import type {
   AdapterState,
   ConvertOptions,
@@ -45,7 +45,7 @@ export const grokbuildAdapter: TranscriptAdapter = {
   displayName: 'Grok Build',
 
   defaultRoots(home: string): readonly string[] {
-    return [join(home, '.grok', 'sessions'), join(home, '.grok', 'archived_sessions')]
+    return [joinLocalPath(home, '.grok', 'sessions'), joinLocalPath(home, '.grok', 'archived_sessions')]
   },
 
   matches(relativePath: string): boolean {

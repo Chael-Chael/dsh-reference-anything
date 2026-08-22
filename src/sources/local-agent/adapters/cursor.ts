@@ -19,7 +19,7 @@
  * @module dsh-reference-anything/local-agent/adapters/cursor
  */
 
-import { join } from 'node:path'
+import { joinLocalPath } from '../path.ts'
 import type {
   AdapterState,
   ConvertOptions,
@@ -51,7 +51,7 @@ export const cursorAdapter: TranscriptAdapter = {
   displayName: 'Cursor',
 
   defaultRoots(home: string): readonly string[] {
-    return [join(home, '.cursor', 'projects')]
+    return [joinLocalPath(home, '.cursor', 'projects')]
   },
 
   matches(relativePath: string): boolean {

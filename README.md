@@ -240,27 +240,33 @@ Supports historical conversations from ChatGPT, Claude, Gemini, DeepSeek, Grok, 
 
 Opening the source URL happens only in the UI; the URL is never injected into model context. The initial reference contains only a safe pointer; if the model needs the body, it calls `reference_read` on demand.
 
-#### ☁️ @Cloud drive files — text files in your own 网盘
+#### ☁️ @Cloud drive files — text files through OpenList
 
-Type `@drive:` — or `@baidu:`, `@pds:`, `@cloud:`, `@网盘` — to search the files you keep in a cloud drive and reference one without downloading it into the workspace first. 百度网盘 and 阿里云盘 (PDS) are both supported, and both are searched at once when you do not name one.
-
-Reference Anything speaks the drive's REST API directly rather than shelling out to a CLI, because the `@` menu runs a query per keystroke and a subprocess per keystroke is not a budget that exists. It reuses the credential the official skill already minted; nothing is copied into this plugin's storage, and a drive that has never been logged into simply reports itself unavailable, so the group is inert until you opt in.
+Type `@drive:`, `@cloud:`, `@netdisk:`, or `@网盘` to search text files mounted in OpenList and reference one without first downloading it into the workspace. A new reference has an OpenList-backed opaque id:
 
 ```text
-@[百度网盘·quarterly-notes.md](dsh-ref:<opaque-base64url>)
+@[OpenList·quarterly-notes.md](dsh-ref:<opaque-base64url>)
 ```
 
-**Setup (百度网盘):** install the official [`baidu-drive`](https://github.com/baidu-netdisk/bdpan-storage/tree/main/skills/baidu-drive) skill and run its `login.sh` once. That mints a token at `~/.config/bdpan/config.json`, which this group reads and never writes, logs, or repeats back in an error message.
+**One-click managed install.** In Settings → Cloud drives, choose **Enable OpenList**. Reference Anything downloads and runs the managed OpenList v4.2.2 binary locally; its connection data is stored host-only, never in the Cordis patch or reference payload. The managed endpoint is loopback HTTP. You may instead connect an external OpenList: non-loopback endpoints must use HTTPS, while `localhost`/`127.0.0.1` HTTP is allowed.
 
-**Setup (阿里云盘 / PDS):** install the `aliyun` CLI's `pds` plugin and run `aliyun pds login` once. That mints a token at `~/.aliyun/pds_config.json`, read on the same terms. If you keep more than one profile there, the one named by `current` is the one this group uses — the same profile the CLI itself would act on.
+**API Pages.** First connect an OpenList admin session. Then open [api.oplist.org](https://api.oplist.org/) and paste its authorization result into the selected driver's masked field. A single scalar token is accepted only when that driver has exactly one authorization field; multi-field results (for example access plus refresh credentials) must be pasted as a JSON object or one `key=value` entry per line. Field names must match the dynamic OpenList driver schema. The values are cleared after submission and are never used as an OpenList admin token. [OpenList API Pages](https://github.com/OpenListTeam/OpenList-APIPages) is an official hosted service/source; it is not copied into this package.
 
-> [!IMPORTANT]
-> **百度网盘 confines an app to `/apps/bdpan/`.** This is Baidu's own sandbox, not a limitation of this plugin: a token minted through `bdpan` cannot see the rest of your drive at all. So the group lists what you have put under `我的应用数据/bdpan` (`/apps/bdpan/` in API terms) and nothing else. An empty group on a drive full of files usually means the files are outside that directory, not that discovery failed. Set `root` to a subdirectory of it to narrow the listing further.
+**Quick versus advanced connection.** The separate **Quick login** list is a Host-curated allowlist of API Pages providers: OneDrive, Aliyun, Baidu, Quark, 115, 123Pan, Dropbox, Google Drive/Photo, and Yandex. Other drivers, including drivers that merely have OAuth-looking field names, stay in **Advanced connection**.
 
-> [!IMPORTANT]
-> **阿里云盘 has no such sandbox, which cuts the other way.** A PDS token sees the whole drive it was minted for. `root` (or a per-drive entry in `roots`) confines the *directory listing* to one folder — give it a folder id, or an absolute path this group resolves to one — but search stays drive-wide by design, because PDS filters a search by immediate parent only: scoping it to a folder would hide every nested hit rather than narrow the results honestly. So an empty query lists your chosen folder, and a typed query reaches everything you own.
+**Add your drives dynamically.** Once connected, the panel reads the available OpenList driver schemas from that server. Choose a driver, complete only the fields it requires, and select a mount path. Driver credentials stay in OpenList on the host; the plugin never puts them in its config, candidates, references, or model context. Removing a mount does not delete cloud files.
 
-**Reading asks for the document, and settles for an extract only if it must.** A read requests the first `maxReadBytes` (64 KiB by default) as a byte range. If the drive answers with the whole file instead of the range it was asked for, the provider notices, demotes itself permanently, and keeps honouring the cap rather than absorbing a multi-gigabyte body; nothing about that is hard-coded, the first ranged request settles it. Only when the download cannot happen at all does the read fall back to the passage the drive's own search index extracted — labelled in the returned text as an extract the provider chose rather than the document, because answering "read this file" with a search snippet is answering a different question. Either way a truncated read is reported as partial rather than cut silently.
+**Database search index.** A managed instance is configured for OpenList's database index and automatic index updates at startup. Adding a managed mount schedules an update for that mount path; **Reindex** starts OpenList's global index build and the mount cards show sanitized global progress. External instances are never reconfigured automatically, although an explicit Reindex uses their global build endpoint.
+
+If an external instance has no usable search index, Reference Anything falls back to a bounded directory traversal. Those candidates are visibly marked **Results may be incomplete**; the traversal never changes the file path or reference id.
+
+**Read-only reference scope.** The integration lists and reads only the mounted text files you select. It never changes remote files, and the model can read a file only after you name that reference in the current task. Signed download URLs and credentials remain host-local.
+
+**Migration.** Old `baidu:` and `pds:` reference IDs are deliberately disabled. Re-select the file through OpenList to create a new reference; old per-provider credential files and direct provider configuration are no longer read.
+
+**Upgrade and rollback.** The managed binary is deliberately pinned to v4.2.2: there is no automatic “latest” upgrade. An older managed version shows an explicit **Upgrade** action that transactionally installs the pinned release; the same version shows **Repair install**. A version newer than the compatibility target is reported as unsupported and is never misleadingly downgraded. External servers are never upgraded or rolled back by this plugin.
+
+**Reading asks for the document.** A read requests the first `maxReadBytes` (64 KiB by default) as a byte range. If the drive answers with the whole file instead of the range it was asked for, the provider notices, demotes itself permanently, and keeps honouring the cap rather than absorbing a multi-gigabyte body. A truncated read is reported as partial rather than cut silently.
 
 At 4000 characters a block, 64 KiB is at most seventeen blocks, which fits inside one `reference_read` page — so an ordinary text file comes back whole, from its beginning. Raising `maxReadBytes` buys reach at the cost of a first page that lands at the *end* of the file and pages backwards: the right shape for a conversation, an awkward one for a document.
 
@@ -269,7 +275,7 @@ At 4000 characters a block, 64 KiB is at most seventeen blocks, which fits insid
 **Authorization.** These are your personal remote files, so this group uses the same per-task gate as the external conversations: the model may read a drive file only after you named it in the current task. A signed download URL never leaves the host — it appears in no candidate, no reference summary, and no error text.
 
 > [!NOTE]
-> **夸克网盘 is not planned.** It exposes no directory listing and no ranged read, and its skill forbids reading the bundle that would have to be ported. The two drives above are what this group speaks; a drive name with no transport in the build you are running is a startup error rather than a silently empty group, so a typo in `drives` says so immediately.
+> **OpenList is the only cloud-drive transport.** Add providers as OpenList mounts; a drive name without an implementation is a startup error rather than a silently empty group.
 
 ---
 

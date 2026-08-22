@@ -15,7 +15,7 @@
  * @module dsh-reference-anything/local-agent/adapters/qoder
  */
 
-import { join } from 'node:path'
+import { joinLocalPath } from '../path.ts'
 import type {
   AdapterState,
   ConvertOptions,
@@ -44,7 +44,7 @@ export const qoderAdapter: TranscriptAdapter = {
   displayName: 'Qoder',
 
   defaultRoots(home: string): readonly string[] {
-    return [join(home, '.qoder', 'projects')]
+    return [joinLocalPath(home, '.qoder', 'projects')]
   },
 
   matches(relativePath: string): boolean {

@@ -46,6 +46,10 @@ export interface ReferenceSummary {
   readonly messageCount?: number
   readonly partial?: boolean
   readonly syncedAt?: number
+  /** Discovery used a bounded fallback and may not cover the whole source. */
+  readonly searchIncomplete?: boolean
+  /** Picker navigation row; directories are never inserted as references. */
+  readonly isDirectory?: boolean
 }
 
 /** One projected turn of a referenced conversation, or one block of a referenced file. */

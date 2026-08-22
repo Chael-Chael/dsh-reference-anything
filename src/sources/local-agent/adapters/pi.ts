@@ -22,7 +22,7 @@
  * @module dsh-reference-anything/local-agent/adapters/pi
  */
 
-import { join } from 'node:path'
+import { joinLocalPath } from '../path.ts'
 import type {
   AdapterState,
   ConvertOptions,
@@ -65,7 +65,7 @@ export const piAdapter: TranscriptAdapter = {
   document: true,
 
   defaultRoots(home: string): readonly string[] {
-    return [join(home, '.pi', 'agent', 'sessions')]
+    return [joinLocalPath(home, '.pi', 'agent', 'sessions')]
   },
 
   matches(relativePath: string): boolean {

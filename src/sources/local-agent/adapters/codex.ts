@@ -16,7 +16,7 @@
  * @module dsh-reference-anything/local-agent/adapters/codex
  */
 
-import { join } from 'node:path'
+import { joinLocalPath } from '../path.ts'
 import type {
   AdapterState,
   ConvertOptions,
@@ -45,7 +45,7 @@ export const codexAdapter: TranscriptAdapter = {
   displayName: 'Codex',
 
   defaultRoots(home: string): readonly string[] {
-    return [join(home, '.codex', 'sessions')]
+    return [joinLocalPath(home, '.codex', 'sessions')]
   },
 
   matches(relativePath: string): boolean {

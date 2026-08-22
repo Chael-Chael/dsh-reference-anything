@@ -20,15 +20,10 @@ import type { FetchLike } from './providers/http.ts'
 /**
  * One supported drive product.
  *
- * Named after the product rather than the protocol, because the two APIs agree
- * on almost nothing: Baidu addresses a file by a bare `int64` while PDS needs a
- * file id *and* a drive id, and their pagination models have no common shape.
+ * OpenList is the only supported drive surface. Its stable locator is an
+ * absolute, normalized path encoded by the registry.
  */
-export type DriveKind =
-  /** 百度网盘, sandboxed to the `/apps/bdpan/` application directory. */
-  | 'baidu'
-  /** 阿里云盘与相册服务 (PDS), `alibabacloud-pds-intelligent-workspace`. */
-  | 'pds'
+export type DriveKind = 'openlist'
 
 /**
  * One file or folder as listing sees it, without its bytes.
@@ -43,8 +38,8 @@ export interface DriveEntry {
   /**
    * Provider-scoped opaque id, stable across listings.
    *
-   * Never parsed outside its owning provider. Baidu puts an `fs_id` here; PDS
-   * will need a composite, and that is precisely why callers must not read it.
+   * Never exposed as a raw download URL. OpenList uses an absolute normalized
+   * path internally and the registry encodes it into the public reference id.
    */
   readonly id: string
   /** Basename for display, never empty — a nameless file falls back to its id. */
@@ -52,9 +47,7 @@ export interface DriveEntry {
   /**
    * Full path as the provider displays it.
    *
-   * User-facing only. Baidu returns a localized display path
-   * (`我的应用数据/…`) that is *not* the path its own API accepts, so this is a
-   * label and never an argument.
+   * User-facing only: it is a label and never an argument.
    */
   readonly path: string
   /** Size in bytes; `0` for a folder. */
@@ -75,6 +68,8 @@ export interface DriveEntry {
    * `reference_read`'s untrusted-data envelope.
    */
   readonly excerpt?: string
+  /** True only when this row came from a bounded traversal after indexed search was unavailable. */
+  readonly searchIncomplete?: boolean
 }
 
 /** What one ranged read actually returned. */
@@ -96,20 +91,14 @@ export interface DriveReadResult {
 /**
  * One drive's transport: authentication, listing, and reading.
  *
- * Kept minimal on purpose. This interface was written against Baidu alone and
- * must be re-examined when the second implementation lands — generalizing two
- * APIs that share no identifier scheme, no pagination model, and no path
- * semantics before either one is working produces an abstraction that fits
- * neither.
+ * Kept minimal on purpose. OpenList owns authentication, driver-specific
+ * details, and pagination behind its single filesystem surface.
  */
 /**
  * Construction-time seams every provider accepts.
  *
- * Uniform across drives even though the fields mean different things in each:
- * `root` is a sandbox path for 百度网盘 and a folder id (or an absolute path to
- * resolve into one) for PDS. Keeping one shape lets the registry build any
- * provider from one config row, and the divergence is documented on each
- * implementation rather than encoded in the type.
+ * `root` is the absolute OpenList directory where browsing begins. Credentials
+ * live in the host-only OpenList credential file rather than plugin config.
  */
 export interface DriveProviderOptions {
   /** Where listing starts when the user has typed no query. */
@@ -118,8 +107,10 @@ export interface DriveProviderOptions {
   readonly fetch?: FetchLike
   /** Clock in epoch milliseconds, for credential expiry and signed-URL aging. */
   readonly now?: () => number
-  /** Credential location; defaults to the drive's own CLI config path. */
+  /** Host-only OpenList credential file; defaults to the managed location. */
   readonly configPath?: string
+  /** Host-local credential supplier; ignored by non-OpenList transports. */
+  readonly credentials?: (refresh?: boolean) => Promise<{ readonly endpoint: string, readonly token?: string } | undefined>
 }
 
 export interface DriveProvider {
@@ -164,10 +155,8 @@ export interface DriveProvider {
   /**
    * Whether ranged reads work, or `undefined` until the first read has probed.
    *
-   * Resolved at runtime rather than declared, because neither product
-   * documents `Range` support and the official SDK exposes no offset at all. A
-   * range request answered with `200` demotes the provider for the rest of the
-   * process.
+   * Resolved at runtime rather than declared. A range request answered with
+   * `200` demotes the provider for the rest of the process.
    */
   supportsRange: boolean | undefined
   /**

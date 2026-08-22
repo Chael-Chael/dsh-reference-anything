@@ -15,7 +15,7 @@
  * @module dsh-reference-anything/local-agent/adapters/hermes
  */
 
-import { join } from 'node:path'
+import { joinLocalPath } from '../path.ts'
 import type {
   AdapterState,
   ConvertOptions,
@@ -44,7 +44,7 @@ export const hermesAdapter: TranscriptAdapter = {
   displayName: 'Hermes',
 
   defaultRoots(home: string): readonly string[] {
-    return [join(home, '.hermes', 'sessions')]
+    return [joinLocalPath(home, '.hermes', 'sessions')]
   },
 
   matches(relativePath: string): boolean {

@@ -329,27 +329,31 @@ describe('local agent conversations', () => {
 
 describe('cloud drive files', () => {
   const driveRow = (over: Partial<DriveCandidate> = {}): DriveCandidate => ({
-    id: 'baidu:412093', label: 'quarterly-notes.md',
-    provider: '百度网盘', origin: '/apps/bdpan/notes', ...over,
+    id: 'openlist:eyJ2IjoxLCJwYXRoIjoiL25vdGVzL3F1YXJ0ZXJseS1ub3Rlcy5tZCJ9', label: 'quarterly-notes.md',
+    provider: 'OpenList', origin: '/notes', ...over,
   })
 
   it('uses the canonical opaque dsh-ref URI, so the host dispatches to the cloud-drive source', () => {
-    const uri = driveReferenceUri('baidu:412093')
+    const uri = driveReferenceUri('openlist:eyJ2IjoxLCJwYXRoIjoiL25vdGVzL3F1YXJ0ZXJseS1ub3Rlcy5tZCJ9')
     expect(uri).toMatch(/^dsh-ref:[A-Za-z0-9_-]+$/)
-    expect(decodeReferenceUri(uri)).toEqual({ source: 'cloud-drive', id: 'baidu:412093' })
+    expect(decodeReferenceUri(uri)).toEqual({ source: 'cloud-drive', id: 'openlist:eyJ2IjoxLCJwYXRoIjoiL25vdGVzL3F1YXJ0ZXJseS1ub3Rlcy5tZCJ9' })
   })
 
   it('answers to drive words in both scripts without taking a prefix another group already owns', () => {
-    for (const prefix of ['drive', 'drives', 'cloud', 'netdisk', 'baidu', 'bdpan', 'pds', 'aliyun']) {
+    for (const prefix of ['drive', 'drives', 'cloud', 'netdisk', 'openlist']) {
       expect(scopedQuery(`${prefix}:notes`, 'drives')).toBe('notes')
       expect(scopedQuery(`${prefix}:notes`, 'files')).toBeUndefined()
     }
     // `scopedQuery`'s prefix pattern is ASCII, so the CJK spellings only ever
     // reach the map through its bare-word branch — which is why they carry no
     // colon here.
-    for (const word of ['网盘', '百度', '百度网盘', '阿里', '阿里云盘']) {
+    for (const word of ['网盘']) {
       expect(scopedQuery(word, 'drives')).toBe('')
       expect(scopedQuery(word, 'files')).toBeUndefined()
+    }
+    for (const prefix of ['baidu', 'bdpan', 'pds', 'aliyun']) {
+      // Removed aliases are an ordinary search string, not a drive scope.
+      expect(scopedQuery(`${prefix}:notes`, 'drives')).toBe(`${prefix}:notes`)
     }
     // `file`/`files` stayed with the workspace, which is why a drive needed
     // words of its own.
@@ -359,17 +363,27 @@ describe('cloud drive files', () => {
   it('names the holding drive and its path, and numbers files that share a name', async () => {
     const source = createCloudDriveSource(async () => [
       driveRow(),
-      driveRow({ id: 'baidu:412094', origin: '/apps/bdpan/archive' }),
-      driveRow({ id: 'pds:99', label: '', provider: '', origin: undefined }),
+      driveRow({ id: 'openlist:eyJ2IjoxLCJwYXRoIjoiL2FyY2hpdmUvcXVhcnRlcmx5LW5vdGVzLm1kIn0', origin: '/archive' }),
+      driveRow({ id: 'openlist:eyJ2IjoxLCJwYXRoIjoiL3VudGl0bGVkIn0', label: '', provider: '', origin: undefined }),
     ], undefined, options({ order: 35 }))
     const candidates = await source.candidates(session, request('drives'))
     expect(source.name).toBe(DRIVE_SOURCE)
     expect(candidates.map(row => row.name)).toEqual(['quarterly-notes.md', 'quarterly-notes.md (2)', 'Untitled'])
     expect(candidates[0]?.icon).toBe(DRIVE_ICON_MARKER)
-    expect(candidates[0]?.description).toBe('百度网盘 · /apps/bdpan/notes')
+    expect(candidates[0]?.description).toBe('OpenList · /notes')
     // Neither the drive nor the folder is known for this one; the group's own
     // name is the honest fallback.
     expect(candidates[2]?.description).toBe('Cloud drive files')
+  })
+
+  it('warns that fallback results may be incomplete without changing the reference id', async () => {
+    const row = driveRow({ searchIncomplete: true })
+    const source = createCloudDriveSource(async () => [row], undefined, options({ order: 35 }))
+    const candidate = (await source.candidates(session, request('drives')))[0]!
+    expect(candidate.description).toContain('Results may be incomplete')
+    const outcome = source.onPick(pick(candidate))
+    if (outcome === undefined || outcome === 'handled' || !('insert' in outcome)) throw new Error('expected insert')
+    expect(JSON.parse(outcome.insert.ref)).toMatchObject({ id: row.id })
   })
 
   it('inserts a file chip while serializing the canonical mention on send', async () => {
@@ -379,15 +393,23 @@ describe('cloud drive files', () => {
     const outcome = source.onPick(pick(candidate))
     if (outcome === undefined || outcome === 'handled' || !('insert' in outcome)) throw new Error('expected insert')
     expect(outcome.insert).toMatchObject({
-      source: DRIVE_SOURCE, label: '百度网盘·quarterly-notes.md', appearance: 'file',
+      source: DRIVE_SOURCE, label: 'OpenList·quarterly-notes.md', appearance: 'file',
     })
     expect(outcome.insert.label).not.toContain(DRIVE_ICON_MARKER)
-    const mention = `@[百度网盘·quarterly-notes.md](${driveReferenceUri(row.id)})`
+    const mention = `@[OpenList·quarterly-notes.md](${driveReferenceUri(row.id)})`
     await expect(source.codec?.serialize(outcome.insert.ref, new AbortController().signal)).resolves.toBe(mention)
     expect(source.codec?.clipboardText(outcome.insert.ref)).toBe(mention)
     // The ref the chip carries is the plugin's own, never the drive's path —
     // and never anything the account signed.
-    expect(outcome.insert.ref).not.toContain('/apps/bdpan')
+    expect(outcome.insert.ref).not.toContain('/notes')
+  })
+
+  it('navigates folders without inserting a folder reference', async () => {
+    const source = createCloudDriveSource(async query => query === '/notes/'
+      ? [driveRow({ label: 'archive', origin: '/notes/archive', isDirectory: true })]
+      : [], undefined, options({ order: 35 }))
+    const candidate = (await source.candidates(session, request('drive:/notes/'))).find(row => row.name.includes('archive'))!
+    expect(source.onPick(pick(candidate))).toEqual({ text: '@drive:/notes/archive/' })
   })
 
   it('escapes a filename that would otherwise break out of the mention it is written into', async () => {

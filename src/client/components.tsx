@@ -1,8 +1,8 @@
 import type { InjectFace, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import type { ObservableSnapshot } from '@deepseek-ai/dsh-client-runtime/client'
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react'
-import { defaultPickerSettings, type ChatProvider, type PickerSettings, type PickerSource, type SettingsRecord } from '../wire.ts'
-import { syncProgressFraction, type BrowsePage, type BrowserProfile, type Health, type PackageUpdateStatus, type ProviderStats, type StorageStats, type SyncStatus } from './remote.ts'
+import { ALL_LOCAL_AGENTS, defaultPickerSettings, type ChatProvider, type LocalAgentKind, type PickerSettings, type PickerSource, type SettingsRecord } from '../wire.ts'
+import { syncProgressFraction, type BrowsePage, type BrowserProfile, type Health, type OpenListDriver, type OpenListMount, type OpenListStatus, type PackageUpdateStatus, type ProviderStats, type StorageStats, type SyncStatus } from './remote.ts'
 import { ProviderLogo } from './provider-icons.tsx'
 import { type REFERENCE_ANYTHING_NS } from './locale.ts'
 import type { TranslateNS } from '@deepseek-ai/dsh-client-locale/client'
@@ -10,13 +10,14 @@ import { OPENCLI_EXTENSION_STORE_URL, openExtensionStore, setupReady, type Setup
 
 /** Current query/filter/page of the "Manage synced conversations" list, plus its last fetched page. */
 export interface BrowseState { query: string; provider?: ChatProvider; offset: number; page?: BrowsePage }
-export interface SettingsSnapshot { settings: SettingsRecord; health?: Health; update?: PackageUpdateStatus; profiles?: readonly BrowserProfile[]; stats?: readonly ProviderStats[]; storage?: StorageStats; sync?: SyncStatus; error?: string; notice?: string; loading?: boolean; browse?: BrowseState; setupStep?: SetupStage }
+export interface SettingsSnapshot { settings: SettingsRecord; health?: Health; update?: PackageUpdateStatus; profiles?: readonly BrowserProfile[]; stats?: readonly ProviderStats[]; storage?: StorageStats; sync?: SyncStatus; openList?: OpenListStatus; openListDrivers?: readonly OpenListDriver[]; openListMounts?: readonly OpenListMount[]; error?: string; notice?: string; loading?: boolean; browse?: BrowseState; setupStep?: SetupStage }
 export interface SettingsInjected {
   hooks: { scope: ObservableSnapshot<SettingsSnapshot> }
   save(value: SettingsRecord): Promise<void>
   sync(providers: ChatProvider[], mode: 'incremental' | 'full'): Promise<void>
   cancel(): Promise<void>
   refresh(): Promise<void>
+  refreshOpenList?(): Promise<void>
   quickRefreshOnOpen?(): Promise<void>
   setupAll(extensionPageOpened: boolean): Promise<void>
   discoverOpenCli(): Promise<void>
@@ -34,6 +35,14 @@ export interface SettingsInjected {
   clearRemoteMissing?: () => Promise<void>
   clearOldAccounts?: () => Promise<void>
   refreshStats(): Promise<void>
+  openListInstall?(): Promise<void>
+  openListUpgrade?(rollback?: boolean): Promise<void>
+  openListConnectExternal?(input: { endpoint: string; username?: string; password?: string; token?: string }): Promise<void>
+  openListDisconnect?(): Promise<void>
+  openListCreateMount?(input: { id?: string; mountPath: string; driver: string; addition: Record<string, unknown> }): Promise<void>
+  openListDisableMount?(id: string, disabled?: boolean): Promise<void>
+  openListRemoveMount?(id: string): Promise<void>
+  openListReindex?(id: string): Promise<{ supported: boolean; reason?: string }>
 }
 type T = TranslateNS<typeof REFERENCE_ANYTHING_NS>
 type SettingsProps = PropsRuntime<'settings.section'> & InjectFace<SettingsInjected> & { t: T }
@@ -53,6 +62,9 @@ const STATS_POLL_MS = 30_000
 const PROVIDER_LABEL: Record<ChatProvider, string> = {
   chatgpt: 'ChatGPT', claude: 'Claude', gemini: 'Gemini', deepseek: 'DeepSeek', grok: 'Grok', kimi: 'Kimi',
 }
+const AGENT_LABEL: Record<LocalAgentKind, string> = {
+  'claude-code': 'Claude Code', codex: 'Codex', cursor: 'Cursor', qoder: 'Qoder', reasonix: 'Reasonix', openclaw: 'OpenClaw', kimi: 'Kimi CLI', grokbuild: 'Grok Build', hermes: 'Hermes', 'gemini-cli': 'Gemini CLI', pi: 'Pi', opencode: 'OpenCode', mimocode: 'MimoCode', zcode: 'ZCode',
+}
 const PICKER_SOURCES: ReadonlyArray<{ id: PickerSource; label: keyof typeof SOURCE_KEYS }> = [
   { id: 'commands', label: 'commands' },
   { id: 'skills', label: 'skills' },
@@ -65,9 +77,10 @@ const PICKER_SOURCES: ReadonlyArray<{ id: PickerSource; label: keyof typeof SOUR
 const SOURCE_KEYS = { commands: 'source.commands', skills: 'source.skills', files: 'source.files', sessions: 'source.sessions', agents: 'source.agents', conversations: 'source.conversations', drives: 'source.drives' } as const
 const REFERENCE_ANYTHING_LOGO = '__REFERENCE_ANYTHING_LOGO_DATA_URI__'
 const GITHUB_REPOSITORY_URL = 'https://github.com/Chael-Chael/dsh-reference-anything'
-export function ConversationSettings({ useScope, save, sync, cancel, refresh, quickRefreshOnOpen, setupAll, discoverOpenCli, installOpenCli, useProfile, install, restartDaemon, checkUpdate, installUpdate, switchReferenceUiMode, browse, deleteConversation, clearProvider, clearOlder, clearRemoteMissing, clearOldAccounts, refreshStats, t }: SettingsProps) {
+export function ConversationSettings({ useScope, save, sync, cancel, refresh, refreshOpenList = async () => undefined, quickRefreshOnOpen, setupAll, discoverOpenCli, installOpenCli, useProfile, install, restartDaemon, checkUpdate, installUpdate, switchReferenceUiMode, browse, deleteConversation, clearProvider, clearOlder, clearRemoteMissing, clearOldAccounts, refreshStats, openListInstall = async () => undefined, openListUpgrade = async () => undefined, openListConnectExternal = async () => undefined, openListDisconnect = async () => undefined, openListCreateMount = async () => undefined, openListDisableMount = async () => undefined, openListRemoveMount = async () => undefined, openListReindex = async () => ({ supported: false }), t }: SettingsProps) {
   const state = useScope(value => value)
   const settings = state.settings
+  const enabledAgents = settings.enabledAgents ?? ALL_LOCAL_AGENTS
   const picker = settings.picker ?? defaultPickerSettings()
   const referenceUiMode = settings.referenceUiMode ?? 'plugin'
   const [busyAction, setBusyAction] = useState<string>()
@@ -234,6 +247,11 @@ export function ConversationSettings({ useScope, save, sync, cancel, refresh, qu
       <div className="dsh_ref_provider_grid">{PROVIDERS.map((provider, index) => <ProviderCard key={provider} provider={provider} index={index} stats={state.stats?.find(row => row.provider === provider)} busy={state.sync?.status === 'running'} autoSync={settings.autoSync} enabled={enabled.has(provider)} onEnabled={value => { setProviderEnabled(provider, value) }} onSync={(mode) => { void sync([provider], mode) }} onClear={() => { if (window.confirm(t('storage.clearProviderConfirm', { provider: PROVIDER_LABEL[provider] }))) void clearProvider(provider) }} t={t} />)}</div>
       {!state.loading && state.stats?.every(item => item.conversations === 0) && <div className="dsh_ref_empty">{t('settings.empty')}</div>}
       <div className="dsh_ref_chat_divider" />
+      <AgentSelectionCards state={state} enabledAgents={enabledAgents} save={save} t={t} />
+      <div className="dsh_ref_chat_divider" />
+      <CloudDrives state={state} refreshOpenList={refreshOpenList} install={openListInstall} upgrade={openListUpgrade} connect={openListConnectExternal} disconnect={openListDisconnect} createMount={openListCreateMount} disableMount={openListDisableMount} removeMount={openListRemoveMount} reindexMount={openListReindex} t={t} />
+      <DriveSelectionCards state={state} save={save} t={t} />
+      <div className="dsh_ref_chat_divider" />
       <div className="dsh_ref_sync_settings"><div className="dsh_ref_section_head"><div><h3>{t('settings.syncSettings')}</h3><p>{t('settings.syncSettingsDetail')}</p></div></div>
       <div className="dsh_ref_form_grid">
         <label><span>{t('settings.syncMode')}</span><select value={syncMode} onChange={event => { const mode = event.target.value; void save({ ...settings, autoSync: mode === 'interval', syncOnStartup: mode === 'startup' || mode === 'interval' }) }}><option value="manual">{t('settings.syncManual')}</option><option value="startup">{t('settings.syncStartup')}</option><option value="interval">{t('settings.syncInterval')}</option></select><small className="dsh_ref_field_note">{syncMode === 'manual' ? t('settings.syncManualDetail') : syncMode === 'startup' ? t('settings.syncStartupDetail') : t('settings.autoNote', { minutes: settings.autoSyncMinutes })}</small></label>
@@ -268,6 +286,237 @@ export function SyncProgress({ sync, t }: { sync: SyncStatus; t: T }) {
     <p className="dsh_ref_progress_label">{t(syncStatusKey(sync.status))} · {sync.completed}/{sync.total}{listing > 0 ? ` · ${t('sync.progressSourcesListing', { count: listing })}` : ''}</p>
     <div className="dsh_ref_progress_sources">{sync.providerProgress.map(row => <span key={row.provider}><b>{PROVIDER_LABEL[row.provider]}</b><i>{row.phase === 'listing' ? t('sync.progressSourceListing') : `${row.completed}/${row.total}`}</i></span>)}</div>
   </div>
+}
+
+/** A separate, read-only-with-respect-to-drive-files OpenList control plane. */
+export function CloudDrives({ state, refreshOpenList, install, upgrade, connect, disconnect, createMount, disableMount, removeMount, reindexMount, t }: {
+  state: SettingsSnapshot; refreshOpenList(): Promise<void>; install(): Promise<void>; upgrade(rollback?: boolean): Promise<void>
+  connect(input: { endpoint: string; username?: string; password?: string; token?: string }): Promise<void>; disconnect(): Promise<void>
+  createMount(input: { id?: string; mountPath: string; driver: string; addition: Record<string, unknown> }): Promise<void>; disableMount(id: string, disabled?: boolean): Promise<void>; removeMount(id: string): Promise<void>; reindexMount(id: string): Promise<{ supported: boolean; reason?: string }>; t: T
+}) {
+  const [endpoint, setEndpoint] = useState('')
+  const [username, setUsername] = useState('')
+  const [password, setPassword] = useState('')
+  const [quickToken, setQuickToken] = useState('')
+  const [quickDriverName, setQuickDriverName] = useState('')
+  const [driverName, setDriverName] = useState('')
+  const [fields, setFields] = useState<Record<string, unknown>>({})
+  const [touchedFields, setTouchedFields] = useState<Record<string, true>>({})
+  const [mountPath, setMountPath] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [optimisticState, setOptimisticState] = useState<OpenListStatus['state']>()
+  const [formError, setFormError] = useState<string>()
+  const [quickError, setQuickError] = useState<string>()
+  const [feedback, setFeedback] = useState<string>()
+  const [reauthMount, setReauthMount] = useState<OpenListMount>()
+  const [showExternal, setShowExternal] = useState(false)
+  const [showAddDrive, setShowAddDrive] = useState(false)
+  const [showAdvanced, setShowAdvanced] = useState(false)
+  const status = state.openList
+  const drivers = state.openListDrivers ?? []
+  const quickDrivers = drivers.filter(item => item.quickAuth === true)
+  const quickDriver = quickDrivers.find(item => item.name === quickDriverName) ?? quickDrivers[0]
+  const quickGuide = apiPagesProviderGuide(quickDriver?.name ?? '')
+  const driver = drivers.find(item => item.name === driverName) ?? drivers[0]
+  const mountNames = (state.openListMounts ?? []).map(item => item.name)
+  useEffect(() => {
+    if (driver && driver.name !== driverName) { setDriverName(driver.name); setFields(reauthMount ? {} : driverDefaults(driver)); setTouchedFields({}) }
+  }, [driver, driverName])
+  useEffect(() => {
+    if (driver && mountPath === '') setMountPath(defaultOpenListMountPath(driver.name, mountNames))
+  }, [driver?.name, mountNames.join('|')])
+  useEffect(() => {
+    if (status?.mode !== undefined) return
+    setPassword(''); setQuickToken(''); setFields({}); setTouchedFields({}); setReauthMount(undefined); setFormError(undefined)
+  }, [status?.mode])
+  useEffect(() => {
+    if (!state.openListMounts?.some(mount => mount.indexStatus === 'running')) return
+    const timer = setInterval(() => { void refreshOpenList() }, 2_000)
+    return () => clearInterval(timer)
+  }, [state.openListMounts, refreshOpenList])
+  const act = (action: () => Promise<void>, operation?: OpenListStatus['state']) => { if (busy) return; setBusy(true); setOptimisticState(operation); void action().catch(() => undefined).finally(() => { setBusy(false); setOptimisticState(undefined) }) }
+  const submitExternal = () => {
+    const input = { endpoint: endpoint.trim(), ...(username.trim() ? { username: username.trim() } : {}), ...(password ? { password } : {}) }
+    act(async () => { try { await connect(input) } finally { setPassword('') } })
+  }
+  const submitQuick = () => {
+    const addition = quickDriver && parseQuickProviderAddition(quickDriver, quickToken)
+    if (!quickDriver || !addition || !status?.mode) { setQuickError(t('cloud.quickRequired')); return }
+    const path = mountPath.trim() || defaultOpenListMountPath(quickDriver.name, mountNames)
+    // API Pages returns a provider OAuth token, not an OpenList admin JWT.
+    // It belongs only in the selected driver's addition payload.
+    setQuickError(undefined)
+    act(async () => { try { await createMount({ mountPath: path, driver: quickDriver.name, addition }); setMountPath(defaultOpenListMountPath(quickDriver.name, [...mountNames, path])); setFeedback(t('cloud.quickSuccess', { provider: quickDriver.name })); setQuickError(undefined) } catch { setQuickError(t('cloud.quickFailed')); throw new Error('mount failed') } finally { setQuickToken('') } })
+  }
+  const submitMount = () => {
+    if (!driver) return
+    const path = mountPath.trim() || defaultOpenListMountPath(driver.name, mountNames)
+    const addition = reauthMount ? sparseReauthAddition(driver, fields, touchedFields) : normalizedDriverAddition(driver, fields)
+    if (addition === undefined) { setFormError(t('cloud.required')); return }
+    setFormError(undefined)
+    act(async () => { try { await createMount({ ...(reauthMount === undefined ? {} : { id: reauthMount.id }), mountPath: reauthMount?.name ?? path, driver: driver.name, addition }); setReauthMount(undefined); if (reauthMount === undefined) setMountPath(defaultOpenListMountPath(driver.name, [...mountNames, path])); setFields({}); setTouchedFields({}); setFormError(undefined) } catch { setFormError(t('cloud.error')); throw new Error('mount failed') } })
+  }
+  return <section className="dsh_ref_cloud" aria-label={t('cloud.title')}>
+    <div className="dsh_ref_section_head"><div><h3>{t('cloud.title')}</h3><p>{t('cloud.detail')}</p></div><span className="dsh_ref_health">{status ? t(`cloud.state.${optimisticState ?? status.state}` as keyof typeof import('./locale.ts').zh) : t('cloud.state.install')}</span></div>
+    <ol className="dsh_ref_cloud_steps"><li className={status?.mode ? 'is_done' : 'is_current'}><b>1</b><span><strong>{t('cloud.stepEnable')}</strong><small>{status?.mode ? t('cloud.stepDone') : t('cloud.stepEnableDetail')}</small></span></li><li className={(state.openListMounts?.length ?? 0) > 0 ? 'is_done' : status?.mode ? 'is_current' : ''}><b>2</b><span><strong>{t('cloud.stepAdd')}</strong><small>{(state.openListMounts?.length ?? 0) > 0 ? t('cloud.stepDone') : t('cloud.stepAddDetail')}</small></span></li><li className={(state.openListMounts?.some(mount => mount.status === 'ready')) ? 'is_done' : ''}><b>3</b><span><strong>{t('cloud.stepUse')}</strong><small>{t('cloud.stepUseDetail')}</small></span></li></ol>
+    <p className="dsh_ref_auto_note">{t('cloud.license')} <a href="https://github.com/OpenListTeam/OpenList/tree/v4.2.2" target="_blank" rel="noreferrer">{t('cloud.source')}</a></p>
+    {status?.error && <p className="dsh_ref_inline_error">{status.error}</p>}
+    <div className="dsh_ref_cloud_actions">
+      {status?.mode !== 'external' && (!status?.installed || !status.mode) && <button className="is_primary" type="button" disabled={busy} onClick={() => act(install, 'downloading')}>{t('cloud.enable')}</button>}
+      {status?.mode && <button className="is_primary" type="button" disabled={busy} onClick={() => { setShowAddDrive(value => { if (value) { setQuickToken(''); setQuickError(undefined) }; return !value }); setShowAdvanced(false) }}>{showAddDrive ? t('cloud.cancelAdd') : t('cloud.addDrive')}</button>}
+      {status?.upgradeAvailable && <button type="button" disabled={busy} onClick={() => act(() => upgrade(false), 'upgrade')}>{t('cloud.upgrade')}</button>}
+      {status?.mode !== 'external' && status?.installed && !status.upgradeAvailable && status.newerVersion !== true && <button type="button" disabled={busy} onClick={() => act(() => upgrade(false), 'downloading')}>{t('cloud.repair')}</button>}
+      {status?.mode !== 'external' && status?.supportsRollback && <button type="button" disabled={busy} onClick={() => act(() => upgrade(true), 'downloading')}>{t('cloud.rollback')}</button>}
+      {status?.mode && <button type="button" disabled={busy} onClick={() => act(disconnect)}>{t('cloud.disconnect')}</button>}
+      {!status?.mode && <button type="button" disabled={busy} onClick={() => setShowExternal(value => !value)}>{showExternal ? t('cloud.hideAdvanced') : t('cloud.connectExisting')}</button>}
+    </div>
+    {!status?.mode && showExternal && <div className="dsh_ref_cloud_connect">
+      <label><span>{t('cloud.endpoint')}</span><input value={endpoint} placeholder="https://openlist.example" onChange={event => setEndpoint(event.target.value)} /></label>
+      <label><span>{t('cloud.username')}</span><input value={username} onChange={event => setUsername(event.target.value)} /></label>
+      <label><span>{t('cloud.password')}</span><input type="password" value={password} onChange={event => setPassword(event.target.value)} /></label>
+      <button type="button" disabled={busy || !endpoint.trim()} onClick={submitExternal}>{t('cloud.connect')}</button>
+    </div>}
+    {status?.mode && showAddDrive && quickDrivers.length > 0 && <div className="dsh_ref_cloud_quick">
+      <div className="dsh_ref_cloud_quick_head"><h4>{t('cloud.quickLoginTitle')}</h4><p>{t('cloud.quickLoginDetail')}</p></div>
+      <ol className="dsh_ref_quick_tasks">
+        <li className="is_done"><b>1</b><div><strong>{t('cloud.quickStepChoose')}</strong><label><span>{t('cloud.quickChooseLabel')}</span><select value={quickDriver?.name ?? ''} disabled={busy} onChange={event => { setQuickDriverName(event.target.value); setMountPath(defaultOpenListMountPath(event.target.value, mountNames)); setQuickToken(''); setQuickError(undefined) }}>{quickDrivers.map(item => <option key={item.name} value={item.name}>{item.name}</option>)}</select></label></div></li>
+        <li><b>2</b><div><strong>{t('cloud.quickStepAuthorize', { provider: quickDriver?.name ?? '' })}</strong><p>{t('cloud.quickAuthorizeDetail', { provider: quickDriver?.name ?? '' })}</p><div className="dsh_ref_api_pages_guide"><strong>{t('cloud.quickOnPage')}</strong><ol><li>{t('cloud.quickPageChoose', { option: quickGuide.option })}</li>{quickGuide.parameters === 'official' && <li>{t('cloud.quickPageOfficial')}</li>}{quickGuide.parameters === 'automatic' && <li>{t('cloud.quickPageAutomatic')}</li>}{quickGuide.parameters === 'own' && <li>{t('cloud.quickPageOwn')}</li>}<li>{t('cloud.quickPageGet')}</li><li>{t('cloud.quickPageCopy', { result: quickGuide.result })}</li></ol></div><a className="dsh_ref_button is_primary" href="https://api.oplist.org/" target="_blank" rel="noreferrer">{t('cloud.quickProviderNamed', { provider: quickDriver?.name ?? '' })}</a></div></li>
+        <li className={quickToken ? 'is_done' : 'is_current'}><b>3</b><div><strong>{t('cloud.quickStepPaste')}</strong><label><span>{t('cloud.quickPasteLabel')}</span><textarea className="dsh_ref_masked_secret" rows={3} value={quickToken} placeholder={t('cloud.quickPastePlaceholder')} aria-invalid={quickError ? true : undefined} aria-describedby="dsh-ref-quick-secret-note" onChange={event => { setQuickToken(event.target.value); setQuickError(undefined) }} autoComplete="off" spellCheck={false} /></label><small id="dsh-ref-quick-secret-note">{t('cloud.quickSecretNote')}</small>{quickError && <p className="dsh_ref_inline_error" role="alert">{quickError}</p>}</div></li>
+      </ol>
+      <div className="dsh_ref_quick_summary"><span>{t('cloud.quickWillAdd')}</span><strong>{quickDriver?.name} · {mountPath || (quickDriver ? defaultOpenListMountPath(quickDriver.name, mountNames) : '')}</strong></div>
+      <button className="is_primary dsh_ref_quick_submit" type="button" aria-busy={busy} disabled={busy || !quickDriver || quickProviderAuthFields(quickDriver).length === 0} onClick={submitQuick}>{busy ? t('cloud.quickConnecting') : t('cloud.quickAdd')}</button>
+    </div>}
+    {status?.mode && showAddDrive && !reauthMount && <button className="dsh_ref_advanced_toggle" type="button" onClick={() => setShowAdvanced(value => !value)}>{showAdvanced ? t('cloud.hideAdvanced') : t('cloud.showAdvanced')}</button>}
+    {status?.mode && (reauthMount !== undefined || (showAddDrive && (showAdvanced || quickDrivers.length === 0))) && <div className="dsh_ref_cloud_mount_form">
+      <h4>{reauthMount ? t('cloud.reauthTitle', { name: reauthMount.name }) : t('cloud.advancedConnection')}</h4>
+      <label><span>{t('cloud.driver')}</span><select value={driver?.name ?? ''} disabled={reauthMount !== undefined} onChange={event => { const next = drivers.find(item => item.name === event.target.value); setDriverName(event.target.value); setFields(next ? driverDefaults(next) : {}); setTouchedFields({}); setMountPath(defaultOpenListMountPath(event.target.value, mountNames)) }}>{drivers.map(item => <option key={item.name} value={item.name}>{item.name}</option>)}</select></label>
+      {driver?.description && <small>{driver.description}</small>}
+      {driver?.fields.map(field => <label key={field.name}><span>{field.label}{field.required && !reauthMount ? ' *' : ''}</span>{field.type === 'boolean' ? <input type="checkbox" checked={fields[field.name] === true} onChange={event => { setFields(value => ({ ...value, [field.name]: event.target.checked })); setTouchedFields(value => ({ ...value, [field.name]: true })) }} /> : field.type === 'select' ? <select value={String(fields[field.name] ?? '')} onChange={event => { setFields(value => ({ ...value, [field.name]: event.target.value })); setTouchedFields(value => ({ ...value, [field.name]: true })) }}>{reauthMount && <option value="" disabled>—</option>}{field.options?.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}</select> : <input type={field.secret ? 'password' : field.type === 'number' ? 'number' : 'text'} value={String(fields[field.name] ?? '')} onChange={event => { setFields(value => ({ ...value, [field.name]: event.target.value })); setTouchedFields(value => ({ ...value, [field.name]: true })) }} />}</label>)}
+      {!reauthMount && <label><span>{t('cloud.mountPath')}</span><input value={mountPath} onChange={event => setMountPath(event.target.value)} /></label>}<button type="button" disabled={busy || !driver} onClick={submitMount}>{reauthMount ? t('cloud.reauth') : t('cloud.create')}</button>{formError && <p className="dsh_ref_inline_error">{formError}</p>}
+    </div>}
+    <div className="dsh_ref_cloud_cards">{(state.openListMounts ?? []).map(mount => <article key={mount.id}>
+      <strong>{mount.name}</strong>
+      <span>{mount.driver} · {mount.status === 'ready' ? t('cloud.ready') : mount.status === 'disabled' || !mount.enabled ? t('cloud.disabled') : t('cloud.error')}{mount.indexStatus ? ` · ${mount.indexStatus}` : ''}</span>
+      {mount.error && <small className="dsh_ref_inline_error">{mount.error}</small>}
+      {mount.capacityTotal !== undefined && <small>{formatBytes(mount.capacityUsed ?? 0)} / {formatBytes(mount.capacityTotal)}</small>}
+      {mount.indexProgress !== undefined && <div className="dsh_ref_progress_track"><div className="dsh_ref_progress_fill" style={{ width: `${Math.round(mount.indexProgress * 100)}%` }} /></div>}
+      <div>
+        <button type="button" disabled={busy} onClick={() => act(() => disableMount(mount.id, mount.enabled))}>{mount.enabled ? t('cloud.disable') : t('cloud.enableMount')}</button>
+        <button type="button" disabled={busy} onClick={() => { setShowAddDrive(true); setReauthMount(mount); setDriverName(mount.driver); setFields({}); setTouchedFields({}) }}>{t('cloud.reauth')}</button>
+        <button type="button" disabled={busy} onClick={() => act(async () => { const result = await reindexMount(mount.id); setFeedback(result.supported ? t('cloud.reindexStarted') : (result.reason ?? t('cloud.reindexUnsupported'))) })}>{t('cloud.reindex')}</button>
+        <button className="is_danger" type="button" disabled={busy} onClick={() => { if (window.confirm(t('cloud.removeConfirm'))) act(() => removeMount(mount.id)) }}>{t('cloud.remove')}</button>
+      </div>
+    </article>)}</div>
+    {feedback && <p className="dsh_ref_auto_note" role="status">{feedback}</p>}
+    {status?.mode && <p className="dsh_ref_auto_note">{t('cloud.removeDetail')}</p>}
+  </section>
+}
+
+export function defaultOpenListMountPath(driver: string, existing: readonly string[]): string {
+  const base = `/${driver.trim().toLocaleLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'drive'}`
+  const set = new Set(existing)
+  if (!set.has(base)) return base
+  for (let suffix = 2; ; suffix += 1) if (!set.has(`${base}-${suffix}`)) return `${base}-${suffix}`
+}
+
+export interface ApiPagesProviderGuide { readonly option: string; readonly parameters: 'official' | 'automatic' | 'own'; readonly result: string }
+
+/** Exact labels currently shown by the official API Pages token tool. */
+export function apiPagesProviderGuide(driver: string): ApiPagesProviderGuide {
+  const name = driver.toLowerCase().replace(/[^a-z0-9]/g, '')
+  if (name === 'onedrive' || name === 'onedriveapp') return { option: 'OneDrive (OAuth2) 个人账号', parameters: 'official', result: '刷新令牌（Refresh Token）' }
+  if (['aliyundrive', 'aliyundriveopen', 'aliyunpan'].includes(name)) return { option: '阿里云盘 (Client) 直接登录', parameters: 'automatic', result: '刷新令牌（Refresh Token）' }
+  if (['baidu', 'baidunetdisk', 'baiduphoto'].includes(name)) return { option: '百度网盘 (OAuth2) 验证登录', parameters: 'official', result: '刷新令牌（Refresh Token）' }
+  if (name === 'quark' || name === 'quarktv') return { option: '夸克网盘 (OAuth2) 验证登录', parameters: 'official', result: '刷新令牌（Refresh Token）' }
+  if (name === '115' || name === '115cloud') return { option: '115 网盘 (QRCode) 扫码登录', parameters: 'automatic', result: '页面生成的完整令牌' }
+  if (['123pan', '123panopen', '123panlink'].includes(name)) return { option: '123 网盘 (OAuth2) 跳转登录', parameters: 'automatic', result: '访问令牌（Access Token）' }
+  if (name === 'dropbox') return { option: 'Drop Box (OAuth2) 跳转登录', parameters: 'own', result: '刷新令牌（Refresh Token）' }
+  if (name === 'googledrive' || name === 'googlephoto' || name === 'googlephotos') return { option: 'GoogleDrive Login (OAuth2)', parameters: 'official', result: '刷新令牌（Refresh Token）' }
+  if (name === 'yandex' || name === 'yandexdisk') return { option: 'YandexDrive Login (OAuth2)', parameters: 'official', result: '刷新令牌（Refresh Token）' }
+  return { option: driver, parameters: 'official', result: '页面底部生成的完整令牌' }
+}
+
+export function driverDefaults(driver: OpenListDriver): Record<string, unknown> {
+  return Object.fromEntries(driver.fields.map(field => [field.name, field.secret && field.hasDefault ? undefined : field.default ?? (field.type === 'boolean' ? false : field.type === 'select' ? field.options?.[0]?.value ?? '' : '')]))
+}
+
+/** Returns undefined when a schema-required value is absent or malformed. */
+export function normalizedDriverAddition(driver: OpenListDriver, values: Record<string, unknown>): Record<string, unknown> | undefined {
+  const output: Record<string, unknown> = {}
+  for (const field of driver.fields) {
+    const value = values[field.name]
+    if (field.type === 'number') {
+      const number = typeof value === 'number' ? value : Number(value)
+      if (String(value ?? '').trim() === '' && field.hasDefault === true) continue
+      if (!Number.isFinite(number) || (field.required && String(value ?? '').trim() === '')) return undefined
+      if (String(value ?? '').trim() !== '') output[field.name] = number
+    } else if (field.type === 'boolean') {
+      if (value === undefined && field.hasDefault === true) continue
+      if (value === undefined && field.required) return undefined
+      output[field.name] = value === true
+    } else {
+      const text = typeof value === 'string' ? value : ''
+      if (field.required && field.hasDefault !== true && text.trim() === '') return undefined
+      if (text !== '') output[field.name] = text
+    }
+  }
+  return output
+}
+
+/** Reauth is a sparse credential patch: untouched schema defaults stay remote. */
+export function sparseReauthAddition(driver: OpenListDriver, values: Record<string, unknown>, touched: Readonly<Record<string, true>>): Record<string, unknown> | undefined {
+  const output: Record<string, unknown> = {}
+  for (const field of driver.fields) {
+    if (touched[field.name] !== true) continue
+    const value = values[field.name]
+    if (field.type === 'boolean') { output[field.name] = value === true; continue }
+    if (field.type === 'number') {
+      const text = String(value ?? '').trim()
+      if (text === '') continue
+      const number = Number(text)
+      if (!Number.isFinite(number)) return undefined
+      output[field.name] = number
+      continue
+    }
+    const text = typeof value === 'string' ? value.trim() : ''
+    // Clearing an existing remote secret needs a dedicated explicit action;
+    // an empty text field is merely left unchanged.
+    if (text !== '') output[field.name] = text
+  }
+  return output
+}
+
+/** Curated API Pages flow only chooses a field; schema remains server-driven. */
+export function quickProviderAuthFields(driver: OpenListDriver): OpenListDriver['fields'][number][] {
+  return driver.fields.filter(field => (field.secret ?? /(token|password|secret|cookie|authorization|credential)/i.test(field.name)) && /(token|oauth|refresh|access|authorization|cookie|credential)/i.test(field.name))
+}
+
+/** Parse API Pages output without guessing which credential a multi-field driver needs. */
+export function parseQuickProviderAddition(driver: OpenListDriver, input: string): Record<string, unknown> | undefined {
+  const text = input.trim()
+  if (text === '') return undefined
+  const authFields = quickProviderAuthFields(driver)
+  if (authFields.length === 0) return undefined
+  let supplied: Record<string, unknown>
+  if (text.startsWith('{')) {
+    try { const value: unknown = JSON.parse(text); if (value === null || typeof value !== 'object' || Array.isArray(value)) return undefined; supplied = value as Record<string, unknown> } catch { return undefined }
+  } else if (text.includes('=')) {
+    supplied = {}
+    for (const line of text.split(/\r?\n/)) {
+      if (line.trim() === '') continue
+      const separator = line.indexOf('=')
+      if (separator < 1) return undefined
+      const key = line.slice(0, separator).trim(); const value = line.slice(separator + 1).trim()
+      if (key === '' || Object.hasOwn(supplied, key)) return undefined
+      supplied[key] = value
+    }
+  } else {
+    if (authFields.length !== 1) return undefined
+    supplied = { [authFields[0]!.name]: text }
+  }
+  const allowed = new Set(driver.fields.map(field => field.name))
+  if (Object.keys(supplied).some(key => !allowed.has(key))) return undefined
+  return normalizedDriverAddition(driver, { ...driverDefaults(driver), ...supplied })
 }
 
 function tProgressListing(listing: number, completed: number, total: number, t: T): string {
@@ -436,6 +685,26 @@ function ProviderCard({ provider, stats, busy, autoSync, enabled, onEnabled, onS
   const label = PROVIDER_LABEL[provider]
   const date = stats?.lastSyncedAt ? new Date(stats.lastSyncedAt).toLocaleString() : t('provider.neverSynced')
   return <article className={`dsh_ref_provider dsh_ref_provider_${provider}`} style={{ '--dsh-ref-index': index } as CSSProperties}><span className="dsh_ref_provider_mark"><ProviderLogo provider={provider} /></span><div className="dsh_ref_provider_content"><div className="dsh_ref_provider_summary"><h4>{label}</h4><strong>{stats?.conversations ?? 0}<span>{t('provider.localConversations')}</span></strong><small>{t('provider.lastUpdated', { date })}</small></div><div className="dsh_ref_provider_controls"><label className="dsh_ref_toggle"><input type="checkbox" checked={enabled} onChange={event => { onEnabled(event.target.checked) }} /><span/><b>{t('provider.enabled')}</b></label><div className="dsh_ref_provider_actions"><button type="button" disabled={busy} onClick={() => { onSync('incremental') }}>{t('provider.syncNow')}</button><button type="button" disabled={busy} onClick={() => { if (window.confirm(t('provider.fullConfirm', { provider: label }))) onSync('full') }}>{t('provider.fullResync')}</button><button className="is_danger" type="button" disabled={busy || !stats?.conversations} onClick={onClear}>{t('storage.clearProvider')}</button></div></div>{stats?.error && <em className="dsh_ref_provider_error">{stats.error}</em>}</div></article>
+}
+
+export function AgentSelectionCards({ state, enabledAgents, save, t }: { state: SettingsSnapshot; enabledAgents: readonly LocalAgentKind[]; save(value: SettingsRecord): Promise<void>; t: T }) {
+  return <div className="dsh_ref_reference_choices dsh_ref_agent_choices">
+    <div className="dsh_ref_section_head"><div><h3>{t('agents.selectionTitle')}</h3><p>{t('agents.selectionDetail')}</p></div><div className="dsh_ref_filter_actions"><button type="button" onClick={() => { void save({ ...state.settings, enabledAgents: [...ALL_LOCAL_AGENTS] }) }}>{t('selection.all')}</button><button type="button" onClick={() => { void save({ ...state.settings, enabledAgents: [] }) }}>{t('selection.none')}</button></div></div>
+    <div className="dsh_ref_provider_grid dsh_ref_selection_grid">{ALL_LOCAL_AGENTS.map((agent, index) => <article className="dsh_ref_provider dsh_ref_selection_card" style={{ '--dsh-ref-index': index } as CSSProperties} key={agent}>
+      <span className="dsh_ref_provider_mark dsh_ref_text_mark">{AGENT_LABEL[agent].slice(0, 1)}</span><div className="dsh_ref_provider_content"><div className="dsh_ref_provider_summary"><h4>{AGENT_LABEL[agent]}</h4><small>{agent}</small></div><div className="dsh_ref_provider_controls"><label className="dsh_ref_toggle"><input type="checkbox" checked={enabledAgents.includes(agent)} onChange={event => { const next = event.target.checked ? [...new Set([...enabledAgents, agent])] : enabledAgents.filter(value => value !== agent); void save({ ...state.settings, enabledAgents: next }) }} /><span/><b>{t('provider.enabled')}</b></label></div></div>
+    </article>)}</div>
+  </div>
+}
+
+export function DriveSelectionCards({ state, save, t }: { state: SettingsSnapshot; save(value: SettingsRecord): Promise<void>; t: T }) {
+  const mounts = state.openListMounts ?? []
+  const selectedMounts = state.settings.enabledDriveMounts ?? mounts.filter(mount => mount.enabled).map(mount => mount.name)
+  return <div className="dsh_ref_reference_choices dsh_ref_drive_choices">
+    <div className="dsh_ref_section_head dsh_ref_mount_selection_head"><div><h3>{t('cloud.selectionTitle')}</h3><p>{t('cloud.selectionDetail')}</p></div></div>
+    {mounts.length === 0 ? <div className="dsh_ref_empty">{t('cloud.selectionEmpty')}</div> : <div className="dsh_ref_provider_grid dsh_ref_selection_grid">{mounts.map((mount, index) => <article className="dsh_ref_provider dsh_ref_selection_card" style={{ '--dsh-ref-index': index } as CSSProperties} key={mount.id}>
+      <span className="dsh_ref_provider_mark dsh_ref_text_mark">☁</span><div className="dsh_ref_provider_content"><div className="dsh_ref_provider_summary"><h4>{mount.name}</h4><small>{mount.driver} · {mount.status === 'ready' ? t('cloud.ready') : mount.enabled ? t('cloud.error') : t('cloud.disabled')}</small></div><div className="dsh_ref_provider_controls"><label className="dsh_ref_toggle"><input type="checkbox" checked={selectedMounts.includes(mount.name)} disabled={!mount.enabled} onChange={event => { const enabledDriveMounts = event.target.checked ? [...new Set([...selectedMounts, mount.name])] : selectedMounts.filter(value => value !== mount.name); void save({ ...state.settings, enabledDriveMounts }) }} /><span/><b>{t('provider.enabled')}</b></label></div></div>
+    </article>)}</div>}
+  </div>
 }
 
 function formatBytes(bytes: number): string {

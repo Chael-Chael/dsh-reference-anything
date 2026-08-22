@@ -8,6 +8,7 @@ import type {} from './sources/local-agent/index.ts'
 import type {} from './sources/cloud-drive/index.ts'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import { switchReferenceUiMode as switchProfileReferenceUiMode } from './profile-mode.ts'
+import type {} from './openlist/index.ts'
 
 export class ReferenceAnythingRemote extends TypertRemoteService {
   constructor(ctx: Context) { super(ctx, 'referenceAnything') }
@@ -33,6 +34,7 @@ export class ReferenceAnythingRemote extends TypertRemoteService {
       label: row.label,
       provider: row.provider ?? '',
       ...row.updatedAt === undefined ? {} : { updatedAt: row.updatedAt },
+      ...row.searchIncomplete === true ? { searchIncomplete: true } : {},
     }))
   }
 
@@ -47,13 +49,14 @@ export class ReferenceAnythingRemote extends TypertRemoteService {
   async driveSearch(input: { query: string; limit: number }, signal: AbortSignal) {
     const drives = this.ctx.get('referenceCloudDrive')
     if (drives === undefined) return []
-    const rows = await drives.list(input.query, input.limit, signal)
+    const rows = await drives.pickerList(input.query, input.limit, signal)
     return rows.map(row => ({
       id: row.ref.id,
       label: row.label,
       provider: row.provider ?? '',
       ...row.origin === undefined ? {} : { origin: row.origin },
       ...row.updatedAt === undefined ? {} : { updatedAt: row.updatedAt },
+      ...row.isDirectory === true ? { isDirectory: true } : {},
     }))
   }
 
@@ -113,4 +116,15 @@ export class ReferenceAnythingRemote extends TypertRemoteService {
     signal.throwIfAborted(); return this.ctx.referenceChatHistory.removeOldAccounts()
   }
   syncStates() { return this.ctx.referenceChatHistory.syncStates() }
+  openListStatus(signal: AbortSignal) { return this.ctx.openListManager.status(signal) }
+  openListInstall(signal: AbortSignal) { return this.ctx.openListManager.install(signal) }
+  openListUpgrade(input: { rollback?: boolean }, signal: AbortSignal) { return this.ctx.openListManager.upgrade(input, signal) }
+  openListConnectExternal(input: { endpoint: string, username?: string, password?: string, token?: string }, signal: AbortSignal) { return this.ctx.openListManager.connectExternal(input, signal) }
+  openListDisconnect(signal: AbortSignal) { return this.ctx.openListManager.disconnect(signal) }
+  openListDrivers(signal: AbortSignal) { return this.ctx.openListManager.drivers(signal) }
+  openListMounts(signal: AbortSignal) { return this.ctx.openListManager.mounts(signal) }
+  openListCreateMount(input: { id?: string, mountPath: string, driver: string, addition: Record<string, unknown>, order?: number, remark?: string }, signal: AbortSignal) { return this.ctx.openListManager.createMount(input, signal) }
+  async openListDisableMount(input: { id: string, disabled?: boolean }, signal: AbortSignal): Promise<boolean> { await this.ctx.openListManager.disableMount(input.id, input.disabled ?? true, signal); return true }
+  async openListRemoveMount(input: { id: string }, signal: AbortSignal): Promise<boolean> { await this.ctx.openListManager.removeMount(input.id, signal); return true }
+  openListReindex(input: { id: string }, signal: AbortSignal) { return this.ctx.openListManager.reindexMount(input.id, signal) }
 }

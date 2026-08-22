@@ -8,7 +8,6 @@
  * @module dsh-reference-anything/local-agent/registry
  */
 
-import { isAbsolute, join, normalize } from 'node:path'
 import { claudeCodeAdapter } from './adapters/claude-code.ts'
 import { codexAdapter } from './adapters/codex.ts'
 import { cursorAdapter } from './adapters/cursor.ts'
@@ -24,6 +23,7 @@ import { reasonixAdapter } from './adapters/reasonix.ts'
 import { zcodeAdapter } from './adapters/zcode.ts'
 import type { AgentAdapter, AgentKind, QueryAdapter, TranscriptAdapter } from './types.ts'
 import { isQueryAdapter } from './types.ts'
+import { isAbsoluteLocalPath, joinLocalPath, normalizeLocalPath } from './path.ts'
 
 /**
  * Every supported adapter, in menu order.
@@ -119,8 +119,8 @@ export function expandRoot(root: string, home: string): string | undefined {
   const trimmed = root.trim()
   if (trimmed === '') return undefined
   if (trimmed === '~') return home
-  if (trimmed.startsWith('~/') || trimmed.startsWith('~\\')) return normalize(join(home, trimmed.slice(2)))
+  if (trimmed.startsWith('~/') || trimmed.startsWith('~\\')) return normalizeLocalPath(joinLocalPath(home, trimmed.slice(2)))
   // A relative root would resolve against whatever directory the harness
   // happened to launch in, which is not a boundary anyone chose.
-  return isAbsolute(trimmed) ? normalize(trimmed) : undefined
+  return isAbsoluteLocalPath(trimmed) ? normalizeLocalPath(trimmed) : undefined
 }

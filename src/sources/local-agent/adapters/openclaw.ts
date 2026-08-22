@@ -17,7 +17,7 @@
  * @module dsh-reference-anything/local-agent/adapters/openclaw
  */
 
-import { join } from 'node:path'
+import { joinLocalPath } from '../path.ts'
 import type {
   AdapterState,
   ConvertOptions,
@@ -49,7 +49,7 @@ export const openclawAdapter: TranscriptAdapter = {
   displayName: 'OpenClaw',
 
   defaultRoots(home: string): readonly string[] {
-    return [join(home, '.openclaw', 'agents')]
+    return [joinLocalPath(home, '.openclaw', 'agents')]
   },
 
   matches(relativePath: string): boolean {

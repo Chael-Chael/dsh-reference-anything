@@ -24,7 +24,7 @@
  * @module dsh-reference-anything/local-agent/adapters/kimi
  */
 
-import { join } from 'node:path'
+import { joinLocalPath } from '../path.ts'
 import type {
   AdapterState,
   ConvertOptions,
@@ -56,7 +56,7 @@ export const kimiAdapter: TranscriptAdapter = {
   displayName: 'Kimi',
 
   defaultRoots(home: string): readonly string[] {
-    return [join(home, '.kimi', 'sessions'), join(home, '.kimi-code', 'sessions')]
+    return [joinLocalPath(home, '.kimi', 'sessions'), joinLocalPath(home, '.kimi-code', 'sessions')]
   },
 
   matches(relativePath: string): boolean {

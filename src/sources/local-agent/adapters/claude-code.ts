@@ -12,7 +12,7 @@
  * @module dsh-reference-anything/local-agent/adapters/claude-code
  */
 
-import { join } from 'node:path'
+import { joinLocalPath } from '../path.ts'
 import type {
   AdapterState,
   ConvertOptions,
@@ -42,7 +42,7 @@ export const claudeCodeAdapter: TranscriptAdapter = {
   displayName: 'Claude Code',
 
   defaultRoots(home: string): readonly string[] {
-    return [join(home, '.claude', 'projects')]
+    return [joinLocalPath(home, '.claude', 'projects')]
   },
 
   matches(relativePath: string): boolean {

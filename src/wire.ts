@@ -5,6 +5,13 @@ export const providerSchema = z.enum(['chatgpt', 'claude', 'gemini', 'deepseek',
 export type ChatProvider = z.infer<typeof providerSchema>
 export const ALL_PROVIDERS: readonly ChatProvider[] = providerSchema.options
 
+export const localAgentKindSchema = z.enum([
+  'claude-code', 'codex', 'cursor', 'qoder', 'reasonix', 'openclaw', 'kimi',
+  'grokbuild', 'hermes', 'gemini-cli', 'pi', 'opencode', 'mimocode', 'zcode',
+])
+export type LocalAgentKind = z.infer<typeof localAgentKindSchema>
+export const ALL_LOCAL_AGENTS: readonly LocalAgentKind[] = localAgentKindSchema.options
+
 export const pickerSourceSchema = z.enum(['commands', 'skills', 'files', 'sessions', 'agents', 'conversations', 'drives'])
 export type PickerSource = z.infer<typeof pickerSourceSchema>
 
@@ -72,6 +79,13 @@ export const settingsRecordSchema = z.object({
   autoSyncMinutes: z.number().int().min(15).max(1440).default(60),
   historyMode: z.enum(['metadata-only', 'offline-mirror']).default('metadata-only'),
   enabledProviders: z.array(providerSchema).default([...ALL_PROVIDERS]),
+  /** Local transcript formats shown by the Agent picker. */
+  enabledAgents: z.array(localAgentKindSchema).optional(),
+  /**
+   * OpenList mount paths shown by the drive picker. Undefined preserves the
+   * legacy behaviour (all enabled mounts); an explicit empty array means none.
+   */
+  enabledDriveMounts: z.array(z.string().startsWith('/')).optional(),
   maxReadTurns: z.number().int().min(1).max(100).default(10),
   inputRenderMode: inputRenderModeSchema.default('pill'),
   // Optional keeps settings written by earlier plugin versions readable.

@@ -19,7 +19,7 @@
  * @module dsh-reference-anything/local-agent/adapters/reasonix
  */
 
-import { join } from 'node:path'
+import { joinLocalPath } from '../path.ts'
 import type {
   AdapterState,
   ConvertOptions,
@@ -48,7 +48,7 @@ export const reasonixAdapter: TranscriptAdapter = {
   displayName: 'Reasonix',
 
   defaultRoots(home: string): readonly string[] {
-    return [join(home, '.reasonix', 'sessions')]
+    return [joinLocalPath(home, '.reasonix', 'sessions')]
   },
 
   matches(relativePath: string): boolean {

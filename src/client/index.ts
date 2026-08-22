@@ -4,7 +4,7 @@ import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
 import type {} from '@deepseek-ai/dsh-client-locale/client'
 import { createSnapshotStore, type ClientContext, type ISessions } from '@deepseek-ai/dsh-client-runtime/client'
 import type { InputTriggerServiceContract } from '@deepseek-ai/dsh-client-ui-input-trigger/client'
-import { ALL_PROVIDERS, defaultPickerSettings, samePickerSettings, type ChatProvider, type PickerSettings, type ReferenceUiMode, type SettingsRecord } from '../wire.ts'
+import { ALL_LOCAL_AGENTS, ALL_PROVIDERS, defaultPickerSettings, samePickerSettings, type ChatProvider, type PickerSettings, type ReferenceUiMode, type SettingsRecord } from '../wire.ts'
 import { REFERENCE_ANYTHING_REMOTE, type AgentCandidate, type DriveCandidate, type ReferenceAnythingRemoteFace, type SearchResult, type SyncStatus } from './remote.ts'
 import { createCloudDriveSource, createCommandSource, createConversationSource, createFileSource, createLocalAgentSource, createSearchDebounce, createSessionSource, createSkillSource, type RefreshablePickerSource } from './source.ts'
 import { ConversationSettings, PAGE_SIZE, type SettingsSnapshot } from './components.tsx'
@@ -16,6 +16,7 @@ import { en, REFERENCE_ANYTHING_NS, zh } from './locale.ts'
 import { runSetupSequence, setupReady, type SetupStage } from './health.ts'
 import { createAutoDismissNotice } from './notice.ts'
 import { runReferenceUiSwitchWithReload } from './reference-ui.ts'
+import { filterAgentCandidates, filterDriveCandidates } from './selection.ts'
 
 // `ctx.remote.commands` is a separately injected Remote face. Declaring only
 // `remote` lets the @ source register, but its candidate request can fail and
@@ -31,12 +32,13 @@ export function apply(ctx: ClientContext): void {
   ctx.effect(() => adoptReferenceIconProjection(), 'reference-anything.client.icon-projection')
   let remote: ReferenceAnythingRemoteFace | undefined
   const scope = createSnapshotStore<SettingsSnapshot>({
-    settings: { opencliPath: 'opencli', profile: '', detailConcurrency: 8, autoSync: false, syncOnStartup: false, autoSyncMinutes: 60, historyMode: 'metadata-only', enabledProviders: [...ALL_PROVIDERS], maxReadTurns: 10, inputRenderMode: 'pill' }, loading: true,
+    settings: { opencliPath: 'opencli', profile: '', detailConcurrency: 8, autoSync: false, syncOnStartup: false, autoSyncMinutes: 60, historyMode: 'metadata-only', enabledProviders: [...ALL_PROVIDERS], enabledAgents: [...ALL_LOCAL_AGENTS], maxReadTurns: 10, inputRenderMode: 'pill' }, loading: true,
   })
   let currentJob = ''
   let lastSyncFinishedAt: string | undefined
   let poll: ReturnType<typeof setInterval> | undefined
   let activeConversationSource: RefreshablePickerSource | undefined
+  let activeDriveSource: RefreshablePickerSource | undefined
   let refreshGeneration = 0
   const t = ctx.locale.bind(REFERENCE_ANYTHING_NS)
   const notices = createAutoDismissNotice(() => scope.getSnapshot(), value => { scope.set(value) })
@@ -47,6 +49,21 @@ export function apply(ctx: ClientContext): void {
   const unwrap = <T>(result: { ok: true; value: T } | { ok: false; error: { code: string; message: string } }): T => {
     if (!result.ok) throw new Error(`${result.error.code}: ${result.error.message}`)
     return result.value
+  }
+  const refreshOpenList = async (): Promise<void> => {
+    if (!remote) return
+    try {
+      const status = unwrap(await remote.openListStatus())
+      const [drivers, mounts] = status.mode === undefined ? [undefined, undefined] : await Promise.all([
+        remote.openListDrivers().then(unwrap).catch(() => undefined), remote.openListMounts().then(unwrap).catch(() => undefined),
+      ])
+      const finalStatus = status.mode === undefined ? status : unwrap(await remote.openListStatus())
+      const previousMounts = scope.getSnapshot().openListMounts
+      scope.set({ ...scope.getSnapshot(), openList: finalStatus, openListDrivers: drivers, openListMounts: mounts })
+      const before = previousMounts?.map(mount => `${mount.id}:${mount.name}:${mount.enabled}:${mount.status}`).join('|') ?? ''
+      const after = mounts?.map(mount => `${mount.id}:${mount.name}:${mount.enabled}:${mount.status}`).join('|') ?? ''
+      if (before !== after) void activeDriveSource?.refreshCachedMenu({ refetch: true })
+    } catch { /* the normal settings panel remains available if OpenList is absent */ }
   }
   /** Refresh settings and local mirror figures without starting OpenCLI. */
   const refreshLocal = async (): Promise<void> => {
@@ -62,6 +79,7 @@ export function apply(ctx: ClientContext): void {
       applySources?.(currentSettings.picker, currentSettings.referenceUiMode)
       scope.set({ ...scope.getSnapshot(), settings: currentSettings, stats, storage: unwrap(storageResult),
         error: statsUnavailable && !stats ? 'Local conversation statistics are unavailable until the DSH host is restarted.' : undefined, loading: false })
+      void refreshOpenList()
     } catch (error) {
       if (generation === refreshGeneration) scope.set({ ...scope.getSnapshot(), error: error instanceof Error ? error.message : String(error), loading: false })
     }
@@ -83,6 +101,7 @@ export function apply(ctx: ClientContext): void {
       applySources?.(currentSettings.picker, currentSettings.referenceUiMode)
       scope.set({ ...scope.getSnapshot(), settings: currentSettings, health: unwrap(health), profiles, stats, storage: unwrap(storageResult),
         error: statsUnavailable && !stats ? 'Local conversation statistics are unavailable until the DSH host is restarted.' : undefined, loading: false })
+      void refreshOpenList()
     } catch (error) {
       if (generation === refreshGeneration) scope.set({ ...scope.getSnapshot(), error: error instanceof Error ? error.message : String(error), loading: false })
     }
@@ -247,14 +266,24 @@ export function apply(ctx: ClientContext): void {
       agentSearch.run(query, signal, async () => {
         // Re-read after the debounce, as the conversation source does above.
         if (!remote) return []
-        return unwrap(await remote.agentSearch(sessionId, { query, limit }, signal))
+        return filterAgentCandidates(
+          unwrap(await remote.agentSearch(sessionId, { query, limit: 100 }, signal)),
+          scope.getSnapshot().settings.enabledAgents,
+        ).slice(0, limit)
       }), t, optionsFor('agents'))))
-    if (picker.drives.enabled) disposers.push(inputTriggers.registerSource(createCloudDriveSource((query, signal, limit) =>
-      driveSearch.run(query, signal, async () => {
+    if (picker.drives.enabled) {
+      const source = createCloudDriveSource((query, signal, limit) =>
+        driveSearch.run(query, signal, async () => {
         // Re-read after the debounce, as the two sources above do.
         if (!remote) return []
-        return unwrap(await remote.driveSearch({ query, limit }, signal))
-      }), t, optionsFor('drives'))))
+        return filterDriveCandidates(
+          unwrap(await remote.driveSearch({ query, limit: 100 }, signal)),
+          scope.getSnapshot().settings.enabledDriveMounts,
+        ).slice(0, limit)
+        }), t, optionsFor('drives'))
+      activeDriveSource = source
+      disposers.push(inputTriggers.registerSource(source))
+    }
     return disposers
   }
   const refreshStorage = async (): Promise<void> => {
@@ -292,6 +321,7 @@ export function apply(ctx: ClientContext): void {
     if (appliedPicker !== undefined && samePickerSettings(appliedPicker, next) && appliedReferenceUiMode === nextMode) return
     for (const dispose of sourceDisposers) dispose()
     activeConversationSource = undefined
+    activeDriveSource = undefined
     sourceDisposers = nextMode === 'plugin' ? registerSources(next) : []
     appliedPicker = next
     appliedReferenceUiMode = nextMode
@@ -342,11 +372,26 @@ export function apply(ctx: ClientContext): void {
       if (poll) clearInterval(poll); poll = setInterval(() => { void pollJob() }, 1_000); await pollJob()
     } catch (error) { scope.set({ ...scope.getSnapshot(), error: message(error) }) }
   }
+  const runOpenListOperation = async (state: 'downloading' | 'upgrade', call: () => ReturnType<ReferenceAnythingRemoteFace['openListInstall']>): Promise<void> => {
+    const previous = scope.getSnapshot().openList
+    scope.set({ ...scope.getSnapshot(), openList: { state, installed: previous?.installed ?? false, supportsRollback: previous?.supportsRollback ?? false, upgradeAvailable: previous?.upgradeAvailable ?? false, ...(previous?.newerVersion === undefined ? {} : { newerVersion: previous.newerVersion }), ...(previous?.mode === undefined ? {} : { mode: previous.mode }), ...(previous?.version === undefined ? {} : { version: previous.version }) } })
+    const pollStatus = setInterval(() => { void refreshOpenList() }, 2_000)
+    try { unwrap(await call()) } catch (error) { scope.set({ ...scope.getSnapshot(), error: message(error) }) } finally { clearInterval(pollStatus); await refreshOpenList() }
+  }
   ctx.slots.inject('settings.section', () => ctx.slots.register({
     name: 'settings.section', id: 'reference-anything', order: 56, label: () => t('settings.title'), locale: REFERENCE_ANYTHING_NS,
     inject: () => ({
-      hooks: { scope }, save, sync: startSync, refresh, quickRefreshOnOpen,
+      hooks: { scope }, close: () => undefined, save, sync: startSync, refresh, quickRefreshOnOpen,
       browse, deleteConversation, clearProvider, clearOlder, clearRemoteMissing, clearOldAccounts, refreshStats,
+      refreshOpenList,
+      openListInstall: async () => { if (!remote) return; await runOpenListOperation('downloading', () => remote!.openListInstall()) },
+      openListUpgrade: async (rollback = false) => { if (!remote) return; await runOpenListOperation(!rollback && scope.getSnapshot().openList?.upgradeAvailable ? 'upgrade' : 'downloading', () => remote!.openListUpgrade({ rollback })) },
+      openListConnectExternal: async (input: { endpoint: string; username?: string; password?: string; token?: string }) => { if (!remote) return; try { unwrap(await remote.openListConnectExternal(input)); await refreshOpenList() } catch (error) { scope.set({ ...scope.getSnapshot(), error: message(error) }); throw error } },
+      openListDisconnect: async () => { if (!remote) return; try { unwrap(await remote.openListDisconnect()); await refreshOpenList() } catch (error) { scope.set({ ...scope.getSnapshot(), error: message(error) }); throw error } },
+      openListCreateMount: async (input: { id?: string; mountPath: string; driver: string; addition: Record<string, unknown> }) => { if (!remote) return; try { unwrap(await remote.openListCreateMount(input)) } catch (error) { scope.set({ ...scope.getSnapshot(), error: message(error) }); throw error } finally { await refreshOpenList() } },
+      openListDisableMount: async (id: string, disabled = true) => { if (!remote) return; try { unwrap(await remote.openListDisableMount({ id, disabled })) } catch (error) { scope.set({ ...scope.getSnapshot(), error: message(error) }); throw error } finally { await refreshOpenList() } },
+      openListRemoveMount: async (id: string) => { if (!remote) return; try { unwrap(await remote.openListRemoveMount({ id })) } catch (error) { scope.set({ ...scope.getSnapshot(), error: message(error) }); throw error } finally { await refreshOpenList() } },
+      openListReindex: async (id: string) => { if (!remote) return { supported: false }; try { const result = unwrap(await remote.openListReindex({ id })); await refreshOpenList(); return result } catch (error) { scope.set({ ...scope.getSnapshot(), error: message(error) }); return { supported: false } } },
       checkUpdate: async () => {
         try {
           if (!remote) return
@@ -460,7 +505,7 @@ export function apply(ctx: ClientContext): void {
         } catch (error) { scope.set({ ...scope.getSnapshot(), error: message(error), notice: undefined }) }
       },
       cancel: async () => { try { if (remote && currentJob) unwrap(await remote.syncCancel({ jobId: currentJob })); await pollJob() } catch (error) { scope.set({ ...scope.getSnapshot(), error: message(error) }) } },
-    }),
+    } as never),
   }, ConversationSettings))
 }
 

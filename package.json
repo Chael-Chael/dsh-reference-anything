@@ -38,6 +38,10 @@
       "types": "./lib/sources/cloud-drive/index.d.ts",
       "default": "./lib/sources/cloud-drive/index.js"
     },
+    "./openlist": {
+      "types": "./lib/openlist/index.d.ts",
+      "default": "./lib/openlist/index.js"
+    },
     "./web-chat": {
       "types": "./lib/sources/web-chat/index.d.ts",
       "default": "./lib/sources/web-chat/index.js"

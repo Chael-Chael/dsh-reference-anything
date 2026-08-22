@@ -32,6 +32,7 @@ import type {
 } from '../../types.ts'
 import { DEFAULT_CONVERT_OPTIONS } from './adapters/shared.ts'
 import { cursorExpired, cursorStillValid, decodeAgentCursor, encodeAgentCursor } from './page.ts'
+import { inWorkspace } from './path.ts'
 import {
   AGENT_ADAPTERS,
   AGENT_KINDS,
@@ -763,13 +764,6 @@ function foldsToNothing(
 function labelFor(descriptor: TranscriptDescriptor, bookmark: AgentBookmark | undefined): string {
   const title = bookmark?.title.trim() ?? ''
   return title === '' ? basename(descriptor.relPath) : title
-}
-
-/** Whether a recorded working directory belongs to the current workspace. */
-function inWorkspace(cwd: string, workspace: string): boolean {
-  if (cwd === '') return false
-  const normalized = resolve(cwd)
-  return normalized === workspace || normalized.startsWith(workspace.endsWith(sep) ? workspace : `${workspace}${sep}`)
 }
 
 /** The schema's own defaults, as a plain object. */

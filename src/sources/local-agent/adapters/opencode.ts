@@ -18,7 +18,7 @@
  * @module dsh-reference-anything/local-agent/adapters/opencode
  */
 
-import { join } from 'node:path'
+import { joinLocalPath } from '../path.ts'
 import type {
   AgentKind,
   ParsedTurn,
@@ -101,7 +101,7 @@ function variantAdapter(variant: Variant): QueryAdapter {
       // The root is the directory, not the database: discovery walks
       // directories, and pointing it at a file would make the one format that
       // needs no walking the only one that needs a special case.
-      return [join(home, '.local', 'share', variant.dataDir)]
+      return [joinLocalPath(home, '.local', 'share', variant.dataDir)]
     },
 
     matches(relativePath: string): boolean {

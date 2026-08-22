@@ -32,13 +32,14 @@ import { sliceTurns } from '../../window.ts'
 import { DriveCache } from './cache.ts'
 import { DRIVE_KINDS, decodeDriveId, encodeDriveId, providerFor } from './registry.ts'
 import type { DriveEntry, DriveKind, DriveProvider } from './types.ts'
+import type {} from '../../openlist/index.ts'
 import type {} from '../../index.ts'
 
 /** Cordis plugin name used by loader diagnostics. */
 export const name = 'reference-cloud-drive'
 
 /** The services this source is built on. */
-export const inject = ['references']
+export const inject = ['references', 'openListManager']
 
 /** Registry id, and the `source` half of every reference this source owns. */
 export const CLOUD_DRIVE_SOURCE_ID = 'cloud-drive'
@@ -63,6 +64,13 @@ const TEXT_EXTENSIONS: readonly string[] = [
   '.srt', '.vtt', '.ass',
 ]
 
+const ATTACHMENT_EXTENSIONS = new Set([
+  '.pdf', '.doc', '.docx', '.odt', '.rtf', '.epub',
+  '.xls', '.xlsx', '.xlsm', '.ods', '.csv',
+  '.ppt', '.pptx', '.odp',
+  '.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg',
+])
+
 /**
  * Bytes sniffed for a NUL before the decode is trusted.
  *
@@ -81,25 +89,20 @@ export interface Config {
   /**
    * Drives to search.
    *
-   * Both ship enabled because enabling one costs nothing until it is logged
-   * into: a drive with no credential on disk is skipped, so it is absent from
-   * the menu rather than an empty group or a recurring warning.
+   * OpenList ships enabled. A missing host-only credential file simply leaves
+   * the source unavailable until the Host connects it.
    */
   drives?: DriveKind[]
   /**
    * Where listing starts, for every drive that has no entry in {@link Config.roots}.
    *
-   * Means different things per drive — a path under `/apps/bdpan/` for 百度网盘,
-   * a folder id or absolute path for 阿里云盘 — so it is only safe to share when
-   * it is empty, which is why the default is `''` and {@link Config.roots}
-   * exists.
+   * Absolute OpenList directory where browsing begins.
    */
   root?: string
   /**
    * Per-drive override of {@link Config.root}, keyed by drive name.
    *
-   * Needed as soon as two drives are enabled at once: the two products address
-   * a folder differently, so one string cannot name a real folder in both.
+   * Kept for configuration compatibility; `openlist` is its only valid key.
    */
   roots?: Record<string, string>
   /** How long one listing is reused across a typing burst. */
@@ -126,7 +129,7 @@ export interface Config {
  * for a conversation and an awkward one for a document.
  */
 export const Config: z<Config> = z.object({
-  drives: z.array(z.union(DRIVE_KINDS)).default(['baidu', 'pds']),
+  drives: z.array(z.union(DRIVE_KINDS)).default(['openlist']),
   root: z.string().default(''),
   roots: z.dict(z.string()).default({}),
   listTtlMs: z.natural().default(30_000),
@@ -157,6 +160,7 @@ export class CloudDriveService extends Service implements ReferenceSource {
   private readonly providers: ReadonlyMap<DriveKind, DriveProvider>
   private readonly cache: DriveCache
   private readonly extensions: ReadonlySet<string>
+  private credentialGeneration = -1
 
   constructor(ctx: Context, config: Config = {}) {
     super(ctx, 'referenceCloudDrive')
@@ -164,7 +168,10 @@ export class CloudDriveService extends Service implements ReferenceSource {
     const built = new Map<DriveKind, DriveProvider>()
     for (const kind of this.settings.drives) {
       const root = this.settings.roots[kind] ?? this.settings.root
-      const provider = providerFor(kind, root === '' ? {} : { root })
+      // Credentials are supplied by the Host-only OpenList service on each
+      // request. They never live in plugin config, settings snapshots, or the
+      // browser bundle.
+      const provider = providerFor(kind, { ...(root === '' ? {} : { root }), credentials: refresh => this.ctx.openListManager.credentials(refresh) })
       if (provider === undefined) {
         throw new ReferenceAnythingError(
           `reference-cloud-drive: "${kind}" has no transport in this build; remove it from "drives"`,
@@ -186,6 +193,7 @@ export class CloudDriveService extends Service implements ReferenceSource {
    * @returns whether any configured drive holds a usable credential.
    */
   async available(): Promise<boolean> {
+    this.invalidateForCredentialChange()
     const checks = await Promise.all([...this.providers.values()].map(async (provider) => {
       try {
         return await provider.credentialed()
@@ -212,6 +220,7 @@ export class CloudDriveService extends Service implements ReferenceSource {
    * @param signal - cancellation from the caller.
    */
   async list(query: string, limit: number, signal?: AbortSignal): Promise<ReferenceSummary[]> {
+    this.invalidateForCredentialChange()
     const bounded = Math.max(0, Math.trunc(limit))
     if (bounded === 0) return []
     const trimmed = query.trim()
@@ -226,7 +235,7 @@ export class CloudDriveService extends Service implements ReferenceSource {
       }
       try {
         // A drive that has never been logged into is absent rather than
-        // broken. Worth a branch of its own now that two drives ship enabled:
+        // broken. Worth a branch of its own now that OpenList is host-managed:
         // `available()` speaks for the source as a whole, so one credentialed
         // drive keeps the group alive and the other would otherwise warn on
         // every keystroke. Local by contract, and behind the cache, so it
@@ -256,6 +265,7 @@ export class CloudDriveService extends Service implements ReferenceSource {
    * @param signal - cancellation from the caller.
    */
   async read(ref: ReferenceRef, window: ReferenceWindow, signal?: AbortSignal): Promise<ReferenceSnapshot> {
+    this.invalidateForCredentialChange()
     const { kind, fileId } = decodeDriveId(ref.id)
     const provider = this.providers.get(kind)
     if (provider === undefined) {
@@ -274,6 +284,14 @@ export class CloudDriveService extends Service implements ReferenceSource {
         `cloud-drive: ${JSON.stringify(entry.name)} is a folder, which has no text to read`,
         'REFERENCE_READ_FAILED',
       )
+    }
+    if (!this.readable(entry) && ATTACHMENT_EXTENSIONS.has(extensionOf(entry.name))) {
+      const item: ConversationItem = {
+        role: 'document',
+        text: `Binary cloud-drive document: ${entry.name}. Use reference_attachment_read with this reference URI and attachmentId "file" to materialize it on demand.`,
+        attachments: [{ attachmentId: 'file', kind: imageExtension(entry.name) ? 'image' : 'file', name: entry.name, mimeType: mimeForName(entry.name), size: entry.size, status: 'available' }],
+      }
+      return { ...this.summarize(entry), body: { kind: 'conversation', items: [item], startIndex: 0, totalTurns: 1, hasOlder: false }, partial: false, capturedAt: Date.now(), provider: provider.displayName }
     }
     this.assertTextual(entry)
 
@@ -318,7 +336,55 @@ export class CloudDriveService extends Service implements ReferenceSource {
       ...(entry.path === '' ? {} : { origin: entry.path }),
       ...(entry.modifiedAt === undefined ? {} : { updatedAt: entry.modifiedAt }),
       ...(provider === undefined ? {} : { provider: provider.displayName }),
+      ...(entry.searchIncomplete === true ? { searchIncomplete: true } : {}),
+      ...(entry.isDirectory ? { isDirectory: true } : {}),
     }
+  }
+
+  /** Download one selected binary document without exposing its signed URL. */
+  async attachment(ref: ReferenceRef, maxBytes: number, signal?: AbortSignal): Promise<{ name: string, bytes: Uint8Array, mimeType: string }> {
+    const { kind, fileId } = decodeDriveId(ref.id)
+    const provider = this.providers.get(kind)
+    if (!provider) throw new ReferenceAnythingError('cloud-drive provider is unavailable', 'SOURCE_UNAVAILABLE')
+    const entry = this.cache.entry(kind, fileId) ?? await provider.describe(fileId, signal)
+    if (!entry || entry.isDirectory) throw new ReferenceAnythingError('cloud-drive file was not found', 'REFERENCE_NOT_FOUND')
+    if (!ATTACHMENT_EXTENSIONS.has(extensionOf(entry.name))) throw new ReferenceAnythingError('cloud-drive file type is not supported as an attachment', 'REFERENCE_READ_FAILED')
+    if (entry.size > maxBytes) throw new ReferenceAnythingError('cloud-drive attachment exceeds the download limit', 'ATTACHMENT_TOO_LARGE')
+    const wanted = entry.size > 0 ? entry.size : maxBytes + 1
+    const result = await provider.read(entry.id, 0, Math.min(wanted, maxBytes + 1), signal)
+    const total = result.totalSize ?? entry.size
+    if (total > maxBytes || result.bytes.byteLength > maxBytes) throw new ReferenceAnythingError('cloud-drive attachment exceeds the download limit', 'ATTACHMENT_TOO_LARGE')
+    return { name: entry.name, bytes: result.bytes, mimeType: mimeForName(entry.name) }
+  }
+
+  /** Picker-only listing which keeps folders and safe downloadable documents. */
+  async pickerList(query: string, limit: number, signal?: AbortSignal): Promise<ReferenceSummary[]> {
+    this.invalidateForCredentialChange()
+    const bounded = Math.max(0, Math.trunc(limit))
+    if (bounded === 0) return []
+    const trimmed = query.trim()
+    const collected: DriveEntry[] = []
+    await Promise.all([...this.providers.values()].map(async provider => {
+      try {
+        if (!await provider.credentialed()) return
+        const entries = await provider.list(trimmed, bounded, signal)
+        collected.push(...entries.filter(entry => entry.isDirectory || this.readable(entry) || ATTACHMENT_EXTENSIONS.has(extensionOf(entry.name))))
+      } catch (cause) {
+        if (cause instanceof ReferenceAnythingError && cause.code === 'REFERENCE_CANCELLED') return
+        const code = cause instanceof ReferenceAnythingError ? cause.code : 'REFERENCE_READ_FAILED'
+        this.ctx.logger.warn(`reference cloud-drive: picker listing ${provider.kind} failed (${code})`)
+      }
+    }))
+    const rows = trimmed.startsWith('/') ? collected : rank(collected, trimmed)
+    return rows.slice(0, bounded).map(entry => this.summarize(entry))
+  }
+
+  /** A token rotation or disconnect must invalidate the outer listing cache. */
+  private invalidateForCredentialChange(): void {
+    const generation = this.ctx.openListManager.credentialGeneration()
+    if (generation === this.credentialGeneration) return
+    this.credentialGeneration = generation
+    this.cache.clear()
   }
 
   /**
@@ -388,6 +454,12 @@ export class CloudDriveService extends Service implements ReferenceSource {
 function extensionOf(name: string): string {
   const dot = name.lastIndexOf('.')
   return dot <= 0 ? '' : name.slice(dot).toLocaleLowerCase()
+}
+
+function imageExtension(name: string): boolean { return ['.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg'].includes(extensionOf(name)) }
+function mimeForName(name: string): string {
+  const ext = extensionOf(name)
+  return ({ '.pdf': 'application/pdf', '.doc': 'application/msword', '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', '.xls': 'application/vnd.ms-excel', '.xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', '.ppt': 'application/vnd.ms-powerpoint', '.pptx': 'application/vnd.openxmlformats-officedocument.presentationml.presentation', '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.gif': 'image/gif', '.webp': 'image/webp', '.svg': 'image/svg+xml' } as Record<string, string>)[ext] ?? 'application/octet-stream'
 }
 
 /**

@@ -16,7 +16,7 @@
  * @module dsh-reference-anything/local-agent/adapters/gemini-cli
  */
 
-import { join } from 'node:path'
+import { joinLocalPath } from '../path.ts'
 import type {
   AdapterState,
   ConvertOptions,
@@ -45,7 +45,7 @@ export const geminiCliAdapter: TranscriptAdapter = {
   document: true,
 
   defaultRoots(home: string): readonly string[] {
-    return [join(home, '.gemini', 'history')]
+    return [joinLocalPath(home, '.gemini', 'history')]
   },
 
   matches(relativePath: string): boolean {

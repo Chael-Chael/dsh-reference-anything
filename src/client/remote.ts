@@ -16,7 +16,7 @@ export interface SearchResult extends ConversationRow {
 /** One local-agent transcript offered by the `@` menu; `id` is source-scoped, not a URI. */
 export interface AgentCandidate { id: string; label: string; provider: string; updatedAt?: number }
 /** One cloud-drive file offered by the `@` menu; `origin` is a display path, never a URL. */
-export interface DriveCandidate { id: string; label: string; provider: string; origin?: string; updatedAt?: number }
+export interface DriveCandidate { id: string; label: string; provider: string; origin?: string; updatedAt?: number; searchIncomplete?: boolean; isDirectory?: boolean }
 export type ExtensionState = 'connected' | 'disconnected' | 'profile-required' | 'profile-disconnected' | 'daemon-offline'
 export interface Health {
   version: string; daemon: string; pluginInstalled: boolean
@@ -80,6 +80,11 @@ export interface ProviderSyncState {
   provider: ChatProvider; status: 'idle' | 'running' | 'cancelled' | 'failed'
   lastSyncAt: string; lastCompleteScanAt: string; error: string
 }
+export interface OpenListStatus { state: 'install' | 'downloading' | 'running' | 'failed' | 'upgrade'; installed: boolean; mode?: 'managed' | 'external'; version?: string; endpoint?: string; supportsRollback: boolean; upgradeAvailable: boolean; newerVersion?: boolean; error?: string }
+export interface OpenListDriverField { name: string; label: string; type: 'text' | 'password' | 'number' | 'boolean' | 'select'; secret?: boolean; required: boolean; hasDefault?: boolean; default?: string | number | boolean; options?: ReadonlyArray<{ label: string; value: string }> }
+export interface OpenListDriver { name: string; description?: string; quickAuth?: boolean; fields: readonly OpenListDriverField[] }
+export interface OpenListMount { id: string; name: string; driver: string; enabled: boolean; status?: 'ready' | 'disabled' | 'error'; error?: string; capacityUsed?: number; capacityTotal?: number; indexStatus?: 'idle' | 'running' | 'complete' | 'failed'; indexProgress?: number; indexCount?: number }
+export interface OpenListReindex { supported: boolean; reason?: string }
 
 export const REFERENCE_ANYTHING_REMOTE: TypertRemoteContribution = {
   package: 'dsh-reference-anything', descriptors: REFERENCE_ANYTHING_INVOCATIONS,
@@ -114,4 +119,15 @@ export interface ReferenceAnythingRemoteFace {
   clearRemoteMissing(signal?: AbortSignal): Promise<RemoteResult<number>>
   clearOldAccounts(signal?: AbortSignal): Promise<RemoteResult<number>>
   syncStates(): Promise<RemoteResult<readonly ProviderSyncState[]>>
+  openListStatus(signal?: AbortSignal): Promise<RemoteResult<OpenListStatus>>
+  openListInstall(signal?: AbortSignal): Promise<RemoteResult<OpenListStatus>>
+  openListUpgrade(input: { rollback?: boolean }, signal?: AbortSignal): Promise<RemoteResult<OpenListStatus>>
+  openListConnectExternal(input: { endpoint: string; username?: string; password?: string; token?: string }, signal?: AbortSignal): Promise<RemoteResult<OpenListStatus>>
+  openListDisconnect(signal?: AbortSignal): Promise<RemoteResult<OpenListStatus>>
+  openListDrivers(signal?: AbortSignal): Promise<RemoteResult<readonly OpenListDriver[]>>
+  openListMounts(signal?: AbortSignal): Promise<RemoteResult<readonly OpenListMount[]>>
+  openListCreateMount(input: { id?: string; mountPath: string; driver: string; addition: Record<string, unknown>; order?: number; remark?: string }, signal?: AbortSignal): Promise<RemoteResult<OpenListMount>>
+  openListDisableMount(input: { id: string; disabled?: boolean }, signal?: AbortSignal): Promise<RemoteResult<boolean>>
+  openListRemoveMount(input: { id: string }, signal?: AbortSignal): Promise<RemoteResult<boolean>>
+  openListReindex(input: { id: string }, signal?: AbortSignal): Promise<RemoteResult<OpenListReindex>>
 }

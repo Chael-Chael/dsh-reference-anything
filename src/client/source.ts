@@ -138,9 +138,8 @@ const PREFIX_SCOPE: Readonly<Record<string, SourceScope>> = {
   // `file`/`files` above already belong to the workspace, so a drive needs
   // its own words. The bare CJK ones only reach the map through the
   // no-colon branch of `scopedQuery` — its prefix pattern is ASCII.
-  drive: 'drives', drives: 'drives', cloud: 'drives', netdisk: 'drives',
-  baidu: 'drives', bdpan: 'drives', pds: 'drives', aliyun: 'drives',
-  '网盘': 'drives', '百度': 'drives', '百度网盘': 'drives', '阿里': 'drives', '阿里云盘': 'drives',
+  drive: 'drives', drives: 'drives', cloud: 'drives', netdisk: 'drives', openlist: 'drives',
+  '网盘': 'drives',
 }
 
 export interface SearchDebounce<V> {
@@ -175,6 +174,8 @@ type CandidateValue =
   | { kind: 'session'; label: string; mention: string }
   | { kind: 'agent'; reference: AgentReference }
   | { kind: 'drive'; reference: DriveReference }
+  | { kind: 'drive-search' }
+  | { kind: 'drive-folder'; path: string }
   | { kind: 'command'; name: string }
   | { kind: 'skill'; name: string }
   | { kind: 'action'; action: 'sync' | 'expand' | 'collapse'; query?: string }
@@ -471,10 +472,22 @@ export function createCloudDriveSource(
       const scoped = scopedQuery(query, 'drives')
       if (scoped === undefined) return []
       const rows = await search(scoped, signal, options.maxCandidates)
+      if (rows.length === 0 && scoped === '') return [{
+        name: t('drive.searchAction'),
+        description: t('drive.searchActionDetail'),
+        icon: DRIVE_ICON_MARKER,
+        value: encodeCandidate({ kind: 'drive-search' }),
+      }]
       // Two drives can hold files of the same name, and one drive can hold the
       // same name in two folders, so the ordinal suffix earns its place here.
-      return disambiguate(rows.map((row): InputTriggerCandidate => {
+      const candidates = disambiguate(rows.map((row): InputTriggerCandidate => {
         const name = row.label.trim() || 'Untitled'
+        if (row.isDirectory === true) return {
+          name: `📁 ${name}`,
+          description: row.origin ?? t('source.drives'),
+          icon: DRIVE_ICON_MARKER,
+          value: encodeCandidate({ kind: 'drive-folder', path: row.origin ?? '/' }),
+        }
         return {
           name,
           description: describeDriveRow(row, t),
@@ -488,9 +501,17 @@ export function createCloudDriveSource(
           }),
         }
       }))
+      if (scoped.startsWith('/') && scoped.replace(/\/+$/u, '') !== '') {
+        const current = scoped.replace(/\/+$/u, '')
+        const parent = current.slice(0, current.lastIndexOf('/')) || '/'
+        candidates.unshift({ name: `↩ ${t('drive.parentFolder')}`, description: parent, icon: DRIVE_ICON_MARKER, value: encodeCandidate({ kind: 'drive-folder', path: parent }) })
+      }
+      return candidates
     },
     onPick({ candidate }) {
       const value = decodeCandidate(candidate.value)
+      if (value?.kind === 'drive-search') return { text: '@drive:' }
+      if (value?.kind === 'drive-folder') return { text: `@drive:${value.path.replace(/\/+$/u, '') || ''}/` }
       if (value?.kind !== 'drive') return undefined
       const reference = value.reference
       return {
@@ -516,8 +537,8 @@ export function createCloudDriveSource(
 /** The dimmed second line: which drive holds it, and where in that drive. */
 function describeDriveRow(row: DriveCandidate, t: T): string {
   const provider = row.provider || t('source.drives')
-  if (!row.origin) return provider
-  return t('drive.description', { provider, path: row.origin })
+  const location = !row.origin ? provider : t('drive.description', { provider, path: row.origin })
+  return row.searchIncomplete === true ? `${location} · ${t('drive.searchIncomplete')}` : location
 }
 
 function encodeDriveReference(reference: DriveReference): string { return JSON.stringify(reference) }
@@ -781,7 +802,7 @@ function formatDate(value: string, t: T): string {
 const fallback: T = (key, params) => {
   const dictionary: Record<string, string> = {
     'source.conversations': 'External conversations', 'source.files': 'Files and folders', 'source.sessions': 'DSH sessions', 'source.agents': 'Local agent conversations', 'source.drives': 'Cloud drive files', 'source.commands': 'Commands', 'source.skills': 'Skills',
-    'conversation.description': '{provider} · {date}', 'drive.description': '{provider} · {path}', 'conversation.unknownDate': 'unknown date', 'skill.userOnly': 'user-only · ',
+    'conversation.description': '{provider} · {date}', 'drive.description': '{provider} · {path}', 'drive.searchIncomplete': 'Results may be incomplete', 'drive.searchAction': 'Search cloud drive files…', 'drive.searchActionDetail': 'Select, then type a filename, for example @drive:notes', 'drive.parentFolder': 'Parent folder', 'conversation.unknownDate': 'unknown date', 'skill.userOnly': 'user-only · ',
     'menu.syncAll': 'Sync all now', 'menu.syncAllDetail': 'Refresh the local external-conversation index',
     'menu.syncRunning': 'Syncing…', 'menu.syncRunningDetail': 'An external-conversation sync is already running',
     'menu.syncAgain': 'Sync again', 'menu.syncLastResult': 'Last synced {time} · Successful sources {success}/{total}',

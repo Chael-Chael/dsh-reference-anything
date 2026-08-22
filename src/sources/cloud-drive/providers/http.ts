@@ -1,10 +1,9 @@
 /**
  * Response handling shared by every drive transport.
  *
- * Small on purpose: what the two providers genuinely have in common is how a
- * body is bounded and how a total size is read back, not how a request is
- * built. Everything above that — auth, pagination, error envelopes — differs
- * enough between 百度网盘 and PDS that sharing it would cost more than it saved.
+ * Small on purpose: OpenList-specific authentication and filesystem envelopes
+ * belong in its provider; this module only bounds a response body and reads a
+ * disclosed total size.
  *
  * @module dsh-reference-anything/cloud-drive/providers/http
  */

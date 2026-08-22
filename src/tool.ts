@@ -10,7 +10,7 @@
  */
 
 import type { Context } from '@deepseek-ai/cordis'
-import { mkdtemp, readFile, rm } from 'node:fs/promises'
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { basename, join } from 'node:path'
 import z from '@deepseek-ai/schemastery'
@@ -22,6 +22,7 @@ import { decodeReferenceUri, encodeReferenceUri } from './uri.ts'
 import { stringifyTagSafeJson } from './serialize.ts'
 import type { ReferenceWindow } from './types.ts'
 import type {} from './index.ts'
+import type { CloudDriveService } from './sources/cloud-drive/index.ts'
 
 /** Cordis plugin name used by loader diagnostics. */
 export const name = 'reference-tool'
@@ -280,7 +281,7 @@ export function apply(ctx: Context, config: Config = {}): void {
 
   ctx.effect(() => ctx.tools.register(defineTool({
     name: 'reference_attachment_read',
-    description: 'Read one attachment from an authorized Web conversation. The bytes are fetched on demand through the logged-in provider page.',
+    description: 'Materialize one authorized Web-conversation attachment or cloud-drive document on demand.',
     parameters: {
       uri: { type: 'string', required: true, description: 'The dsh-ref URI that exposed the attachment.' },
       attachmentId: { type: 'string', required: true, description: 'Attachment id exactly as shown in the conversation page.' },
@@ -315,7 +316,23 @@ export function apply(ctx: Context, config: Config = {}): void {
     async execute(args, exec) {
       const ref = decodeReferenceUri(args.uri)
       ctx.references.assertGranted(exec.agent ? String(exec.agent.session.id) : undefined, ref)
-      if (ref.source !== 'web-chat') throw new Error('attachments are available only for synchronized Web conversations')
+      if (ref.source === 'cloud-drive') {
+        const service = ctx.get('referenceCloudDrive') as CloudDriveService | undefined
+        if (!service) throw new Error('Cloud-drive service is not mounted')
+        const attachment = await service.attachment(ref, 25 * 1024 * 1024, exec.signal)
+        const root = await mkdtemp(join(tmpdir(), 'dsh-reference-drive-'))
+        tempRoots.add(root)
+        const safeName = basename(attachment.name).replace(/[<>:"/\\|?*\x00-\x1f]/g, '_') || 'attachment'
+        const localPath = join(root, safeName)
+        await writeFile(localPath, attachment.bytes)
+        const bytes = Buffer.from(attachment.bytes)
+        const mimeType = sniffMime(bytes, attachment.mimeType)
+        const timer = setTimeout(() => { tempRoots.delete(root); void rm(root, { recursive: true, force: true }) }, 60 * 60 * 1000)
+        timer.unref?.()
+        const image = mimeType.startsWith('image/') ? await saveImage(ctx, bytes, mimeType, attachment.name) : undefined
+        return { name: attachment.name, mimeType, size: bytes.byteLength, localPath, ...(image ? { image } : {}) }
+      }
+      if (ref.source !== 'web-chat') throw new Error('attachments are available only for synchronized Web conversations and cloud-drive documents')
       const service = ctx.get('referenceChatHistory')
       if (!service) throw new Error('Web conversation history service is not mounted')
       const conversation = service.store.conversations.get(ref.id)

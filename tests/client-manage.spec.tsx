@@ -53,11 +53,12 @@ function renderSettings(current: SettingsSnapshot, actions: {
   checkUpdate?: () => Promise<void>; installUpdate?: () => Promise<void>
   switchReferenceUiMode?: () => Promise<void>
   quickRefreshOnOpen?: () => Promise<void>
+  save?: (settings: SettingsRecord) => Promise<void>
 } = {}): HTMLElement {
   const noop = async () => {}
   const useScope = ((selector: (value: SettingsSnapshot) => unknown) => selector(current)) as never
   return render(<ConversationSettings close={() => {}} useSessions={(() => []) as never} useWorkspaces={(() => []) as never}
-    useScope={useScope} save={noop} sync={noop} cancel={noop} refresh={actions.refresh ?? noop} quickRefreshOnOpen={actions.quickRefreshOnOpen ?? noop}
+    useScope={useScope} save={actions.save ?? noop} sync={noop} cancel={noop} refresh={actions.refresh ?? noop} quickRefreshOnOpen={actions.quickRefreshOnOpen ?? noop}
     setupAll={actions.setupAll ?? noop} discoverOpenCli={actions.discoverOpenCli ?? noop} installOpenCli={actions.installOpenCli ?? noop}
     useProfile={actions.useProfile ?? noop} install={actions.install ?? noop} restartDaemon={noop} checkUpdate={actions.checkUpdate ?? noop} installUpdate={actions.installUpdate ?? noop} switchReferenceUiMode={actions.switchReferenceUiMode ?? noop} browse={noop} deleteConversation={noop}
     clearProvider={noop} clearOlder={noop} refreshStats={noop} t={t} />)
@@ -107,6 +108,36 @@ describe('settings update bar', () => {
     await act(async () => { button.click() })
     expect(installUpdate).toHaveBeenCalledOnce()
     expect(confirmation).toHaveBeenCalledTimes(2)
+  })
+})
+
+describe('local agent source selection', () => {
+  it('shows every supported agent and saves an explicit selection', async () => {
+    const saved: SettingsRecord[] = []
+    const el = renderSettings({ settings }, { save: async value => { saved.push(value) } })
+    const choices = el.querySelector('.dsh_ref_selection_grid')!.querySelectorAll<HTMLInputElement>('input')
+    expect(choices).toHaveLength(14)
+    await act(async () => { choices[0]!.click() })
+    expect(saved.at(-1)?.enabledAgents).not.toContain('claude-code')
+    expect(saved.at(-1)?.enabledAgents).toHaveLength(13)
+  })
+
+  it('places agent and drive choices directly below external conversation cards', async () => {
+    const saved: SettingsRecord[] = []
+    const el = renderSettings({ settings, openListMounts: [
+      { id: '1', name: '/work', driver: 'OneDrive', enabled: true, status: 'ready' },
+      { id: '2', name: '/archive', driver: 'Aliyundrive', enabled: true, status: 'ready' },
+    ] }, { save: async value => { saved.push(value) } })
+    const providerGrid = el.querySelector('.dsh_ref_provider_grid')!
+    const agentChoices = el.querySelector('.dsh_ref_agent_choices')!
+    const cloudSetup = el.querySelector('.dsh_ref_cloud')!
+    const driveChoices = el.querySelector('.dsh_ref_drive_choices')!
+    expect(providerGrid.compareDocumentPosition(agentChoices) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0)
+    expect(cloudSetup.compareDocumentPosition(driveChoices) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0)
+    const driveToggles = driveChoices.querySelectorAll<HTMLInputElement>('input')
+    expect(driveToggles).toHaveLength(2)
+    await act(async () => { driveToggles[0]!.click() })
+    expect(saved.at(-1)?.enabledDriveMounts).toEqual(['/archive'])
   })
 })
 

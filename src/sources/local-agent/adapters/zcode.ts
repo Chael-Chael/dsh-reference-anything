@@ -18,7 +18,7 @@
  * @module dsh-reference-anything/local-agent/adapters/zcode
  */
 
-import { join } from 'node:path'
+import { joinLocalPath } from '../path.ts'
 import type { ParsedTurn, QueryAdapter, SessionTurns, SqliteReader, TranscriptSession } from '../types.ts'
 import { COMPACTION_MARKER, createSharedState, flushAssistant, normalizeTitle, parseTimestamp } from './shared.ts'
 import { readSessionMessages, stepSessionMessage } from './sqlite-shared.ts'
@@ -38,7 +38,7 @@ export const zcodeAdapter: QueryAdapter = {
   query: true,
 
   defaultRoots(home: string): readonly string[] {
-    return [join(home, '.zcode', 'cli', 'db')]
+    return [joinLocalPath(home, '.zcode', 'cli', 'db')]
   },
 
   matches(relativePath: string): boolean {

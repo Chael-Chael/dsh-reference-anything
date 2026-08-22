@@ -18,7 +18,8 @@ export const agentCandidateSchema = z.object({ id: z.string(), label: z.string()
 export const driveCandidateSchema = z.object({
   id: z.string(), label: z.string(), provider: z.string(),
   origin: z.string().optional(), updatedAt: z.number().optional(),
-}).readonly()
+  searchIncomplete: z.boolean().optional(), isDirectory: z.boolean().optional(),
+}).strict().readonly()
 
 /**
  * Binds the calling session to the invocation, so the Host can scope a search
@@ -98,6 +99,29 @@ export const providerSyncStateSchema = z.object({
   provider: providerSchema, status: z.enum(['idle', 'running', 'cancelled', 'failed']),
   lastSyncAt: z.string(), lastCompleteScanAt: z.string(), error: z.string(),
 }).readonly()
+// OpenList wire DTOs intentionally omit every credential, storage addition,
+// raw/signed URL, and server-supplied diagnostic.  The Host keeps those in its
+// restricted credential file and translates failures to a generic message.
+export const openListStatusSchema = z.object({
+  state: z.enum(['install', 'downloading', 'running', 'failed', 'upgrade']), installed: z.boolean(),
+  mode: z.enum(['managed', 'external']).optional(), version: z.string().optional(), endpoint: z.string().optional(),
+  supportsRollback: z.boolean(), upgradeAvailable: z.boolean(), newerVersion: z.boolean().optional(), error: z.string().optional(),
+}).strict().readonly()
+export const openListDriverFieldSchema = z.object({
+  name: z.string(), label: z.string(), type: z.enum(['text', 'password', 'number', 'boolean', 'select']), secret: z.boolean(), required: z.boolean(), hasDefault: z.boolean().optional(), default: z.union([z.string(), z.number(), z.boolean()]).optional(),
+  options: z.array(z.object({ label: z.string(), value: z.string() }).readonly()).optional(),
+}).strict().readonly()
+export const openListDriverSchema = z.object({ name: z.string(), description: z.string().optional(), quickAuth: z.boolean(), fields: z.array(openListDriverFieldSchema) }).strict().readonly()
+export const openListMountSchema = z.object({
+  id: z.string(), name: z.string(), driver: z.string(), enabled: z.boolean(), status: z.enum(['ready', 'disabled', 'error']).optional(), error: z.string().optional(),
+  capacityUsed: z.number().nonnegative().optional(), capacityTotal: z.number().nonnegative().optional(),
+  indexStatus: z.enum(['idle', 'running', 'complete', 'failed']).optional(), indexProgress: z.number().min(0).max(1).optional(), indexCount: z.number().nonnegative().optional(),
+}).strict().readonly()
+export const openListExternalConnectSchema = z.object({ endpoint: z.string().min(1), username: z.string().optional(), password: z.string().optional(), token: z.string().optional() }).strict().readonly()
+export const openListMountCreateSchema = z.object({ id: z.string().min(1).optional(), mountPath: z.string().min(1), driver: z.string().min(1), addition: z.record(z.string(), z.unknown()), order: z.number().int().optional(), remark: z.string().optional() }).strict().readonly()
+export const openListMountInputSchema = z.object({ id: z.string().min(1) }).strict().readonly()
+export const openListDisableMountSchema = z.object({ id: z.string().min(1), disabled: z.boolean().optional() }).strict().readonly()
+export const openListUpgradeInputSchema = z.object({ rollback: z.boolean().optional() }).strict().readonly()
 
 export const REFERENCE_ANYTHING_INVOCATIONS: readonly InvocationDescriptor[] = [
   descriptor('agentSearch', [agentLookup, { name: 'input', wire: 'input', source: 'json', codec: strict('AgentSearchInput', z.object({ query: z.string(), limit: z.number().int().min(1).max(100) }).readonly()) }], strict('AgentCandidate[]', z.array(agentCandidateSchema)), true),
@@ -130,6 +154,17 @@ export const REFERENCE_ANYTHING_INVOCATIONS: readonly InvocationDescriptor[] = [
   descriptor('clearRemoteMissing', [], strict('Count', z.number().int().nonnegative()), true),
   descriptor('clearOldAccounts', [], strict('Count', z.number().int().nonnegative()), true),
   descriptor('syncStates', [], strict('ProviderSyncState[]', z.array(providerSyncStateSchema))),
+  descriptor('openListStatus', [], strict('OpenListStatus', openListStatusSchema), true),
+  descriptor('openListInstall', [], strict('OpenListStatus', openListStatusSchema), true),
+  descriptor('openListUpgrade', [{ name: 'input', wire: 'input', source: 'json', codec: strict('OpenListUpgradeInput', openListUpgradeInputSchema) }], strict('OpenListStatus', openListStatusSchema), true),
+  descriptor('openListConnectExternal', [{ name: 'input', wire: 'input', source: 'json', codec: strict('OpenListExternalConnect', openListExternalConnectSchema) }], strict('OpenListStatus', openListStatusSchema), true),
+  descriptor('openListDisconnect', [], strict('OpenListStatus', openListStatusSchema), true),
+  descriptor('openListDrivers', [], strict('OpenListDriver[]', z.array(openListDriverSchema)), true),
+  descriptor('openListMounts', [], strict('OpenListMount[]', z.array(openListMountSchema)), true),
+  descriptor('openListCreateMount', [{ name: 'input', wire: 'input', source: 'json', codec: strict('OpenListMountCreate', openListMountCreateSchema) }], strict('OpenListMount', openListMountSchema), true),
+  descriptor('openListDisableMount', [{ name: 'input', wire: 'input', source: 'json', codec: strict('OpenListDisableMountInput', openListDisableMountSchema) }], strict('Boolean', z.boolean()), true),
+  descriptor('openListRemoveMount', [{ name: 'input', wire: 'input', source: 'json', codec: strict('OpenListMountInput', openListMountInputSchema) }], strict('Boolean', z.boolean()), true),
+  descriptor('openListReindex', [{ name: 'input', wire: 'input', source: 'json', codec: strict('OpenListMountInput', openListMountInputSchema) }], strict('OpenListReindex', z.object({ supported: z.boolean(), reason: z.string().optional() }).readonly()), true),
 ]
 
 function strict(type: string, schema: z.ZodType): { mode: 'strict'; typeSymbol: string; schema: z.ZodType } {
