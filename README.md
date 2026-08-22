@@ -12,14 +12,16 @@ One `@` for them all.
 
 <!-- SHIELD GROUP -->
 
-[![][github-version-shield]][github-releases-link]
+[![][github-version-shield]][github-version-link]
 [![][typescript-shield]][typescript-link]
-[![][dsh-plugin-shield]][repository-link]<br/>
+[![][dsh-plugin-shield]][repository-link]
+<br/>
 [![][github-stars-shield]][github-stars-link]
 [![][github-forks-shield]][github-forks-link]
 [![][github-issues-shield]][github-issues-link]
 [![][github-license-shield]][github-license-link]<br/>
 ![awesome · DSH plugin](https://awesome-dsh-plugin.com/badge.svg)
+[![][npm-downloads-shield]][npm-package-link]
 
 </div>
 
@@ -31,13 +33,16 @@ One `@` for them all.
 
 **Reference Anything is an enhancement for the DeepSeek Harness (DSH) `@` menu.** It brings multiple reference sources into one searchable menu, so you can mention the context you need without switching tools or copying content manually.
 
+After typing `@`, you can browse and click items in the menu with your mouse, or use the keyboard to enter text, search, and narrow down the results.
+
 Use one `@` menu to reference:
 
 - DSH commands and Skills
 - Workspace files and folders
 - DSH session history
 - Transcripts left on disk by other local agent CLIs (Claude Code, Codex, Cursor, and eleven more)
-- Historical conversations from ChatGPT, Claude, Gemini, DeepSeek, Grok, and Kimi
+- ✨ **NEW: Historical conversations from online chatbots like ChatGPT, Claude, Gemini, DeepSeek, Grok, and Kimi**
+- Files from cloud drives connected through OpenList
 
 Beyond extending what `@` can reference, Reference Anything also enhances the `@` menu itself:
 
@@ -105,6 +110,9 @@ For development, the repository can still be installed from a local path:
 # Run from the repository root
 dsh plugin --profile web add .
 ```
+
+> [!NOTE]
+> To restore DSH's original `@` menu appearance, simply uninstall this plugin.
 
 After installing the DSH plugin, open `Settings → Reference Anything → Availability check` in DSH Web (restart DSH first if this settings entry is not yet visible), then click **One-click setup**. It discovers OpenCLI; installs or upgrades it globally through npm when it is missing or older than `1.8.6`; installs the bundled adapters for all six platforms; starts or refreshes Browser Bridge; and opens the OpenCLI Browser Bridge page in the [Chrome Web Store](https://chromewebstore.google.com/detail/opencli/ildkmabpimmkaediidaifkhjpohdnifk). Confirm the extension installation, then return and click **Recheck setup**. Any remaining failed check displays its own recovery action.
 
@@ -365,8 +373,10 @@ This project is licensed under the [MIT License](./LICENSE). Third-party copyrig
 [typescript-link]: https://www.typescriptlang.org/
 [typescript-shield]: https://img.shields.io/badge/TypeScript-3178C6?labelColor=black&logo=typescript&logoColor=white&style=flat-square
 [dsh-plugin-shield]: https://img.shields.io/badge/DSH-plugin-ffffff?labelColor=black&style=flat-square
-[github-version-shield]: https://img.shields.io/github/package-json/v/Chael-Chael/dsh-reference-anything?color=369eff&label=version&labelColor=black&style=flat-square
-[github-releases-link]: https://github.com/Chael-Chael/dsh-reference-anything/releases
+[github-version-shield]: https://img.shields.io/github/package-json/v/Chael-Chael/dsh-reference-anything/main?color=369eff&label=version&labelColor=black&style=flat-square
+[github-version-link]: https://github.com/Chael-Chael/dsh-reference-anything/blob/main/package.json
+[npm-downloads-shield]: https://img.shields.io/npm/dt/dsh-reference-anything?color=cb3837&label=downloads&labelColor=black&style=flat-square
+[npm-package-link]: https://www.npmjs.com/package/dsh-reference-anything
 [github-stars-link]: https://github.com/Chael-Chael/dsh-reference-anything/stargazers
 [github-stars-shield]: https://img.shields.io/github/stars/Chael-Chael/dsh-reference-anything?color=ffcb47&labelColor=black&style=flat-square
 [github-forks-link]: https://github.com/Chael-Chael/dsh-reference-anything/forks

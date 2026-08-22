@@ -27,7 +27,6 @@ export interface SettingsInjected {
   restartDaemon(): Promise<void>
   checkUpdate(): Promise<void>
   installUpdate(): Promise<void>
-  switchReferenceUiMode(): Promise<void>
   browse(query: string, provider: ChatProvider | undefined, offset: number): Promise<void>
   deleteConversation(uriId: string): Promise<void>
   clearProvider(provider: ChatProvider): Promise<void>
@@ -77,12 +76,11 @@ const PICKER_SOURCES: ReadonlyArray<{ id: PickerSource; label: keyof typeof SOUR
 const SOURCE_KEYS = { commands: 'source.commands', skills: 'source.skills', files: 'source.files', sessions: 'source.sessions', agents: 'source.agents', conversations: 'source.conversations', drives: 'source.drives' } as const
 const REFERENCE_ANYTHING_LOGO = '__REFERENCE_ANYTHING_LOGO_DATA_URI__'
 const GITHUB_REPOSITORY_URL = 'https://github.com/Chael-Chael/dsh-reference-anything'
-export function ConversationSettings({ useScope, save, sync, cancel, refresh, refreshOpenList = async () => undefined, quickRefreshOnOpen, setupAll, discoverOpenCli, installOpenCli, useProfile, install, restartDaemon, checkUpdate, installUpdate, switchReferenceUiMode, browse, deleteConversation, clearProvider, clearOlder, clearRemoteMissing, clearOldAccounts, refreshStats, openListInstall = async () => undefined, openListUpgrade = async () => undefined, openListConnectExternal = async () => undefined, openListDisconnect = async () => undefined, openListCreateMount = async () => undefined, openListDisableMount = async () => undefined, openListRemoveMount = async () => undefined, openListReindex = async () => ({ supported: false }), t }: SettingsProps) {
+export function ConversationSettings({ useScope, save, sync, cancel, refresh, refreshOpenList = async () => undefined, quickRefreshOnOpen, setupAll, discoverOpenCli, installOpenCli, useProfile, install, restartDaemon, checkUpdate, installUpdate, browse, deleteConversation, clearProvider, clearOlder, clearRemoteMissing, clearOldAccounts, refreshStats, openListInstall = async () => undefined, openListUpgrade = async () => undefined, openListConnectExternal = async () => undefined, openListDisconnect = async () => undefined, openListCreateMount = async () => undefined, openListDisableMount = async () => undefined, openListRemoveMount = async () => undefined, openListReindex = async () => ({ supported: false }), t }: SettingsProps) {
   const state = useScope(value => value)
   const settings = state.settings
   const enabledAgents = settings.enabledAgents ?? ALL_LOCAL_AGENTS
   const picker = settings.picker ?? defaultPickerSettings()
-  const referenceUiMode = settings.referenceUiMode ?? 'plugin'
   const [busyAction, setBusyAction] = useState<string>()
   const busyActionRef = useRef(false)
   const [storeBlocked, setStoreBlocked] = useState(false)
@@ -209,9 +207,6 @@ export function ConversationSettings({ useScope, save, sync, cancel, refresh, re
         <a className="dsh_ref_button" href={GITHUB_REPOSITORY_URL} target="_blank" rel="noreferrer">{t('settings.github')}</a>
       </div>
     </section>
-    <div className="dsh_ref_official_reference"><span><b>{t(referenceUiMode === 'official' ? 'settings.pluginReferenceTitle' : 'settings.officialReferenceTitle')}</b><small>{t(referenceUiMode === 'official' ? 'settings.pluginReferenceDetail' : 'settings.officialReferenceDetail')}</small></span><button className={`dsh_ref_official_reference_action${referenceUiMode === 'official' ? ' is_enable' : ''}`} type="button" disabled={Boolean(busyAction) || Boolean(state.loading)} onClick={() => {
-      if (window.confirm(t(referenceUiMode === 'official' ? 'settings.pluginReferenceConfirm' : 'settings.officialReferenceConfirm'))) runAction('reference-ui-mode', switchReferenceUiMode)
-    }}>{busyAction === 'reference-ui-mode' ? t('settings.referenceUiSwitching') : t(referenceUiMode === 'official' ? 'settings.pluginReferenceAction' : 'settings.officialReferenceAction')}</button></div>
     <div className="dsh_ref_workspace">
     {state.error && <div className="dsh_ref_error" role="alert"><strong>{t('settings.actionFailed')}</strong><span>{state.error}</span></div>}
     <section className="dsh_ref_panel dsh_ref_general_settings"><div className="dsh_ref_section_head"><div><h3>{t('settings.general')}</h3><p>{t('settings.generalDetail')}</p></div></div>

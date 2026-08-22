@@ -1,13 +1,11 @@
 import type { Context } from '@deepseek-ai/cordis'
 import { TypertRemoteService } from '@deepseek-ai/dsh-typert-protocol'
 import type { ChatProvider, SettingsRecord } from './store/spec.ts'
-import type { ReferenceUiMode } from './wire.ts'
 import type { SyncMode } from './sync/index.ts'
 import type {} from './sources/web-chat/index.ts'
 import type {} from './sources/local-agent/index.ts'
 import type {} from './sources/cloud-drive/index.ts'
 import type { Agent } from '@deepseek-ai/dsh-agent'
-import { switchReferenceUiMode as switchProfileReferenceUiMode } from './profile-mode.ts'
 import type {} from './openlist/index.ts'
 
 export class ReferenceAnythingRemote extends TypertRemoteService {
@@ -74,18 +72,6 @@ export class ReferenceAnythingRemote extends TypertRemoteService {
   updateStatus(signal: AbortSignal) { return this.ctx.referenceChatHistory.updateStatus(signal) }
   checkUpdate(signal: AbortSignal) { return this.ctx.referenceChatHistory.checkUpdate(signal) }
   installUpdate(signal: AbortSignal) { return this.ctx.referenceChatHistory.installUpdate(signal) }
-  async switchReferenceUiMode(input: { mode: ReferenceUiMode }, signal: AbortSignal) {
-    const settings = this.ctx.referenceChatHistory.getSettings()
-    const previousMode = settings.referenceUiMode ?? 'plugin'
-    const result = await switchProfileReferenceUiMode({ mode: input.mode, signal })
-    try {
-      await this.ctx.referenceChatHistory.updateSettings({ ...settings, referenceUiMode: input.mode })
-    } catch (error) {
-      await switchProfileReferenceUiMode({ mode: previousMode }).catch(() => undefined)
-      throw error
-    }
-    return result
-  }
   stats() { return this.ctx.referenceChatHistory.stats() }
   syncStart(input: { providers: ChatProvider[]; mode: SyncMode }): string {
     return this.ctx.referenceChatHistory.sync.start(input.providers, input.mode)

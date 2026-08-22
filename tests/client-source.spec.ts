@@ -231,8 +231,6 @@ describe('native @ sources', () => {
     expect(REFERENCE_ANYTHING_INVOCATIONS.some(item => item.method === 'sessionSearch')).toBe(false)
     expect(REFERENCE_ANYTHING_INVOCATIONS.find(item => item.method === 'agentSearch')?.cancellation)
       .toEqual({ parameter: 'signal' })
-    expect(REFERENCE_ANYTHING_INVOCATIONS.find(item => item.method === 'switchReferenceUiMode')?.cancellation)
-      .toEqual({ parameter: 'signal' })
   })
 })
 

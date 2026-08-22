@@ -1,7 +1,7 @@
 {
   "name": "dsh-reference-anything",
   "version": "0.3.1",
-  "description": "Reference commands, skills, workspace files, DSH sessions, other local agent CLIs' transcripts, and mirrored ChatGPT/Claude/Gemini/DeepSeek/Grok/Kimi conversations from one DeepSeek Harness @ menu",
+  "description": "Reference commands, skills, workspace files, DSH sessions, local agent transcripts, cloud-drive files, and mirrored web-chat conversations from one DeepSeek Harness @ menu",
   "license": "MIT",
   "publishConfig": {
     "access": "public"

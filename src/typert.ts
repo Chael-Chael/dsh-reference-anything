@@ -20,7 +20,6 @@ export const TYPERT_MANIFEST: TypertContribution = {
       { kind: 'method', name: 'updateStatus', signature: 'updateStatus(signal: AbortSignal): Promise<PackageUpdateStatus>' },
       { kind: 'method', name: 'checkUpdate', signature: 'checkUpdate(signal: AbortSignal): Promise<PackageUpdateStatus>' },
       { kind: 'method', name: 'installUpdate', signature: 'installUpdate(signal: AbortSignal): Promise<PackageUpdateResult>' },
-      { kind: 'method', name: 'switchReferenceUiMode', signature: 'switchReferenceUiMode(input: ReferenceUiModeInput, signal: AbortSignal): Promise<ReferenceUiSwitchResult>' },
       { kind: 'method', name: 'stats', signature: 'stats(): ProviderStats[]' },
       { kind: 'method', name: 'syncStart', signature: 'syncStart(input: SyncStart): string' },
       { kind: 'method', name: 'syncStatus', signature: 'syncStatus(input: JobInput): SyncStatus | undefined' },

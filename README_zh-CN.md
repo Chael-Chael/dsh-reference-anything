@@ -12,9 +12,10 @@
 
 <!-- SHIELD GROUP -->
 
-[![][github-version-shield]][github-releases-link]
+[![][github-version-shield]][github-version-link]
 [![][typescript-shield]][typescript-link]
-[![][dsh-plugin-shield]][repository-link]<br/>
+[![][dsh-plugin-shield]][repository-link]
+[![][npm-downloads-shield]][npm-package-link]<br/>
 [![][github-stars-shield]][github-stars-link]
 [![][github-forks-shield]][github-forks-link]
 [![][github-issues-shield]][github-issues-link]
@@ -31,13 +32,16 @@
 
 **Reference Anything 是 DeepSeek Harness（DSH）的 `@` 菜单增强插件。** 它把多种引用来源集中到一个可搜索的菜单中，无需切换工具或手动复制内容，即可为当前任务补充所需上下文。
 
+输入 `@` 后，既可以用鼠标浏览并点击菜单中的条目，也可以直接用键盘输入文本进行搜索，缩小结果范围。
+
 通过同一个 `@` 菜单，可以引用：
 
 - DSH 命令与 Skills
 - 工作区文件和文件夹
 - DSH 历史会话
 - 本地其他 Agent CLI 留在磁盘上的历史对话（Claude Code、Codex、Cursor 等共 14 种）
-- 来自 ChatGPT、Claude、Gemini、DeepSeek、Grok 和 Kimi 的历史对话
+- ✨ **新增：来自 ChatGPT、Claude、Gemini、DeepSeek、Grok 和 Kimi 这些网页端 Chatbot 的历史对话**
+- 通过 OpenList 连接的云盘文件
 
 在扩展 `@` 的能力之外，我们还支持一些对于 `@` 菜单界面的增强：
 
@@ -106,6 +110,9 @@ dsh plugin --profile web add dsh-reference-anything
 # 在仓库根目录执行
 dsh plugin --profile web add .
 ```
+
+> [!NOTE]
+> 如需恢复 DSH 原有的 `@` 菜单样式，卸载本插件即可。
 
 安装 DSH 插件后，打开 DSH Web 的 `Settings → Reference Anything → 可用性检查`（如果尚未出现该设置项，请先重启 DSH），点击**「一键安装」**：它会自动查找 OpenCLI；若未找到 OpenCLI 或版本低于 `1.8.6`，则通过 npm 全局安装或升级；随后安装插件包内附带的六个平台适配器，启动或刷新 Browser Bridge，并打开 OpenCLI Browser Bridge 扩展的 [Chrome Web Store 安装页](https://chromewebstore.google.com/detail/opencli/ildkmabpimmkaediidaifkhjpohdnifk)。在商店页确认安装后，回到设置页点击「重新检查」；每个仍未通过的检查项旁都会显示对应的恢复操作。
 
@@ -367,8 +374,10 @@ metadata-only 模式下，读取引用正文时会在同一次 detail 浏览器�
 [typescript-link]: https://www.typescriptlang.org/
 [typescript-shield]: https://img.shields.io/badge/TypeScript-3178C6?labelColor=black&logo=typescript&logoColor=white&style=flat-square
 [dsh-plugin-shield]: https://img.shields.io/badge/DSH-plugin-ffffff?labelColor=black&style=flat-square
-[github-version-shield]: https://img.shields.io/github/package-json/v/Chael-Chael/dsh-reference-anything?color=369eff&label=version&labelColor=black&style=flat-square
-[github-releases-link]: https://github.com/Chael-Chael/dsh-reference-anything/releases
+[github-version-shield]: https://img.shields.io/github/package-json/v/Chael-Chael/dsh-reference-anything/main?color=369eff&label=version&labelColor=black&style=flat-square
+[github-version-link]: https://github.com/Chael-Chael/dsh-reference-anything/blob/main/package.json
+[npm-downloads-shield]: https://img.shields.io/npm/dt/dsh-reference-anything?color=cb3837&label=downloads&labelColor=black&style=flat-square
+[npm-package-link]: https://www.npmjs.com/package/dsh-reference-anything
 [github-stars-link]: https://github.com/Chael-Chael/dsh-reference-anything/stargazers
 [github-stars-shield]: https://img.shields.io/github/stars/Chael-Chael/dsh-reference-anything?color=ffcb47&labelColor=black&style=flat-square
 [github-forks-link]: https://github.com/Chael-Chael/dsh-reference-anything/forks

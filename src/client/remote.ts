@@ -1,6 +1,6 @@
 import type { RemoteResult, TypertRemoteContribution } from '@deepseek-ai/dsh-typert-protocol'
 import { REFERENCE_ANYTHING_INVOCATIONS } from '../contract.ts'
-import type { ChatProvider, ReferenceUiMode, SettingsRecord } from '../wire.ts'
+import type { ChatProvider, SettingsRecord } from '../wire.ts'
 
 /** The stored facts about one mirrored conversation, shared by both list surfaces. */
 export interface ConversationRow {
@@ -32,7 +32,6 @@ export interface PackageUpdateStatus {
   currentVersion: string; latestVersion: string; updateAvailable: boolean; checkedAt: number; error?: string
 }
 export interface PackageUpdateResult { version: string; restartRequired: boolean }
-export interface ReferenceUiSwitchResult { mode: ReferenceUiMode; restartRequired: false }
 export interface ProviderStats {
   provider: ChatProvider; conversations: number; lastSyncedAt: string
   status: 'ready' | 'syncing' | 'error' | 'empty'; error?: string
@@ -104,7 +103,6 @@ export interface ReferenceAnythingRemoteFace {
   updateStatus(signal?: AbortSignal): Promise<RemoteResult<PackageUpdateStatus>>
   checkUpdate(signal?: AbortSignal): Promise<RemoteResult<PackageUpdateStatus>>
   installUpdate(signal?: AbortSignal): Promise<RemoteResult<PackageUpdateResult>>
-  switchReferenceUiMode(input: { mode: ReferenceUiMode }, signal?: AbortSignal): Promise<RemoteResult<ReferenceUiSwitchResult>>
   stats(): Promise<RemoteResult<readonly ProviderStats[]>>
   syncStart(input: { providers: ChatProvider[]; mode: 'incremental' | 'full' }): Promise<RemoteResult<string>>
   syncStatus(input: { jobId: string }): Promise<RemoteResult<SyncStatus | undefined>>
