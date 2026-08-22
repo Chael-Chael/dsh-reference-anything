@@ -14,7 +14,7 @@ export interface SearchResult extends ConversationRow {
   snippet?: string
 }
 /** One local-agent transcript offered by the `@` menu; `id` is source-scoped, not a URI. */
-export interface AgentCandidate { id: string; label: string; provider: string; updatedAt?: number }
+export interface AgentCandidate { id: string; kind: string; label: string; provider: string; updatedAt?: number }
 /** One cloud-drive file offered by the `@` menu; `origin` is a display path, never a URL. */
 export interface DriveCandidate { id: string; label: string; provider: string; origin?: string; updatedAt?: number; searchIncomplete?: boolean; isDirectory?: boolean }
 export type ExtensionState = 'connected' | 'disconnected' | 'profile-required' | 'profile-disconnected' | 'daemon-offline'

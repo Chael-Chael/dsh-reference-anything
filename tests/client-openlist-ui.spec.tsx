@@ -8,7 +8,7 @@ import { en } from '../src/client/locale.ts'
 
 ;(globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 const t = ((key: keyof typeof en, values?: Record<string, string | number>) => Object.entries(values ?? {}).reduce((text, [name, value]) => text.replace(`{${name}}`, String(value)), en[key])) as never
-const settings = { opencliPath: 'opencli', profile: '', detailConcurrency: 8, autoSync: false, syncOnStartup: false, autoSyncMinutes: 60, historyMode: 'metadata-only' as const, enabledProviders: [], maxReadTurns: 10, inputRenderMode: 'pill' as const }
+const settings = { opencliPath: 'opencli', profile: '', detailConcurrency: 8, autoSync: false, syncOnStartup: false, autoSyncMinutes: 60, historyMode: 'metadata-only' as const, enabledProviders: [], enabledAgents: [], maxReadTurns: 10, inputRenderMode: 'pill' as const }
 let root: Root | undefined; let host: HTMLElement | undefined
 function mount(state: SettingsSnapshot, overrides: Partial<React.ComponentProps<typeof CloudDrives>> = {}): HTMLElement {
   host = document.createElement('div'); document.body.append(host); root = createRoot(host)

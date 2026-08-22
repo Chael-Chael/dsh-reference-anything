@@ -569,6 +569,7 @@ export function adoptReferenceIconProjection(): () => void {
 const CHIP_PROVIDER_LABEL: Readonly<Record<ChatProvider, string>> = {
   chatgpt: 'ChatGPT', claude: 'Claude', gemini: 'Gemini', deepseek: 'DeepSeek', grok: 'Grok', kimi: 'Kimi',
 }
+const LOCAL_AGENT_CHIP_LABELS = ['Claude Code', 'Codex', 'Cursor', 'Qoder', 'Reasonix', 'OpenClaw', 'Kimi CLI', 'Grok Build', 'Hermes', 'Gemini CLI', 'Pi', 'opencode', 'mimocode', 'zcode'] as const
 
 function projectComposerChips(
   root: ParentNode,
@@ -586,6 +587,15 @@ function projectComposerChips(
     const label = (chip.textContent ?? '').trim().replace(/^@/u, '')
     const appearance = chip.dataset.referenceAppearance
     if (appearance === 'session') {
+      const referenceSource = chip.dataset.referenceSource
+      if (referenceSource === 'Local agent conversations' || referenceSource === 'local-agent') {
+        applyChipIcon(chip, 'agent', pickerMasks.agent)
+        continue
+      }
+      if (LOCAL_AGENT_CHIP_LABELS.some(agent => label.startsWith(`${agent}·`))) {
+        applyChipIcon(chip, 'agent', pickerMasks.agent)
+        continue
+      }
       const provider = (Object.keys(CHIP_PROVIDER_LABEL) as ChatProvider[])
         .find(item => label.startsWith(`${CHIP_PROVIDER_LABEL[item]}·`))
       if (provider !== undefined) applyChipIcon(chip, provider, providerMasks[provider])

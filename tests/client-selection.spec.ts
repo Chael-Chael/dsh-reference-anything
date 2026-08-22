@@ -4,8 +4,8 @@ import { filterAgentCandidates, filterDriveCandidates } from '../src/client/sele
 describe('picker source selection', () => {
   it('keeps only explicitly selected local agent formats', () => {
     const rows = [
-      { id: 'codex:a', label: 'A', provider: 'Codex' },
-      { id: 'claude-code:b', label: 'B', provider: 'Claude Code' },
+      { id: 'codex:a', kind: 'codex', label: 'A', provider: 'Codex' },
+      { id: 'claude-code:b', kind: 'claude-code', label: 'B', provider: 'Claude Code' },
     ]
     expect(filterAgentCandidates(rows, ['codex']).map(row => row.id)).toEqual(['codex:a'])
     expect(filterAgentCandidates(rows, [])).toEqual([])

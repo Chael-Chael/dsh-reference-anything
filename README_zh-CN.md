@@ -74,7 +74,7 @@
 
 ## 📰 新闻
 
-- **2026-08-20 · v0.3.1** — 新增第六个 `@` 分组「本地 Agent 对话」：其他 14 种 Agent CLI 留在磁盘上的会话——Claude Code、Codex、Cursor、Qoder、Reasonix、OpenClaw、Kimi、Grok Build、Hermes、Gemini CLI、Pi，以及三种以 SQLite 存储的 opencode、mimocode、zcode——现在可以像其他来源一样列举和引用。**只做引用**：不向 DSH 会话库导入任何内容，只有模型调用 `reference_read` 时才会流式读取对应记录。读取有明确上界，默认按工作目录收窄，并复用与外部对话相同的按任务授权门禁——该门禁现已按来源限定，不再硬编码在单一来源上。
+- **2026-08-20 · v0.3.1** — 新增第六个 `@` 分组「本地 Agent 对话」：其他 14 种 Agent CLI 留在磁盘上的会话——Claude Code、Codex、Cursor、Qoder、Reasonix、OpenClaw、Kimi、Grok Build、Hermes、Gemini CLI、Pi，以及三种以 SQLite 存储的 opencode、mimocode、zcode——现在可以像其他来源一样列举和引用。**只做引用**：不向 DSH 会话库导入任何内容，只有模型调用 `reference_read` 时才会流式读取对应记录。读取有明确上界，默认按工作目录收窄，并复用与外部对话相同的按任务授权门禁——该门禁现已按来源限定，不再硬编码在单一来源上。rc.8 构建现从已发布的软件包解析开发 SDK，并在工作区范围判断时规范化比较双方的路径，确保 Windows 匹配可靠。
 - **2026-08-20 · v0.3.0** — 完成 DSH 原生 `@` 整合：五个来源可独立配置，文件与 DSH 会话复用官方 Remote，原生 Composer 引用支持来源 Logo，展开/折叠与同步操作均在菜单原位更新，并可一键在 Reference Anything 与 DSH 官方 `@` 列表之间切换；同时删除旧 `dsh-file:` 协议和自建 Composer 交互层。
 - **2026-08-19 · v0.2.4** — 新增插件版本自动检查与设置页内更新，提供 Pill/Raw text 两种输入框渲染方式，并通过可复用的后台浏览器会话提升 OpenCLI 同步稳定性及输入交互兼容性。
 - **2026-08-18 · v0.2.0** — 全新 Reference Anything 设置页，支持本地会话统计、分页管理、Provider/Profile 选择与同步状态检查。
@@ -104,10 +104,12 @@
 dsh plugin --profile web add dsh-reference-anything
 ```
 
-开发仓库也可以继续使用本地路径安装：
+开发时请先安装已发布的 DSH rc.8 SDK 依赖并运行完整验证，再通过本地路径安装仓库：
 
 ```powershell
 # 在仓库根目录执行
+pnpm install
+pnpm run check
 dsh plugin --profile web add .
 ```
 

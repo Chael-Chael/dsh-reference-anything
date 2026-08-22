@@ -1,3 +1,4 @@
+import { isAbsolute } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { claudeCodeAdapter } from '../src/sources/local-agent/adapters/claude-code.ts'
 import { codexAdapter } from '../src/sources/local-agent/adapters/codex.ts'
@@ -809,7 +810,7 @@ describe('registry', () => {
     for (const adapter of AGENT_ADAPTERS) {
       expect(adapter.displayName).not.toBe('')
       expect(adapter.defaultRoots('/home/u').length).toBeGreaterThan(0)
-      for (const root of adapter.defaultRoots('/home/u')) expect(root.startsWith('/home/u')).toBe(true)
+      for (const root of adapter.defaultRoots('/home/u')) expect(isAbsolute(root)).toBe(true)
     }
   })
 
