@@ -13,7 +13,7 @@ export interface BrowseState { query: string; provider?: ChatProvider; offset: n
 export interface SettingsSnapshot { settings: SettingsRecord; health?: Health; update?: PackageUpdateStatus; profiles?: readonly BrowserProfile[]; stats?: readonly ProviderStats[]; storage?: StorageStats; sync?: SyncStatus; openList?: OpenListStatus; openListDrivers?: readonly OpenListDriver[]; openListMounts?: readonly OpenListMount[]; error?: string; notice?: string; loading?: boolean; browse?: BrowseState; setupStep?: SetupStage }
 export interface SettingsInjected {
   hooks: { scope: ObservableSnapshot<SettingsSnapshot> }
-  save(value: SettingsRecord): Promise<void>
+  save(value: SettingsRecord): Promise<boolean | void>
   sync(providers: ChatProvider[], mode: 'incremental' | 'full'): Promise<void>
   cancel(): Promise<void>
   refresh(): Promise<void>
@@ -42,6 +42,7 @@ export interface SettingsInjected {
   openListDisableMount?(id: string, disabled?: boolean): Promise<void>
   openListRemoveMount?(id: string): Promise<void>
   openListReindex?(id: string): Promise<{ supported: boolean; reason?: string }>
+  pickCloudDriveDownloadDirectory?(): Promise<string | null>
 }
 type T = TranslateNS<typeof REFERENCE_ANYTHING_NS>
 type SettingsProps = PropsRuntime<'settings.section'> & InjectFace<SettingsInjected> & { t: T }
@@ -73,7 +74,7 @@ const PICKER_SOURCES: ReadonlyArray<{ id: PickerSource; label: keyof typeof SOUR
 const SOURCE_KEYS = { commands: 'source.commands', skills: 'source.skills', files: 'source.files', sessions: 'source.sessions', agents: 'source.agents', conversations: 'source.conversations', drives: 'source.drives' } as const
 const REFERENCE_ANYTHING_LOGO = '__REFERENCE_ANYTHING_LOGO_DATA_URI__'
 const GITHUB_REPOSITORY_URL = 'https://github.com/Chael-Chael/dsh-reference-anything'
-export function ConversationSettings({ useScope, save, sync, cancel, refresh, refreshOpenList = async () => undefined, quickRefreshOnOpen, setupAll, discoverOpenCli, installOpenCli, useProfile, install, restartDaemon, checkUpdate, installUpdate, browse, deleteConversation, clearProvider, clearOlder, clearRemoteMissing, clearOldAccounts, refreshStats, openListInstall = async () => undefined, openListUpgrade = async () => undefined, openListConnectExternal = async () => undefined, openListDisconnect = async () => undefined, openListCreateMount = async () => undefined, openListDisableMount = async () => undefined, openListRemoveMount = async () => undefined, openListReindex = async () => ({ supported: false }), t }: SettingsProps) {
+export function ConversationSettings({ useScope, save, sync, cancel, refresh, refreshOpenList = async () => undefined, quickRefreshOnOpen, setupAll, discoverOpenCli, installOpenCli, useProfile, install, restartDaemon, checkUpdate, installUpdate, browse, deleteConversation, clearProvider, clearOlder, clearRemoteMissing, clearOldAccounts, refreshStats, openListInstall = async () => undefined, openListUpgrade = async () => undefined, openListConnectExternal = async () => undefined, openListDisconnect = async () => undefined, openListCreateMount = async () => undefined, openListDisableMount = async () => undefined, openListRemoveMount = async () => undefined, openListReindex = async () => ({ supported: false }), pickCloudDriveDownloadDirectory, t }: SettingsProps) {
   const state = useScope(value => value)
   const settings = state.settings
   const picker = settings.picker ?? defaultPickerSettings()
@@ -245,7 +246,7 @@ export function ConversationSettings({ useScope, save, sync, cancel, refresh, re
       <AgentSelectionCards enabledAgents={enabledAgents} onEnabled={setAgentEnabled} t={t} />
       {!state.loading && state.stats?.every(item => item.conversations === 0) && <div className="dsh_ref_empty">{t('settings.empty')}</div>}
       <div className="dsh_ref_chat_divider" />
-      <CloudDrives state={state} refreshOpenList={refreshOpenList} install={openListInstall} upgrade={openListUpgrade} connect={openListConnectExternal} disconnect={openListDisconnect} createMount={openListCreateMount} disableMount={openListDisableMount} removeMount={openListRemoveMount} reindexMount={openListReindex} t={t} />
+      <CloudDrives state={state} save={save} pickDownloadDirectory={pickCloudDriveDownloadDirectory} refreshOpenList={refreshOpenList} install={openListInstall} upgrade={openListUpgrade} connect={openListConnectExternal} disconnect={openListDisconnect} createMount={openListCreateMount} disableMount={openListDisableMount} removeMount={openListRemoveMount} reindexMount={openListReindex} t={t} />
       <DriveSelectionCards state={state} save={save} t={t} />
       <div className="dsh_ref_chat_divider" />
       <div className="dsh_ref_sync_settings"><div className="dsh_ref_section_head"><div><h3>{t('settings.syncSettings')}</h3><p>{t('settings.syncSettingsDetail')}</p></div></div>
@@ -285,8 +286,9 @@ export function SyncProgress({ sync, t }: { sync: SyncStatus; t: T }) {
 }
 
 /** A separate, read-only-with-respect-to-drive-files OpenList control plane. */
-export function CloudDrives({ state, refreshOpenList, install, upgrade, connect, disconnect, createMount, disableMount, removeMount, reindexMount, t }: {
+export function CloudDrives({ state, save, pickDownloadDirectory, refreshOpenList, install, upgrade, connect, disconnect, createMount, disableMount, removeMount, reindexMount, t }: {
   state: SettingsSnapshot; refreshOpenList(): Promise<void>; install(): Promise<void>; upgrade(rollback?: boolean): Promise<void>
+  save(value: SettingsRecord): Promise<boolean | void>; pickDownloadDirectory?(): Promise<string | null>
   connect(input: { endpoint: string; username?: string; password?: string; token?: string }): Promise<void>; disconnect(): Promise<void>
   createMount(input: { id?: string; mountPath: string; driver: string; addition: Record<string, unknown> }): Promise<void>; disableMount(id: string, disabled?: boolean): Promise<void>; removeMount(id: string): Promise<void>; reindexMount(id: string): Promise<{ supported: boolean; reason?: string }>; t: T
 }) {
@@ -308,6 +310,15 @@ export function CloudDrives({ state, refreshOpenList, install, upgrade, connect,
   const [showExternal, setShowExternal] = useState(false)
   const [showAddDrive, setShowAddDrive] = useState(false)
   const [showAdvanced, setShowAdvanced] = useState(false)
+  const configuredDownloadDirectory = state.settings.cloudDriveDownloadDirectory ?? ''
+  const [downloadDirectory, setDownloadDirectory] = useState(configuredDownloadDirectory)
+  const [downloadDirectoryBusy, setDownloadDirectoryBusy] = useState(false)
+  const downloadSaveChain = useRef<Promise<void>>(Promise.resolve())
+  const downloadSaveGeneration = useRef(0)
+  const activeDownloadSaves = useRef(0)
+  const downloadPickerActive = useRef(false)
+  const persistedDownloadDirectory = useRef(configuredDownloadDirectory)
+  const requestedDownloadDirectory = useRef(configuredDownloadDirectory)
   const status = state.openList
   const drivers = state.openListDrivers ?? []
   const quickDrivers = drivers.filter(item => item.quickAuth === true)
@@ -315,6 +326,13 @@ export function CloudDrives({ state, refreshOpenList, install, upgrade, connect,
   const quickGuide = apiPagesProviderGuide(quickDriver?.name ?? '')
   const driver = drivers.find(item => item.name === driverName) ?? drivers[0]
   const mountNames = (state.openListMounts ?? []).map(item => item.name)
+  useEffect(() => {
+    persistedDownloadDirectory.current = configuredDownloadDirectory
+    if (activeDownloadSaves.current === 0 && !downloadPickerActive.current) {
+      requestedDownloadDirectory.current = configuredDownloadDirectory
+      setDownloadDirectory(configuredDownloadDirectory)
+    }
+  }, [configuredDownloadDirectory])
   useEffect(() => {
     if (driver && driver.name !== driverName) { setDriverName(driver.name); setFields(reauthMount ? {} : driverDefaults(driver)); setTouchedFields({}) }
   }, [driver, driverName])
@@ -352,10 +370,56 @@ export function CloudDrives({ state, refreshOpenList, install, upgrade, connect,
     setFormError(undefined)
     act(async () => { try { await createMount({ ...(reauthMount === undefined ? {} : { id: reauthMount.id }), mountPath: reauthMount?.name ?? path, driver: driver.name, addition }); setReauthMount(undefined); if (reauthMount === undefined) setMountPath(defaultOpenListMountPath(driver.name, [...mountNames, path])); setFields({}); setTouchedFields({}); setFormError(undefined) } catch { setFormError(t('cloud.error')); throw new Error('mount failed') } })
   }
+  const saveDownloadDirectory = (value: string): Promise<boolean> => {
+    if (value === requestedDownloadDirectory.current) return Promise.resolve(true)
+    requestedDownloadDirectory.current = value
+    const generation = ++downloadSaveGeneration.current
+    activeDownloadSaves.current += 1
+    setDownloadDirectoryBusy(true)
+    const nextSettings = { ...state.settings, cloudDriveDownloadDirectory: value }
+    const operation = downloadSaveChain.current.then(async () => {
+      let succeeded = false
+      try { succeeded = await save(nextSettings) !== false } catch { succeeded = false }
+      if (succeeded) persistedDownloadDirectory.current = value
+      else if (generation === downloadSaveGeneration.current) {
+        requestedDownloadDirectory.current = persistedDownloadDirectory.current
+        setDownloadDirectory(persistedDownloadDirectory.current)
+      }
+      return succeeded
+    }).finally(() => {
+      activeDownloadSaves.current -= 1
+      if (activeDownloadSaves.current === 0 && !downloadPickerActive.current) setDownloadDirectoryBusy(false)
+    })
+    downloadSaveChain.current = operation.then(() => undefined)
+    return operation
+  }
+  const commitDownloadDirectory = () => { void saveDownloadDirectory(downloadDirectory) }
+  const chooseDownloadDirectory = async () => {
+    if (downloadPickerActive.current) return
+    downloadPickerActive.current = true
+    setDownloadDirectoryBusy(true)
+    try {
+      const value = await pickDownloadDirectory?.()
+      if (value === undefined || value === null) return
+      setDownloadDirectory(value)
+      await saveDownloadDirectory(value)
+    } catch {
+      // The production adapter reports through the settings error channel.
+      // Keep this event handler settled if a custom injector rejects directly.
+    } finally {
+      downloadPickerActive.current = false
+      if (activeDownloadSaves.current === 0) setDownloadDirectoryBusy(false)
+    }
+  }
   return <section className="dsh_ref_cloud" aria-label={t('cloud.title')}>
     <div className="dsh_ref_section_head"><div><h3>{t('cloud.title')}</h3><p>{t('cloud.detail')}</p></div><span className="dsh_ref_health">{status ? t(`cloud.state.${optimisticState ?? status.state}` as keyof typeof import('./locale.ts').zh) : t('cloud.state.install')}</span></div>
     <ol className="dsh_ref_cloud_steps"><li className={status?.mode ? 'is_done' : 'is_current'}><b>1</b><span><strong>{t('cloud.stepEnable')}</strong><small>{status?.mode ? t('cloud.stepDone') : t('cloud.stepEnableDetail')}</small></span></li><li className={(state.openListMounts?.length ?? 0) > 0 ? 'is_done' : status?.mode ? 'is_current' : ''}><b>2</b><span><strong>{t('cloud.stepAdd')}</strong><small>{(state.openListMounts?.length ?? 0) > 0 ? t('cloud.stepDone') : t('cloud.stepAddDetail')}</small></span></li><li className={(state.openListMounts?.some(mount => mount.status === 'ready')) ? 'is_done' : ''}><b>3</b><span><strong>{t('cloud.stepUse')}</strong><small>{t('cloud.stepUseDetail')}</small></span></li></ol>
     <p className="dsh_ref_auto_note">{t('cloud.license')} <a href="https://github.com/OpenListTeam/OpenList/tree/v4.2.2" target="_blank" rel="noreferrer">{t('cloud.source')}</a></p>
+    <div className="dsh_ref_cloud_download">
+      <div className="dsh_ref_cloud_download_copy"><strong>{t('cloud.downloadDirectory')}</strong><small>{t('cloud.downloadDirectoryDetail')}</small><span className="dsh_ref_cloud_download_state">{configuredDownloadDirectory ? t('cloud.downloadDirectoryCustom') : t('cloud.downloadDirectorySystem')}</span></div>
+      <label><span>{t('cloud.downloadDirectory')}</span><input aria-label={t('cloud.downloadDirectory')} value={downloadDirectory} placeholder={t('cloud.downloadDirectoryPlaceholder')} disabled={downloadDirectoryBusy} onChange={event => { setDownloadDirectory(event.target.value) }} onBlur={commitDownloadDirectory} onKeyDown={event => { if (event.key === 'Enter') { event.preventDefault(); commitDownloadDirectory() } }} /></label>
+      <div className="dsh_ref_cloud_download_actions"><button type="button" disabled={downloadDirectoryBusy} onClick={() => { void chooseDownloadDirectory() }}>{t('cloud.chooseDirectory')}</button><button type="button" disabled={downloadDirectoryBusy || !configuredDownloadDirectory} onClick={() => { setDownloadDirectory(''); void saveDownloadDirectory('') }}>{t('cloud.resetDownloadDirectory')}</button></div>
+    </div>
     {status?.error && <p className="dsh_ref_inline_error">{status.error}</p>}
     <div className="dsh_ref_cloud_actions">
       {status?.mode !== 'external' && (!status?.installed || !status.mode) && <button className="is_primary" type="button" disabled={busy} onClick={() => act(install, 'downloading')}>{t('cloud.enable')}</button>}
@@ -690,7 +754,7 @@ export function AgentSelectionCards({ enabledAgents, onEnabled, t }: { enabledAg
   </div>
 }
 
-export function DriveSelectionCards({ state, save, t }: { state: SettingsSnapshot; save(value: SettingsRecord): Promise<void>; t: T }) {
+export function DriveSelectionCards({ state, save, t }: { state: SettingsSnapshot; save(value: SettingsRecord): Promise<boolean | void>; t: T }) {
   const mounts = state.openListMounts ?? []
   const selectedMounts = state.settings.enabledDriveMounts ?? mounts.filter(mount => mount.enabled).map(mount => mount.name)
   return <div className="dsh_ref_reference_choices dsh_ref_drive_choices">

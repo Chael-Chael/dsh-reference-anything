@@ -9,9 +9,11 @@ import { OpenCliError, OpenCliRunner, discoverOpenCli, installOpenCli as install
 import { PACKAGE_NAME, PackageUpdateManager, type PackageUpdateResult, type PackageUpdateStatus } from '../../update.ts'
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
+import { isDeepStrictEqual } from 'node:util'
 import type { ProviderTurnRow } from '../../store/store.ts'
 import { ReferenceAnythingError } from '../../errors.ts'
 import { parseProviderQuery } from '../../search.ts'
+import { validateDownloadDirectory } from '../../download-directory.ts'
 import type {} from '../../index.ts'
 
 export { parseProviderQuery }
@@ -74,6 +76,8 @@ export default class WebChatHistoryService extends Service implements ReferenceS
   private syncValue?: ConversationSyncManager
   private autoSyncInterval?: ReturnType<typeof setInterval>
   private autoSyncCatchUp?: ReturnType<typeof setTimeout>
+  private settingsUpdateQueue: Promise<void> = Promise.resolve()
+  private validateDownloadDirectoryValue = validateDownloadDirectory
   private readonly packageUpdates = new PackageUpdateManager({
     afterInstall: async (profileDir, _version, signal) => {
       await this.installAdapterFrom(pathToFileURL(join(profileDir, 'node_modules', PACKAGE_NAME, 'opencli-plugin')).href, signal)
@@ -272,9 +276,34 @@ export default class WebChatHistoryService extends Service implements ReferenceS
     }
     return discovery
   }
-  async updateSettings(value: unknown): Promise<SettingsRecord> {
-    const settings = settingsRecordSchema.parse(value)
-    const enteringMetadataOnly = settings.historyMode === 'metadata-only' && this.store.settings.historyMode !== 'metadata-only'
+  updateSettings(value: unknown): Promise<SettingsRecord> {
+    const submittedAgainst = this.store.settings
+    const pending = (this.settingsUpdateQueue ?? Promise.resolve()).then(() => this.applySettings(value, submittedAgainst))
+    // Keep the serialization tail fulfilled so one rejected mutation does not
+    // prevent a later, valid settings request from running.
+    this.settingsUpdateQueue = pending.then(() => undefined, () => undefined)
+    return pending
+  }
+
+  private async applySettings(value: unknown, submittedAgainst: SettingsRecord): Promise<SettingsRecord> {
+    const submitted = settingsRecordSchema.parse(value)
+    const directoryChanged = !isDeepStrictEqual(
+      submitted.cloudDriveDownloadDirectory,
+      submittedAgainst.cloudDriveDownloadDirectory,
+    )
+    let validatedDirectory = submitted.cloudDriveDownloadDirectory
+    if (directoryChanged) {
+      const validateDirectory = this.validateDownloadDirectoryValue ?? validateDownloadDirectory
+      validatedDirectory = await validateDirectory(validatedDirectory)
+    }
+
+    // Validation can be slow (especially for a network drive). Merge against a
+    // fresh value so direct writers such as installOpenCli are not overwritten
+    // by the snapshot captured before that await.
+    const current = this.store.settings
+    let settings = mergeSettingsUpdate(submittedAgainst, current, submitted)
+    if (directoryChanged) settings = { ...settings, cloudDriveDownloadDirectory: validatedDirectory }
+    const enteringMetadataOnly = settings.historyMode === 'metadata-only' && current.historyMode !== 'metadata-only'
     await this.store.setSettings(settings)
     if (enteringMetadataOnly) await this.store.clearMirrorContent()
     this.armAutoSync()
@@ -388,6 +417,22 @@ export default class WebChatHistoryService extends Service implements ReferenceS
     if (this.autoSyncInterval) { clearInterval(this.autoSyncInterval); this.autoSyncInterval = undefined }
     if (this.autoSyncCatchUp) { clearTimeout(this.autoSyncCatchUp); this.autoSyncCatchUp = undefined }
   }
+}
+
+/** Apply only fields changed by this full-record request since its submission snapshot. */
+function mergeSettingsUpdate(
+  submittedAgainst: SettingsRecord,
+  current: SettingsRecord,
+  submitted: SettingsRecord,
+): SettingsRecord {
+  const merged: SettingsRecord = { ...current }
+  const keys = new Set([...Object.keys(submittedAgainst), ...Object.keys(submitted)] as Array<keyof SettingsRecord>)
+  for (const key of keys) {
+    if (!isDeepStrictEqual(submitted[key], submittedAgainst[key])) {
+      Object.assign(merged, { [key]: submitted[key] })
+    }
+  }
+  return settingsRecordSchema.parse(merged)
 }
 
 /** Spread a period by ±10% so providers and instances do not all fire together. */

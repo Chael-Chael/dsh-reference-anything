@@ -5,13 +5,14 @@ import { createRoot, type Root } from 'react-dom/client'
 import { ConversationSettings, ManageConversations, PAGE_SIZE, type BrowseState, type SettingsSnapshot } from '../src/client/components.tsx'
 import type { Health, ManagedConversation } from '../src/client/remote.ts'
 import { en } from '../src/client/locale.ts'
+import { pickDirectoryWithError } from '../src/client/directory-picker.ts'
 import { ALL_LOCAL_AGENTS, defaultPickerSettings, type SettingsRecord } from '../src/wire.ts'
 
 // React only flushes effects synchronously inside act() when it is told it is
 // in a test environment; without this every act() call warns and defers.
 ;(globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
-const settings = { opencliPath: 'opencli', profile: '', detailConcurrency: 8, autoSync: false, syncOnStartup: false, autoSyncMinutes: 60, historyMode: 'metadata-only' as const, enabledProviders: ['chatgpt', 'claude', 'gemini', 'deepseek', 'grok', 'kimi'] as Array<'chatgpt' | 'claude' | 'gemini' | 'deepseek' | 'grok' | 'kimi'>, enabledAgents: [...ALL_LOCAL_AGENTS], maxReadTurns: 10, inputRenderMode: 'pill' as const }
+const settings = { opencliPath: 'opencli', profile: '', detailConcurrency: 8, autoSync: false, syncOnStartup: false, autoSyncMinutes: 60, historyMode: 'metadata-only' as const, enabledProviders: ['chatgpt', 'claude', 'gemini', 'deepseek', 'grok', 'kimi'] as Array<'chatgpt' | 'claude' | 'gemini' | 'deepseek' | 'grok' | 'kimi'>, enabledAgents: [...ALL_LOCAL_AGENTS], maxReadTurns: 10, inputRenderMode: 'pill' as const, cloudDriveDownloadDirectory: '' }
 const t = ((key: keyof typeof en, values?: Record<string, string | number>) => Object.entries(values ?? {}).reduce((text, [name, value]) => text.replace(`{${name}}`, String(value)), en[key])) as never
 
 function conversation(overrides: Partial<ManagedConversation> = {}): ManagedConversation {
@@ -40,6 +41,12 @@ function render(node: Parameters<Root['render']>[0]): HTMLElement {
   act(() => { root!.render(node) })
   return host
 }
+function deferred<T>() {
+  let resolve!: (value: T | PromiseLike<T>) => void
+  let reject!: (reason?: unknown) => void
+  const promise = new Promise<T>((accept, decline) => { resolve = accept; reject = decline })
+  return { promise, resolve, reject }
+}
 afterEach(() => {
   act(() => { root?.unmount() })
   host?.remove()
@@ -47,21 +54,181 @@ afterEach(() => {
   vi.restoreAllMocks()
 })
 
-function renderSettings(current: SettingsSnapshot, actions: {
-  save?: (value: SettingsRecord) => Promise<void>
+type SettingsActions = {
+  save?: (value: SettingsRecord) => Promise<boolean | void>
   setupAll?: (opened: boolean) => Promise<void>; discoverOpenCli?: () => Promise<void>; installOpenCli?: () => Promise<void>
   useProfile?: (profile: string) => Promise<void>; install?: () => Promise<void>; refresh?: () => Promise<void>
   checkUpdate?: () => Promise<void>; installUpdate?: () => Promise<void>
   quickRefreshOnOpen?: () => Promise<void>
-} = {}): HTMLElement {
+  pickCloudDriveDownloadDirectory?: () => Promise<string | null>
+}
+function settingsElement(current: SettingsSnapshot, actions: SettingsActions = {}) {
   const noop = async () => {}
   const useScope = ((selector: (value: SettingsSnapshot) => unknown) => selector(current)) as never
-  return render(<ConversationSettings close={() => {}} useSessions={(() => []) as never} useWorkspaces={(() => []) as never}
+  return <ConversationSettings close={() => {}} useSessions={(() => []) as never} useWorkspaces={(() => []) as never}
     useScope={useScope} save={actions.save ?? noop} sync={noop} cancel={noop} refresh={actions.refresh ?? noop} quickRefreshOnOpen={actions.quickRefreshOnOpen ?? noop}
     setupAll={actions.setupAll ?? noop} discoverOpenCli={actions.discoverOpenCli ?? noop} installOpenCli={actions.installOpenCli ?? noop}
     useProfile={actions.useProfile ?? noop} install={actions.install ?? noop} restartDaemon={noop} checkUpdate={actions.checkUpdate ?? noop} installUpdate={actions.installUpdate ?? noop} browse={noop} deleteConversation={noop}
-    clearProvider={noop} clearOlder={noop} refreshStats={noop} t={t} />)
+    clearProvider={noop} clearOlder={noop} refreshStats={noop} pickCloudDriveDownloadDirectory={actions.pickCloudDriveDownloadDirectory} t={t} />
 }
+function renderSettings(current: SettingsSnapshot, actions: SettingsActions = {}): HTMLElement {
+  return render(settingsElement(current, actions))
+}
+function rerenderSettings(current: SettingsSnapshot, actions: SettingsActions = {}): HTMLElement {
+  act(() => { root!.render(settingsElement(current, actions)) })
+  return host!
+}
+
+describe('cloud-drive download directory', () => {
+  const directoryInput = (el: HTMLElement) => el.querySelector<HTMLInputElement>('input[aria-label="Cloud-drive download directory"]')!
+
+  it('distinguishes the system temporary directory from a custom directory', () => {
+    const system = renderSettings({ settings })
+    expect(system.querySelector('.dsh_ref_cloud_download_state')?.textContent).toBe('System temporary directory')
+    expect(directoryInput(system).value).toBe('')
+
+    act(() => { root!.unmount() }); host!.remove()
+    const custom = renderSettings({ settings: { ...settings, cloudDriveDownloadDirectory: 'D:\\Reference Downloads' } })
+    expect(custom.querySelector('.dsh_ref_cloud_download_state')?.textContent).toBe('Custom directory')
+    expect(directoryInput(custom).value).toBe('D:\\Reference Downloads')
+  })
+
+  it('saves a manually entered host path verbatim on blur or Enter', async () => {
+    const saved: SettingsRecord[] = []
+    const el = renderSettings({ settings }, { save: async value => { saved.push(value) } })
+    const input = directoryInput(el)
+
+    await act(async () => { setNativeValue(input, '/var/tmp/Drive Cache '); input.dispatchEvent(new Event('input', { bubbles: true })); input.dispatchEvent(new FocusEvent('focusout', { bubbles: true })) })
+    expect(saved.at(-1)?.cloudDriveDownloadDirectory).toBe('/var/tmp/Drive Cache ')
+
+    await act(async () => { setNativeValue(input, '\\\\server\\share\\cache'); input.dispatchEvent(new Event('input', { bubbles: true })); input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })) })
+    expect(saved.at(-1)?.cloudDriveDownloadDirectory).toBe('\\\\server\\share\\cache')
+  })
+
+  it('rolls manual, picker, and reset failures back to the configured directory', async () => {
+    const stable = '/var/tmp/stable'
+    let save = vi.fn(async (_value: SettingsRecord) => false)
+    let el = renderSettings({ settings: { ...settings, cloudDriveDownloadDirectory: stable } }, { save })
+    let input = directoryInput(el)
+
+    await act(async () => { setNativeValue(input, '/var/tmp/rejected'); input.dispatchEvent(new Event('input', { bubbles: true })); input.dispatchEvent(new FocusEvent('focusout', { bubbles: true })) })
+    expect(input.value).toBe(stable)
+
+    act(() => { root!.unmount() }); host!.remove()
+    save = vi.fn(async (_value: SettingsRecord) => false)
+    el = renderSettings({ settings: { ...settings, cloudDriveDownloadDirectory: stable } }, { save, pickCloudDriveDownloadDirectory: async () => '/var/tmp/picked' })
+    await act(async () => { Array.from(el.querySelectorAll<HTMLButtonElement>('.dsh_ref_cloud_download button')).find(button => button.textContent === 'Choose folder')!.click() })
+    expect(directoryInput(el).value).toBe(stable)
+
+    act(() => { root!.unmount() }); host!.remove()
+    save = vi.fn(async (_value: SettingsRecord) => { throw new Error('save failed') })
+    el = renderSettings({ settings: { ...settings, cloudDriveDownloadDirectory: stable } }, { save })
+    await act(async () => { Array.from(el.querySelectorAll<HTMLButtonElement>('.dsh_ref_cloud_download button')).find(button => button.textContent === 'Use system temporary directory')!.click() })
+    expect(directoryInput(el).value).toBe(stable)
+  })
+
+  it('serializes rapid saves and rolls back to the last successful value', async () => {
+    const first = deferred<boolean | void>()
+    const second = deferred<boolean | void>()
+    const save = vi.fn((_value: SettingsRecord) => save.mock.calls.length === 1 ? first.promise : second.promise)
+    const el = renderSettings({ settings: { ...settings, cloudDriveDownloadDirectory: '/stable' } }, { save })
+    const input = directoryInput(el)
+
+    act(() => { setNativeValue(input, '/first'); input.dispatchEvent(new Event('input', { bubbles: true })); input.dispatchEvent(new FocusEvent('focusout', { bubbles: true })) })
+    act(() => { setNativeValue(input, '/second'); input.dispatchEvent(new Event('input', { bubbles: true })); input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })) })
+    await act(async () => { await Promise.resolve() })
+    expect(save).toHaveBeenCalledTimes(1)
+
+    await act(async () => { first.resolve(true); await first.promise; await Promise.resolve() })
+    expect(save).toHaveBeenCalledTimes(2)
+    expect(save.mock.calls[1]?.[0].cloudDriveDownloadDirectory).toBe('/second')
+    await act(async () => { second.resolve(false); await second.promise })
+    expect(input.value).toBe('/first')
+  })
+
+  it('locks the draft through a deferred save and scope write-back', async () => {
+    const pending = deferred<boolean | void>()
+    const actions: SettingsActions = { save: () => pending.promise }
+    const stable = { ...settings, cloudDriveDownloadDirectory: '/var/tmp/stable' }
+    const el = renderSettings({ settings: stable }, actions)
+    const input = directoryInput(el)
+
+    act(() => { setNativeValue(input, '/var/tmp/pending path'); input.dispatchEvent(new Event('input', { bubbles: true })); input.dispatchEvent(new FocusEvent('focusout', { bubbles: true })) })
+    await act(async () => { await Promise.resolve() })
+    const [choose, reset] = Array.from(el.querySelectorAll<HTMLButtonElement>('.dsh_ref_cloud_download button'))
+    expect(input.disabled).toBe(true)
+    expect(choose?.disabled).toBe(true)
+    expect(reset?.disabled).toBe(true)
+
+    rerenderSettings({ settings: { ...stable, cloudDriveDownloadDirectory: '/var/tmp/pending path' } }, actions)
+    expect(input.value).toBe('/var/tmp/pending path')
+    expect(input.disabled).toBe(true)
+
+    await act(async () => { pending.resolve(true); await pending.promise; await Promise.resolve() })
+    expect(input.disabled).toBe(false)
+    act(() => { setNativeValue(input, '/var/tmp/next path'); input.dispatchEvent(new Event('input', { bubbles: true })) })
+    await act(async () => { await Promise.resolve() })
+    expect(input.value).toBe('/var/tmp/next path')
+  })
+
+  it('resets a custom directory to the system temporary directory', async () => {
+    const save = vi.fn(async (_value: SettingsRecord) => {})
+    const el = renderSettings({ settings: { ...settings, cloudDriveDownloadDirectory: '/var/tmp/references' } }, { save })
+    const reset = Array.from(el.querySelectorAll<HTMLButtonElement>('.dsh_ref_cloud_download button')).find(button => button.textContent === 'Use system temporary directory')!
+
+    await act(async () => { reset.click() })
+    expect(save).toHaveBeenCalledWith(expect.objectContaining({ cloudDriveDownloadDirectory: '' }))
+  })
+
+  it('saves the directory selected by the host picker', async () => {
+    const save = vi.fn(async (_value: SettingsRecord) => {})
+    const pickCloudDriveDownloadDirectory = vi.fn(async () => 'C:\\Users\\alice\\Downloads')
+    const el = renderSettings({ settings }, { save, pickCloudDriveDownloadDirectory })
+    const choose = Array.from(el.querySelectorAll<HTMLButtonElement>('.dsh_ref_cloud_download button')).find(button => button.textContent === 'Choose folder')!
+
+    await act(async () => { choose.click() })
+    expect(pickCloudDriveDownloadDirectory).toHaveBeenCalledOnce()
+    expect(save).toHaveBeenCalledWith(expect.objectContaining({ cloudDriveDownloadDirectory: 'C:\\Users\\alice\\Downloads' }))
+  })
+
+  it('does not save when the host picker is cancelled', async () => {
+    const save = vi.fn(async (_value: SettingsRecord) => {})
+    const el = renderSettings({ settings }, { save, pickCloudDriveDownloadDirectory: async () => null })
+    const choose = Array.from(el.querySelectorAll<HTMLButtonElement>('.dsh_ref_cloud_download button')).find(button => button.textContent === 'Choose folder')!
+
+    await act(async () => { choose.click() })
+    expect(save).not.toHaveBeenCalled()
+  })
+
+  it('disables the chooser while the host picker is active', async () => {
+    const selected = deferred<string | null>()
+    const el = renderSettings({ settings }, { pickCloudDriveDownloadDirectory: () => selected.promise })
+    const choose = Array.from(el.querySelectorAll<HTMLButtonElement>('.dsh_ref_cloud_download button')).find(button => button.textContent === 'Choose folder')!
+
+    act(() => { choose.click() })
+    expect(choose.disabled).toBe(true)
+    await act(async () => { selected.resolve(null); await selected.promise })
+    expect(choose.disabled).toBe(false)
+  })
+
+  it('reports host-picker failures and keeps the manual input usable', async () => {
+    const save = vi.fn(async (_value: SettingsRecord) => {})
+    const failure = new Error('Native directory picker unavailable')
+    const reportError = vi.fn()
+    const el = renderSettings({ settings }, {
+      save,
+      pickCloudDriveDownloadDirectory: () => pickDirectoryWithError({ pickDirectory: async () => { throw failure } }, reportError),
+    })
+    const choose = Array.from(el.querySelectorAll<HTMLButtonElement>('.dsh_ref_cloud_download button')).find(button => button.textContent === 'Choose folder')!
+
+    await act(async () => { choose.click() })
+    expect(reportError).toHaveBeenCalledWith(failure)
+    const input = directoryInput(el)
+    expect(input.disabled).toBe(false)
+    await act(async () => { setNativeValue(input, '/tmp/manual'); input.dispatchEvent(new Event('input', { bubbles: true })); input.dispatchEvent(new FocusEvent('focusout', { bubbles: true })); await Promise.resolve() })
+    expect(save).toHaveBeenCalledWith(expect.objectContaining({ cloudDriveDownloadDirectory: '/tmp/manual' }))
+  })
+})
 
 describe('local agent settings', () => {
   it('renders all 14 agents beside provider settings and saves an individual toggle', async () => {

@@ -284,6 +284,8 @@ At 4000 characters a block, 64 KiB is at most seventeen blocks, which fits insid
 
 **Text and on-demand document files.** Files on the configurable `extensions` allowlist are decoded as text; a read whose bytes turn out to be binary is refused instead of emitting mojibake. Common documents, spreadsheets, presentations, PDFs, and images use an explicit `file` attachment handle and are downloaded only through `reference_attachment_read`. Other extensions and directories stay out of the reference results.
 
+**Download directory.** Under **Settings → Cloud drives**, choose a host directory for those on-demand document downloads, or leave it blank to use the system temporary directory. An absolute host path can always be entered manually if the native folder picker is unavailable. Each file is materialized inside a new random `dsh-reference-drive-*` child directory; the plugin cleans up only that child, never the selected base directory or its other contents. Successful downloads expire after one hour, while failed downloads and plugin disposal clean up immediately. This setting applies only to cloud-drive attachments—Web-conversation attachments continue to use the system temporary directory.
+
 **Authorization.** These are your personal remote files, so this group uses the same per-task gate as the external conversations: the model may read a drive file only after you named it in the current task. A signed download URL never leaves the host — it appears in no candidate, no reference summary, and no error text.
 
 > [!NOTE]

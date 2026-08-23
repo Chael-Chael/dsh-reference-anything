@@ -10,12 +10,13 @@
  */
 
 import type { Context } from '@deepseek-ai/cordis'
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { lstat, mkdtemp, open, readFile, readdir, rm, rmdir, unlink } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { basename, isAbsolute, join, relative, resolve, sep } from 'node:path'
+import { basename } from 'node:path'
 import z from '@deepseek-ai/schemastery'
 import { defineTool } from '@deepseek-ai/dsh-tools'
 import { AttachmentId, type ImageMediaType } from '@deepseek-ai/dsh-attachment'
+import { appendDownloadDirectoryPrefix, validateDownloadDirectory } from './download-directory.ts'
 import { ReferenceAnythingError } from './errors.ts'
 import { DEFAULT_OPENCLI_MAX_STDOUT_BYTES, OpenCliError, OpenCliRunner } from './opencli.ts'
 import { addUnavailableAttachmentNotices, continuationFooter, frameReferenceBlock } from './render.ts'
@@ -49,6 +50,36 @@ export const MAX_ATTACHMENT_BYTES = 25 * 1024 * 1024
 
 /** Successful materializations remain usable for one hour. */
 export const ATTACHMENT_LIFETIME_MS = 60 * 60 * 1000
+
+type FileIdentity = { dev: number, ino: number }
+
+function fileIdentity(stats: { dev: number, ino: number }): FileIdentity {
+  return { dev: stats.dev, ino: stats.ino }
+}
+
+function sameFileIdentity(left: FileIdentity, right: FileIdentity): boolean {
+  return left.dev === right.dev && left.ino === right.ino
+}
+
+async function selectedBaseIdentity(path: string): Promise<FileIdentity> {
+  try {
+    const stats = await lstat(path)
+    if (!stats.isDirectory() || stats.isSymbolicLink()) {
+      throw new ReferenceAnythingError(
+        'selected cloud-drive download directory must be a real directory, not a symbolic link',
+        'REFERENCE_INVALID_CONFIG',
+      )
+    }
+    return fileIdentity(stats)
+  } catch (cause) {
+    if (cause instanceof ReferenceAnythingError) throw cause
+    throw new ReferenceAnythingError(
+      'selected cloud-drive download directory is unavailable',
+      'REFERENCE_INVALID_CONFIG',
+      { cause },
+    )
+  }
+}
 
 /** Deployment settings for the model-facing tools. */
 export interface Config {
@@ -286,6 +317,12 @@ export function apply(ctx: Context, config: Config = {}): void {
     timer?: ReturnType<typeof setTimeout>
     removal?: Promise<void>
     retries: number
+    activeOperations: number
+    removed: boolean
+    selectedBasePath?: string
+    selectedBaseIdentity?: FileIdentity
+    selectedRootIdentity?: FileIdentity
+    selectedFiles?: Map<string, FileIdentity>
   }
   const tempRoots = new Map<string, TempRootState>()
   let disposed = false
@@ -302,13 +339,107 @@ export function apply(ctx: Context, config: Config = {}): void {
     state.timer = timer
   }
   const removeTempRoot = async (root: string) => {
-    const state = tempRoots.get(root) ?? { retries: 0 }
-    if (!tempRoots.has(root)) tempRoots.set(root, state)
+    const state = tempRoots.get(root)
+    if (!state) {
+      ctx.logger.warn('ignored cleanup request for an untracked attachment temporary directory')
+      return
+    }
     if (state.removal) return state.removal
     if (state.timer !== undefined) clearTimeout(state.timer)
     state.timer = undefined
-    const removal = rm(root, { recursive: true, force: true, maxRetries: 3, retryDelay: 50 })
-      .then(() => { tempRoots.delete(root) })
+    state.removed = false
+    const removal = (async (): Promise<'removed' | 'missing' | 'abandoned'> => {
+      if (state.selectedRootIdentity) {
+        if (!state.selectedBasePath || !state.selectedBaseIdentity) {
+          ctx.logger.warn('selected attachment temporary directory lost its base identity; cleanup was abandoned')
+          return 'abandoned'
+        }
+        let currentBase: FileIdentity
+        try {
+          const baseStats = await lstat(state.selectedBasePath)
+          if (!baseStats.isDirectory() || baseStats.isSymbolicLink()) {
+            ctx.logger.warn('selected attachment base directory changed type; cleanup was abandoned')
+            return 'abandoned'
+          }
+          currentBase = fileIdentity(baseStats)
+        } catch (cause) {
+          if ((cause as NodeJS.ErrnoException).code === 'ENOENT') {
+            ctx.logger.warn('selected attachment base directory disappeared; cleanup was abandoned')
+            return 'abandoned'
+          }
+          throw cause
+        }
+        if (!sameFileIdentity(currentBase, state.selectedBaseIdentity)) {
+          ctx.logger.warn('selected attachment base directory identity changed; cleanup was abandoned')
+          return 'abandoned'
+        }
+        let current: FileIdentity
+        try {
+          current = fileIdentity(await lstat(root))
+        } catch (cause) {
+          if ((cause as NodeJS.ErrnoException).code === 'ENOENT') return 'missing'
+          throw cause
+        }
+        if (!sameFileIdentity(current, state.selectedRootIdentity)) {
+          ctx.logger.warn('selected attachment temporary directory identity changed; cleanup was abandoned')
+          return 'abandoned'
+        }
+        const selectedFiles = state.selectedFiles ?? new Map<string, FileIdentity>()
+        for (const [name, expected] of selectedFiles) {
+          let actual: FileIdentity
+          try {
+            actual = fileIdentity(await lstat(appendDownloadDirectoryPrefix(root, name)))
+          } catch (cause) {
+            if ((cause as NodeJS.ErrnoException).code === 'ENOENT') {
+              selectedFiles.delete(name)
+              continue
+            }
+            ctx.logger.warn('selected attachment temporary file identity could not be verified; cleanup was abandoned')
+            return 'abandoned'
+          }
+          if (!sameFileIdentity(actual, expected)) {
+            ctx.logger.warn('selected attachment temporary file identity changed; cleanup was abandoned')
+            return 'abandoned'
+          }
+        }
+        const rootBeforeUnlink = fileIdentity(await lstat(root))
+        if (!sameFileIdentity(rootBeforeUnlink, state.selectedRootIdentity)) {
+          ctx.logger.warn('selected attachment temporary directory identity changed; cleanup was abandoned')
+          return 'abandoned'
+        }
+        for (const name of [...selectedFiles.keys()]) {
+          try {
+            await unlink(appendDownloadDirectoryPrefix(root, name))
+          } catch (cause) {
+            if ((cause as NodeJS.ErrnoException).code !== 'ENOENT') throw cause
+          }
+          selectedFiles.delete(name)
+        }
+        if ((await readdir(root)).length !== 0) {
+          ctx.logger.warn('selected attachment temporary directory contains foreign entries; directory removal was abandoned')
+          return 'abandoned'
+        }
+        const rootBeforeRemoval = fileIdentity(await lstat(root))
+        if (!sameFileIdentity(rootBeforeRemoval, state.selectedRootIdentity)) {
+          ctx.logger.warn('selected attachment temporary directory identity changed; cleanup was abandoned')
+          return 'abandoned'
+        }
+        await rmdir(root)
+        return 'removed'
+      }
+      await rm(root, { recursive: true, force: true, maxRetries: 3, retryDelay: 50 })
+      return 'removed'
+    })()
+      .then((outcome) => {
+        state.removal = undefined
+        if (outcome === 'removed' || outcome === 'missing') {
+          state.removed = true
+          if (state.activeOperations === 0) tempRoots.delete(root)
+        } else if (!disposed && state.retries < 3) {
+          state.retries += 1
+          scheduleTempCleanup(root, 1_000)
+        }
+      })
       .catch((cause) => {
         state.removal = undefined
         if (!disposed && state.retries < 3) {
@@ -320,15 +451,64 @@ export function apply(ctx: Context, config: Config = {}): void {
     state.removal = removal
     return removal
   }
-  const createTempRoot = async (prefix: string) => {
+  const createTempRoot = async (base: string, prefix: string, expectedBaseIdentity?: FileIdentity) => {
     if (disposed) throw new ReferenceAnythingError('attachment materializer has been disposed', 'REFERENCE_CANCELLED')
+    const selectedBase = expectedBaseIdentity !== undefined
+    if (expectedBaseIdentity) {
+      const currentBaseIdentity = await selectedBaseIdentity(base)
+      if (!sameFileIdentity(currentBaseIdentity, expectedBaseIdentity)) {
+        throw new ReferenceAnythingError(
+          'selected cloud-drive download directory changed before temporary storage was created',
+          'REFERENCE_INVALID_CONFIG',
+        )
+      }
+    }
     let root: string
     try {
-      root = await mkdtemp(join(tmpdir(), prefix))
+      root = await mkdtemp(appendDownloadDirectoryPrefix(base, prefix))
     } catch (cause) {
-      throw new ReferenceAnythingError('could not create attachment temporary storage', 'REFERENCE_READ_FAILED', { cause })
+      throw new ReferenceAnythingError(
+        selectedBase
+          ? 'selected cloud-drive download directory is unavailable or not writable'
+          : 'could not create attachment temporary storage',
+        selectedBase ? 'REFERENCE_INVALID_CONFIG' : 'REFERENCE_READ_FAILED',
+        { cause },
+      )
     }
-    tempRoots.set(root, { retries: 0 })
+    let selectedRootIdentity: FileIdentity | undefined
+    if (selectedBase) {
+      try {
+        selectedRootIdentity = fileIdentity(await lstat(root))
+      } catch (cause) {
+        ctx.logger.warn('could not record selected attachment temporary directory identity; cleanup was abandoned')
+        throw new ReferenceAnythingError(
+          'could not secure selected cloud-drive temporary storage',
+          'REFERENCE_INVALID_CONFIG',
+          { cause },
+        )
+      }
+    }
+    tempRoots.set(root, {
+      retries: 0,
+      activeOperations: 0,
+      removed: false,
+      ...(selectedRootIdentity && expectedBaseIdentity ? {
+        selectedBasePath: base,
+        selectedBaseIdentity: expectedBaseIdentity,
+        selectedRootIdentity,
+        selectedFiles: new Map<string, FileIdentity>(),
+      } : {}),
+    })
+    if (expectedBaseIdentity) {
+      const baseAfterCreation = await selectedBaseIdentity(base)
+      if (!sameFileIdentity(baseAfterCreation, expectedBaseIdentity)) {
+        ctx.logger.warn('selected attachment base changed while temporary storage was being created; cleanup was abandoned')
+        throw new ReferenceAnythingError(
+          'selected cloud-drive download directory changed while temporary storage was created',
+          'REFERENCE_INVALID_CONFIG',
+        )
+      }
+    }
     if (disposed) {
       await removeTempRoot(root)
       throw new ReferenceAnythingError('attachment materializer has been disposed', 'REFERENCE_CANCELLED')
@@ -341,6 +521,22 @@ export function apply(ctx: Context, config: Config = {}): void {
       throw new ReferenceAnythingError('attachment materializer has been disposed', 'REFERENCE_CANCELLED')
     }
     scheduleTempCleanup(root, ATTACHMENT_LIFETIME_MS)
+  }
+  const beginTempRootOperation = (root: string) => {
+    const state = tempRoots.get(root)
+    if (!state) throw new ReferenceAnythingError('attachment temporary storage is no longer tracked', 'REFERENCE_CANCELLED')
+    state.activeOperations += 1
+  }
+  const endTempRootOperation = (root: string) => {
+    const state = tempRoots.get(root)
+    if (!state) return
+    state.activeOperations = Math.max(0, state.activeOperations - 1)
+    if (state.activeOperations === 0 && state.removed && !state.removal) tempRoots.delete(root)
+  }
+  const registerSelectedTempFile = (root: string, localPath: string, identity: FileIdentity) => {
+    const selectedFiles = tempRoots.get(root)?.selectedFiles
+    if (!selectedFiles) return
+    selectedFiles.set(basename(localPath), identity)
   }
   ctx.effect(() => async () => {
     disposed = true
@@ -395,6 +591,18 @@ export function apply(ctx: Context, config: Config = {}): void {
         }
         const service = ctx.get('referenceCloudDrive') as CloudDriveService | undefined
         if (!service) throw new ReferenceAnythingError('cloud-drive service is not mounted', 'SOURCE_UNAVAILABLE')
+        const history = ctx.get('referenceChatHistory')
+        const configuredValue = (history?.store.settings as { cloudDriveDownloadDirectory?: unknown } | undefined)
+          ?.cloudDriveDownloadDirectory
+        if (configuredValue !== undefined && typeof configuredValue !== 'string') {
+          throw new ReferenceAnythingError(
+            'selected cloud-drive download directory must be a string path',
+            'REFERENCE_INVALID_CONFIG',
+          )
+        }
+        const configuredBase = await validateDownloadDirectory(configuredValue ?? '')
+        const usesConfiguredBase = configuredBase !== ''
+        const configuredBaseIdentity = usesConfiguredBase ? await selectedBaseIdentity(configuredBase) : undefined
         let attachment: Awaited<ReturnType<CloudDriveService['attachment']>>
         try {
           attachment = await service.attachment(ref, MAX_ATTACHMENT_BYTES, exec.signal)
@@ -404,10 +612,21 @@ export function apply(ctx: Context, config: Config = {}): void {
         if (attachment.bytes.byteLength > MAX_ATTACHMENT_BYTES) {
           throw new ReferenceAnythingError('cloud-drive attachment exceeds 25 MiB', 'ATTACHMENT_TOO_LARGE')
         }
-        const root = await createTempRoot('dsh-reference-drive-')
+        const root = await createTempRoot(
+          usesConfiguredBase ? configuredBase : tmpdir(),
+          'dsh-reference-drive-',
+          configuredBaseIdentity,
+        )
+        beginTempRootOperation(root)
         try {
           const localPath = attachmentLocalPath(root, attachment.name)
-          await writeFile(localPath, attachment.bytes)
+          const handle = await open(localPath, 'wx', 0o600)
+          try {
+            registerSelectedTempFile(root, localPath, fileIdentity(await handle.stat()))
+            await handle.writeFile(attachment.bytes)
+          } finally {
+            await handle.close()
+          }
           const bytes = Buffer.from(attachment.bytes)
           const mimeType = sniffMime(bytes, attachment.mimeType)
           const image = isRenderableImage(mimeType) ? await saveImage(ctx, bytes, mimeType, attachment.name) : undefined
@@ -416,6 +635,8 @@ export function apply(ctx: Context, config: Config = {}): void {
         } catch (error) {
           await removeTempRoot(root)
           throw attachmentFailure(error, exec.signal, 'cloud-drive')
+        } finally {
+          endTempRootOperation(root)
         }
       }
       if (ref.source !== 'web-chat') {
@@ -441,7 +662,8 @@ export function apply(ctx: Context, config: Config = {}): void {
       if (!attachment?.locator || attachment.status !== 'available') {
         throw new ReferenceAnythingError('provider supplied no stable attachment locator', 'ATTACHMENT_UNAVAILABLE')
       }
-      const root = await createTempRoot('dsh-reference-attachment-')
+      const root = await createTempRoot(tmpdir(), 'dsh-reference-attachment-')
+      beginTempRootOperation(root)
       try {
         const localPath = attachmentLocalPath(root, attachment.name)
         const settings = service.store.settings
@@ -466,6 +688,8 @@ export function apply(ctx: Context, config: Config = {}): void {
       } catch (error) {
         await removeTempRoot(root)
         throw attachmentFailure(error, exec.signal, conversation.provider)
+      } finally {
+        endTempRootOperation(root)
       }
     },
     presentCall: args => ({ card: 'generic', title: 'Read conversation attachment', kind: 'read', rawInput: args.attachmentId }),
@@ -524,13 +748,10 @@ function safeAttachmentName(name: string): string {
 }
 
 function attachmentLocalPath(root: string, name: string): string {
-  const normalizedRoot = resolve(root)
-  const localPath = resolve(normalizedRoot, safeAttachmentName(name))
-  const child = relative(normalizedRoot, localPath)
-  if (!child || child === '..' || child.startsWith(`..${sep}`) || isAbsolute(child)) {
-    throw new ReferenceAnythingError('attachment filename escaped its temporary directory', 'ATTACHMENT_UNAVAILABLE')
-  }
-  return localPath
+  // `safeAttachmentName` guarantees one leaf segment. Preserve the exact root
+  // string so a validated symlink/`..` path keeps the same OS resolution
+  // semantics for creation, use, and cleanup.
+  return appendDownloadDirectoryPrefix(root, safeAttachmentName(name))
 }
 
 async function saveImage(ctx: Context, bytes: Buffer, mimeType: ImageMediaType, name: string) {

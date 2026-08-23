@@ -16,13 +16,14 @@ import { en, REFERENCE_ANYTHING_NS, zh } from './locale.ts'
 import { runSetupSequence, setupReady, type SetupStage } from './health.ts'
 import { createAutoDismissNotice } from './notice.ts'
 import { filterAgentCandidates, filterDriveCandidates } from './selection.ts'
+import { pickDirectoryWithError } from './directory-picker.ts'
 
 // `ctx.remote.commands` is a separately injected Remote face. Declaring only
 // `remote` lets the @ source register, but its candidate request can fail and
 // the input-trigger menu then removes the Commands group as a failed source.
 export const inject = [
   'inputTriggers', 'remote', 'remote.commands', 'remote.fileReferences', 'remote.sessionReferenceResolver',
-  'slots', 'connection', 'locale', 'sessions',
+  'slots', 'connection', 'locale', 'sessions', 'workspaces',
 ]
 
 export function apply(ctx: ClientContext): void {
@@ -31,7 +32,7 @@ export function apply(ctx: ClientContext): void {
   ctx.effect(() => adoptReferenceIconProjection(), 'reference-anything.client.icon-projection')
   let remote: ReferenceAnythingRemoteFace | undefined
   const scope = createSnapshotStore<SettingsSnapshot>({
-    settings: { opencliPath: 'opencli', profile: '', detailConcurrency: 8, autoSync: false, syncOnStartup: false, autoSyncMinutes: 60, historyMode: 'metadata-only', enabledProviders: [...ALL_PROVIDERS], enabledAgents: [...ALL_LOCAL_AGENTS], maxReadTurns: 10, inputRenderMode: 'pill' }, loading: true,
+    settings: { opencliPath: 'opencli', profile: '', detailConcurrency: 8, autoSync: false, syncOnStartup: false, autoSyncMinutes: 60, historyMode: 'metadata-only', enabledProviders: [...ALL_PROVIDERS], enabledAgents: [...ALL_LOCAL_AGENTS], maxReadTurns: 10, inputRenderMode: 'pill', cloudDriveDownloadDirectory: '' }, loading: true,
   })
   let currentJob = ''
   let lastSyncFinishedAt: string | undefined
@@ -325,13 +326,14 @@ export function apply(ctx: ClientContext): void {
   applySources(undefined)
   ctx.effect(() => () => { for (const dispose of sourceDisposers) dispose() }, 'reference-anything.client.sources')
 
-  const save = async (settings: SettingsRecord): Promise<void> => {
-    if (!remote) return
+  const save = async (settings: SettingsRecord): Promise<boolean> => {
+    if (!remote) return false
     try {
       const value = unwrap(await remote.settingsUpdate(settings))
       applySources?.(value.picker)
       notices.show(t('notice.settingsSaved'), { settings: value, error: undefined })
-    } catch (error) { scope.set({ ...scope.getSnapshot(), error: message(error), notice: undefined }) }
+      return true
+    } catch (error) { scope.set({ ...scope.getSnapshot(), error: message(error), notice: undefined }); return false }
   }
   const setSetupStep = (setupStep: SetupStage) => { scope.set({ ...scope.getSnapshot(), setupStep }) }
   const clearRemoteMissing = async (): Promise<void> => {
@@ -380,6 +382,9 @@ export function apply(ctx: ClientContext): void {
       hooks: { scope }, close: () => undefined, save, sync: startSync, refresh, quickRefreshOnOpen,
       browse, deleteConversation, clearProvider, clearOlder, clearRemoteMissing, clearOldAccounts, refreshStats,
       refreshOpenList,
+      pickCloudDriveDownloadDirectory: () => pickDirectoryWithError(ctx.workspaces, error => {
+        scope.set({ ...scope.getSnapshot(), error: message(error), notice: undefined })
+      }),
       openListInstall: async () => { if (!remote) return; await runOpenListOperation('downloading', () => remote!.openListInstall()) },
       openListUpgrade: async (rollback = false) => { if (!remote) return; await runOpenListOperation(!rollback && scope.getSnapshot().openList?.upgradeAvailable ? 'upgrade' : 'downloading', () => remote!.openListUpgrade({ rollback })) },
       openListConnectExternal: async (input: { endpoint: string; username?: string; password?: string; token?: string }) => { if (!remote) return; try { unwrap(await remote.openListConnectExternal(input)); await refreshOpenList() } catch (error) { scope.set({ ...scope.getSnapshot(), error: message(error) }); throw error } },
