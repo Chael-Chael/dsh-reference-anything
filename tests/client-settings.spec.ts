@@ -33,10 +33,19 @@ describe('settings source registration guard', () => {
       opencliPath: 'opencli', profile: '', detailConcurrency: 2, autoSync: false,
       autoSyncMinutes: 60, historyMode: 'metadata-only', referenceUiMode: 'official',
     })
-    expect(value).toMatchObject({ syncOnStartup: false, maxReadTurns: 10, inputRenderMode: 'pill' })
+    expect(value).toMatchObject({ syncOnStartup: false, maxReadTurns: 10, inputRenderMode: 'pill', cloudDriveDownloadDirectory: '' })
     expect(value).not.toHaveProperty('referenceUiMode')
     expect(value.enabledProviders).toEqual(['chatgpt', 'claude', 'gemini', 'deepseek', 'grok', 'kimi'])
     expect(value.enabledAgents).toEqual(['claude-code', 'codex', 'cursor', 'qoder', 'reasonix', 'openclaw', 'kimi', 'grokbuild', 'hermes', 'gemini-cli', 'pi', 'opencode', 'mimocode', 'zcode'])
+  })
+
+  it('bounds the persisted download directory length', () => {
+    const base = {
+      opencliPath: 'opencli', profile: '', detailConcurrency: 2, autoSync: false,
+      autoSyncMinutes: 60, historyMode: 'metadata-only',
+    }
+    expect(settingsRecordSchema.safeParse({ ...base, cloudDriveDownloadDirectory: 'x'.repeat(4096) }).success).toBe(true)
+    expect(settingsRecordSchema.safeParse({ ...base, cloudDriveDownloadDirectory: 'x'.repeat(4097) }).success).toBe(false)
   })
   // `settingsRecordSchema` is the durable read boundary for the domain global,
   // so a missing key does not degrade one group — it rejects the whole medium

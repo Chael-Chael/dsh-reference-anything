@@ -73,6 +73,8 @@ export function samePickerSettings(left: PickerSettings, right: PickerSettings):
 export const settingsRecordSchema = z.object({
   opencliPath: z.string(),
   profile: z.string(),
+  /** Empty keeps the original system-temporary-directory behavior. */
+  cloudDriveDownloadDirectory: z.string().max(4096).default(''),
   detailConcurrency: z.number().int().min(1).max(8),
   autoSync: z.boolean().default(false),
   syncOnStartup: z.boolean().default(false),

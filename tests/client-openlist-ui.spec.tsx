@@ -8,13 +8,13 @@ import { en } from '../src/client/locale.ts'
 
 ;(globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 const t = ((key: keyof typeof en, values?: Record<string, string | number>) => Object.entries(values ?? {}).reduce((text, [name, value]) => text.replace(`{${name}}`, String(value)), en[key])) as never
-const settings = { opencliPath: 'opencli', profile: '', detailConcurrency: 8, autoSync: false, syncOnStartup: false, autoSyncMinutes: 60, historyMode: 'metadata-only' as const, enabledProviders: [], enabledAgents: [], maxReadTurns: 10, inputRenderMode: 'pill' as const }
+const settings = { opencliPath: 'opencli', profile: '', detailConcurrency: 8, autoSync: false, syncOnStartup: false, autoSyncMinutes: 60, historyMode: 'metadata-only' as const, enabledProviders: [], enabledAgents: [], maxReadTurns: 10, inputRenderMode: 'pill' as const, cloudDriveDownloadDirectory: '' }
 let root: Root | undefined; let host: HTMLElement | undefined
 function mount(state: SettingsSnapshot, overrides: Partial<React.ComponentProps<typeof CloudDrives>> = {}): HTMLElement {
   host = document.createElement('div'); document.body.append(host); root = createRoot(host)
   state = { ...state, openListDrivers: state.openListDrivers?.map(driver => ({ ...driver, fields: driver.fields.map(field => ({ ...field, secret: field.secret ?? field.type === 'password' })) })) }
   const noop = async () => {}
-  act(() => { root!.render(<CloudDrives state={state} refreshOpenList={noop} install={noop} upgrade={async () => {}} connect={noop} disconnect={noop} createMount={noop} disableMount={noop} removeMount={noop} reindexMount={async () => ({ supported: false })} t={t} {...overrides} />) })
+  act(() => { root!.render(<CloudDrives state={state} save={noop} refreshOpenList={noop} install={noop} upgrade={async () => {}} connect={noop} disconnect={noop} createMount={noop} disableMount={noop} removeMount={noop} reindexMount={async () => ({ supported: false })} t={t} {...overrides} />) })
   return host
 }
 afterEach(() => { act(() => root?.unmount()); host?.remove(); root = undefined; host = undefined; vi.restoreAllMocks() })
@@ -38,7 +38,7 @@ describe('Cloud drives form', () => {
     const connect = vi.fn(async () => { throw new Error('no') }); const createMount = vi.fn(async () => { throw new Error('no') })
     let el = mount({ settings, openList: { state: 'install', installed: false, supportsRollback: false, upgradeAvailable: false } }, { connect })
     await act(async () => { button(el, 'I already use OpenList').click() })
-    const endpoint = el.querySelector('input[placeholder]') as HTMLInputElement
+    const endpoint = el.querySelector('input[placeholder="https://openlist.example"]') as HTMLInputElement
     const passwords = el.querySelectorAll<HTMLInputElement>('input[type=password]')
     act(() => { setNativeValue(endpoint, 'https://drive.example'); endpoint.dispatchEvent(new Event('input', { bubbles: true })) })
     act(() => { setNativeValue(passwords[0]!, 'password'); passwords[0]!.dispatchEvent(new Event('input', { bubbles: true })) })

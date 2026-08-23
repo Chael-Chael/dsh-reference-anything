@@ -19,7 +19,7 @@ class Table<V> implements KvTable<string, V> {
 
 function store() {
   const tables = new Map<string, Table<never>>()
-  let settings: SettingsRecord = { opencliPath: 'opencli', profile: '', detailConcurrency: 8, autoSync: false, syncOnStartup: false, autoSyncMinutes: 60, historyMode: 'offline-mirror', enabledProviders: ['chatgpt', 'claude', 'gemini', 'deepseek', 'grok', 'kimi'], enabledAgents: [...ALL_LOCAL_AGENTS], maxReadTurns: 10, inputRenderMode: 'pill' }
+  let settings: SettingsRecord = { opencliPath: 'opencli', profile: '', cloudDriveDownloadDirectory: '', detailConcurrency: 8, autoSync: false, syncOnStartup: false, autoSyncMinutes: 60, historyMode: 'offline-mirror', enabledProviders: ['chatgpt', 'claude', 'gemini', 'deepseek', 'grok', 'kimi'], enabledAgents: [...ALL_LOCAL_AGENTS], maxReadTurns: 10, inputRenderMode: 'pill' }
   const domain = {
     name: 'reference_anything',
     global: { get: () => settings, set: async (value: SettingsRecord) => { settings = value } },
