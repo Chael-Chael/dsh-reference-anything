@@ -13,12 +13,12 @@ class StubDrive implements DriveProvider {
   readonly displayName = 'OpenList'
   supportsRange: boolean | undefined = true
   reads = 0
-  constructor(public entry: DriveEntry, private readonly bytes: Uint8Array) {}
+  constructor(public entry: DriveEntry, private readonly bytes: Uint8Array, private readonly readResult?: DriveReadResult) {}
   async credentialed() { return true }
   async list() { return [this.entry] }
   async describe(id: string) { return id === this.entry.id ? this.entry : undefined }
   async extractedText() { return undefined }
-  async read(_id: string, start: number, end: number): Promise<DriveReadResult> { this.reads++; return { bytes: this.bytes.subarray(start, end), ranged: true, totalSize: this.bytes.byteLength } }
+  async read(_id: string, start: number, end: number): Promise<DriveReadResult> { this.reads++; return this.readResult ?? { bytes: this.bytes.subarray(start, end), ranged: true, totalSize: this.bytes.byteLength } }
 }
 
 async function mount(drive: StubDrive, config: cloudDrive.Config = {}, generation?: () => number) {
@@ -61,6 +61,91 @@ describe('cloud drive source safeguards survive the OpenList migration', () => {
       expect(drive.reads).toBe(0)
       const bytes = await ctx.referenceCloudDrive.attachment(ref, 10)
       expect([...bytes.bytes]).toEqual([1, 2, 3, 4])
+    } finally { await dispose() }
+  })
+  it('rejects a truncated attachment download when the provider reports its total size', async () => {
+    const drive = new StubDrive(
+      { kind: 'openlist', id: '/report.pdf', path: '/report.pdf', name: 'report.pdf', size: 4, isDirectory: false },
+      new Uint8Array([1, 2, 3, 4]),
+      { bytes: new Uint8Array([1, 2]), ranged: true, totalSize: 4 },
+    )
+    const { ctx, dispose } = await mount(drive)
+    try {
+      const ref = { source: 'cloud-drive', id: 'openlist:eyJ2IjoxLCJwYXRoIjoiL3JlcG9ydC5wZGYifQ' }
+      await expect(ctx.referenceCloudDrive.attachment(ref, 10)).rejects.toMatchObject({ code: 'REFERENCE_READ_FAILED' })
+    } finally { await dispose() }
+  })
+  it('rejects a truncated attachment download when the provider omits its total size', async () => {
+    const drive = new StubDrive(
+      { kind: 'openlist', id: '/report.pdf', path: '/report.pdf', name: 'report.pdf', size: 4, isDirectory: false },
+      new Uint8Array([1, 2, 3, 4]),
+      { bytes: new Uint8Array([1, 2]), ranged: true },
+    )
+    const { ctx, dispose } = await mount(drive)
+    try {
+      const ref = { source: 'cloud-drive', id: 'openlist:eyJ2IjoxLCJwYXRoIjoiL3JlcG9ydC5wZGYifQ' }
+      await expect(ctx.referenceCloudDrive.attachment(ref, 10)).rejects.toMatchObject({ code: 'REFERENCE_READ_FAILED' })
+    } finally { await dispose() }
+  })
+  it('accepts a completed attachment when both metadata and provider total size are unknown', async () => {
+    const drive = new StubDrive(
+      { kind: 'openlist', id: '/report.pdf', path: '/report.pdf', name: 'report.pdf', size: 0, isDirectory: false },
+      new Uint8Array([1, 2, 3, 4]),
+      { bytes: new Uint8Array([1, 2, 3, 4]), ranged: false },
+    )
+    const { ctx, dispose } = await mount(drive)
+    try {
+      const ref = { source: 'cloud-drive', id: 'openlist:eyJ2IjoxLCJwYXRoIjoiL3JlcG9ydC5wZGYifQ' }
+      await expect(ctx.referenceCloudDrive.attachment(ref, 10)).resolves.toMatchObject({ bytes: new Uint8Array([1, 2, 3, 4]) })
+    } finally { await dispose() }
+  })
+  it('rejects an unknown-size ranged attachment whose completeness cannot be proven', async () => {
+    const drive = new StubDrive(
+      { kind: 'openlist', id: '/report.pdf', path: '/report.pdf', name: 'report.pdf', size: 0, isDirectory: false },
+      new Uint8Array([1, 2, 3, 4]),
+      { bytes: new Uint8Array([1, 2, 3, 4]), ranged: true },
+    )
+    const { ctx, dispose } = await mount(drive)
+    try {
+      const ref = { source: 'cloud-drive', id: 'openlist:eyJ2IjoxLCJwYXRoIjoiL3JlcG9ydC5wZGYifQ' }
+      await expect(ctx.referenceCloudDrive.attachment(ref, 10)).rejects.toMatchObject({ code: 'REFERENCE_READ_FAILED' })
+    } finally { await dispose() }
+  })
+  it('rejects a provider total that contradicts indexed file size', async () => {
+    const drive = new StubDrive(
+      { kind: 'openlist', id: '/report.pdf', path: '/report.pdf', name: 'report.pdf', size: 4, isDirectory: false },
+      new Uint8Array([1, 2, 3, 4]),
+      { bytes: new Uint8Array([1, 2]), ranged: true, totalSize: 2 },
+    )
+    const { ctx, dispose } = await mount(drive)
+    try {
+      const ref = { source: 'cloud-drive', id: 'openlist:eyJ2IjoxLCJwYXRoIjoiL3JlcG9ydC5wZGYifQ' }
+      await expect(ctx.referenceCloudDrive.attachment(ref, 10)).rejects.toMatchObject({ code: 'REFERENCE_READ_FAILED' })
+    } finally { await dispose() }
+  })
+  it('rejects an oversized attachment from metadata without downloading it', async () => {
+    const drive = new StubDrive(
+      { kind: 'openlist', id: '/report.pdf', path: '/report.pdf', name: 'report.pdf', size: 11, isDirectory: false },
+      new Uint8Array(11),
+    )
+    const { ctx, dispose } = await mount(drive)
+    try {
+      const ref = { source: 'cloud-drive', id: 'openlist:eyJ2IjoxLCJwYXRoIjoiL3JlcG9ydC5wZGYifQ' }
+      await expect(ctx.referenceCloudDrive.attachment(ref, 10)).rejects.toMatchObject({ code: 'ATTACHMENT_TOO_LARGE' })
+      expect(drive.reads).toBe(0)
+    } finally { await dispose() }
+  })
+  it('rejects an oversized attachment returned by the provider', async () => {
+    const drive = new StubDrive(
+      { kind: 'openlist', id: '/report.pdf', path: '/report.pdf', name: 'report.pdf', size: 4, isDirectory: false },
+      new Uint8Array([1, 2, 3, 4]),
+      { bytes: new Uint8Array(11), ranged: false, totalSize: 11 },
+    )
+    const { ctx, dispose } = await mount(drive)
+    try {
+      const ref = { source: 'cloud-drive', id: 'openlist:eyJ2IjoxLCJwYXRoIjoiL3JlcG9ydC5wZGYifQ' }
+      await expect(ctx.referenceCloudDrive.attachment(ref, 10)).rejects.toMatchObject({ code: 'ATTACHMENT_TOO_LARGE' })
+      expect(drive.reads).toBe(1)
     } finally { await dispose() }
   })
   it('drops cached listings immediately when the OpenList credential generation changes', async () => {

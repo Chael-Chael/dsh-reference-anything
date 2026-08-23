@@ -121,10 +121,7 @@ const detailScript = String.raw`async function (args) {
   }
 }`
 
-registerProvider({
-  site: 'dsh-deepseek', provider: 'DeepSeek', domain: 'chat.deepseek.com',
-  home: 'https://chat.deepseek.com/', conversationUrl: id => `https://chat.deepseek.com/a/chat/s/${encodeURIComponent(id)}`,
-  whoamiScript: String.raw`async function () {
+export const whoamiScript = String.raw`async function () {
     const headers = (() => {
       try {
         const stored = JSON.parse(localStorage.getItem('userToken') || 'null')
@@ -135,6 +132,7 @@ registerProvider({
     for (const url of ['/api/v0/users/current', '/api/v0/user/profile']) {
       const response = await fetch(url, { credentials: 'include', headers })
       if (response.status === 401 || response.status === 403) return JSON.stringify({ ok: false, code: 'AUTH' })
+      if (response.status === 429) return JSON.stringify({ ok: false, code: 'RATE_LIMIT' })
       if (!response.ok) continue
       const contentType = response.headers.get('content-type') || ''
       if (!contentType.includes('application/json')) continue
@@ -147,6 +145,11 @@ registerProvider({
       if (identity) return JSON.stringify({ ok: true, identity })
     }
     return JSON.stringify({ ok: false, code: 'AUTH' })
-  }`,
+  }`
+
+registerProvider({
+  site: 'dsh-deepseek', provider: 'DeepSeek', domain: 'chat.deepseek.com',
+  home: 'https://chat.deepseek.com/', conversationUrl: id => `https://chat.deepseek.com/a/chat/s/${encodeURIComponent(id)}`,
+  whoamiScript,
   historyScript, detailScript, fallbackScript: domFallbackScript,
 })

@@ -18,6 +18,8 @@ export type ReferenceErrorCode =
   | 'REFERENCE_NOT_FOUND'
   /** A live browser read targeted a conversation owned by another account. */
   | 'REFERENCE_ACCOUNT_MISMATCH'
+  /** The active provider account temporarily refused identity verification due to rate limiting. */
+  | 'PROVIDER_RATE_LIMIT'
   /** The source failed while reading; its own error is the `cause`. */
   | 'REFERENCE_READ_FAILED'
   /** A transcript whose format must be read whole is larger than the scan budget. */

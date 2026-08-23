@@ -472,7 +472,7 @@ function isRetryable(error: unknown): boolean {
 function isFatal(error: unknown): boolean {
   return error instanceof OpenCliError && (error.code === 'OPENCLI_CONFIGURATION'
     || error.code === 'PROVIDER_NOT_LOGGED_IN' || error.code === 'PROVIDER_ACCOUNT_MISMATCH'
-    || error.code === 'EXTENSION_NOT_CONNECTED')
+    || error.code === 'PROVIDER_RATE_LIMIT' || error.code === 'EXTENSION_NOT_CONNECTED')
 }
 
 function summarize(failures: readonly string[]): string {

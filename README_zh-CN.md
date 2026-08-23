@@ -250,9 +250,9 @@ Reference Anything 直接向 DSH 原生 `@` 菜单注册七个来源，不会引
 
 打开来源 URL 仅发生在 UI 中，URL 不会注入模型上下文。初始引用只包含安全指针，模型如需正文才调用 `reference_read` 按需读取。
 
-#### ☁️ @Cloud drive files —— 通过 OpenList 访问的文本文件
+#### ☁️ @Cloud drive files —— 通过 OpenList 访问文本与文档引用
 
-输入 `@drive:`、`@cloud:`、`@netdisk:` 或 `@网盘`，即可搜索已挂载到 OpenList 的文本文件并直接引用，不必先下载到工作区。新的引用使用 OpenList 支持的不透明 ID：
+输入 `@drive:`、`@cloud:`、`@netdisk:` 或 `@网盘`，即可搜索已挂载到 OpenList 的受支持文件并直接引用，不必先下载到工作区。新的引用使用 OpenList 支持的不透明 ID：
 
 ```text
 @[OpenList·quarterly-notes.md](dsh-ref:<opaque-base64url>)
@@ -270,7 +270,7 @@ Reference Anything 直接向 DSH 原生 `@` 菜单注册七个来源，不会引
 
 如果外部实例没有可用的搜索索引，Reference Anything 会退化为有上限的目录遍历。这类候选会明确标记 **结果可能不完整**；遍历不会修改文件路径或引用 ID。
 
-**只读引用范围。** 集成只列出和读取你选择的已挂载文本文件，不会修改云端文件；模型也只能在你于当前任务中点名该引用后读取它。带签名的下载地址和凭据始终留在宿主机。
+**只读引用范围。** 集成只列出和读取你选择的受支持挂载文件，不会修改云端文件；模型也只能在你于当前任务中点名该引用后读取它。带签名的下载地址和凭据始终留在宿主机。
 
 **迁移。** 旧的 `baidu:` 与 `pds:` 引用 ID 已被有意停用。请通过 OpenList 重新选择文件以生成新引用；旧的按厂商凭据文件和直连配置不再读取。
 
@@ -280,7 +280,7 @@ Reference Anything 直接向 DSH 原生 `@` 菜单注册七个来源，不会引
 
 按每块 4000 字符算，64 KiB 最多十七块，正好装得进一页 `reference_read`——所以一份普通文本文件是从头到尾整份返回的。调大 `maxReadBytes` 换来的是更长的可及范围，代价是首页落在文件**末尾**、然后往前翻：这对对话是对的形状，对文档则别扭。
 
-**只处理文本。** 网盘里有大量模型用不上的东西。扩展名不在 `extensions` 白名单上的文件根本不会进入菜单；即便进来了、读出来的字节是二进制，也会以明确的错误拒绝，而不是吐出一堆乱码。目录按同一条规则丢弃：文件夹和 `.zip` 一样没有可读的文本，放进菜单只会产生一个注定失败的引用。
+**文本与按需文档文件。** `extensions` 白名单中的文件按文本解码；如果实际字节是二进制，会明确拒绝而不是输出乱码。常见文档、表格、演示文稿、PDF 和图片使用固定的 `file` 附件句柄，仅在调用 `reference_attachment_read` 时下载。其他扩展名和目录不会进入引用结果。
 
 **授权**：这些是你自己的远端文件，所以本分组沿用与外部对话相同的按任务门禁——只有你在当前任务里点名之后，模型才能读取某个网盘文件。带签名的下载地址始终不出宿主：候选里没有，引用摘要里没有，任何错误文本里也没有。
 
@@ -342,7 +342,8 @@ ChatGPT / Claude / Gemini / DeepSeek / Grok / Kimi
 - `before` 只作为一个版本的 deprecated 兼容参数；不能与 `cursor` 同时提供。
 - mention 或 `reference_list` 会授予当前 task 对 URI 的读取权限；未授权 URI 会被拒绝。
 - 每条 conversation 只保留最新 revision；正文更新后，指向旧 revision 的 cursor 会过期。
-- `reference_attachment_read` 单独校验 conversation 授权，附件上限为 25 MiB。
+- `reference_attachment_read` 会校验当前任务授权；对于 Web 对话，还会确认当前 Provider 登录账号与同步时保存的账号范围一致。若不一致，会拒绝下载并提示先同步该 Provider、再重新选择对话。
+- 附件在流式读取过程中限制为 25 MiB。PNG、JPEG、WebP 和 GIF 可内联渲染；包括 SVG 在内的其他格式会作为普通临时文件返回。成功文件一小时后过期；失败或插件卸载时会立即清理。
 - 同步只保存附件元数据和同源 locator，并将附件归类为 `image` 或 `file`；空地址和站点根路径不会标记为可用。
 - 不可读取的附件会在模型侧附加 `[User attached 1 image; image contents were not included]` 或对应的 file 提示，原始对话正文保持不变。
 

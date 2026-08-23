@@ -8,7 +8,9 @@ import type { ProviderConversationRow, ProviderTurnRow } from './store/store.ts'
 
 const execFile = promisify(nodeExecFile)
 export const MIN_OPENCLI_VERSION = '1.8.6'
-export const MIN_ADAPTER_VERSION = '0.2.2'
+export const MIN_ADAPTER_VERSION = '0.2.3'
+/** Allows a 25 MiB attachment to cross JSON/base64 stdout with bounded headroom. */
+export const DEFAULT_OPENCLI_MAX_STDOUT_BYTES = 40 * 1024 * 1024
 export const OPENCLI_NPM_PACKAGE = '@jackwener/opencli'
 const SITE: Record<ChatProvider, string> = {
   chatgpt: 'dsh-chatgpt', claude: 'dsh-claude', gemini: 'dsh-gemini',
@@ -18,8 +20,8 @@ const REQUIRED_ADAPTER_COMMANDS = ['chatgpt', 'claude', 'gemini', 'deepseek', 'g
 const ADAPTER_PLUGIN_NAME = 'dsh-chat-history'
 
 export type OpenCliErrorCode = 'EXTENSION_NOT_CONNECTED' | 'PROVIDER_TIMEOUT' | 'PROVIDER_NOT_LOGGED_IN'
-  | 'PROVIDER_ACCOUNT_MISMATCH' | 'OPENCLI_CONFIGURATION' | 'OPENCLI_OUTPUT_TOO_LARGE' | 'OPENCLI_FAILED'
-  | 'OPENCLI_INSTALL_FAILED'
+  | 'PROVIDER_ACCOUNT_MISMATCH' | 'PROVIDER_RATE_LIMIT' | 'OPENCLI_CONFIGURATION' | 'OPENCLI_OUTPUT_TOO_LARGE' | 'OPENCLI_FAILED'
+  | 'OPENCLI_INSTALL_FAILED' | 'ATTACHMENT_TOO_LARGE'
 
 export class OpenCliError extends Error {
   constructor(message: string, readonly code: OpenCliErrorCode, options?: ErrorOptions) { super(message, options) }
@@ -117,7 +119,7 @@ export class OpenCliRunner {
     this.profile = options.profile || ''
     this.prefixArgs = options.prefixArgs ?? []
     this.timeoutMs = options.timeoutMs ?? 60_000
-    this.maxStdoutBytes = options.maxStdoutBytes ?? 32 * 1024 * 1024
+    this.maxStdoutBytes = options.maxStdoutBytes ?? DEFAULT_OPENCLI_MAX_STDOUT_BYTES
   }
 
   async whoami(provider: ChatProvider, signal?: AbortSignal): Promise<string> {
@@ -172,9 +174,12 @@ export class OpenCliRunner {
   }
 
   async attachment(
-    provider: ChatProvider, locator: string, output: string, maxBytes: number, signal?: AbortSignal,
+    provider: ChatProvider, locator: string, output: string, maxBytes: number, signal?: AbortSignal, accountScope = '',
   ): Promise<Record<string, unknown>> {
-    const rows = await this.json(SITE[provider], 'attachment', [locator, '--output', output, '--maxBytes', String(maxBytes)], signal)
+    const rows = await this.json(SITE[provider], 'attachment', [
+      locator, '--output', output, '--maxBytes', String(maxBytes),
+      ...(accountScope ? ['--accountScope', accountScope] : []),
+    ], signal)
     return rows[0] ?? {}
   }
 
@@ -316,6 +321,8 @@ export class OpenCliRunner {
       const stderr = String(detail.stderr || detail.stdout || '').trim().slice(0, 2_000)
       const exit = typeof detail.code === 'number' ? detail.code : undefined
       const code: OpenCliErrorCode = stderr.includes('DSH_ACCOUNT_SCOPE_MISMATCH') ? 'PROVIDER_ACCOUNT_MISMATCH'
+        : stderr.includes('DSH_PROVIDER_RATE_LIMIT') ? 'PROVIDER_RATE_LIMIT'
+        : stderr.includes('DSH_ATTACHMENT_TOO_LARGE') ? 'ATTACHMENT_TOO_LARGE'
         : exit === 69 ? 'EXTENSION_NOT_CONNECTED' : exit === 75 ? 'PROVIDER_TIMEOUT'
           : exit === 77 ? 'PROVIDER_NOT_LOGGED_IN' : exit === 78 ? 'OPENCLI_CONFIGURATION' : 'OPENCLI_FAILED'
       throw new OpenCliError(stderr || `OpenCLI exited with ${String(detail.code)}`, code, { cause: error })

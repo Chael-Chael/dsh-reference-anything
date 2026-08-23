@@ -38,6 +38,23 @@ async function evaluate(page, script, args, operation) {
   return parseEvaluate(await page.evaluate(source), operation)
 }
 
+/** Refuse an identity that does not match the account scope captured by sync. */
+export function verifyAccountScope(provider, site, expectedScope, identity) {
+  if (!expectedScope) return
+  const actualScope = createHash('sha256').update(`${provider.toLocaleLowerCase()}\0${identity}`).digest('hex')
+  if (actualScope !== expectedScope) {
+    throw new CommandExecutionError(`DSH_ACCOUNT_SCOPE_MISMATCH: ${site} attachment: attachment belongs to a different logged-in account`)
+  }
+}
+
+/** Preserve omission compatibility while rejecting malformed supplied scopes. */
+export function parseExpectedAccountScope(value) {
+  if (value === undefined || value === null) return ''
+  const scope = String(value).trim()
+  if (!/^[a-f0-9]{64}$/.test(scope)) throw new ArgumentError('accountScope must be a 64-character lowercase hexadecimal hash')
+  return scope
+}
+
 function assertResult(result, domain, operation) {
   if (result?.code === 'AUTH') throw new AuthRequiredError(domain, result.message || `${operation} requires login`)
   if (result?.code === 'RATE_LIMIT') {
@@ -47,6 +64,17 @@ function assertResult(result, domain, operation) {
     throw new CommandExecutionError(`${operation}: ${result?.message || 'provider adapter did not return rows'}`)
   }
   return result.rows
+}
+
+function assertIdentityResult(result, domain, operation) {
+  if (result?.code === 'AUTH') throw new AuthRequiredError(domain, result.message)
+  if (result?.code === 'RATE_LIMIT') {
+    throw new CommandExecutionError(`DSH_PROVIDER_RATE_LIMIT: ${operation}: ${result.message || 'provider rate limit reached'}`)
+  }
+  if (result?.ok !== true || typeof result.identity !== 'string' || !result.identity) {
+    throw new CommandExecutionError(`${operation}: ${result?.message || 'stable account identity unavailable'}`)
+  }
+  return result.identity
 }
 
 const PROVIDER_READY_TIMEOUT_MS = 1200
@@ -130,11 +158,7 @@ export function registerProvider(config) {
       const result = await evaluateWhenProviderReady(
         page, config.whoamiScript, {}, `${config.site} whoami`, { accepts: terminalIdentityResult },
       )
-      if (result?.code === 'AUTH') throw new AuthRequiredError(config.domain)
-      if (result?.ok !== true || typeof result.identity !== 'string' || !result.identity) {
-        throw new CommandExecutionError(`${config.site} whoami: ${result?.message || 'stable account identity unavailable'}`)
-      }
-      return [{ identity: result.identity }]
+      return [{ identity: assertIdentityResult(result, config.domain, `${config.site} whoami`) }]
     }),
   })
 
@@ -160,11 +184,8 @@ export function registerProvider(config) {
       const identity = await evaluateWhenProviderReady(
         page, config.whoamiScript, {}, `${config.site} sync-index identity`, { accepts: terminalIdentityResult },
       )
-      if (identity?.code === 'AUTH') throw new AuthRequiredError(config.domain)
-      if (identity?.ok !== true || typeof identity.identity !== 'string' || !identity.identity) {
-        throw new CommandExecutionError(`${config.site} sync-index: ${identity?.message || 'stable account identity unavailable'}`)
-      }
-      const accountScope = createHash('sha256').update(`${config.provider.toLocaleLowerCase()}\0${identity.identity}`).digest('hex')
+      const stableIdentity = assertIdentityResult(identity, config.domain, `${config.site} sync-index`)
+      const accountScope = createHash('sha256').update(`${config.provider.toLocaleLowerCase()}\0${stableIdentity}`).digest('hex')
       const effectiveSince = String(kwargs.accountScope || '') === accountScope ? since : ''
       const rows = assertResult(
         await evaluate(page, config.historyScript, { since: effectiveSince }, `${config.site} sync-index history`),
@@ -172,7 +193,7 @@ export function registerProvider(config) {
         `${config.site} sync-index`,
       )
       return [
-        { kind: 'identity', identity: identity.identity, sinceApplied: effectiveSince },
+        { kind: 'identity', identity: stableIdentity, sinceApplied: effectiveSince },
         ...rows.map(row => ({ kind: 'conversation', identity: '', sinceApplied: '', ...row })),
       ]
     }),
@@ -225,14 +246,11 @@ export function registerProvider(config) {
       const id = String(kwargs.id || '').trim()
       if (!id) throw new ArgumentError('id must be a non-empty conversation id')
       await page.goto(config.home, { settleMs: 600 })
-      const expectedScope = String(kwargs.accountScope || '').trim()
+      const expectedScope = parseExpectedAccountScope(kwargs.accountScope)
       if (expectedScope) {
         const identity = await evaluate(page, config.whoamiScript, {}, `${config.site} detail identity`)
-        if (identity?.code === 'AUTH') throw new AuthRequiredError(config.domain)
-        if (identity?.ok !== true || typeof identity.identity !== 'string' || !identity.identity) {
-          throw new CommandExecutionError(`${config.site} detail: stable account identity unavailable`)
-        }
-        const actualScope = createHash('sha256').update(`${config.provider.toLocaleLowerCase()}\0${identity.identity}`).digest('hex')
+        const stableIdentity = assertIdentityResult(identity, config.domain, `${config.site} detail`)
+        const actualScope = createHash('sha256').update(`${config.provider.toLocaleLowerCase()}\0${stableIdentity}`).digest('hex')
         if (actualScope !== expectedScope) {
           throw new CommandExecutionError(`DSH_ACCOUNT_SCOPE_MISMATCH: ${config.site} detail: conversation belongs to a different logged-in account`)
         }
@@ -262,6 +280,7 @@ export function registerProvider(config) {
       { name: 'locator', positional: true, required: true, help: 'Stable same-origin attachment locator' },
       { name: 'output', required: true, help: 'Absolute output file path' },
       { name: 'maxBytes', type: 'int', default: 26214400, help: 'Maximum decoded bytes' },
+      { name: 'accountScope', help: 'Expected hashed account scope; mismatch refuses the download' },
     ],
     columns: ['attachmentId', 'name', 'mimeType', 'size', 'status', 'localPath'],
     func: async (page, kwargs) => inTemporaryTab(page, async () => {
@@ -273,17 +292,30 @@ export function registerProvider(config) {
         throw new ArgumentError('maxBytes must be between 1 and 26214400')
       }
       await page.goto(config.home, { settleMs: 500 })
+      const expectedScope = parseExpectedAccountScope(kwargs.accountScope)
+      if (expectedScope) {
+        const identity = await evaluateWhenProviderReady(
+          page, config.whoamiScript, {}, `${config.site} attachment identity`, { accepts: terminalIdentityResult },
+        )
+        const stableIdentity = assertIdentityResult(identity, config.domain, `${config.site} attachment`)
+        verifyAccountScope(config.provider, config.site, expectedScope, stableIdentity)
+      }
       const result = await evaluate(page, ATTACHMENT_SCRIPT, {
         locator,
         origin: new URL(config.home).origin,
         maxBytes,
       }, `${config.site} attachment`)
       if (result?.code === 'AUTH') throw new AuthRequiredError(config.domain)
+      if (result?.code === 'TOO_LARGE') {
+        throw new CommandExecutionError(`DSH_ATTACHMENT_TOO_LARGE: ${config.site} attachment exceeds maxBytes`)
+      }
       if (result?.ok !== true || typeof result.base64 !== 'string') {
         throw new CommandExecutionError(`${config.site} attachment: ${result?.message || 'attachment unavailable'}`)
       }
       const bytes = Buffer.from(result.base64, 'base64')
-      if (bytes.byteLength > maxBytes) throw new CommandExecutionError(`${config.site} attachment exceeds maxBytes`)
+      if (bytes.byteLength > maxBytes) {
+        throw new CommandExecutionError(`DSH_ATTACHMENT_TOO_LARGE: ${config.site} attachment exceeds maxBytes`)
+      }
       await mkdir(dirname(output), { recursive: true })
       await writeFile(output, bytes)
       return [{
@@ -304,17 +336,64 @@ export const SYNC_BROWSER_SESSION = Object.freeze({
   defaultWindowMode: 'background',
 })
 
-const ATTACHMENT_SCRIPT = String.raw`async function (args) {
+export const ATTACHMENT_SCRIPT = String.raw`async function (args) {
   try {
+    const cancelBody = async body => {
+      try { await body?.cancel?.() } catch {}
+    }
     const target = new URL(args.locator, args.origin)
     if (target.origin !== args.origin) return JSON.stringify({ ok: false, message: 'cross-origin locator refused' })
-    const response = await fetch(target.href, { credentials: 'include' })
-    if (response.status === 401 || response.status === 403) return JSON.stringify({ ok: false, code: 'AUTH' })
-    if (!response.ok) return JSON.stringify({ ok: false, message: 'attachment HTTP ' + response.status })
+    const response = await fetch(target.href, { credentials: 'include', redirect: 'error' })
+    if (response.url && new URL(response.url).origin !== args.origin) {
+      await cancelBody(response.body)
+      return JSON.stringify({ ok: false, message: 'cross-origin redirect refused' })
+    }
+    if (response.status === 401 || response.status === 403) {
+      await cancelBody(response.body)
+      return JSON.stringify({ ok: false, code: 'AUTH' })
+    }
+    if (!response.ok) {
+      await cancelBody(response.body)
+      return JSON.stringify({ ok: false, message: 'attachment HTTP ' + response.status })
+    }
     const length = Number(response.headers.get('content-length') || 0)
-    if (length > args.maxBytes) return JSON.stringify({ ok: false, message: 'attachment exceeds maxBytes' })
-    const bytes = new Uint8Array(await response.arrayBuffer())
-    if (bytes.byteLength > args.maxBytes) return JSON.stringify({ ok: false, message: 'attachment exceeds maxBytes' })
+    const declaredLength = Number.isFinite(length) && length > 0 ? length : 0
+    if (declaredLength > args.maxBytes) {
+      await cancelBody(response.body)
+      return JSON.stringify({ ok: false, code: 'TOO_LARGE', message: 'attachment exceeds maxBytes' })
+    }
+    const chunks = []
+    let total = 0
+    if (response.body) {
+      const reader = response.body.getReader()
+      try {
+        for (;;) {
+          const { done, value } = await reader.read()
+          if (done) break
+          const chunk = value instanceof Uint8Array ? value : new Uint8Array(value)
+          if (total + chunk.byteLength > args.maxBytes) {
+            try { await reader.cancel() } catch {}
+            return JSON.stringify({ ok: false, code: 'TOO_LARGE', message: 'attachment exceeds maxBytes' })
+          }
+          chunks.push(chunk)
+          total += chunk.byteLength
+        }
+      } catch (error) {
+        try { await reader.cancel() } catch {}
+        throw error
+      } finally {
+        try { reader.releaseLock?.() } catch {}
+      }
+    }
+    if (declaredLength && total < declaredLength) {
+      return JSON.stringify({ ok: false, message: 'attachment download was truncated' })
+    }
+    const bytes = new Uint8Array(total)
+    let offset = 0
+    for (const chunk of chunks) {
+      bytes.set(chunk, offset)
+      offset += chunk.byteLength
+    }
     let binary = ''
     for (let at = 0; at < bytes.length; at += 0x8000) {
       binary += String.fromCharCode(...bytes.subarray(at, Math.min(bytes.length, at + 0x8000)))

@@ -34,7 +34,7 @@ describe('OpenCLI sync browser lifecycle', () => {
     const source = await readFile(new URL('../opencli-plugin/common.js', import.meta.url), 'utf8')
     expect(source.match(/page\.goto\(config\.home, \{ waitUntil: 'none' \}\)/g)).toHaveLength(3)
     expect(source).not.toContain('settleMs: 1200')
-    // Detail and attachment paths are deliberately outside this optimization.
+    // Detail and attachment navigation retain their shorter workflow-specific settle windows.
     expect(source).toContain('settleMs: 600')
     expect(source).toContain('settleMs: 500')
   })

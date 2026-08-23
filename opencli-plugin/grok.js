@@ -106,6 +106,7 @@ const detailScript = String.raw`async function (args) {
 export const whoamiScript = String.raw`async function () {
   for (const url of ['/api/auth/session', '/rest/app-chat/users/me', '/rest/auth/me']) {
     const response = await fetch(url, { credentials: 'include', headers: { Accept: 'application/json' } })
+    if (response.status === 429) return JSON.stringify({ ok: false, code: 'RATE_LIMIT' })
     if (!response.ok) continue
     const payload = await response.json()
     const user = payload.session || payload.user || payload

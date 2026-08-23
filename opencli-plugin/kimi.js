@@ -108,16 +108,19 @@ export const detailScript = String.raw`async function (args) {
   }
 }`
 
-registerProvider({
-  site: 'dsh-kimi', provider: 'Kimi', domain: 'kimi.com', home: 'https://www.kimi.com/',
-  conversationUrl: id => `https://www.kimi.com/chat/${encodeURIComponent(id)}`,
-  whoamiScript: String.raw`async function () {
+export const whoamiScript = String.raw`async function () {
     const headers = (${authHeaders})()
     const response = await fetch('/api/user', { credentials: 'include', headers })
     if (response.status === 401 || response.status === 403) return JSON.stringify({ ok: false, code: 'AUTH' })
+    if (response.status === 429) return JSON.stringify({ ok: false, code: 'RATE_LIMIT' })
     if (!response.ok) return JSON.stringify({ ok: false, message: 'user HTTP ' + response.status })
     const user = await response.json(); const identity = String(user.id || user.user_id || user.email || '')
     return JSON.stringify({ ok: Boolean(identity), identity, code: identity ? undefined : 'AUTH' })
-  }`,
+  }`
+
+registerProvider({
+  site: 'dsh-kimi', provider: 'Kimi', domain: 'kimi.com', home: 'https://www.kimi.com/',
+  conversationUrl: id => `https://www.kimi.com/chat/${encodeURIComponent(id)}`,
+  whoamiScript,
   historyScript, detailScript, fallbackScript: domFallbackScript,
 })

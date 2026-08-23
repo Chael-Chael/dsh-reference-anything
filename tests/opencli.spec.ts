@@ -2,7 +2,7 @@ import { chmod, mkdtemp, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { describe, expect, it } from 'vitest'
-import { OpenCliError, OpenCliRunner, parseDaemonStatus, versionAtLeast } from '../src/opencli.ts'
+import { DEFAULT_OPENCLI_MAX_STDOUT_BYTES, OpenCliError, OpenCliRunner, parseDaemonStatus, versionAtLeast } from '../src/opencli.ts'
 
 async function fake(source: string): Promise<string> {
   const root = await mkdtemp(join(tmpdir(), 'opencli-fake-'))
@@ -12,6 +12,10 @@ async function fake(source: string): Promise<string> {
 }
 
 describe('OpenCLI execFile boundary', () => {
+  it('reserves enough stdout for a base64-encoded 25 MiB attachment', () => {
+    expect(new OpenCliRunner().maxStdoutBytes).toBe(DEFAULT_OPENCLI_MAX_STDOUT_BYTES)
+    expect(DEFAULT_OPENCLI_MAX_STDOUT_BYTES).toBeGreaterThan(Math.ceil(25 * 1024 * 1024 * 4 / 3))
+  })
   it('passes a malicious conversation id as data, without a shell', async () => {
     const script = await fake(`process.stdout.write(JSON.stringify([{conversationId:process.argv[4],ordinal:0,messageId:'1',parentId:'',branchId:'',activeBranch:true,role:'user',text:'ok',createdAt:'',attachmentsJson:'[]',partial:false}]))`)
     const runner = new OpenCliRunner({ executable: process.execPath, prefixArgs: [script] })
@@ -38,6 +42,46 @@ describe('OpenCLI execFile boundary', () => {
     await expect(runner.detail('chatgpt', 'c1', undefined, 'scope')).rejects.toMatchObject({
       code: 'PROVIDER_ACCOUNT_MISMATCH',
     } satisfies Partial<OpenCliError>)
+  })
+
+  it('passes the expected account scope to attachment reads', async () => {
+    const script = await fake(`
+      const args=process.argv.slice(2)
+      const at=args.indexOf('--accountScope')
+      if(args[0]!=='dsh-chatgpt'||args[1]!=='attachment'||args[2]!=='/files/a'||at<0||args[at+1]!=='scope') process.exit(78)
+      process.stdout.write(JSON.stringify([{attachmentId:'/files/a',name:'a.bin',mimeType:'application/octet-stream',size:1,status:'available',localPath:args[args.indexOf('--output')+1]}]))
+    `)
+    const runner = new OpenCliRunner({ executable: process.execPath, prefixArgs: [script] })
+
+    await expect(runner.attachment('chatgpt', '/files/a', 'a.bin', 10, undefined, 'scope'))
+      .resolves.toMatchObject({ attachmentId: '/files/a', status: 'available' })
+  })
+
+  it('classifies an attachment account-scope refusal', async () => {
+    const script = await fake(`process.stderr.write('DSH_ACCOUNT_SCOPE_MISMATCH: wrong attachment account');process.exit(1)`)
+    const runner = new OpenCliRunner({ executable: process.execPath, prefixArgs: [script] })
+
+    await expect(runner.attachment('chatgpt', '/files/a', 'a.bin', 10, undefined, 'scope')).rejects.toMatchObject({
+      code: 'PROVIDER_ACCOUNT_MISMATCH',
+    } satisfies Partial<OpenCliError>)
+  })
+
+  it('classifies an attachment size-limit refusal', async () => {
+    const script = await fake(`process.stderr.write('DSH_ATTACHMENT_TOO_LARGE: attachment exceeds maxBytes');process.exit(1)`)
+    const runner = new OpenCliRunner({ executable: process.execPath, prefixArgs: [script] })
+
+    await expect(runner.attachment('chatgpt', '/files/a', 'a.bin', 10)).rejects.toMatchObject({
+      code: 'ATTACHMENT_TOO_LARGE',
+    } satisfies Partial<OpenCliError>)
+  })
+
+  it('classifies a provider identity rate-limit refusal', async () => {
+    const script = await fake(`process.stderr.write('DSH_PROVIDER_RATE_LIMIT: provider rate limit reached');process.exit(1)`)
+    const runner = new OpenCliRunner({ executable: process.execPath, prefixArgs: [script] })
+
+    await expect(runner.attachment('chatgpt', '/files/a', 'a.bin', 10)).rejects.toMatchObject({
+      code: 'PROVIDER_RATE_LIMIT',
+    })
   })
 
   it('parses account identity and history from one sync-index command', async () => {
@@ -148,7 +192,7 @@ describe('OpenCLI execFile boundary', () => {
       if(args.startsWith('dsh-')) { process.stderr.write('health opened a provider'); process.exit(78) }
       if(args==='--version') process.stdout.write('1.8.6')
       else if(args==='daemon status') process.stdout.write('Daemon: running (PID 1)\\nVersion: v1.8.6\\nExtension: connected')
-      else if(args==='plugin list') process.stdout.write('dsh-chat-history @0.2.2 (chatgpt, claude, deepseek, gemini, grok, kimi)')
+      else if(args==='plugin list') process.stdout.write('dsh-chat-history @0.2.3 (chatgpt, claude, deepseek, gemini, grok, kimi)')
       else if(args==='doctor') process.stdout.write('[OK] Connectivity: connected in 0.2s')
       else process.exit(78)
     `)
@@ -163,7 +207,7 @@ describe('OpenCLI execFile boundary', () => {
       const args=process.argv.slice(2).join(' ')
       if(args==='--version') process.stdout.write('1.8.6')
       else if(args==='daemon status') process.stdout.write('Daemon: running (PID 1)\\nVersion: v1.8.6\\nExtension: connected')
-      else if(args==='plugin list') process.stdout.write('dsh-chat-history @0.2.2 (chatgpt, claude, deepseek, gemini, grok, kimi)')
+      else if(args==='plugin list') process.stdout.write('dsh-chat-history @0.2.3 (chatgpt, claude, deepseek, gemini, grok, kimi)')
       else if(args==='doctor') { process.stderr.write('doctor must not run'); process.exit(78) }
       else process.exit(78)
     `)
@@ -180,7 +224,7 @@ describe('OpenCLI execFile boundary', () => {
       if(args==='--version') process.stdout.write('1.8.6')
       else if(args==='daemon status') process.stdout.write('Daemon: running (PID 1)\\nVersion: v1.8.6\\nExtension: connected')
       else if(args==='plugin list') {
-        process.stdout.write('dsh-chat-history @0.2.2 (chatgpt, claude, deepseek, gemini, grok, kimi)')
+        process.stdout.write('dsh-chat-history @0.2.3 (chatgpt, claude, deepseek, gemini, grok, kimi)')
         process.stderr.write("⚠ Plugin dsh-chat-history/chatgpt.js: Cannot find package '@jackwener/opencli'")
       } else if(args==='doctor') process.stdout.write('[OK] Connectivity: connected in 0.2s')
     `)
@@ -197,7 +241,7 @@ describe('OpenCLI execFile boundary', () => {
       const marker = new URL('./repaired', import.meta.url)
       const args=process.argv.slice(2).join(' ')
       if(args==='plugin list') {
-        process.stdout.write('dsh-chat-history @0.2.2 (chatgpt, claude, deepseek, gemini, grok, kimi)')
+        process.stdout.write('dsh-chat-history @0.2.3 (chatgpt, claude, deepseek, gemini, grok, kimi)')
         if(!existsSync(marker)) process.stderr.write("⚠ Plugin dsh-chat-history/chatgpt.js: Cannot find package '@jackwener/opencli'")
       } else if(args==='plugin update dsh-chat-history') writeFileSync(marker, '')
       else process.exit(78)
@@ -213,7 +257,7 @@ describe('OpenCLI execFile boundary', () => {
       const marker = new URL('./installed', import.meta.url)
       const args=process.argv.slice(2).join(' ')
       if(args==='plugin list') {
-        if(existsSync(marker)) process.stdout.write('dsh-chat-history @0.2.2 (chatgpt, claude, deepseek, gemini, grok, kimi)')
+        if(existsSync(marker)) process.stdout.write('dsh-chat-history @0.2.3 (chatgpt, claude, deepseek, gemini, grok, kimi)')
       } else if(args==='plugin install file:///adapter') writeFileSync(marker, '')
       else process.exit(78)
     `)
@@ -227,13 +271,13 @@ describe('OpenCLI execFile boundary', () => {
       const args=process.argv.slice(2).join(' ')
       if(args==='--version') process.stdout.write('1.8.6')
       else if(args==='daemon status') process.stdout.write('Daemon: running (PID 1)\\nVersion: v1.8.5\\nExtension: connected (v1.0.22)')
-      else if(args==='plugin list') process.stdout.write('dsh-chat-history @0.2.0 (chatgpt, claude, deepseek, gemini, grok, kimi)')
+      else if(args==='plugin list') process.stdout.write('dsh-chat-history @0.2.2 (chatgpt, claude, deepseek, gemini, grok, kimi)')
       else if(args==='doctor'&&process.env.OPENCLI_WINDOW==='background') process.stdout.write('[OK] Connectivity: connected in 0.2s')
     `)
     const health = await new OpenCliRunner({ executable: process.execPath, prefixArgs: [script] }).health()
     expect(health).toMatchObject({
       opencliCompatible: true, daemonVersion: '1.8.5', daemonStale: true,
-      connectivityOk: true, pluginVersion: '0.2.0', pluginInstalled: true, adapterCommandsReady: true, adapterCompatible: false,
+      connectivityOk: true, pluginVersion: '0.2.2', pluginInstalled: true, adapterCommandsReady: true, adapterCompatible: false,
     })
   })
 

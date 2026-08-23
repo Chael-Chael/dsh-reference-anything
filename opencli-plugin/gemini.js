@@ -153,13 +153,17 @@ const detailScript = String.raw`async function (args) {
   }
 }`
 
+export const whoamiScript = String.raw`async function () {
+  const wiz = window.__WIZ_global_data || window.WIZ_global_data || {}
+  const candidate = wiz.oPEP7c || wiz.CfO9Re
+  const identity = typeof candidate === 'string' ? candidate.trim() : ''
+  if (!identity) return JSON.stringify({ ok: false, message: 'Gemini stable account identity unavailable' })
+  return JSON.stringify({ ok: true, identity })
+}`
+
 registerProvider({
   site: 'dsh-gemini', provider: 'Gemini', domain: 'gemini.google.com', home: 'https://gemini.google.com/app',
   conversationUrl: id => `https://gemini.google.com/app/${encodeURIComponent(id)}`,
-  whoamiScript: String.raw`async function () {
-    const match = location.pathname.match(/\/u\/(\d+)(?:\/|$)/); const slot = match ? match[1] : 'default'
-    const wiz = window.__WIZ_global_data || window.WIZ_global_data || {}; const identity = String(wiz.oPEP7c || wiz.CfO9Re || slot)
-    return JSON.stringify({ ok: Boolean(identity), identity })
-  }`,
+  whoamiScript,
   historyScript, detailScript, fallbackScript: domFallbackScript,
 })

@@ -9,6 +9,7 @@ import { join } from 'node:path'
 import { Context } from '@deepseek-ai/cordis'
 import { describe, expect, it, vi } from 'vitest'
 import { ReferenceAnythingError } from '../src/errors.ts'
+import { totalFromResponse } from '../src/sources/cloud-drive/providers/http.ts'
 import { isGlobalUnicastIPv6, OpenListDriveProvider, pinnedRawRequest, validateRawDownloadUrl } from '../src/sources/cloud-drive/providers/openlist.ts'
 import { decodeDriveId, encodeDriveId, normalizeOpenListPath } from '../src/sources/cloud-drive/registry.ts'
 import { authenticateOpenList, installOpenList, ManagedOpenListRuntime, OpenListHostClient, OPENLIST_FIXED_VERSION, OPENLIST_RELEASE, parseRandomAdminPassword, recoverInterruptedReplacement, selectOpenListAsset, validateOpenListEndpoint, verifyOpenListAsset, writeManagedOpenListConfig, writeOpenListCredentials } from '../src/openlist/host.ts'
@@ -29,6 +30,13 @@ describe('OpenList drive reference ids', () => {
 })
 
 describe('OpenList provider', () => {
+  it('does not mistake a 206 Content-Length for the complete file size', () => {
+    expect(totalFromResponse(new Response('ab', { status: 206, headers: { 'content-length': '2' } }))).toBeUndefined()
+    expect(totalFromResponse(new Response('ab', { status: 206, headers: { 'content-range': 'bytes 0-1/4' } }))).toBe(4)
+    expect(totalFromResponse(new Response('ab', { status: 206, headers: { 'content-range': 'garbage/2' } }))).toBeUndefined()
+    expect(totalFromResponse(new Response('ab', { status: 206, headers: { 'content-range': 'bytes 0-2/2' } }))).toBeUndefined()
+    expect(totalFromResponse(new Response('ab', { status: 200, headers: { 'content-length': '2' } }))).toBe(2)
+  })
   it('blocks raw-download SSRF targets and DNS rebinding while allowing public provider hosts', async () => {
     const publicDns = async () => [{ address: '93.184.216.34' }]
     await expect(validateRawDownloadUrl('https://provider.example/file', publicDns)).resolves.toMatchObject({ hostname: 'provider.example' })

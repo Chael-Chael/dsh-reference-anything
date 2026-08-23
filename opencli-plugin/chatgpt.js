@@ -110,16 +110,19 @@ const detailScript = String.raw`async function (args) {
   }
 }`
 
-registerProvider({
-  site: 'dsh-chatgpt', provider: 'ChatGPT', domain: 'chatgpt.com', home: 'https://chatgpt.com/',
-  conversationUrl: id => `https://chatgpt.com/c/${encodeURIComponent(id)}`,
-  whoamiScript: String.raw`async function () {
+export const whoamiScript = String.raw`async function () {
     const response = await fetch('/api/auth/session', { credentials: 'include' })
     if (response.status === 401 || response.status === 403) return JSON.stringify({ ok: false, code: 'AUTH' })
+    if (response.status === 429) return JSON.stringify({ ok: false, code: 'RATE_LIMIT' })
     if (!response.ok) return JSON.stringify({ ok: false, message: 'session HTTP ' + response.status })
     const payload = await response.json(); const user = payload.user || payload.account || {}
     const identity = String(user.id || user.account_id || user.email || '')
     return JSON.stringify({ ok: Boolean(identity), identity, code: identity ? undefined : 'AUTH' })
-  }`,
+  }`
+
+registerProvider({
+  site: 'dsh-chatgpt', provider: 'ChatGPT', domain: 'chatgpt.com', home: 'https://chatgpt.com/',
+  conversationUrl: id => `https://chatgpt.com/c/${encodeURIComponent(id)}`,
+  whoamiScript,
   historyScript, detailScript, fallbackScript: domFallbackScript,
 })

@@ -9,8 +9,9 @@
  * Two properties shape everything below. The first is that these are the
  * user's own remote files, so reading one needs a per-task grant and no
  * credential or signed URL may appear in anything a summary, a log, or an
- * error carries. The second is that a drive holds binaries, so the source is
- * text-only on purpose and says so rather than emitting mojibake.
+ * error carries. The second is that a drive holds binaries, so text decoding
+ * stays allowlisted while selected document and image formats are exposed as
+ * bounded, on-demand attachments rather than emitted as mojibake.
  *
  * @module dsh-reference-anything/cloud-drive
  */
@@ -350,10 +351,21 @@ export class CloudDriveService extends Service implements ReferenceSource {
     if (!entry || entry.isDirectory) throw new ReferenceAnythingError('cloud-drive file was not found', 'REFERENCE_NOT_FOUND')
     if (!ATTACHMENT_EXTENSIONS.has(extensionOf(entry.name))) throw new ReferenceAnythingError('cloud-drive file type is not supported as an attachment', 'REFERENCE_READ_FAILED')
     if (entry.size > maxBytes) throw new ReferenceAnythingError('cloud-drive attachment exceeds the download limit', 'ATTACHMENT_TOO_LARGE')
-    const wanted = entry.size > 0 ? entry.size : maxBytes + 1
-    const result = await provider.read(entry.id, 0, Math.min(wanted, maxBytes + 1), signal)
-    const total = result.totalSize ?? entry.size
-    if (total > maxBytes || result.bytes.byteLength > maxBytes) throw new ReferenceAnythingError('cloud-drive attachment exceeds the download limit', 'ATTACHMENT_TOO_LARGE')
+    const result = await provider.read(entry.id, 0, maxBytes + 1, signal)
+    const describedTotal = entry.size > 0 ? entry.size : undefined
+    if ((result.totalSize !== undefined && result.totalSize > maxBytes) || result.bytes.byteLength > maxBytes) {
+      throw new ReferenceAnythingError('cloud-drive attachment exceeds the download limit', 'ATTACHMENT_TOO_LARGE')
+    }
+    if (result.totalSize !== undefined && describedTotal !== undefined && result.totalSize !== describedTotal) {
+      throw new ReferenceAnythingError('cloud-drive attachment size did not match its indexed metadata', 'REFERENCE_READ_FAILED')
+    }
+    const total = result.totalSize ?? describedTotal
+    if (result.ranged && total === undefined) {
+      throw new ReferenceAnythingError('cloud-drive ranged attachment had no verifiable total size', 'REFERENCE_READ_FAILED')
+    }
+    if (total !== undefined && result.bytes.byteLength !== total) {
+      throw new ReferenceAnythingError('cloud-drive attachment download was incomplete', 'REFERENCE_READ_FAILED')
+    }
     return { name: entry.name, bytes: result.bytes, mimeType: mimeForName(entry.name) }
   }
 
