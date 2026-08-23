@@ -284,6 +284,22 @@ describe('auto-sync resilience', () => {
     const fatalJob = fatalManager.start(['chatgpt'], 'incremental')
     await settled(fatalManager, fatalJob)
     expect(fatalManager.status(fatalJob)).toMatchObject({ status: 'failed', error: expect.stringContaining('bad provider config') })
+
+    let rateLimitedCalls = 0
+    const rateLimited = store({ detailConcurrency: 1 })
+    const rateLimitedManager = new ConversationSyncManager(rateLimited, () => fakeRunner({
+      history: async () => many,
+      detail: async () => {
+        rateLimitedCalls++
+        throw new OpenCliError('provider rate limit reached', 'PROVIDER_RATE_LIMIT')
+      },
+    }))
+    const rateLimitedJob = rateLimitedManager.start(['chatgpt'], 'incremental')
+    await settled(rateLimitedManager, rateLimitedJob)
+    expect(rateLimitedManager.status(rateLimitedJob)).toMatchObject({
+      status: 'failed', error: expect.stringContaining('rate limit'),
+    })
+    expect(rateLimitedCalls).toBe(1)
   })
 
   it('aborts a job that outruns its deadline, so later ticks are not gated forever', async () => {

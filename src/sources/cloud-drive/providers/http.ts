@@ -18,14 +18,18 @@ export function isEntry(entry: DriveEntry | undefined): entry is DriveEntry {
   return entry !== undefined
 }
 
-/** Total size from `Content-Range`, falling back to `Content-Length`. */
+/** Total size from `Content-Range`, falling back to `Content-Length` only for a complete response. */
 export function totalFromResponse(response: Response): number | undefined {
   const range = response.headers.get('content-range')
-  const slash = range?.lastIndexOf('/') ?? -1
-  if (range !== null && slash !== -1) {
-    const total = Number(range.slice(slash + 1))
-    if (Number.isFinite(total) && total > 0) return total
+  const match = range?.match(/^bytes\s+(\d+)-(\d+)\/(\d+)$/i)
+  if (match) {
+    const start = Number(match[1]); const end = Number(match[2]); const total = Number(match[3])
+    if (Number.isSafeInteger(start) && Number.isSafeInteger(end) && Number.isSafeInteger(total)
+      && start >= 0 && end >= start && total > end) return total
   }
+  // A 206 Content-Length is only this range's length, never proof of the
+  // complete object's size. Callers must fall back to trusted file metadata.
+  if (response.status === 206) return undefined
   const length = Number(response.headers.get('content-length'))
   return Number.isFinite(length) && length > 0 ? length : undefined
 }

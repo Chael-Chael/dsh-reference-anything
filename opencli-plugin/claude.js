@@ -119,16 +119,20 @@ const detailScript = String.raw`async function (args) {
   }
 }`
 
+export const whoamiScript = String.raw`async function () {
+  const response = await fetch('/api/account', { credentials: 'include', headers: { Accept: 'application/json' } })
+  if (response.status === 401 || response.status === 403) return JSON.stringify({ ok: false, code: 'AUTH' })
+  if (response.status === 429) return JSON.stringify({ ok: false, code: 'RATE_LIMIT' })
+  if (!response.ok) return JSON.stringify({ ok: false, message: 'account HTTP ' + response.status })
+  const payload = await response.json()
+  const identity = typeof payload.email_address === 'string' ? payload.email_address.trim() : ''
+  if (!identity) return JSON.stringify({ ok: false, message: 'Claude stable account identity unavailable' })
+  return JSON.stringify({ ok: true, identity })
+}`
+
 registerProvider({
   site: 'dsh-claude', provider: 'Claude', domain: 'claude.ai', home: 'https://claude.ai/',
   conversationUrl: id => `https://claude.ai/chat/${encodeURIComponent(id)}`,
-  whoamiScript: String.raw`async function () {
-    const response = await fetch('/api/organizations', { credentials: 'include' })
-    if (response.status === 401 || response.status === 403) return JSON.stringify({ ok: false, code: 'AUTH' })
-    if (!response.ok) return JSON.stringify({ ok: false, message: 'organizations HTTP ' + response.status })
-    const payload = await response.json(); const values = Array.isArray(payload) ? payload : payload.organizations || []
-    const item = values.find(value => value && (value.uuid || value.id)); const identity = String(item && (item.uuid || item.id) || '')
-    return JSON.stringify({ ok: Boolean(identity), identity, code: identity ? undefined : 'AUTH' })
-  }`,
+  whoamiScript,
   historyScript, detailScript, fallbackScript: domFallbackScript,
 })

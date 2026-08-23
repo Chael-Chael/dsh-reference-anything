@@ -12,10 +12,12 @@
 import type { Context } from '@deepseek-ai/cordis'
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { basename, join } from 'node:path'
+import { basename, isAbsolute, join, relative, resolve, sep } from 'node:path'
 import z from '@deepseek-ai/schemastery'
 import { defineTool } from '@deepseek-ai/dsh-tools'
 import { AttachmentId, type ImageMediaType } from '@deepseek-ai/dsh-attachment'
+import { ReferenceAnythingError } from './errors.ts'
+import { DEFAULT_OPENCLI_MAX_STDOUT_BYTES, OpenCliError, OpenCliRunner } from './opencli.ts'
 import { addUnavailableAttachmentNotices, continuationFooter, frameReferenceBlock } from './render.ts'
 import { retainConversation } from './retain.ts'
 import { decodeReferenceUri, encodeReferenceUri } from './uri.ts'
@@ -41,6 +43,12 @@ export const DEFAULT_READ_TURNS = 10
 
 /** Ceiling on the model-supplied turn limit when none is configured. */
 export const DEFAULT_MAX_READ_TURNS = 100
+
+/** Hard attachment cap shared by drive and Web materialization. */
+export const MAX_ATTACHMENT_BYTES = 25 * 1024 * 1024
+
+/** Successful materializations remain usable for one hour. */
+export const ATTACHMENT_LIFETIME_MS = 60 * 60 * 1000
 
 /** Deployment settings for the model-facing tools. */
 export interface Config {
@@ -274,9 +282,71 @@ export function apply(ctx: Context, config: Config = {}): void {
     }),
   })), 'reference-tool.reference_read()')
 
-  const tempRoots = new Set<string>()
+  type TempRootState = {
+    timer?: ReturnType<typeof setTimeout>
+    removal?: Promise<void>
+    retries: number
+  }
+  const tempRoots = new Map<string, TempRootState>()
+  let disposed = false
+  const scheduleTempCleanup = (root: string, delay: number) => {
+    const state = tempRoots.get(root)
+    if (!state || disposed) return
+    if (state.timer !== undefined) clearTimeout(state.timer)
+    const timer = setTimeout(() => {
+      void removeTempRoot(root).catch(() => {
+        ctx.logger.warn('reference attachment temporary cleanup failed; the tracked path will be retried')
+      })
+    }, delay)
+    timer.unref?.()
+    state.timer = timer
+  }
+  const removeTempRoot = async (root: string) => {
+    const state = tempRoots.get(root) ?? { retries: 0 }
+    if (!tempRoots.has(root)) tempRoots.set(root, state)
+    if (state.removal) return state.removal
+    if (state.timer !== undefined) clearTimeout(state.timer)
+    state.timer = undefined
+    const removal = rm(root, { recursive: true, force: true, maxRetries: 3, retryDelay: 50 })
+      .then(() => { tempRoots.delete(root) })
+      .catch((cause) => {
+        state.removal = undefined
+        if (!disposed && state.retries < 3) {
+          state.retries += 1
+          scheduleTempCleanup(root, 1_000)
+        }
+        throw new ReferenceAnythingError('could not remove attachment temporary files', 'REFERENCE_READ_FAILED', { cause })
+      })
+    state.removal = removal
+    return removal
+  }
+  const createTempRoot = async (prefix: string) => {
+    if (disposed) throw new ReferenceAnythingError('attachment materializer has been disposed', 'REFERENCE_CANCELLED')
+    let root: string
+    try {
+      root = await mkdtemp(join(tmpdir(), prefix))
+    } catch (cause) {
+      throw new ReferenceAnythingError('could not create attachment temporary storage', 'REFERENCE_READ_FAILED', { cause })
+    }
+    tempRoots.set(root, { retries: 0 })
+    if (disposed) {
+      await removeTempRoot(root)
+      throw new ReferenceAnythingError('attachment materializer has been disposed', 'REFERENCE_CANCELLED')
+    }
+    return root
+  }
+  const retainTempRoot = async (root: string) => {
+    if (disposed) {
+      await removeTempRoot(root)
+      throw new ReferenceAnythingError('attachment materializer has been disposed', 'REFERENCE_CANCELLED')
+    }
+    scheduleTempCleanup(root, ATTACHMENT_LIFETIME_MS)
+  }
   ctx.effect(() => async () => {
-    await Promise.all([...tempRoots].map(path => rm(path, { recursive: true, force: true }).catch(() => {})))
+    disposed = true
+    const settled = await Promise.allSettled([...tempRoots.keys()].map(removeTempRoot))
+    const failure = settled.find(result => result.status === 'rejected')
+    if (failure?.status === 'rejected') throw failure.reason
   }, 'reference-tool.attachmentTempCleanup()')
 
   ctx.effect(() => ctx.tools.register(defineTool({
@@ -317,54 +387,85 @@ export function apply(ctx: Context, config: Config = {}): void {
       const ref = decodeReferenceUri(args.uri)
       ctx.references.assertGranted(exec.agent ? String(exec.agent.session.id) : undefined, ref)
       if (ref.source === 'cloud-drive') {
+        if (args.attachmentId !== 'file') {
+          throw new ReferenceAnythingError(
+            'cloud-drive documents use attachmentId "file" exactly as shown by reference_read',
+            'ATTACHMENT_UNAVAILABLE',
+          )
+        }
         const service = ctx.get('referenceCloudDrive') as CloudDriveService | undefined
-        if (!service) throw new Error('Cloud-drive service is not mounted')
-        const attachment = await service.attachment(ref, 25 * 1024 * 1024, exec.signal)
-        const root = await mkdtemp(join(tmpdir(), 'dsh-reference-drive-'))
-        tempRoots.add(root)
-        const safeName = basename(attachment.name).replace(/[<>:"/\\|?*\x00-\x1f]/g, '_') || 'attachment'
-        const localPath = join(root, safeName)
-        await writeFile(localPath, attachment.bytes)
-        const bytes = Buffer.from(attachment.bytes)
-        const mimeType = sniffMime(bytes, attachment.mimeType)
-        const timer = setTimeout(() => { tempRoots.delete(root); void rm(root, { recursive: true, force: true }) }, 60 * 60 * 1000)
-        timer.unref?.()
-        const image = mimeType.startsWith('image/') ? await saveImage(ctx, bytes, mimeType, attachment.name) : undefined
-        return { name: attachment.name, mimeType, size: bytes.byteLength, localPath, ...(image ? { image } : {}) }
+        if (!service) throw new ReferenceAnythingError('cloud-drive service is not mounted', 'SOURCE_UNAVAILABLE')
+        let attachment: Awaited<ReturnType<CloudDriveService['attachment']>>
+        try {
+          attachment = await service.attachment(ref, MAX_ATTACHMENT_BYTES, exec.signal)
+        } catch (error) {
+          throw attachmentFailure(error, exec.signal, 'cloud-drive')
+        }
+        if (attachment.bytes.byteLength > MAX_ATTACHMENT_BYTES) {
+          throw new ReferenceAnythingError('cloud-drive attachment exceeds 25 MiB', 'ATTACHMENT_TOO_LARGE')
+        }
+        const root = await createTempRoot('dsh-reference-drive-')
+        try {
+          const localPath = attachmentLocalPath(root, attachment.name)
+          await writeFile(localPath, attachment.bytes)
+          const bytes = Buffer.from(attachment.bytes)
+          const mimeType = sniffMime(bytes, attachment.mimeType)
+          const image = isRenderableImage(mimeType) ? await saveImage(ctx, bytes, mimeType, attachment.name) : undefined
+          await retainTempRoot(root)
+          return { name: attachment.name, mimeType, size: bytes.byteLength, localPath, ...(image ? { image } : {}) }
+        } catch (error) {
+          await removeTempRoot(root)
+          throw attachmentFailure(error, exec.signal, 'cloud-drive')
+        }
       }
-      if (ref.source !== 'web-chat') throw new Error('attachments are available only for synchronized Web conversations and cloud-drive documents')
+      if (ref.source !== 'web-chat') {
+        throw new ReferenceAnythingError(
+          'attachments are available only for synchronized Web conversations and cloud-drive documents',
+          'ATTACHMENT_UNAVAILABLE',
+        )
+      }
       const service = ctx.get('referenceChatHistory')
-      if (!service) throw new Error('Web conversation history service is not mounted')
+      if (!service) throw new ReferenceAnythingError('Web conversation history service is not mounted', 'SOURCE_UNAVAILABLE')
       const conversation = service.store.conversations.get(ref.id)
       const revision = conversation?.currentRevision
-      if (!conversation) throw new Error('conversation is not in the local title index')
+      if (!conversation) throw new ReferenceAnythingError('conversation is not in the local title index', 'REFERENCE_NOT_FOUND')
+      if (!/^[a-f0-9]{64}$/.test(conversation.accountScope)) {
+        throw new ReferenceAnythingError(
+          `conversation has no verified ${conversation.provider} account scope; ask the user to sync ${conversation.provider} and reselect the conversation from the refreshed @ list, then retry`,
+          'REFERENCE_ACCOUNT_MISMATCH',
+        )
+      }
       const attachment = service.store.settings.historyMode === 'metadata-only'
         ? service.liveAttachment(ref.id, args.attachmentId)
         : revision ? service.store.attachment(ref.id, revision, args.attachmentId) : undefined
       if (!attachment?.locator || attachment.status !== 'available') {
-        throw new Error('ATTACHMENT_UNAVAILABLE: provider supplied no stable attachment locator')
+        throw new ReferenceAnythingError('provider supplied no stable attachment locator', 'ATTACHMENT_UNAVAILABLE')
       }
-      const root = await mkdtemp(join(tmpdir(), 'dsh-reference-attachment-'))
-      tempRoots.add(root)
-      const safeName = basename(attachment.name).replace(/[<>:"/\\|?*\x00-\x1f]/g, '_') || 'attachment'
-      const localPath = join(root, safeName)
-      const settings = service.store.settings
-      const runner = new (await import('./opencli.ts')).OpenCliRunner({
-        executable: settings.opencliPath, profile: settings.profile, timeoutMs, maxStdoutBytes: 32 * 1024 * 1024,
-      })
-      await runner.attachment(conversation.provider, attachment.locator, localPath, 25 * 1024 * 1024, exec.signal)
-      const bytes = await readFile(localPath)
-      if (bytes.byteLength > 25 * 1024 * 1024) throw new Error('ATTACHMENT_TOO_LARGE: attachment exceeds 25 MiB')
-      const mimeType = sniffMime(bytes, attachment.mimeType)
-      const timer = setTimeout(() => {
-        tempRoots.delete(root)
-        void rm(root, { recursive: true, force: true })
-      }, 60 * 60 * 1000)
-      timer.unref?.()
-      const image = mimeType.startsWith('image/') ? await saveImage(ctx, bytes, mimeType, attachment.name) : undefined
-      return {
-        name: attachment.name, mimeType, size: bytes.byteLength, localPath,
-        ...(image ? { image } : {}),
+      const root = await createTempRoot('dsh-reference-attachment-')
+      try {
+        const localPath = attachmentLocalPath(root, attachment.name)
+        const settings = service.store.settings
+        const runner = new OpenCliRunner({
+          executable: settings.opencliPath, profile: settings.profile, timeoutMs,
+          maxStdoutBytes: DEFAULT_OPENCLI_MAX_STDOUT_BYTES,
+        })
+        await runner.attachment(
+          conversation.provider, attachment.locator, localPath, MAX_ATTACHMENT_BYTES, exec.signal, conversation.accountScope,
+        )
+        const bytes = await readFile(localPath)
+        if (bytes.byteLength > MAX_ATTACHMENT_BYTES) {
+          throw new ReferenceAnythingError('attachment exceeds 25 MiB', 'ATTACHMENT_TOO_LARGE')
+        }
+        const mimeType = sniffMime(bytes, attachment.mimeType)
+        const image = isRenderableImage(mimeType) ? await saveImage(ctx, bytes, mimeType, attachment.name) : undefined
+        await retainTempRoot(root)
+        return {
+          name: attachment.name, mimeType, size: bytes.byteLength, localPath,
+          ...(image ? { image } : {}),
+        }
+      } catch (error) {
+        await removeTempRoot(root)
+        throw attachmentFailure(error, exec.signal, conversation.provider)
       }
     },
     presentCall: args => ({ card: 'generic', title: 'Read conversation attachment', kind: 'read', rawInput: args.attachmentId }),
@@ -407,15 +508,81 @@ function sniffMime(bytes: Buffer, declared: string): string {
         : detected.subarray(0, 4).toString('ascii') === 'RIFF' && detected.subarray(8, 12).toString('ascii') === 'WEBP' ? 'image/webp'
           : detected.subarray(0, 5).toString('ascii') === '%PDF-' ? 'application/pdf'
             : 'application/octet-stream'
-  if (declared.startsWith('image/') && !mime.startsWith('image/')) throw new Error('ATTACHMENT_UNAVAILABLE: attachment MIME did not match its bytes')
+  if (isRenderableImage(declared) && mime !== declared) {
+    throw new ReferenceAnythingError('attachment MIME did not match its bytes', 'ATTACHMENT_UNAVAILABLE')
+  }
   return mime === 'application/octet-stream' && declared ? declared : mime
 }
 
-async function saveImage(ctx: Context, bytes: Buffer, mimeType: string, name: string) {
-  const attachments = ctx.get('attachments')
-  if (!attachments) throw new Error('ATTACHMENT_UNAVAILABLE: no DSH attachment store is mounted for image output')
-  if (mimeType !== 'image/png' && mimeType !== 'image/jpeg' && mimeType !== 'image/webp' && mimeType !== 'image/gif') {
-    throw new Error(`ATTACHMENT_UNAVAILABLE: unsupported image type ${mimeType}`)
+function isRenderableImage(mimeType: string): mimeType is ImageMediaType {
+  return mimeType === 'image/png' || mimeType === 'image/jpeg' || mimeType === 'image/webp' || mimeType === 'image/gif'
+}
+
+function safeAttachmentName(name: string): string {
+  const leaf = basename(name).replace(/[<>:"/\\|?*\x00-\x1f]/g, '_').replace(/[. ]+$/g, '_') || 'file'
+  return `attachment-${leaf}`
+}
+
+function attachmentLocalPath(root: string, name: string): string {
+  const normalizedRoot = resolve(root)
+  const localPath = resolve(normalizedRoot, safeAttachmentName(name))
+  const child = relative(normalizedRoot, localPath)
+  if (!child || child === '..' || child.startsWith(`..${sep}`) || isAbsolute(child)) {
+    throw new ReferenceAnythingError('attachment filename escaped its temporary directory', 'ATTACHMENT_UNAVAILABLE')
   }
-  return await attachments.saveImage({ data: bytes, mediaType: mimeType, name })
+  return localPath
+}
+
+async function saveImage(ctx: Context, bytes: Buffer, mimeType: ImageMediaType, name: string) {
+  const attachments = ctx.get('attachments')
+  if (!attachments) {
+    throw new ReferenceAnythingError('no DSH attachment store is mounted for image output', 'ATTACHMENT_UNAVAILABLE')
+  }
+  let saved: Awaited<ReturnType<typeof attachments.saveImage>>
+  try {
+    saved = await attachments.saveImage({ data: bytes, mediaType: mimeType, name })
+  } catch (error) {
+    throw new ReferenceAnythingError('DSH image storage refused the attachment', 'ATTACHMENT_UNAVAILABLE', { cause: error })
+  }
+  if (!saved || typeof saved.attachmentId !== 'string' || !isRenderableImage(saved.mediaType)
+    || !Number.isInteger(saved.bytes) || !Number.isInteger(saved.width) || !Number.isInteger(saved.height)) {
+    throw new ReferenceAnythingError('DSH image storage returned invalid metadata', 'ATTACHMENT_UNAVAILABLE')
+  }
+  return {
+    attachmentId: saved.attachmentId,
+    mediaType: saved.mediaType,
+    bytes: saved.bytes,
+    width: saved.width,
+    height: saved.height,
+    ...(typeof saved.name === 'string' ? { name: saved.name } : {}),
+  }
+}
+
+function attachmentFailure(error: unknown, signal: AbortSignal | undefined, provider: string): ReferenceAnythingError {
+  if (error instanceof ReferenceAnythingError) return error
+  if (signal?.aborted) {
+    return new ReferenceAnythingError('attachment materialization was cancelled', 'REFERENCE_CANCELLED', { cause: signal.reason })
+  }
+  if (error instanceof OpenCliError && error.code === 'PROVIDER_ACCOUNT_MISMATCH') {
+    return new ReferenceAnythingError(
+      `attachment belongs to a different logged-in ${provider} account; ask the user to sync ${provider} and reselect the conversation from the refreshed @ list, then retry`,
+      'REFERENCE_ACCOUNT_MISMATCH',
+      { cause: error },
+    )
+  }
+  if (error instanceof OpenCliError && error.code === 'ATTACHMENT_TOO_LARGE') {
+    return new ReferenceAnythingError('attachment exceeds 25 MiB', 'ATTACHMENT_TOO_LARGE', { cause: error })
+  }
+  if (error instanceof OpenCliError && error.code === 'PROVIDER_RATE_LIMIT') {
+    return new ReferenceAnythingError(
+      `${provider} rate-limited account verification; wait before retrying the attachment`,
+      'PROVIDER_RATE_LIMIT',
+      { cause: error },
+    )
+  }
+  return new ReferenceAnythingError(
+    `could not materialize the attachment from ${provider}`,
+    'REFERENCE_READ_FAILED',
+    { cause: error },
+  )
 }

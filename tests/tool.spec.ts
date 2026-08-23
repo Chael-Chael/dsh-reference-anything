@@ -70,10 +70,11 @@ beforeEach(async () => {
 })
 
 describe('registration', () => {
-  it('registers both tools', () => {
+  it('registers all three tools', () => {
     const names = ctx.tools.schemas().map(schema => schema.name)
     expect(names).toContain('reference_list')
     expect(names).toContain('reference_read')
+    expect(names).toContain('reference_attachment_read')
   })
 
   it('unregisters them with its fiber (HMR safety)', async () => {
