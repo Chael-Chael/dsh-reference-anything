@@ -181,55 +181,21 @@ Reference Anything 直接向 DSH 原生 `@` 菜单注册七个来源，不会引
 
 选中的会话使用 DSH 规范 `dsh-session:` mention 和原生 session 外观；快照准备与解析继续由 DSH 官方服务负责，而不是由本插件复制实现。
 
-#### 🖥️ @Local agent conversations — 本地其他 Agent 留在磁盘上的对话
+#### 🖥️ @Local agent conversations — 本地 Agent 历史对话
 
-键入 `@agents:` 即可浏览本地其他 Agent CLI 已经写在用户目录下的历史会话，引用方式与引用 DSH 会话完全一致。
-
-在 `Settings → Reference Anything` 中，14 种本地 Agent 与 ChatGPT、Gemini 等网页对话平台一并显示为可独立开关的卡片。关闭某个 Agent 后，它不会再出现在新的 `@agents:` 搜索中，但已插入草稿或历史对话的引用仍然有效。本地 Agent 引用在输入框中使用机器人图标，网页对话则保留各平台 Logo。
+键入 `@agents:`，即可搜索并引用其他本地 Agent 工具保存的历史对话。
 
 <p align="center"><img src="./images/at-local-agents.png" alt="从 @ 菜单浏览本地其他 Agent 的历史会话" width="800" /></p>
 
-这个分组**只做引用**：不向 DSH 会话库导入任何内容，也不转换或改写原始记录。候选中只有指针，只有模型调用 `reference_read` 时才会去流式读取磁盘上的文件。序列化形式与其他引用分组一致：
+**支持的 Agent：** Claude Code、Codex、Cursor、Qoder、Reasonix、OpenClaw、Kimi、Grok Build、Hermes、Gemini CLI、Pi、opencode、mimocode 和 zcode。
 
-```text
-@[Codex·对话标题](dsh-ref:<opaque-base64url>)
-```
+**功能：**
 
-**已支持的格式：**
-
-| 格式 | 前缀 | 默认目录 |
-| --- | --- | --- |
-| Claude Code | `@claude-code:` `@cc:` | `~/.claude/projects` |
-| Codex | `@codex:` | `~/.codex/sessions` |
-| Cursor | `@cursor:` | `~/.cursor/projects` |
-| Qoder | `@qoder:` | `~/.qoder/projects` |
-| Reasonix | `@reasonix:` | `~/.reasonix/sessions` |
-| OpenClaw | `@openclaw:` | `~/.openclaw/agents` |
-| Kimi | `@kimi-cli:` `@kimi-code:` | `~/.kimi/sessions`、`~/.kimi-code/sessions` |
-| Grok Build | `@grokbuild:` `@grok-build:` | `~/.grok/sessions`、`~/.grok/archived_sessions` |
-| Hermes | `@hermes:` | `~/.hermes/sessions` |
-| Gemini CLI | `@gemini-cli:` | `~/.gemini/history` |
-| Pi | `@pi:` | `~/.pi/agent/sessions` |
-| opencode | `@opencode:` | `~/.local/share/opencode` |
-| mimocode | `@mimocode:` `@mimo:` | `~/.local/share/mimocode` |
-| zcode | `@zcode:` | `~/.zcode/cli/db` |
-
-设置页会显示各 Agent 已识别的对话数量。若历史记录不在默认位置，可直接为对应 Agent 选择自定义目录；未找到记录的 Agent 不会报错。
-
-**最后三种是数据库，不是文件。** opencode、mimocode 和 zcode 把跑过的每个会话都放在同一个 SQLite 文件里，而不是一条对话一个文件，所以每条对话单独列出，其引用 id 同时指明数据库和里面的会话（`opencode:opencode.db#ses_…`）。读取它们需要 Node 自带的 `node:sqlite`，该模块从 Node 22.5 起提供；在更老的运行时上这三种格式直接不出现。设置 `sqlite: false` 可以让驱动完全不进入进程——这几类目录根本不会被解析，也就永远不会打开数据库。数据库的读取由 `maxSessionRecords`（2000 条消息，从最新往前数）限制，而不是 `maxScanBytes`，因为数据库没法像 JSONL 那样流式读。
-
-> [!NOTE]
-> **只有 Claude Code 和 Codex 是对着真实语料验证过的**（开发所在机器上分别有 541 和 212 个会话）。其余十二种适配器根据格式文档实现，只有合成用例覆盖：九种文件格式在 `tests/local-agent-converters.spec.ts`，三种数据库在 `tests/local-agent-sqlite.spec.ts`——后者按文档中的表结构写出真正的 SQLite 文件，足以钉住查询本身，但仍然不是真实语料。它们默认启用，但如果结果不符合预期，请当成待反馈的 bug，而不是“这个会话本来就是空的”。
-
-**与外部对话分组的前缀冲突：** 单独的 `@claude:`、`@gemini:`、`@grok:`、`@kimi:` 仍然表示浏览器平台，因为多数人说到这几个词时指的就是网页端。同名品牌的本地 CLI 记录只能通过带限定的前缀访问——`@claude-code:`、`@gemini-cli:`、`@grokbuild:`、`@kimi-cli:`。
-
-**范围：** 默认可浏览所有已识别的本地 Agent 对话；需要只看当前项目时，可在配置中切换为工作区范围。
-
-**读取：** 默认保留对话内容和使用过的工具名称，省略较长的工具参数与结果；确有需要时，Agent 可以继续读取完整细节。超大记录会明确标记为不完整。
-
-**目前仍有两种格式没有纳入：**
-- **ChatGPT 网页导出** —— 理由已经不是原来那条了。一个 `conversations.json` 里装着很多条对话，而上面三种数据库正是这样，为它们建立的 `文件#id` 方案同样能承载它。剩下的问题是：导出文件需要用户手动生成、想更新还得再导一次，而同一份历史在 `External conversations` 分组里本来就是实时可读的。也就是说技术上已经够得着，只是还没做。
-- **DSH 自己的 `~/.dsh/sessions`** —— 已经能通过 `DSH sessions` 分组以 `dsh-session:` 访问。放进来只会让同一条对话在菜单里以两种协议出现两次。
+- 自动识别历史对话，并显示每个 Agent 的对话数量
+- 可独立启用不同 Agent，也可选择自定义历史目录
+- 默认搜索全部已识别对话，也可限制为当前工作区
+- 按需读取对话正文；默认精简展示工具名称，需要时可读取完整细节
+- 支持 `@codex:`、`@claude-code:`、`@gemini-cli:` 等 Agent 专属前缀
 
 #### 🌐 @External conversations — 外部对话平台
 
@@ -255,46 +221,21 @@ Reference Anything 直接向 DSH 原生 `@` 菜单注册七个来源，不会引
 
 打开来源 URL 仅发生在 UI 中，URL 不会注入模型上下文。初始引用只包含安全指针，模型如需正文才调用 `reference_read` 按需读取。
 
-#### ☁️ @Cloud drive files —— 通过 OpenList 访问文本与文档引用
+#### ☁️ @Cloud drive files — 通过 OpenList 引用网盘文件
 
-输入 `@drive:`、`@cloud:`、`@netdisk:` 或 `@网盘`，即可搜索已挂载到 OpenList 的受支持文件并直接引用，不必先下载到工作区。新的引用使用 OpenList 支持的不透明 ID：
+键入 `@drive:`、`@cloud:`、`@netdisk:` 或 `@网盘`，即可逐层浏览文件夹，并引用通过 OpenList 连接的网盘文件。
 
-```text
-@[OpenList·quarterly-notes.md](dsh-ref:<opaque-base64url>)
-```
+常用网盘包括 OneDrive、阿里云盘、百度网盘、夸克、115、123、Dropbox、Google Drive/相册和 Yandex；OpenList 提供的其他网盘也可在同一设置页中配置。
 
-**一键托管安装。** 在“设置 → 网盘”中点击“**一键启用 OpenList**”，Reference Anything 会在本机下载并运行固定的 OpenList v4.2.2。连接信息只保存在宿主机，不会写入 Cordis patch 或引用载荷。托管实例使用回环 HTTP；外部 OpenList 必须使用 HTTPS，只有 `localhost`/`127.0.0.1` 可以使用 HTTP。
+**功能：**
 
-**API Pages。** 先连接一个 OpenList 管理员会话，再打开 [api.oplist.org](https://api.oplist.org/)，把授权结果粘贴到所选驱动的 masked 输入框。仅当驱动只有一个授权字段时才接受单个 token；包含 access、refresh 等多个字段时，必须粘贴 JSON 对象，或每行一个 `key=value`，字段名需与 OpenList 动态驱动 schema 一致。提交后输入会立即清空，且这些值绝不会被当作 OpenList 管理员令牌使用。[OpenList API Pages](https://github.com/OpenListTeam/OpenList-APIPages) 是官方托管服务和源码；本包并未复制其中的代码。
-
-**快捷登录与高级连接。** 独立的“快捷登录”列表由 Host 侧白名单决定，只包含 API Pages 明确覆盖的 OneDrive、阿里云盘、百度、夸克、115、123、Dropbox、Google Drive/Photo 和 Yandex。其他驱动即使字段名看起来像 OAuth，也只显示在“高级连接”。
-
-**动态添加网盘。** 连接后，面板会从该 OpenList 服务读取可用驱动及其字段。选择驱动、只填写它要求的字段、再设置挂载路径即可。驱动凭据保留在宿主机的 OpenList 中；插件不会将其写入配置、候选项、引用或模型上下文。移除挂载不会删除云端文件。
-
-**数据库搜索索引。** 托管实例启动时会配置 OpenList 数据库索引和自动更新；新增托管挂载后会在后台更新该挂载路径。“重建索引”调用 OpenList 的全局构建接口，挂载卡片展示脱敏后的全局进度。外部实例不会被自动修改设置，但用户显式点击“重建索引”时仍会调用该实例的全局构建接口。
-
-如果外部实例没有可用的搜索索引，Reference Anything 会退化为有上限的目录遍历。这类候选会明确标记 **结果可能不完整**；遍历不会修改文件路径或引用 ID。
-
-**只读引用范围。** 集成只列出和读取你选择的受支持挂载文件，不会修改云端文件；模型也只能在你于当前任务中点名该引用后读取它。带签名的下载地址和凭据始终留在宿主机。
-
-**迁移。** 旧的 `baidu:` 与 `pds:` 引用 ID 已被有意停用。请通过 OpenList 重新选择文件以生成新引用；旧的按厂商凭据文件和直连配置不再读取。
-
-**升级与回滚。** 托管二进制刻意固定在 v4.2.2，不会自动跟随“最新版本”。使用较旧托管版本时会明确显示“升级”，由用户触发事务式安装；版本相同时显示“修复安装”。高于兼容版本的实例会显示不兼容状态，不会被误降级。插件绝不会静默升级，也不会升级或回滚外部服务器。
-
-**读取请求文档正文。** 一次读取会按字节范围请求前 `maxReadBytes`（默认 64 KiB）。如果网盘不按范围返回、直接给了整个文件，provider 会察觉并永久降级，同时继续守住上限，而不是把几 GB 的正文照单全收。被截断的读取都会如实报成 partial，而不是悄悄裁掉。
-
-按每块 4000 字符算，64 KiB 最多十七块，正好装得进一页 `reference_read`——所以一份普通文本文件是从头到尾整份返回的。调大 `maxReadBytes` 换来的是更长的可及范围，代价是首页落在文件**末尾**、然后往前翻：这对对话是对的形状，对文档则别扭。
-
-**文本与按需文档文件。** `extensions` 白名单中的文件按文本解码；如果实际字节是二进制，会明确拒绝而不是输出乱码。常见文档、表格、演示文稿、PDF 和图片使用固定的 `file` 附件句柄，仅在调用 `reference_attachment_read` 时下载。其他扩展名和目录不会进入引用结果。
-
-**下载目录。** 可在“**设置 → 网盘**”中选择这些按需文档的宿主机下载目录；留空则使用系统临时目录。原生文件夹选择器不可用时，仍可手工输入宿主机绝对路径。每个文件都会写入新建的随机 `dsh-reference-drive-*` 子目录；插件只清理该子目录，绝不会删除用户选择的基目录或其中其他内容。成功下载保留一小时，下载失败或插件退出时立即清理。此设置只影响网盘附件；Web 对话附件仍使用系统临时目录。
-
-设置页也可以直接打开当前下载目录。选择网盘文件夹后，`@` 菜单会继续显示其中内容，便于逐层查找文件。
-
-**授权**：这些是你自己的远端文件，所以本分组沿用与外部对话相同的按任务门禁——只有你在当前任务里点名之后，模型才能读取某个网盘文件。带签名的下载地址始终不出宿主：候选里没有，引用摘要里没有，任何错误文本里也没有。
-
-> [!NOTE]
-> **OpenList 是唯一的网盘传输层。** 请通过 OpenList 挂载服务商；当前构建没有实现的网盘名会直接报启动错误，而不是静默显示空分组。
+- 一键启用托管 OpenList，也可连接已有的 OpenList 服务
+- 在设置页添加和管理网盘挂载，常用网盘支持快捷登录
+- 搜索已建立索引的文件，并在 `@` 菜单中逐层浏览目录
+- 在搜索结果中显示网盘、路径和文件类型，方便区分同名文件
+- 直接读取文本文件；按需下载文档、表格、演示文稿、PDF 和图片
+- 可选择并直接打开下载目录
+- 显示挂载状态，并支持启用、停用、重新认证、移除和重建搜索索引
 
 ---
 

@@ -180,55 +180,21 @@ Type `@sessions:` to browse DSH sessions through the official session-reference 
 
 Selected sessions use DSH's canonical `dsh-session:` mention and native session appearance. Snapshot preparation and resolution remain owned by DSH rather than this plugin.
 
-#### 🖥️ @Local agent conversations — transcripts other local agents leave on disk
+#### 🖥️ @Local agent conversations — transcripts from local agent CLIs
 
-Type `@agents:` to browse the sessions other agent CLIs have already written into your home directory, and reference one the same way you reference a DSH session.
-
-In `Settings → Reference Anything`, the fourteen local Agent cards sit alongside the ChatGPT, Gemini, and other conversation-provider cards. Each Agent can be enabled or disabled independently; disabling one removes its sessions from new `@agents:` searches without invalidating references that are already in a draft or an existing conversation. Selected local-Agent references use a small robot icon in the composer, while browser conversation references keep their Provider logos.
+Type `@agents:` to search and reference conversations saved by other local agent tools.
 
 <p align="center"><img src="./images/at-local-agents.png" alt="Browse other local agents' transcripts from the @ menu" width="800" /></p>
 
-This group is **reference-only**. Nothing is copied into DSH's session store and no transcript is converted or rewritten: candidates carry a pointer, and the file on disk is streamed only when the model calls `reference_read`. Its serialized form matches the other reference groups:
+**Supported agents:** Claude Code, Codex, Cursor, Qoder, Reasonix, OpenClaw, Kimi, Grok Build, Hermes, Gemini CLI, Pi, opencode, mimocode, and zcode.
 
-```text
-@[Codex·Transcript title](dsh-ref:<opaque-base64url>)
-```
+**Features:**
 
-**Supported formats:**
-
-| Format | Prefix | Default root |
-| --- | --- | --- |
-| Claude Code | `@claude-code:` `@cc:` | `~/.claude/projects` |
-| Codex | `@codex:` | `~/.codex/sessions` |
-| Cursor | `@cursor:` | `~/.cursor/projects` |
-| Qoder | `@qoder:` | `~/.qoder/projects` |
-| Reasonix | `@reasonix:` | `~/.reasonix/sessions` |
-| OpenClaw | `@openclaw:` | `~/.openclaw/agents` |
-| Kimi | `@kimi-cli:` `@kimi-code:` | `~/.kimi/sessions`, `~/.kimi-code/sessions` |
-| Grok Build | `@grokbuild:` `@grok-build:` | `~/.grok/sessions`, `~/.grok/archived_sessions` |
-| Hermes | `@hermes:` | `~/.hermes/sessions` |
-| Gemini CLI | `@gemini-cli:` | `~/.gemini/history` |
-| Pi | `@pi:` | `~/.pi/agent/sessions` |
-| opencode | `@opencode:` | `~/.local/share/opencode` |
-| mimocode | `@mimocode:` `@mimo:` | `~/.local/share/mimocode` |
-| zcode | `@zcode:` | `~/.zcode/cli/db` |
-
-Settings show how many conversations were detected for each agent. If history is stored elsewhere, choose a custom folder for that agent. Missing history is not treated as an error.
-
-**The last three formats are databases, not files.** opencode, mimocode, and zcode keep every session they have ever run in one SQLite file rather than one file per conversation, so each conversation is listed on its own and its reference id names both the database and the session inside it (`opencode:opencode.db#ses_…`). Reading them needs Node's built-in `node:sqlite`, which exists from Node 22.5; on an older runtime those three simply do not list. Set `sqlite: false` to keep the driver out of the process entirely — with no root of those kinds resolved, no database is ever opened. A database read is bounded by `maxSessionRecords` (2000 messages, counted from the newest) rather than by `maxScanBytes`, because a database cannot be streamed the way a JSONL file can.
-
-> [!NOTE]
-> **Only Claude Code and Codex were validated against real transcripts** (541 and 212 sessions respectively on the machine this was developed on). The other twelve adapters were written from format documentation and are covered only by synthetic fixtures: the nine file formats by `tests/local-agent-converters.spec.ts`, and the three databases by `tests/local-agent-sqlite.spec.ts`, which builds genuine SQLite files to the documented schema — real enough to pin the queries, but still not a corpus. They ship enabled, but treat an unexpected result from one of them as a bug worth reporting rather than as your transcript being empty.
-
-**Prefix collisions with External conversations:** bare `@claude:`, `@gemini:`, `@grok:`, and `@kimi:` keep meaning the browser platform, because that is what the bare word means to most people. The on-disk CLI transcripts of those same brands are reachable only under their qualified names — `@claude-code:`, `@gemini-cli:`, `@grokbuild:`, `@kimi-cli:`.
-
-**Scope:** all detected local-agent conversations are available by default. Configuration can narrow the list to the current workspace when preferred.
-
-**Reading:** conversation text and tool names are included by default, while lengthy tool arguments and results are omitted. The agent can request full detail when useful. Oversized records are clearly marked as partial.
-
-**Two formats are still left out:**
-- **ChatGPT web exports** — not for the original reason. A `conversations.json` holds many conversations at once, which is exactly what the three databases above do, and the `file#id` scheme built for them would carry it too. What is left is that an export is a snapshot the user has to produce by hand and re-produce to refresh, while the same history is already live in the `External conversations` group. Reachable, then, but not yet built.
-- **DSH's own `~/.dsh/sessions`** — already reachable through the `DSH sessions` group under `dsh-session:`. Adding it here would put the same conversation in the menu twice under two different schemes.
+- Automatically detects conversation history and shows the number found for each agent
+- Lets you enable agents independently or choose a custom history folder
+- Searches all detected conversations by default, with an option to limit results to the current workspace
+- Reads conversation content on demand; tool names are concise by default, with full details available when needed
+- Supports agent-specific prefixes such as `@codex:`, `@claude-code:`, and `@gemini-cli:`
 
 #### 🌐 @External conversations — external conversation platforms
 
@@ -254,46 +220,21 @@ Supports historical conversations from ChatGPT, Claude, Gemini, DeepSeek, Grok, 
 
 Opening the source URL happens only in the UI; the URL is never injected into model context. The initial reference contains only a safe pointer; if the model needs the body, it calls `reference_read` on demand.
 
-#### ☁️ @Cloud drive files — OpenList text and document references
+#### ☁️ @Cloud drive files — files connected through OpenList
 
-Type `@drive:`, `@cloud:`, `@netdisk:`, or `@网盘` to search supported files mounted in OpenList and reference one without first downloading it into the workspace. A new reference has an OpenList-backed opaque id:
+Type `@drive:`, `@cloud:`, `@netdisk:`, or `@网盘` to browse folders and reference files from cloud drives connected through OpenList.
 
-```text
-@[OpenList·quarterly-notes.md](dsh-ref:<opaque-base64url>)
-```
+Common providers include OneDrive, Aliyun Drive, Baidu Netdisk, Quark, 115, 123, Dropbox, Google Drive/Photos, and Yandex. Other providers available in OpenList can be configured from the same settings page.
 
-**One-click managed install.** In Settings → Cloud drives, choose **Enable OpenList**. Reference Anything downloads and runs the managed OpenList v4.2.2 binary locally; its connection data is stored host-only, never in the Cordis patch or reference payload. The managed endpoint is loopback HTTP. You may instead connect an external OpenList: non-loopback endpoints must use HTTPS, while `localhost`/`127.0.0.1` HTTP is allowed.
+**Features:**
 
-**API Pages.** First connect an OpenList admin session. Then open [api.oplist.org](https://api.oplist.org/) and paste its authorization result into the selected driver's masked field. A single scalar token is accepted only when that driver has exactly one authorization field; multi-field results (for example access plus refresh credentials) must be pasted as a JSON object or one `key=value` entry per line. Field names must match the dynamic OpenList driver schema. The values are cleared after submission and are never used as an OpenList admin token. [OpenList API Pages](https://github.com/OpenListTeam/OpenList-APIPages) is an official hosted service/source; it is not copied into this package.
-
-**Quick versus advanced connection.** The separate **Quick login** list is a Host-curated allowlist of API Pages providers: OneDrive, Aliyun, Baidu, Quark, 115, 123Pan, Dropbox, Google Drive/Photo, and Yandex. Other drivers, including drivers that merely have OAuth-looking field names, stay in **Advanced connection**.
-
-**Add your drives dynamically.** Once connected, the panel reads the available OpenList driver schemas from that server. Choose a driver, complete only the fields it requires, and select a mount path. Driver credentials stay in OpenList on the host; the plugin never puts them in its config, candidates, references, or model context. Removing a mount does not delete cloud files.
-
-**Database search index.** A managed instance is configured for OpenList's database index and automatic index updates at startup. Adding a managed mount schedules an update for that mount path; **Reindex** starts OpenList's global index build and the mount cards show sanitized global progress. External instances are never reconfigured automatically, although an explicit Reindex uses their global build endpoint.
-
-If an external instance has no usable search index, Reference Anything falls back to a bounded directory traversal. Those candidates are visibly marked **Results may be incomplete**; the traversal never changes the file path or reference id.
-
-**Read-only reference scope.** The integration lists and reads only supported mounted files you select. It never changes remote files, and the model can read a file only after you name that reference in the current task. Signed download URLs and credentials remain host-local.
-
-**Migration.** Old `baidu:` and `pds:` reference IDs are deliberately disabled. Re-select the file through OpenList to create a new reference; old per-provider credential files and direct provider configuration are no longer read.
-
-**Upgrade and rollback.** The managed binary is deliberately pinned to v4.2.2: there is no automatic “latest” upgrade. An older managed version shows an explicit **Upgrade** action that transactionally installs the pinned release; the same version shows **Repair install**. A version newer than the compatibility target is reported as unsupported and is never misleadingly downgraded. External servers are never upgraded or rolled back by this plugin.
-
-**Reading asks for the document.** A read requests the first `maxReadBytes` (64 KiB by default) as a byte range. If the drive answers with the whole file instead of the range it was asked for, the provider notices, demotes itself permanently, and keeps honouring the cap rather than absorbing a multi-gigabyte body. A truncated read is reported as partial rather than cut silently.
-
-At 4000 characters a block, 64 KiB is at most seventeen blocks, which fits inside one `reference_read` page — so an ordinary text file comes back whole, from its beginning. Raising `maxReadBytes` buys reach at the cost of a first page that lands at the *end* of the file and pages backwards: the right shape for a conversation, an awkward one for a document.
-
-**Text and on-demand document files.** Files on the configurable `extensions` allowlist are decoded as text; a read whose bytes turn out to be binary is refused instead of emitting mojibake. Common documents, spreadsheets, presentations, PDFs, and images use an explicit `file` attachment handle and are downloaded only through `reference_attachment_read`. Other extensions and directories stay out of the reference results.
-
-**Download directory.** Under **Settings → Cloud drives**, choose a host directory for those on-demand document downloads, or leave it blank to use the system temporary directory. An absolute host path can always be entered manually if the native folder picker is unavailable. Each file is materialized inside a new random `dsh-reference-drive-*` child directory; the plugin cleans up only that child, never the selected base directory or its other contents. Successful downloads expire after one hour, while failed downloads and plugin disposal clean up immediately. This setting applies only to cloud-drive attachments—Web-conversation attachments continue to use the system temporary directory.
-
-Settings can also open the active download directory. Selecting a cloud-drive folder keeps the `@` menu open and continues browsing inside it.
-
-**Authorization.** These are your personal remote files, so this group uses the same per-task gate as the external conversations: the model may read a drive file only after you named it in the current task. A signed download URL never leaves the host — it appears in no candidate, no reference summary, and no error text.
-
-> [!NOTE]
-> **OpenList is the only cloud-drive transport.** Add providers as OpenList mounts; a drive name without an implementation is a startup error rather than a silently empty group.
+- Enables a managed OpenList instance with one click, or connects to an existing OpenList service
+- Adds and manages drive mounts from Settings, including common providers through quick login
+- Searches indexed files and supports folder-by-folder browsing from the `@` menu
+- Shows the drive, path, and file type in search results to make similarly named files easy to distinguish
+- Reads text files directly and downloads documents, spreadsheets, presentations, PDFs, and images when referenced
+- Lets you choose and open the download directory
+- Shows mount status and supports enabling, disabling, reauthenticating, removing, and rebuilding the search index
 
 ---
 
