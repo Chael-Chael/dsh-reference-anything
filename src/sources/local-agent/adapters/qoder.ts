@@ -35,6 +35,7 @@ import {
   parseTimestamp,
   pushAssistant,
   pushContentBlocks,
+  pushToolResults,
   stringField,
 } from './shared.ts'
 
@@ -62,6 +63,7 @@ export const qoderAdapter: TranscriptAdapter = {
     const message = objectField(record, 'message')
 
     if (record['type'] === 'user') {
+      pushToolResults(state, message?.['content'], options)
       const text = contentBlockUserText(message?.['content'])
       return text === undefined ? [] : emitUser(state, text)
     }

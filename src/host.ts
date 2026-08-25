@@ -7,6 +7,9 @@ import type {} from './sources/local-agent/index.ts'
 import type {} from './sources/cloud-drive/index.ts'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import type {} from './openlist/index.ts'
+import { tmpdir } from 'node:os'
+import { spawn } from 'node:child_process'
+import { validateDownloadDirectory } from './download-directory.ts'
 
 export class ReferenceAnythingRemote extends TypertRemoteService {
   constructor(ctx: Context) { super(ctx, 'referenceAnything') }
@@ -35,6 +38,14 @@ export class ReferenceAnythingRemote extends TypertRemoteService {
       ...row.updatedAt === undefined ? {} : { updatedAt: row.updatedAt },
       ...row.searchIncomplete === true ? { searchIncomplete: true } : {},
     }))
+  }
+
+  async agentStats(signal: AbortSignal) {
+    signal.throwIfAborted()
+    const agents = this.ctx.get('referenceLocalAgents')
+    if (agents === undefined) return []
+    agents.setAgentDirectories(this.ctx.referenceChatHistory.getSettings().agentDirectories ?? {})
+    return (await agents.stats(signal)).map(row => ({ agent: row.kind, conversations: row.conversations }))
   }
 
   /**
@@ -80,7 +91,24 @@ export class ReferenceAnythingRemote extends TypertRemoteService {
   syncStatus(input: { jobId: string }) { return this.ctx.referenceChatHistory.sync.status(input.jobId) }
   syncCancel(input: { jobId: string }): boolean { return this.ctx.referenceChatHistory.sync.cancel(input.jobId) }
   settingsGet(): SettingsRecord { return this.ctx.referenceChatHistory.getSettings() }
-  settingsUpdate(settings: SettingsRecord) { return this.ctx.referenceChatHistory.updateSettings(settings) }
+  async settingsUpdate(settings: SettingsRecord) {
+    const value = await this.ctx.referenceChatHistory.updateSettings(settings)
+    this.ctx.get('referenceLocalAgents')?.setAgentDirectories(value.agentDirectories ?? {})
+    return value
+  }
+  async openDownloadDirectory(signal: AbortSignal): Promise<boolean> {
+    signal.throwIfAborted()
+    const configured = this.ctx.referenceChatHistory.getSettings().cloudDriveDownloadDirectory
+    const path = configured || tmpdir()
+    await validateDownloadDirectory(path)
+    const child = process.platform === 'win32'
+      ? spawn('explorer.exe', [path], { detached: true, stdio: 'ignore' })
+      : process.platform === 'darwin'
+        ? spawn('open', [path], { detached: true, stdio: 'ignore' })
+        : spawn('xdg-open', [path], { detached: true, stdio: 'ignore' })
+    child.unref()
+    return true
+  }
   browse(input: { query: string; provider?: ChatProvider; limit: number; offset: number }, signal: AbortSignal) {
     signal.throwIfAborted()
     return this.ctx.referenceChatHistory.browse(input.query, input.provider, input.limit, input.offset)
@@ -92,9 +120,6 @@ export class ReferenceAnythingRemote extends TypertRemoteService {
   storageStats() { return this.ctx.referenceChatHistory.storageStats() }
   clearProvider(input: { provider: ChatProvider }, signal: AbortSignal) {
     signal.throwIfAborted(); return this.ctx.referenceChatHistory.removeProvider(input.provider)
-  }
-  clearOlder(input: { days: number }, signal: AbortSignal) {
-    signal.throwIfAborted(); return this.ctx.referenceChatHistory.removeOlderThan(input.days)
   }
   clearRemoteMissing(signal: AbortSignal) {
     signal.throwIfAborted(); return this.ctx.referenceChatHistory.removeRemoteMissing()

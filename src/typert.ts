@@ -30,7 +30,6 @@ export const TYPERT_MANIFEST: TypertContribution = {
       { kind: 'method', name: 'deleteConversation', signature: 'deleteConversation(input: DeleteInput): Promise<boolean>' },
       { kind: 'method', name: 'storageStats', signature: 'storageStats(): StorageStats' },
       { kind: 'method', name: 'clearProvider', signature: 'clearProvider(input: ClearProviderInput): Promise<number>' },
-      { kind: 'method', name: 'clearOlder', signature: 'clearOlder(input: ClearOlderInput): Promise<number>' },
       { kind: 'method', name: 'clearRemoteMissing', signature: 'clearRemoteMissing(signal: AbortSignal): Promise<number>' },
       { kind: 'method', name: 'clearOldAccounts', signature: 'clearOldAccounts(signal: AbortSignal): Promise<number>' },
       { kind: 'method', name: 'syncStates', signature: 'syncStates(): ProviderSyncState[]' },

@@ -8,19 +8,23 @@
 
 一个 `@`，引用全部。
 
-[English](./README.md) · **简体中文** · [📰 新闻](#-新闻) · [🧭 Roadmap](#-roadmap) · [📦 安装](#-安装) · [🚀 使用](#-使用) · [🐛 报告问题][github-issues-link]
+[English](./README.md) · **简体中文**
+
+[📰 新闻](#-新闻) · [🧭 Roadmap](#-roadmap) · [📦 安装](#-安装) · [🚀 使用](#-使用) · [🐛 报告问题][github-issues-link]
 
 <!-- SHIELD GROUP -->
 
 [![][github-version-shield]][github-version-link]
 [![][typescript-shield]][typescript-link]
 [![][dsh-plugin-shield]][repository-link]
-[![][npm-downloads-shield]][npm-package-link]<br/>
+<br/>
 [![][github-stars-shield]][github-stars-link]
 [![][github-forks-shield]][github-forks-link]
 [![][github-issues-shield]][github-issues-link]
 [![][github-license-shield]][github-license-link]<br/>
 ![awesome · DSH plugin](https://awesome-dsh-plugin.com/badge.svg)
+[![][npm-downloads-shield]][npm-package-link]
+[![dshfind](https://dshfind.com/api/badge/Chael-Chael/dsh-reference-anything?lang=zh)](https://dshfind.com/zh/plugins/Chael-Chael/dsh-reference-anything?ref=badge)
 
 </div>
 
@@ -36,16 +40,16 @@
 
 通过同一个 `@` 菜单，可以引用：
 
-- DSH 命令与 Skills
-- 工作区文件和文件夹
-- DSH 历史会话
-- 本地其他 Agent CLI 留在磁盘上的历史对话（Claude Code、Codex、Cursor 等共 14 种）
+- 🧩 DSH 命令与 Skills
+- 📁 工作区文件和文件夹
+- 💬 DSH 历史会话
+- 🖥️ **新增：本地其他 Agent CLI 留在磁盘上的历史对话（Claude Code、Codex、Cursor 等共 14 种）**
 - ✨ **新增：来自 ChatGPT、Claude、Gemini、DeepSeek、Grok 和 Kimi 这些网页端 Chatbot 的历史对话**
-- 通过 OpenList 连接的云盘文件
+- ☁️ **新增：通过 OpenList 连接的云盘文件**
 
 在扩展 `@` 的能力之外，我们还支持一些对于 `@` 菜单界面的增强：
 
-- 自定义展示分组：按需启用或隐藏 `Commands`、`Skills`、文件、DSH 会话、本地 Agent 对话和外部对话，并调整分组顺序
+- 自定义展示分组：按需启用或隐藏 `Commands`、`Skills`、文件、DSH 会话、本地 Agent 对话、外部对话和网盘文件，并调整分组顺序
 - 自定义展示数量：分别设置各组折叠时的条目数和候选数量上限
 - 两种浏览方式：使用逐组展开/折叠，或切换至 DSH 原生滚动列表
 - 图标可视化增强：通过类型图标和平台 Logo 区分不同引用来源，让菜单内容更易识别
@@ -74,17 +78,16 @@
 
 ## 📰 新闻
 
+- **2026-08-25 · v0.3.2** — 设置页现在可以识别各本地 Agent 的历史对话数量，并为未自动识别的 Agent 选择自定义目录；网页端 AI 对话可限制同步天数；网盘支持按目录继续浏览、选择或直接打开下载目录；发现新版本时可直接查看更新内容。本地 Agent 对话默认精简工具记录，需要时仍可获取完整细节。
 - **2026-08-20 · v0.3.1** — 新增第六个 `@` 分组「本地 Agent 对话」：其他 14 种 Agent CLI 留在磁盘上的会话——Claude Code、Codex、Cursor、Qoder、Reasonix、OpenClaw、Kimi、Grok Build、Hermes、Gemini CLI、Pi，以及三种以 SQLite 存储的 opencode、mimocode、zcode——现在可以像其他来源一样列举和引用。**只做引用**：不向 DSH 会话库导入任何内容，只有模型调用 `reference_read` 时才会流式读取对应记录。读取有明确上界，默认按工作目录收窄，并复用与外部对话相同的按任务授权门禁——该门禁现已按来源限定，不再硬编码在单一来源上。rc.8 构建现从已发布的软件包解析开发 SDK，并在工作区范围判断时规范化比较双方的路径，确保 Windows 匹配可靠。
 - **2026-08-20 · v0.3.0** — 完成 DSH 原生 `@` 整合：五个来源可独立配置，文件与 DSH 会话复用官方 Remote，原生 Composer 引用支持来源 Logo，展开/折叠与同步操作均在菜单原位更新，并可一键在 Reference Anything 与 DSH 官方 `@` 列表之间切换；同时删除旧 `dsh-file:` 协议和自建 Composer 交互层。
 - **2026-08-19 · v0.2.4** — 新增插件版本自动检查与设置页内更新，提供 Pill/Raw text 两种输入框渲染方式，并通过可复用的后台浏览器会话提升 OpenCLI 同步稳定性及输入交互兼容性。
-- **2026-08-18 · v0.2.0** — 全新 Reference Anything 设置页，支持本地会话统计、分页管理、Provider/Profile 选择与同步状态检查。
-- **2026-08-18** — 引入按需读取协议：引用默认只传递安全指针，正文与附件由 agent 在获得授权后按需读取。
-- **2026-08-17** — ChatGPT、Claude、Gemini、DeepSeek、Grok 和 Kimi 统一接入 DSH 的 `@` 菜单。
 
 ## 🧭 Roadmap
 
 - [x] 支持引用本地其他 Agent 的历史对话
-- [ ] 支持引用来自网盘的文件，并对网盘进行操作（开发中）
+- [x] 支持通过 OpenList 引用网盘文件
+- [ ] 在插件内管理网盘文件（开发中；当前不会修改云端文件）
 - [ ] 更多的关键词搜索匹配规则，黑名单、白名单等（特别对于file search）
 - [ ] 支持引用更多 AI 对话平台消息
 - [ ] 更静默的 AI 对话同步机制
@@ -134,18 +137,18 @@ Reference Anything 直接向 DSH 原生 `@` 菜单注册七个来源，不会引
 
 1. 打开 DSH Web 的 `Settings → Reference Anything`。
 2. 在“可用性检查”中确认 OpenCLI、Browser Bridge、浏览器扩展和对话适配器均已就绪。
-3. 在“@ 外部对话同步设置”中选择已连接的浏览器 Profile、正文保存方式与同步方式，然后点击“立即同步已启用来源”，或在平台卡片上单独同步一个 Provider。
+3. 在“@ 网页端 AI 对话同步设置”中选择浏览器 Profile、正文保存方式、同步方式和聊天记录范围，然后开始同步。
 4. 在输入框键入 `@`，从 `Commands`、`Skills`、`Files and folders`、`DSH sessions`、`Local agent conversations`、`External conversations` 或 `Cloud drive files` 分组选择来源。
 5. 键入关键词过滤候选，例如 `@缓存设计`。
 
-默认使用“按需读取正文”模式：本地只保存标题索引，Agent 调用 `reference_read` 时才通过浏览器读取正文。若需要离线读取和正文检索，请选择“在本地保存完整正文”；该模式只保留每条对话的最新版本。文件、DSH 会话和外部对话都使用 DSH 原生引用 occurrence；Reference Anything 只补充对应来源 Logo，不替换原生换行、光标、选区、整段删除、草稿、剪贴板和序列化行为。插件会在加载时检查 npm 新版本；从设置页完成更新后，需要重启 DSH 才能生效。
+默认使用“按需读取正文”模式：本地只保存标题索引，Agent 需要对话内容时才通过浏览器读取正文。若需要离线读取和正文检索，请选择“在本地保存完整正文”。插件会在加载时检查新版本；可在设置页查看更新日志，安装更新后重启 DSH 即可生效。
 
 > [!WARNING]
 > 为保障账号和对话数据安全，外部对话的导入与同步通过 OpenCLI 复用已登录的浏览器会话完成。在使用或同步过程中，系统可能会临时弹出浏览器窗口（大部分情况下，保持弹出窗口在后台不要关闭就行，插件会复用这个窗口，不会打扰你），浏览器窗口上也可能显示 OpenCLI 的调试信息；这是正常现象，无须惊讶或手动关闭，请等待操作完成。受限于当前 OpenCLI，为了减少浏览器窗口的弹出次数，我们暂时采用速度较慢的串行同步方式；待 OpenCLI 上游仓库更新后，我们将改用速度更快的并行同步。
 
 ### 🧩 一个 `@` 菜单，多种来源
 
-`@` 菜单包含七个分组：`Commands`、`Skills`、`Files and folders`、`DSH sessions`、`Local agent conversations`、`External conversations`、`Cloud drive files`。每组默认先显示 6 条，并可分别设置 1–50 的候选硬上限。在展开/折叠模式下，每次展开追加 5 条且菜单保持当前滚动位置，折叠则恢复到配置的紧凑条目数；外部对话的同步入口固定在分组最前面，同步开始、进行和完成时都会原位更新菜单与可见结果。可在 `Settings → Reference Anything → 通用设置` 中启用或关闭分组、调整顺序，并选择“展开/折叠”或“DSH 原生滚动”。
+`@` 菜单包含七个分组：`Commands`、`Skills`、`Files and folders`、`DSH sessions`、`Local agent conversations`、`External conversations`、`Cloud drive files`。网盘分组可逐层浏览通过 OpenList 连接的文件夹和受支持文件；当前仅提供只读访问，连接在设置页中管理。每组默认先显示 6 条，并可分别设置 1–50 的候选硬上限。在展开/折叠模式下，每次展开追加 5 条且菜单保持当前滚动位置，折叠则恢复到配置的紧凑条目数；外部对话的同步入口固定在分组最前面，同步开始、进行和完成时都会原位更新菜单与可见结果。可在 `Settings → Reference Anything → 通用设置` 中启用或关闭分组、调整顺序，并选择“展开/折叠”或“DSH 原生滚动”。
 
 #### ⌨️ @Commands — DSH 原生命令
 
@@ -182,6 +185,8 @@ Reference Anything 直接向 DSH 原生 `@` 菜单注册七个来源，不会引
 
 键入 `@agents:` 即可浏览本地其他 Agent CLI 已经写在用户目录下的历史会话，引用方式与引用 DSH 会话完全一致。
 
+在 `Settings → Reference Anything` 中，14 种本地 Agent 与 ChatGPT、Gemini 等网页对话平台一并显示为可独立开关的卡片。关闭某个 Agent 后，它不会再出现在新的 `@agents:` 搜索中，但已插入草稿或历史对话的引用仍然有效。本地 Agent 引用在输入框中使用机器人图标，网页对话则保留各平台 Logo。
+
 <p align="center"><img src="./images/at-local-agents.png" alt="从 @ 菜单浏览本地其他 Agent 的历史会话" width="800" /></p>
 
 这个分组**只做引用**：不向 DSH 会话库导入任何内容，也不转换或改写原始记录。候选中只有指针，只有模型调用 `reference_read` 时才会去流式读取磁盘上的文件。序列化形式与其他引用分组一致：
@@ -209,7 +214,7 @@ Reference Anything 直接向 DSH 原生 `@` 菜单注册七个来源，不会引
 | mimocode | `@mimocode:` `@mimo:` | `~/.local/share/mimocode` |
 | zcode | `@zcode:` | `~/.zcode/cli/db` |
 
-目录不存在会被当作“没装这个 Agent”，菜单里直接不显示，而不是报错。可以通过 `extraRoots` 追加目录并指定其格式；目录一律写成 `~/` 相对形式，方便配置在不同机器之间迁移。
+设置页会显示各 Agent 已识别的对话数量。若历史记录不在默认位置，可直接为对应 Agent 选择自定义目录；未找到记录的 Agent 不会报错。
 
 **最后三种是数据库，不是文件。** opencode、mimocode 和 zcode 把跑过的每个会话都放在同一个 SQLite 文件里，而不是一条对话一个文件，所以每条对话单独列出，其引用 id 同时指明数据库和里面的会话（`opencode:opencode.db#ses_…`）。读取它们需要 Node 自带的 `node:sqlite`，该模块从 Node 22.5 起提供；在更老的运行时上这三种格式直接不出现。设置 `sqlite: false` 可以让驱动完全不进入进程——这几类目录根本不会被解析，也就永远不会打开数据库。数据库的读取由 `maxSessionRecords`（2000 条消息，从最新往前数）限制，而不是 `maxScanBytes`，因为数据库没法像 JSONL 那样流式读。
 
@@ -218,9 +223,9 @@ Reference Anything 直接向 DSH 原生 `@` 菜单注册七个来源，不会引
 
 **与外部对话分组的前缀冲突：** 单独的 `@claude:`、`@gemini:`、`@grok:`、`@kimi:` 仍然表示浏览器平台，因为多数人说到这几个词时指的就是网页端。同名品牌的本地 CLI 记录只能通过带限定的前缀访问——`@claude-code:`、`@gemini-cli:`、`@grokbuild:`、`@kimi-cli:`。
 
-**范围：** 默认只列出记录的工作目录与当前会话一致的对话，所以在某个项目里按 `@` 不会把整台机器上的对话全部翻出来。需要放宽时设置 `scope: 'all'`，或直接键入 `@agents:all`。
+**范围：** 默认可浏览所有已识别的本地 Agent 对话；需要只看当前项目时，可在配置中切换为工作区范围。
 
-**读取：** 相邻的 assistant 记录会合并成一轮，工具结果会被丢弃，所以这里的轮数和原 Agent 自己界面上显示的条数并不相同。思考内容默认丢弃，需要 `includeThinking` 才保留；工具调用在默认的 `toolCalls: 'elide'` 下渲染成 `[tool: Bash]`；超过 `maxScanBytes`（32 MiB）的会话按文件尾部锚定读取并标记为不完整，而不是悄悄截断。附件以文本注记内联，本分组不产出附件句柄。
+**读取：** 默认保留对话内容和使用过的工具名称，省略较长的工具参数与结果；确有需要时，Agent 可以继续读取完整细节。超大记录会明确标记为不完整。
 
 **目前仍有两种格式没有纳入：**
 - **ChatGPT 网页导出** —— 理由已经不是原来那条了。一个 `conversations.json` 里装着很多条对话，而上面三种数据库正是这样，为它们建立的 `文件#id` 方案同样能承载它。剩下的问题是：导出文件需要用户手动生成、想更新还得再导一次，而同一份历史在 `External conversations` 分组里本来就是实时可读的。也就是说技术上已经够得着，只是还没做。
@@ -283,6 +288,8 @@ Reference Anything 直接向 DSH 原生 `@` 菜单注册七个来源，不会引
 **文本与按需文档文件。** `extensions` 白名单中的文件按文本解码；如果实际字节是二进制，会明确拒绝而不是输出乱码。常见文档、表格、演示文稿、PDF 和图片使用固定的 `file` 附件句柄，仅在调用 `reference_attachment_read` 时下载。其他扩展名和目录不会进入引用结果。
 
 **下载目录。** 可在“**设置 → 网盘**”中选择这些按需文档的宿主机下载目录；留空则使用系统临时目录。原生文件夹选择器不可用时，仍可手工输入宿主机绝对路径。每个文件都会写入新建的随机 `dsh-reference-drive-*` 子目录；插件只清理该子目录，绝不会删除用户选择的基目录或其中其他内容。成功下载保留一小时，下载失败或插件退出时立即清理。此设置只影响网盘附件；Web 对话附件仍使用系统临时目录。
+
+设置页也可以直接打开当前下载目录。选择网盘文件夹后，`@` 菜单会继续显示其中内容，便于逐层查找文件。
 
 **授权**：这些是你自己的远端文件，所以本分组沿用与外部对话相同的按任务门禁——只有你在当前任务里点名之后，模型才能读取某个网盘文件。带签名的下载地址始终不出宿主：候选里没有，引用摘要里没有，任何错误文本里也没有。
 
@@ -359,7 +366,7 @@ ChatGPT / Claude / Gemini / DeepSeek / Grok / Kimi
 - `attachments`：稳定 locator 和元数据，不保存临时签名 URL。
 - `sync_states`：Provider cursor、Profile、进度与错误。
 
-只有完整枚举远端分页成功后，才会把远端消失的记录标记为 `remoteMissing`；本地历史不会被自动删除。API 请求失败后才启用 DOM fallback，且 fallback 数据始终标记为 `partial=true`。
+只有完整枚举远端分页成功后，才会把远端消失的记录标记为 `remoteMissing`。同步记录范围默认无限期；设置天数后，最后更新时间早于该范围的网页对话会自动从本地删除，并在后续同步中跳过。API 请求失败后才启用 DOM fallback，且 fallback 数据始终标记为 `partial=true`。
 
 metadata-only 模式下，读取引用正文时会在同一次 detail 浏览器操作内校验当前登录账号与同步缓存的账号范围；账号不一致时拒绝读取。对话管理页提供“删除所有云端缺失对话”和“删除旧账号消息”，后者只清理已识别当前账号的 Provider 中属于非当前账号的本地条目。
 

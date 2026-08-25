@@ -98,6 +98,9 @@ export default class WebChatHistoryService extends Service implements ReferenceS
       await this.store.setSettings(this.store.settings)
       await this.store.clearMirrorContent()
     }
+    if (this.store.settings.syncHistoryDays !== null) {
+      await this.store.removeOlderThan(this.store.settings.syncHistoryDays)
+    }
     this.syncValue = new ConversationSyncManager(this.storeValue, () => new OpenCliRunner({
       executable: this.store.settings.opencliPath, profile: this.store.settings.profile,
       timeoutMs: this.config.timeoutMs, maxStdoutBytes: this.config.maxStdoutBytes,
@@ -240,11 +243,6 @@ export default class WebChatHistoryService extends Service implements ReferenceS
     return this.store.removeProvider(provider)
   }
 
-  async removeOlderThan(days: number): Promise<number> {
-    if (this.sync.isRunning()) throw new ReferenceAnythingError('cannot clear old data while a sync is in progress', 'REFERENCE_SYNC_IN_PROGRESS')
-    return this.store.removeOlderThan(days)
-  }
-
   async removeRemoteMissing(): Promise<number> {
     if (this.sync.isRunning()) throw new ReferenceAnythingError('cannot clear remote-missing data while a sync is in progress', 'REFERENCE_SYNC_IN_PROGRESS')
     return this.store.removeRemoteMissing()
@@ -304,8 +302,10 @@ export default class WebChatHistoryService extends Service implements ReferenceS
     let settings = mergeSettingsUpdate(submittedAgainst, current, submitted)
     if (directoryChanged) settings = { ...settings, cloudDriveDownloadDirectory: validatedDirectory }
     const enteringMetadataOnly = settings.historyMode === 'metadata-only' && current.historyMode !== 'metadata-only'
+    const historyRangeChanged = settings.syncHistoryDays !== current.syncHistoryDays
     await this.store.setSettings(settings)
     if (enteringMetadataOnly) await this.store.clearMirrorContent()
+    if (historyRangeChanged && settings.syncHistoryDays !== null) await this.store.removeOlderThan(settings.syncHistoryDays)
     this.armAutoSync()
     return settings
   }

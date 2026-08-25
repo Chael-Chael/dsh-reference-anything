@@ -11,7 +11,7 @@ import { parseProviderQuery } from '../search.ts'
 import { encodeReferenceUri } from '../uri-codec.ts'
 import type { AgentCandidate, DriveCandidate, SearchResult, SyncStatus } from './remote.ts'
 import {
-  AGENT_ICON_MARKER, COMMAND_ICON_MARKER, DRIVE_ICON_MARKER, PICKER_ICON_MARKER, PROVIDER_ICON_MARKER, SESSION_ICON_MARKER, SKILL_ICON_MARKER,
+  AGENT_ICON_MARKER, COMMAND_ICON_MARKER, DRIVE_ICON_MARKER, LOCAL_AGENT_ICON_MARKER, PICKER_ICON_MARKER, PROVIDER_ICON_MARKER, SESSION_ICON_MARKER, SKILL_ICON_MARKER,
   type PickerIconKind,
 } from './provider-icons.tsx'
 import type { REFERENCE_ANYTHING_NS } from './locale.ts'
@@ -409,7 +409,7 @@ export function createLocalAgentSource(
         return {
           name: title,
           description: describeAgentRow(row, t),
-          icon: AGENT_ICON_MARKER,
+          icon: LOCAL_AGENT_ICON_MARKER[row.kind as keyof typeof LOCAL_AGENT_ICON_MARKER] ?? AGENT_ICON_MARKER,
           value: encodeCandidate({ kind: 'agent', reference: { id: row.id, label } }),
         }
       }))
@@ -433,7 +433,7 @@ export function createLocalAgentSource(
       serialize: ref => Promise.resolve(formatAgentMention(decodeAgentReference(ref))),
     },
   }
-  return withDisplayPolicy(source, options, t)
+  return withDisplayPolicy(source, options, t, candidate => candidate, true)
 }
 
 /** The dimmed second line: which agent wrote it, and when it last moved. */
@@ -470,11 +470,11 @@ export function createCloudDriveSource(
   const source: InputTriggerSource = {
     trigger: '@', name: DRIVE_SOURCE, order: options.order,
     async candidates(_session, { query, quoted, signal }) {
-      // A quoted query is a workspace path completion; a remote file is not on
-      // this filesystem, so this group stays out of the way.
-      if (quoted === true) return []
       const scoped = scopedQuery(query, 'drives')
       if (scoped === undefined) return []
+      // A bare quoted token belongs to workspace files. A drive-qualified one
+      // is our folder navigation syntax, needed when its path contains spaces.
+      if (quoted === true && scoped === query.trim()) return []
       const rows = await search(scoped, signal, options.maxCandidates)
       if (rows.length === 0 && scoped === '') return [{
         name: t('drive.searchAction'),
@@ -487,21 +487,21 @@ export function createCloudDriveSource(
       const candidates = disambiguate(rows.map((row): InputTriggerCandidate => {
         const name = row.label.trim() || 'Untitled'
         if (row.isDirectory === true) return {
-          name: `📁 ${name}`,
+          name,
           description: row.origin ?? t('source.drives'),
-          icon: DRIVE_ICON_MARKER,
+          icon: driveIcon(row),
           value: encodeCandidate({ kind: 'drive-folder', path: row.origin ?? '/' }),
         }
         return {
           name,
           description: describeDriveRow(row, t),
-          icon: DRIVE_ICON_MARKER,
+          icon: driveIcon(row),
           value: encodeCandidate({
             kind: 'drive',
             // Same separator rule as the other pointer groups: a spaced
             // `@Drive · Name` is re-projected as a native pill by the
             // user-bubble renderer.
-            reference: { id: row.id, label: (row.provider ? `${row.provider}·${name}` : name).replace(/[\[\]]/gu, '') },
+            reference: { id: row.id, label: (displayDriveProvider(row) ? `${displayDriveProvider(row)}·${name}` : name).replace(/[\[\]]/gu, '') },
           }),
         }
       }))
@@ -515,7 +515,7 @@ export function createCloudDriveSource(
     onPick({ candidate }) {
       const value = decodeCandidate(candidate.value)
       if (value?.kind === 'drive-search') return { text: '@drive:' }
-      if (value?.kind === 'drive-folder') return { text: `@drive:${value.path.replace(/\/+$/u, '') || ''}/` }
+      if (value?.kind === 'drive-folder') return { text: `@"drive:${value.path.replace(/\/+$/u, '') || ''}/`, continue: true }
       if (value?.kind !== 'drive') return undefined
       const reference = value.reference
       return {
@@ -530,12 +530,29 @@ export function createCloudDriveSource(
         },
       }
     },
+    matchSpace(_session, token) {
+      if (!token.startsWith('@drive:/') || !token.endsWith('/')) return undefined
+      return { text: `@"${token.slice(1)}" ` }
+    },
     codec: {
       clipboardText: ref => formatDriveMention(decodeDriveReference(ref)),
       serialize: ref => Promise.resolve(formatDriveMention(decodeDriveReference(ref))),
     },
   }
-  return withDisplayPolicy(source, options, t)
+  return withDisplayPolicy(source, options, t, candidate => candidate, true)
+}
+
+function driveIcon(row: DriveCandidate): string {
+  const file = PICKER_ICON_MARKER[workspacePathIconKind(row.label, row.isDirectory === true ? 'directory' : 'file')]
+  return `${DRIVE_ICON_MARKER}${file}`
+}
+
+function displayDriveProvider(row: DriveCandidate): string {
+  return isBaiduDrive(row) ? 'BaiduNetdisk' : row.provider
+}
+
+function isBaiduDrive(row: DriveCandidate): boolean {
+  return /(?:^|\/)baidu(?:netdisk|cloud)?(?:\/|$)/iu.test(row.origin ?? '')
 }
 
 /** The dimmed second line: which drive holds it, and where in that drive. */
@@ -626,9 +643,11 @@ function withDisplayPolicy(
   options: PickerSourceOptions,
   t: T,
   refreshPinned: (candidate: InputTriggerCandidate) => InputTriggerCandidate = candidate => candidate,
+  staleWhileRevalidate = false,
 ): RefreshablePickerSource {
   const expandedStates = new Map<SessionId, { query: string; visibleCount: number }>()
   const caches = new Map<SessionId, CachedSourceCandidates>()
+  const refreshing = new Set<SessionId>()
   const present = (cache: CachedSourceCandidates): InputTriggerCandidate[] => {
     const { normal, pinned } = cache
     if (options.displayMode === 'native-scroll' || normal.length <= options.limit) return [...pinned, ...normal]
@@ -680,8 +699,25 @@ function withDisplayPolicy(
   return {
     ...source,
     async candidates(session, request) {
-      const all = await source.candidates(session, request)
       const previous = caches.get(session.sessionId)
+      if (staleWhileRevalidate && previous !== undefined
+        && previous.request.query === request.query && previous.request.quoted === request.quoted
+        && previous.request.position === request.position) {
+        if (!refreshing.has(session.sessionId)) {
+          refreshing.add(session.sessionId)
+          const revision = previous.revision + 1
+          previous.revision = revision
+          void source.candidates(session, request).then((all) => {
+            if (request.signal.aborted || caches.get(session.sessionId) !== previous || previous.revision !== revision) return
+            const refreshed = cacheCandidates(session, request, all, revision)
+            caches.set(session.sessionId, refreshed)
+            publish(refreshed, false)
+          }).catch(() => { /* Keep the stale candidates on refresh failure. */ })
+            .finally(() => refreshing.delete(session.sessionId))
+        }
+        return present(previous)
+      }
+      const all = await source.candidates(session, request)
       const cache = cacheCandidates(session, {
         query: request.query, quoted: request.quoted, position: request.position,
       }, all, (previous?.revision ?? 0) + 1)

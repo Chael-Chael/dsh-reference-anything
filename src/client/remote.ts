@@ -1,6 +1,6 @@
 import type { RemoteResult, TypertRemoteContribution } from '@deepseek-ai/dsh-typert-protocol'
 import { REFERENCE_ANYTHING_INVOCATIONS } from '../contract.ts'
-import type { ChatProvider, SettingsRecord } from '../wire.ts'
+import type { ChatProvider, LocalAgent, SettingsRecord } from '../wire.ts'
 
 /** The stored facts about one mirrored conversation, shared by both list surfaces. */
 export interface ConversationRow {
@@ -15,6 +15,7 @@ export interface SearchResult extends ConversationRow {
 }
 /** One local-agent transcript offered by the `@` menu; `id` is source-scoped, not a URI. */
 export interface AgentCandidate { id: string; kind: string; label: string; provider: string; updatedAt?: number }
+export interface AgentStats { agent: LocalAgent; conversations: number }
 /** One cloud-drive file offered by the `@` menu; `origin` is a display path, never a URL. */
 export interface DriveCandidate { id: string; label: string; provider: string; origin?: string; updatedAt?: number; searchIncomplete?: boolean; isDirectory?: boolean }
 export type ExtensionState = 'connected' | 'disconnected' | 'profile-required' | 'profile-disconnected' | 'daemon-offline'
@@ -29,7 +30,7 @@ export interface Health {
 export interface BrowserProfile { id: string; alias?: string; connected: boolean; isDefault: boolean }
 export interface OpenCliDiscovery { found: boolean; executable: string; version: string; error?: string }
 export interface PackageUpdateStatus {
-  currentVersion: string; latestVersion: string; updateAvailable: boolean; checkedAt: number; error?: string
+  currentVersion: string; latestVersion: string; updateAvailable: boolean; checkedAt: number; releaseNotes?: string; releaseUrl?: string; error?: string
 }
 export interface PackageUpdateResult { version: string; restartRequired: boolean }
 export interface ProviderStats {
@@ -91,6 +92,7 @@ export const REFERENCE_ANYTHING_REMOTE: TypertRemoteContribution = {
 
 export interface ReferenceAnythingRemoteFace {
   agentSearch(agentId: string, input: { query: string; limit: number }, signal?: AbortSignal): Promise<RemoteResult<readonly AgentCandidate[]>>
+  agentStats(signal?: AbortSignal): Promise<RemoteResult<readonly AgentStats[]>>
   driveSearch(input: { query: string; limit: number }, signal?: AbortSignal): Promise<RemoteResult<readonly DriveCandidate[]>>
   search(input: { query: string; provider?: ChatProvider; limit: number }, signal?: AbortSignal): Promise<RemoteResult<readonly SearchResult[]>>
   health(signal?: AbortSignal): Promise<RemoteResult<Health>>
@@ -109,11 +111,11 @@ export interface ReferenceAnythingRemoteFace {
   syncCancel(input: { jobId: string }): Promise<RemoteResult<boolean>>
   settingsGet(): Promise<RemoteResult<SettingsRecord>>
   settingsUpdate(settings: SettingsRecord): Promise<RemoteResult<SettingsRecord>>
+  openDownloadDirectory(signal?: AbortSignal): Promise<RemoteResult<boolean>>
   browse(input: { query: string; provider?: ChatProvider; limit: number; offset: number }, signal?: AbortSignal): Promise<RemoteResult<BrowsePage>>
   deleteConversation(input: { uriId: string }, signal?: AbortSignal): Promise<RemoteResult<boolean>>
   storageStats(): Promise<RemoteResult<StorageStats>>
   clearProvider(input: { provider: ChatProvider }, signal?: AbortSignal): Promise<RemoteResult<number>>
-  clearOlder(input: { days: number }, signal?: AbortSignal): Promise<RemoteResult<number>>
   clearRemoteMissing(signal?: AbortSignal): Promise<RemoteResult<number>>
   clearOldAccounts(signal?: AbortSignal): Promise<RemoteResult<number>>
   syncStates(): Promise<RemoteResult<readonly ProviderSyncState[]>>

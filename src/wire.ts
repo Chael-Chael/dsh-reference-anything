@@ -80,8 +80,12 @@ export const settingsRecordSchema = z.object({
   syncOnStartup: z.boolean().default(false),
   autoSyncMinutes: z.number().int().min(15).max(1440).default(60),
   historyMode: z.enum(['metadata-only', 'offline-mirror']).default('metadata-only'),
+  /** Null keeps all web-chat history; old settings default to that upgrade-safe behavior. */
+  syncHistoryDays: z.number().int().min(1).max(36500).nullable().default(null),
   enabledProviders: z.array(providerSchema).default([...ALL_PROVIDERS]),
   enabledAgents: z.array(localAgentSchema).default([...ALL_LOCAL_AGENTS]),
+  /** One optional additional transcript root per local Agent. */
+  agentDirectories: z.partialRecord(localAgentSchema, z.string().max(4096)).optional(),
   /**
    * OpenList mount paths shown by the drive picker. Undefined preserves the
    * legacy behaviour (all enabled mounts); an explicit empty array means none.

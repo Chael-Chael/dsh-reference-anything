@@ -44,6 +44,7 @@ import {
   parseTimestamp,
   pushAssistant,
   pushContentBlocks,
+  renderToolResult,
   stringField,
   takeHeld,
 } from './shared.ts'
@@ -237,6 +238,10 @@ function foldMessage(
     case 'assistant':
       pushContentBlocks(state, arrayField(message, 'content'), options)
       return []
+    case 'toolResult':
+    case 'bashExecution':
+      pushAssistant(state, renderToolResult(message['content'], options.toolResults, options.toolSummaryChars))
+      return []
     case 'compactionSummary':
       pushAssistant(state, marked(COMPACTION_MARKER, stringField(message, 'summary')))
       return []
@@ -244,8 +249,7 @@ function foldMessage(
       pushAssistant(state, marked(BRANCH_MARKER, stringField(message, 'summary')))
       return []
     default:
-      // `toolResult` and `bashExecution` are results of work already recorded
-      // as a call, and `custom` is an extension's injected context.
+      // `custom` is an extension's injected context.
       return []
   }
 }

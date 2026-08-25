@@ -6,7 +6,7 @@ import {
   describeRow, disambiguate, parseQuery, scopedQuery, workspaceIconKind,
   type PickerSourceOptions,
 } from '../src/client/source.ts'
-import { AGENT_ICON_MARKER, DRIVE_ICON_MARKER, PICKER_ICON_MARKER } from '../src/client/provider-icons.tsx'
+import { AGENT_ICON_MARKER, DRIVE_ICON_MARKER, LOCAL_AGENT_ICON_MARKER, PICKER_ICON_MARKER } from '../src/client/provider-icons.tsx'
 import type { PickerMenuUpdate } from '../src/client/menu-update.ts'
 import type { AgentCandidate, DriveCandidate, SearchResult } from '../src/client/remote.ts'
 import { REFERENCE_ANYTHING_INVOCATIONS } from '../src/contract.ts'
@@ -284,7 +284,7 @@ describe('local agent conversations', () => {
     const candidates = await source.candidates(session, request('agents'))
     expect(source.name).toBe(AGENT_SOURCE)
     expect(candidates.map(row => row.name)).toEqual(['Refactor the scan probe', 'Refactor the scan probe (2)', 'Untitled'])
-    expect(candidates[0]?.icon).toBe(AGENT_ICON_MARKER)
+    expect(candidates[0]?.icon).toBe(LOCAL_AGENT_ICON_MARKER.codex)
     expect(candidates[0]?.description).toContain('Codex')
     // A transcript whose mtime the host could not report still gets a row; the
     // date is the only part that goes missing.
@@ -367,7 +367,7 @@ describe('cloud drive files', () => {
     const candidates = await source.candidates(session, request('drives'))
     expect(source.name).toBe(DRIVE_SOURCE)
     expect(candidates.map(row => row.name)).toEqual(['quarterly-notes.md', 'quarterly-notes.md (2)', 'Untitled'])
-    expect(candidates[0]?.icon).toBe(DRIVE_ICON_MARKER)
+    expect(candidates[0]?.icon).toBe(`${DRIVE_ICON_MARKER}${PICKER_ICON_MARKER.text}`)
     expect(candidates[0]?.description).toBe('OpenList · /notes')
     // Neither the drive nor the folder is known for this one; the group's own
     // name is the honest fallback.
@@ -382,6 +382,32 @@ describe('cloud drive files', () => {
     const outcome = source.onPick(pick(candidate))
     if (outcome === undefined || outcome === 'handled' || !('insert' in outcome)) throw new Error('expected insert')
     expect(JSON.parse(outcome.insert.ref)).toMatchObject({ id: row.id })
+  })
+
+  it('returns the previous drive list immediately and refreshes it in place', async () => {
+    let resolveRefresh!: (rows: readonly DriveCandidate[]) => void
+    let calls = 0
+    const updateMenu = vi.fn((_update: PickerMenuUpdate) => true)
+    const source = createCloudDriveSource(async () => {
+      if (++calls === 1) return [driveRow({ label: 'Old.md' })]
+      return await new Promise(resolve => { resolveRefresh = resolve })
+    }, undefined, options({ order: 35, updateMenu }))
+
+    expect((await source.candidates(session, request('drives')))[0]?.name).toBe('Old.md')
+    expect((await source.candidates(session, request('drives')))[0]?.name).toBe('Old.md')
+    expect(calls).toBe(2)
+
+    resolveRefresh([driveRow({ label: 'Fresh.md' })])
+    await vi.waitFor(() => expect(updateMenu.mock.calls.at(-1)?.[0].candidates[0]?.name).toBe('Fresh.md'))
+  })
+
+  it('uses the mounted Baidu source logo', async () => {
+    const source = createCloudDriveSource(async () => [driveRow({ origin: '/baidunetdisk/docs' })], undefined, options({ order: 35 }))
+    const candidate = (await source.candidates(session, request('drives')))[0]!
+    expect(candidate.icon).toBe(`${DRIVE_ICON_MARKER}${PICKER_ICON_MARKER.text}`)
+    const outcome = source.onPick(pick(candidate))
+    if (outcome === undefined || outcome === 'handled' || !('insert' in outcome)) throw new Error('expected insert')
+    expect(outcome.insert.label).toBe('BaiduNetdisk·quarterly-notes.md')
   })
 
   it('inserts a file chip while serializing the canonical mention on send', async () => {
@@ -407,7 +433,22 @@ describe('cloud drive files', () => {
       ? [driveRow({ label: 'archive', origin: '/notes/archive', isDirectory: true })]
       : [], undefined, options({ order: 35 }))
     const candidate = (await source.candidates(session, request('drive:/notes/'))).find(row => row.name.includes('archive'))!
-    expect(source.onPick(pick(candidate))).toEqual({ text: '@drive:/notes/archive/' })
+    expect(source.onPick(pick(candidate))).toEqual({ text: '@"drive:/notes/archive/', continue: true })
+  })
+
+  it('keeps navigating a quoted drive path containing spaces', async () => {
+    const path = '/baidunetdisk/03、（13课）Matlab与机器学习的入门 进阶与提高/'
+    const search = vi.fn(async () => [driveRow({ label: '01 MATLAB入门基础', origin: `${path}01 MATLAB入门基础`, isDirectory: true })])
+    const source = createCloudDriveSource(search, undefined, options({ order: 35 }))
+    const candidates = await source.candidates(session, request(`drive:${path}`, true))
+    expect(search).toHaveBeenCalledWith(path, expect.any(AbortSignal), 50)
+    expect(candidates.some(row => row.name.includes('01 MATLAB入门基础'))).toBe(true)
+  })
+
+  it('closes a quoted folder-navigation token on space', () => {
+    const source = createCloudDriveSource(async () => [], undefined, options({ order: 35 }))
+    expect(source.matchSpace?.(session, '@drive:/baidunetdisk/path with spaces/'))
+      .toEqual({ text: '@"drive:/baidunetdisk/path with spaces/" ' })
   })
 
   it('escapes a filename that would otherwise break out of the mention it is written into', async () => {

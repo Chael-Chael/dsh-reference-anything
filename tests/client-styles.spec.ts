@@ -4,7 +4,7 @@ import {
   adoptMenuGroupTitleProjection, adoptMenuViewportTracking, adoptReferenceIconProjection, adoptStyles,
   mutateActiveTriggerMenu, refreshActiveTriggerMenu,
 } from '../src/client/styles.ts'
-import { PROVIDER_ICON_PATH } from '../src/client/provider-icons.tsx'
+import { LOCAL_AGENT_ICON_MARKER, PICKER_ICON_MARKER, PROVIDER_ICON_PATH } from '../src/client/provider-icons.tsx'
 
 afterEach(() => {
   document.body.replaceChildren()
@@ -54,6 +54,18 @@ describe('reference DOM customization', () => {
     dispose()
   })
 
+  it('projects Agent and drive source logos inside the @ menu', () => {
+    document.body.innerHTML = `<div data-composer-card><div role="listbox">
+      <button role="option"><span>${LOCAL_AGENT_ICON_MARKER.codex}</span><span>Codex</span></button>
+      <button role="option"><span>${PICKER_ICON_MARKER.drive}${PICKER_ICON_MARKER.text}</span><span>Drive</span></button>
+    </div></div>`
+    const dispose = adoptReferenceIconProjection()
+    expect(document.querySelector('[data-dsh-ref-menu-icon="codex"] > svg')).not.toBeNull()
+    expect(document.querySelector('[data-dsh-ref-menu-icon="drive"] > svg')).not.toBeNull()
+    expect(document.querySelectorAll('[data-dsh-ref-menu-icon="drive"] > svg')).toHaveLength(2)
+    dispose()
+  })
+
   it('reuses Provider and file-type menu glyphs without changing chip geometry nodes', () => {
     document.body.innerHTML = `
       <div data-composer-card>
@@ -90,13 +102,24 @@ describe('reference DOM customization', () => {
     dispose()
   })
 
-  it('projects local-agent chips as bots without confusing same-named Web providers', () => {
+  it('uses source logos on Agent and Baidu input chips', () => {
+    document.body.innerHTML = `<div data-composer-card>
+      <span id="agent" data-decoration="chip" data-reference-appearance="session" data-reference-source="Local agent conversations"><span>Codex·Task</span></span>
+      <span id="drive" data-decoration="chip" data-reference-appearance="file" data-reference-source="Cloud drive files"><span>BaiduNetdisk·notes.pdf</span></span>
+    </div>`
+    const dispose = adoptReferenceIconProjection()
+    expect(document.getElementById('agent')?.dataset.dshRefChipIcon).toBe('codex')
+    expect(document.getElementById('drive')?.dataset.dshRefChipIcon).toBe('drive')
+    dispose()
+  })
+
+  it('projects local-agent chips with their logo without confusing same-named Web providers', () => {
     document.body.innerHTML = `<div data-composer-card>
       <span id="agent" data-decoration="chip" data-reference-appearance="session"><span><svg/></span><span>Kimi CLI·Agent task</span></span>
       <span id="web" data-decoration="chip" data-reference-appearance="session" data-reference-source="Web conversations"><span><svg/></span><span>Kimi·Web chat</span></span>
     </div>`
     const dispose = adoptReferenceIconProjection()
-    expect(document.getElementById('agent')?.dataset.dshRefChipIcon).toBe('agent')
+    expect(document.getElementById('agent')?.dataset.dshRefChipIcon).toBe('kimi')
     expect(document.getElementById('web')?.dataset.dshRefChipIcon).toBe('kimi')
     dispose()
   })
@@ -226,6 +249,7 @@ describe('reference DOM customization', () => {
       expect(style.zIndex).toBe('2')
       expect(style.paddingTop).toBe('6px')
     }
+    expect(getComputedStyle(document.querySelector('[role="option"]')!).scrollMarginBlockStart).toBe('30px')
   })
 
   it('refreshes an active @ query without changing the visible input or caret', async () => {

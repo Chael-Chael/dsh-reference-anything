@@ -8,7 +8,7 @@ import { en } from '../src/client/locale.ts'
 
 ;(globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 const t = ((key: keyof typeof en, values?: Record<string, string | number>) => Object.entries(values ?? {}).reduce((text, [name, value]) => text.replace(`{${name}}`, String(value)), en[key])) as never
-const settings = { opencliPath: 'opencli', profile: '', detailConcurrency: 8, autoSync: false, syncOnStartup: false, autoSyncMinutes: 60, historyMode: 'metadata-only' as const, enabledProviders: [], enabledAgents: [], maxReadTurns: 10, inputRenderMode: 'pill' as const, cloudDriveDownloadDirectory: '' }
+const settings = { opencliPath: 'opencli', profile: '', detailConcurrency: 8, autoSync: false, syncOnStartup: false, autoSyncMinutes: 60, historyMode: 'metadata-only' as const, syncHistoryDays: null, enabledProviders: [], enabledAgents: [], maxReadTurns: 10, inputRenderMode: 'pill' as const, cloudDriveDownloadDirectory: '' }
 let root: Root | undefined; let host: HTMLElement | undefined
 function mount(state: SettingsSnapshot, overrides: Partial<React.ComponentProps<typeof CloudDrives>> = {}): HTMLElement {
   host = document.createElement('div'); document.body.append(host); root = createRoot(host)
@@ -20,6 +20,12 @@ function mount(state: SettingsSnapshot, overrides: Partial<React.ComponentProps<
 afterEach(() => { act(() => root?.unmount()); host?.remove(); root = undefined; host = undefined; vi.restoreAllMocks() })
 
 describe('Cloud drives form', () => {
+  it('refreshes host status when the settings card opens', async () => {
+    const refreshOpenList = vi.fn(async () => {})
+    mount({ settings }, { refreshOpenList })
+    await act(async () => { await Promise.resolve() })
+    expect(refreshOpenList).toHaveBeenCalledOnce()
+  })
   it('separates curated quick login drivers from advanced-only drivers', async () => {
     const el = mount({ settings, openList: { state: 'running', installed: true, mode: 'external', supportsRollback: false, upgradeAvailable: false }, openListDrivers: [
       { name: 'OneDrive', quickAuth: true, fields: [{ name: 'refresh_token', label: 'Token', type: 'text', secret: true, required: true }] },

@@ -101,7 +101,7 @@ export interface Config {
   directoryTtlMs?: number
   /** Whether the model sees the other agent's reasoning. */
   includeThinking?: boolean
-  /** How a tool call is projected into a turn. */
+  /** How a tool call and its result are projected into a turn. */
   toolCalls?: ToolCallMode
   /** Whether subagent branches are projected alongside the main thread. */
   includeSidechains?: boolean
@@ -130,7 +130,7 @@ export const Config: z<Config> = z.object({
     kind: z.union(AGENT_KINDS).default(DEFAULT_AGENT_KIND),
     path: z.string().default(''),
   })).default([]),
-  scope: z.union(['workspace', 'all'] as const).default('workspace'),
+  scope: z.union(['workspace', 'all'] as const).default('all'),
   maxTranscripts: z.natural().default(200),
   maxReadTurns: z.natural().default(20),
   maxScanBytes: z.natural().default(32 * 1024 * 1024),
@@ -140,7 +140,7 @@ export const Config: z<Config> = z.object({
   maxLineBytes: z.natural().default(1024 * 1024),
   directoryTtlMs: z.natural().default(5000),
   includeThinking: z.boolean().default(false),
-  toolCalls: z.union(['elide', 'summarize', 'drop'] as const).default('elide'),
+  toolCalls: z.union(['full', 'elide', 'summarize', 'drop'] as const).default('full'),
   includeSidechains: z.boolean().default(false),
   stripEnvironmentPreamble: z.boolean().default(true),
   // The one switch that keeps `node:sqlite` out of the process entirely.
@@ -176,7 +176,7 @@ export class LocalAgentService extends Service implements ReferenceSource {
 
   private readonly settings: Required<Config>
   private readonly adapters: ReadonlyMap<AgentKind, AgentAdapter>
-  private readonly roots: readonly ScanRoot[]
+  private roots: readonly ScanRoot[]
   private readonly convert: ConvertOptions
   private cache: DirectoryCache | undefined
   private store: AgentBookmarkStore | undefined
@@ -190,6 +190,7 @@ export class LocalAgentService extends Service implements ReferenceSource {
       ...DEFAULT_CONVERT_OPTIONS,
       includeThinking: this.settings.includeThinking,
       toolCalls: this.settings.toolCalls,
+      toolResults: this.settings.toolCalls,
       includeSidechains: this.settings.includeSidechains,
       stripEnvironmentPreamble: this.settings.stripEnvironmentPreamble,
     }
@@ -215,6 +216,25 @@ export class LocalAgentService extends Service implements ReferenceSource {
       }
     }))
     return checks.includes(true)
+  }
+
+  /** Replace UI-managed extra roots while retaining every deployment root. */
+  setAgentDirectories(directories: Partial<Record<AgentKind, string>>): void {
+    this.roots = resolveRoots({
+      ...this.settings,
+      extraRoots: [
+        ...this.settings.extraRoots,
+        ...Object.entries(directories).map(([kind, path]) => ({ kind: kind as AgentKind, path })),
+      ],
+    }, homedir())
+    this.cache = undefined
+  }
+
+  /** Count transcripts recognized by the current roots, grouped by format. */
+  async stats(signal?: AbortSignal): Promise<Array<{ kind: AgentKind; conversations: number }>> {
+    const counts = new Map<AgentKind, number>(AGENT_KINDS.map(kind => [kind, 0]))
+    for (const row of await this.scan(signal)) counts.set(row.kind, (counts.get(row.kind) ?? 0) + 1)
+    return AGENT_KINDS.map(kind => ({ kind, conversations: counts.get(kind) ?? 0 }))
   }
 
   /**
@@ -311,10 +331,13 @@ export class LocalAgentService extends Service implements ReferenceSource {
     // is derived from the limit actually used.
     const limit = Math.max(1, Math.min(window.limit, this.settings.maxReadTurns))
     const bounds = resolveBefore(window, cursor)
+    const convert = window.detail === 'summary'
+      ? { ...this.convert, toolCalls: 'elide' as const, toolResults: 'drop' as const }
+      : this.convert
     const page = isQueryAdapter(adapter)
-      ? await this.readSession(adapter, descriptor, sessionId ?? '', limit, bounds.before, signal)
+      ? await this.readSession(adapter, descriptor, sessionId ?? '', limit, bounds.before, convert, signal)
       : await readTurns(
-        descriptor.path, descriptor.size, adapter, this.convert,
+        descriptor.path, descriptor.size, adapter, convert,
         { limit, ...bounds },
         { maxScanBytes: this.settings.maxScanBytes, maxLineBytes: this.settings.maxLineBytes },
         signal,
@@ -377,10 +400,11 @@ export class LocalAgentService extends Service implements ReferenceSource {
     sessionId: string,
     limit: number,
     before: number | undefined,
+    convert: ConvertOptions,
     signal?: AbortSignal,
   ): Promise<TurnPage> {
     const session = await readSessionTurns(
-      descriptor.path, adapter, sessionId, this.convert, this.settings.maxSessionRecords, signal,
+      descriptor.path, adapter, sessionId, convert, this.settings.maxSessionRecords, signal,
     )
     const slice = sliceTurns(session.items, { limit, ...before === undefined ? {} : { before } })
     // `sliceTurns` speaks the package's wider wire type, which now admits

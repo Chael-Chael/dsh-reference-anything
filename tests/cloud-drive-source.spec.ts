@@ -46,6 +46,19 @@ describe('cloud drive source safeguards survive the OpenList migration', () => {
       expect(drive.reads).toBe(1)
     } finally { await dispose() }
   })
+  it('orders an unfiltered listing by filename, then newest duplicate first', async () => {
+    const bytes = new TextEncoder().encode('one')
+    const drive = new StubDrive({ kind: 'openlist', id: '/unused', path: '/unused', name: 'unused.md', size: 3, isDirectory: false }, bytes)
+    drive.list = async () => [
+      { kind: 'openlist', id: '/b', path: '/b', name: 'b.md', size: 3, isDirectory: false, modifiedAt: 100 },
+      { kind: 'openlist', id: '/a-old', path: '/a-old', name: 'a.md', size: 3, isDirectory: false, modifiedAt: 10 },
+      { kind: 'openlist', id: '/a-new', path: '/a-new', name: 'a.md', size: 3, isDirectory: false, modifiedAt: 30 },
+    ]
+    const { ctx, dispose } = await mount(drive)
+    try {
+      expect((await ctx.references.list('', 10)).map(value => value.updatedAt)).toEqual([30, 10, 100])
+    } finally { await dispose() }
+  })
   it('rejects binary data even when its filename is text-like', async () => {
     const drive = new StubDrive({ kind: 'openlist', id: '/fake.md', path: '/fake.md', name: 'fake.md', size: 4, isDirectory: false }, new Uint8Array([0x50, 0x4b, 0x03, 0]))
     const { ctx, dispose } = await mount(drive)

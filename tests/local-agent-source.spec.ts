@@ -2,6 +2,7 @@ import { appendFile, mkdir, mkdtemp, rm, symlink, truncate, writeFile } from 'no
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Context } from '@deepseek-ai/cordis'
+import type { Session } from '@deepseek-ai/dsh-session'
 import type { Domain, DomainSpec, KvTable } from '@deepseek-ai/dsh-storage-domain'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import ReferenceRuntime from '../src/index.ts'
@@ -9,6 +10,7 @@ import * as localAgent from '../src/sources/local-agent/index.ts'
 import { LOCAL_AGENT_SOURCE_ID, referenceId } from '../src/sources/local-agent/index.ts'
 import type { Config } from '../src/sources/local-agent/index.ts'
 import type { ReferenceSnapshot } from '../src/types.ts'
+import { encodeReferenceUri } from '../src/uri.ts'
 
 /** Wide enough for every fixture here; clamping has its own test. */
 const WINDOW = { limit: 100 }
@@ -144,7 +146,6 @@ async function mount(over: Config = {}, enabledAgents?: readonly string[]): Prom
   const fiber = await ctx.plugin(localAgent, {
     agents: [],
     extraRoots: [{ kind: 'claude-code', path: claudeRoot }, { kind: 'codex', path: codexRoot }],
-    scope: 'all',
     directoryTtlMs: 0,
     ...over,
   })
@@ -159,10 +160,18 @@ function texts(snapshot: ReferenceSnapshot): string[] {
 
 /** The single turn the fixture's two assistant records fold into. */
 function reply(index: number): string {
-  return `reply ${index}\n\n[tool: Bash]`
+  return `reply ${index}\n\n[tool: Bash] {"command":"ls"}`
 }
 
 describe('discovery', () => {
+  it('counts recognized conversations by Agent', async () => {
+    const { ctx, dispose } = await mount()
+    await expect(ctx.get('referenceLocalAgents')!.stats()).resolves.toEqual(expect.arrayContaining([
+      { kind: 'claude-code', conversations: 1 },
+      { kind: 'codex', conversations: 1 },
+    ]))
+    await dispose()
+  })
   it('filters disabled kinds at the ReferenceSource boundary before applying limit', async () => {
     const { ctx, dispose } = await mount({}, ['codex'])
     const found = await ctx.references.list('', 1)
@@ -287,6 +296,16 @@ describe('discovery', () => {
 })
 
 describe('reading', () => {
+  it('layers tool detail per read', async () => {
+    const { ctx, dispose } = await mount()
+    const summary = texts(await ctx.references.read(CLAUDE_REF, { ...WINDOW, detail: 'summary' })).join('\n')
+    const full = texts(await ctx.references.read(CLAUDE_REF, { ...WINDOW, detail: 'full' })).join('\n')
+    expect(summary).toContain('[tool: Bash]')
+    expect(summary).not.toContain('{"command":"ls"}')
+    expect(full).toContain('[tool: Bash] {"command":"ls"}')
+    await dispose()
+  })
+
   it('merges an assistant run into one turn and counts turns exactly', async () => {
     const { ctx, dispose } = await mount()
     const snapshot = await ctx.references.read(CLAUDE_REF, WINDOW)
@@ -468,6 +487,35 @@ describe('as a mounted plugin', () => {
       .toThrow(expect.objectContaining({ code: 'CONVERSATION_REFERENCE_NOT_GRANTED' }))
     ctx.references.grant('task-a', CLAUDE_REF)
     expect(() => ctx.references.assertGranted('task-a', CLAUDE_REF)).not.toThrow()
+    await dispose()
+  })
+
+  it('recovers a grant from a URI mentioned in durable task history', async () => {
+    const { ctx, dispose } = await mount()
+    const session = {
+      id: 'task-history',
+      events: [{
+        type: 'user/message',
+        data: { content: [{ type: 'text', text: `read ${encodeReferenceUri(CLAUDE_REF)}` }] },
+      }],
+    } as unknown as Session
+    expect(() => ctx.references.assertSessionGranted(session, CLAUDE_REF)).not.toThrow()
+    expect(() => ctx.references.assertGranted('task-history', CLAUDE_REF)).not.toThrow()
+    await dispose()
+  })
+
+  it('recovers a grant from a URI returned by a tool', async () => {
+    const { ctx, dispose } = await mount()
+    const session = {
+      id: 'task-tool-result',
+      events: [{
+        type: 'tool/result',
+        data: { message: { content: [{ type: 'tool-result', content: [
+          { type: 'text', text: encodeReferenceUri(CLAUDE_REF) },
+        ] }] } },
+      }],
+    } as unknown as Session
+    expect(() => ctx.references.assertSessionGranted(session, CLAUDE_REF)).not.toThrow()
     await dispose()
   })
 

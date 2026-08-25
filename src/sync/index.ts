@@ -158,6 +158,8 @@ export class ConversationSyncManager {
     const failures = new Map<ChatProvider, string>()
     let succeeded = 0
     try {
+      const historyDays = this.store.settings.syncHistoryDays
+      if (historyDays !== null) await this.store.removeOlderThan(historyDays)
       for (const provider of job.providers) {
         if (job.controller.signal.aborted) break
         const started = Date.now()
@@ -174,6 +176,8 @@ export class ConversationSyncManager {
           this.logger?.warn(`reference sync: ${provider} failed: ${describe(error)}`)
         }
       }
+      const currentHistoryDays = this.store.settings.syncHistoryDays
+      if (currentHistoryDays !== null) await this.store.removeOlderThan(currentHistoryDays)
       job.status = job.controller.signal.aborted ? 'cancelled'
         : failures.size === 0 ? 'complete'
           : succeeded === 0 ? 'failed' : 'partial'
@@ -218,7 +222,7 @@ export class ConversationSyncManager {
     let accountScope = ''
     let progress: ProgressWriter | undefined
     try {
-      const sinceFor = (scope: string): string => mode === 'incremental' ? this.listingSince(provider, scope) : ''
+      const sinceFor = (scope: string): string => this.listingSince(provider, scope, mode)
       let rows: ProviderConversationRow[]
       let since = ''
       if (typeof runner.syncIndex === 'function') {
@@ -244,7 +248,13 @@ export class ConversationSyncManager {
       // changed rows when a trustworthy watermark exists, then fetch detail
       // only for rows whose provider timestamp changed. Full always enumerates
       // and re-fetches everything, replacing each current local revision.
-      const seen = new Set(rows.map(row => row.id))
+      const listedRows = rows
+      const historySince = this.historySince()
+      if (historySince) {
+        const cutoff = Date.parse(historySince)
+        rows = rows.filter(row => { const updatedAt = Date.parse(row.updatedAt); return Number.isNaN(updatedAt) || updatedAt >= cutoff })
+      }
+      const seen = new Set(listedRows.map(row => row.id))
       job.total += rows.length
       const providerProgress = this.providerProgress(job, provider)
       providerProgress.phase = 'syncing'
@@ -287,7 +297,7 @@ export class ConversationSyncManager {
       const enumerated = since === '' && failures.length === 0
       if (enumerated) await this.store.markRemoteMissing(provider, accountScope, seen)
       await progress.save('idle', {
-        cursor: rows.at(-1)?.cursor ?? '',
+        cursor: listedRows.at(-1)?.cursor ?? '',
         complete: enumerated,
         ...(failures.length > 0 ? { error: `${String(failures.length)} conversations failed; ${summarize(failures)}` } : {}),
       })
@@ -343,13 +353,21 @@ export class ConversationSyncManager {
    * Watermark for an incremental listing, or `''` to demand a full one.
    * @returns an ISO instant the adapter may page back to, exclusive of slack.
    */
-  private listingSince(provider: ChatProvider, accountScope: string): string {
+  private listingSince(provider: ChatProvider, accountScope: string, mode: SyncMode): string {
+    const historySince = this.historySince()
+    if (mode === 'full') return historySince
     const state = this.store.syncStates.get(`${provider}:${accountScope}`)
     const lastComplete = Date.parse(state?.lastCompleteScanAt ?? '')
     const lastSync = Date.parse(state?.lastSyncAt ?? '')
-    if (Number.isNaN(lastComplete) || Number.isNaN(lastSync)) return ''
-    if (Date.now() - lastComplete >= FULL_SCAN_INTERVAL_MS) return ''
-    return new Date(lastSync - LISTING_OVERLAP_MS).toISOString()
+    if (Number.isNaN(lastComplete) || Number.isNaN(lastSync)) return historySince
+    if (Date.now() - lastComplete >= FULL_SCAN_INTERVAL_MS) return historySince
+    const incrementalSince = new Date(lastSync - LISTING_OVERLAP_MS).toISOString()
+    return historySince > incrementalSince ? historySince : incrementalSince
+  }
+
+  private historySince(): string {
+    const days = this.store.settings.syncHistoryDays
+    return days === null ? '' : new Date(Date.now() - days * 24 * 60 * 60_000).toISOString()
   }
 
   private progressWriter(

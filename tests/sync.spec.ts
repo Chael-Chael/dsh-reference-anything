@@ -22,7 +22,7 @@ class Table<V> implements KvTable<string, V> {
 function store(overrides: Partial<SettingsRecord> = {}) {
   const tables = new Map<string, Table<never>>()
   let settings: SettingsRecord = {
-    opencliPath: 'opencli', profile: '', cloudDriveDownloadDirectory: '', detailConcurrency: 8, autoSync: false, syncOnStartup: false, autoSyncMinutes: 60, historyMode: 'offline-mirror', enabledProviders: ['chatgpt', 'claude', 'gemini', 'deepseek', 'grok', 'kimi'], enabledAgents: [...ALL_LOCAL_AGENTS], maxReadTurns: 10, ...overrides,
+    opencliPath: 'opencli', profile: '', cloudDriveDownloadDirectory: '', detailConcurrency: 8, autoSync: false, syncOnStartup: false, autoSyncMinutes: 60, historyMode: 'offline-mirror', syncHistoryDays: null, enabledProviders: ['chatgpt', 'claude', 'gemini', 'deepseek', 'grok', 'kimi'], enabledAgents: [...ALL_LOCAL_AGENTS], maxReadTurns: 10, ...overrides,
     inputRenderMode: overrides.inputRenderMode ?? 'pill',
   }
   const domain = {
@@ -194,6 +194,24 @@ describe('auto-sync resilience', () => {
     expect(since[2]).toBe('')
     // Initial full + final full; unchanged incremental skips the body.
     expect(detailCalls).toBe(2)
+  })
+
+  it('requests and keeps only the configured number of days', async () => {
+    const db = store({ syncHistoryDays: 60, historyMode: 'metadata-only' })
+    await db.putConversation(row('chatgpt', 'local-old', '2000-01-01T00:00:00.000Z'), 'scope-chatgpt')
+    const requestedSince: string[] = []
+    const recent = new Date(Date.now() - 24 * 60 * 60_000).toISOString()
+    const manager = new ConversationSyncManager(db, () => fakeRunner({
+      history: async (provider, _signal, since) => {
+        requestedSince.push(since ?? '')
+        return [row(provider, 'remote-old', '2000-01-01T00:00:00.000Z'), row(provider, 'recent', recent)]
+      },
+    }))
+
+    await settled(manager, manager.start(['chatgpt'], 'full'))
+
+    expect(Date.now() - Date.parse(requestedSince[0]!)).toBeGreaterThanOrEqual(60 * 24 * 60 * 60_000)
+    expect([...db.conversations.entries()].map(([, value]) => value.externalId)).toEqual(['recent'])
   })
 
   it('stores only listing metadata in metadata-only mode', async () => {

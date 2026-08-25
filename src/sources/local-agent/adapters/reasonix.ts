@@ -39,6 +39,7 @@ import {
   parseTimestamp,
   pushAssistant,
   renderToolCall,
+  renderToolResult,
   stringField,
 } from './shared.ts'
 
@@ -68,7 +69,10 @@ export const reasonixAdapter: TranscriptAdapter = {
       const text = contentBlockUserText(record['content'])
       return text === undefined ? [] : emitUser(state, text)
     }
-    // `tool` records are results, which this projection drops by design.
+    if (record['role'] === 'tool') {
+      pushAssistant(state, renderToolResult(record['content'], options.toolResults, options.toolSummaryChars))
+      return []
+    }
     if (record['role'] !== 'assistant') return []
 
     pushAssistant(state, contentBlockUserText(record['content'], false))

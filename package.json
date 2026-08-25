@@ -1,6 +1,6 @@
 {
   "name": "dsh-reference-anything",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "description": "Reference commands, skills, workspace files, DSH sessions, local agent transcripts, cloud-drive files, and mirrored web-chat conversations from one DeepSeek Harness @ menu",
   "license": "MIT",
   "publishConfig": {
@@ -159,6 +159,7 @@
   "dependencies": {
     "@deepseek-ai/schemastery": "^3.18.1",
     "@lobehub/icons": "^5.16.0",
+    "react-markdown": "^10.1.0",
     "zod": "^4.4.3"
   },
   "devDependencies": {

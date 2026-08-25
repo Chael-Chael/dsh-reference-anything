@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import type { InvocationDescriptor } from '@deepseek-ai/dsh-typert-protocol'
-import { providerSchema, settingsRecordSchema } from './wire.ts'
+import { localAgentSchema, providerSchema, settingsRecordSchema } from './wire.ts'
 
 /**
  * One local-agent transcript as the `@` menu sees it.
@@ -12,6 +12,7 @@ import { providerSchema, settingsRecordSchema } from './wire.ts'
  * leaks.
  */
 export const agentCandidateSchema = z.object({ id: z.string(), kind: z.string(), label: z.string(), provider: z.string(), updatedAt: z.number().optional() }).readonly()
+export const agentStatsSchema = z.object({ agent: localAgentSchema, conversations: z.number().int().nonnegative() }).readonly()
 // `origin` is the drive's own display path, shown under the candidate. It is
 // never a download URL: those are signed with the account's credential and
 // must not cross this wire.
@@ -53,7 +54,7 @@ export const openCliDiscoverySchema = z.object({
 }).readonly()
 export const packageUpdateStatusSchema = z.object({
   currentVersion: z.string(), latestVersion: z.string(), updateAvailable: z.boolean(),
-  checkedAt: z.number().int().nonnegative(), error: z.string().optional(),
+  checkedAt: z.number().int().nonnegative(), releaseNotes: z.string().max(12_000).optional(), releaseUrl: z.string().url().optional(), error: z.string().optional(),
 }).readonly()
 export const packageUpdateResultSchema = z.object({
   version: z.string(), restartRequired: z.boolean(),
@@ -92,7 +93,6 @@ export const storageStatsSchema = z.object({
   remoteMissing: z.number().int().nonnegative().default(0), oldAccountConversations: z.number().int().nonnegative().default(0),
 }).readonly()
 export const clearProviderInputSchema = z.object({ provider: providerSchema }).readonly()
-export const clearOlderInputSchema = z.object({ days: z.number().int().min(1).max(36500) }).readonly()
 export const providerSyncStateSchema = z.object({
   provider: providerSchema, status: z.enum(['idle', 'running', 'cancelled', 'failed']),
   lastSyncAt: z.string(), lastCompleteScanAt: z.string(), error: z.string(),
@@ -123,6 +123,7 @@ export const openListUpgradeInputSchema = z.object({ rollback: z.boolean().optio
 
 export const REFERENCE_ANYTHING_INVOCATIONS: readonly InvocationDescriptor[] = [
   descriptor('agentSearch', [agentLookup, { name: 'input', wire: 'input', source: 'json', codec: strict('AgentSearchInput', z.object({ query: z.string(), limit: z.number().int().min(1).max(100) }).readonly()) }], strict('AgentCandidate[]', z.array(agentCandidateSchema)), true),
+  descriptor('agentStats', [], strict('AgentStats[]', z.array(agentStatsSchema)), true),
   // No session lookup, unlike `agentSearch`: a drive is the same drive from
   // every workspace, so there is nothing to scope the query to.
   descriptor('driveSearch', [{ name: 'input', wire: 'input', source: 'json', codec: strict('DriveSearchInput', z.object({ query: z.string(), limit: z.number().int().min(1).max(100) }).readonly()) }], strict('DriveCandidate[]', z.array(driveCandidateSchema)), true),
@@ -143,11 +144,11 @@ export const REFERENCE_ANYTHING_INVOCATIONS: readonly InvocationDescriptor[] = [
   descriptor('syncCancel', [{ name: 'input', wire: 'input', source: 'json', codec: strict('JobInput', jobInputSchema) }], strict('Boolean', z.boolean())),
   descriptor('settingsGet', [], strict('Settings', settingsRecordSchema)),
   descriptor('settingsUpdate', [{ name: 'settings', wire: 'settings', source: 'json', codec: strict('Settings', settingsRecordSchema) }], strict('Settings', settingsRecordSchema)),
+  descriptor('openDownloadDirectory', [], strict('Boolean', z.boolean()), true),
   descriptor('browse', [{ name: 'input', wire: 'input', source: 'json', codec: strict('BrowseInput', browseInputSchema) }], strict('BrowsePage', browsePageSchema), true),
   descriptor('deleteConversation', [{ name: 'input', wire: 'input', source: 'json', codec: strict('DeleteInput', deleteInputSchema) }], strict('Boolean', z.boolean()), true),
   descriptor('storageStats', [], strict('StorageStats', storageStatsSchema)),
   descriptor('clearProvider', [{ name: 'input', wire: 'input', source: 'json', codec: strict('ClearProviderInput', clearProviderInputSchema) }], strict('Count', z.number().int().nonnegative()), true),
-  descriptor('clearOlder', [{ name: 'input', wire: 'input', source: 'json', codec: strict('ClearOlderInput', clearOlderInputSchema) }], strict('Count', z.number().int().nonnegative()), true),
   descriptor('clearRemoteMissing', [], strict('Count', z.number().int().nonnegative()), true),
   descriptor('clearOldAccounts', [], strict('Count', z.number().int().nonnegative()), true),
   descriptor('syncStates', [], strict('ProviderSyncState[]', z.array(providerSyncStateSchema))),

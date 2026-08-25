@@ -368,7 +368,7 @@ describe('reading a conversation', () => {
     const snapshot = await ctx.references.read(ref('opencode', 'opencode.db', 'ses_a'), WINDOW)
     expect(turns(snapshot)).toEqual([
       { role: 'user', text: 'how does the cache work?' },
-      { role: 'assistant', text: 'It memoizes by key.\n\n[tool: Bash]' },
+      { role: 'assistant', text: 'It memoizes by key.\n\n[tool: Bash] {"command":"ls"}' },
       { role: 'user', text: 'and eviction?' },
       { role: 'assistant', text: 'LRU.' },
     ])
@@ -412,7 +412,7 @@ describe('reading a conversation', () => {
     expect(tail.body.startIndex).toBe(2)
     expect(tail.body.hasOlder).toBe(true)
     const head = await ctx.references.read(ref('opencode', 'opencode.db', 'ses_a'), { limit: 2, before: 2 })
-    expect(turns(head).map(turn => turn.text)).toEqual(['how does the cache work?', 'It memoizes by key.\n\n[tool: Bash]'])
+    expect(turns(head).map(turn => turn.text)).toEqual(['how does the cache work?', 'It memoizes by key.\n\n[tool: Bash] {"command":"ls"}'])
     expect(head.body.hasOlder).toBe(false)
     await dispose()
   })

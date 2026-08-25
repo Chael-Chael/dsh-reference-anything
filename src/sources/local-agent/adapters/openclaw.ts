@@ -37,6 +37,7 @@ import {
   parseTimestamp,
   pushAssistant,
   pushContentBlocks,
+  renderToolResult,
   stringField,
 } from './shared.ts'
 
@@ -72,8 +73,10 @@ export const openclawAdapter: TranscriptAdapter = {
       const text = contentBlockUserText(content)
       return text === undefined ? [] : emitUser(state, stripMessageId(text))
     }
-    // `toolResult` is a role of its own here rather than a user record full of
-    // `tool_result` blocks; either way it is plumbing this projection drops.
+    if (message['role'] === 'toolResult') {
+      pushAssistant(state, renderToolResult(content, options.toolResults, options.toolSummaryChars))
+      return []
+    }
     if (message['role'] !== 'assistant') return []
 
     if (typeof content === 'string') pushAssistant(state, stripMessageId(content))

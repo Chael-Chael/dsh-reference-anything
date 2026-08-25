@@ -4,7 +4,7 @@ import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
 import type {} from '@deepseek-ai/dsh-client-locale/client'
 import { createSnapshotStore, type ClientContext, type ISessions } from '@deepseek-ai/dsh-client-runtime/client'
 import type { InputTriggerServiceContract } from '@deepseek-ai/dsh-client-ui-input-trigger/client'
-import { ALL_LOCAL_AGENTS, ALL_PROVIDERS, defaultPickerSettings, samePickerSettings, type ChatProvider, type PickerSettings, type SettingsRecord } from '../wire.ts'
+import { ALL_LOCAL_AGENTS, ALL_PROVIDERS, defaultPickerSettings, samePickerSettings, type ChatProvider, type LocalAgent, type PickerSettings, type SettingsRecord } from '../wire.ts'
 import { REFERENCE_ANYTHING_REMOTE, type AgentCandidate, type DriveCandidate, type ReferenceAnythingRemoteFace, type SearchResult, type SyncStatus } from './remote.ts'
 import { createCloudDriveSource, createCommandSource, createConversationSource, createFileSource, createLocalAgentSource, createSearchDebounce, createSessionSource, createSkillSource, type RefreshablePickerSource } from './source.ts'
 import { ConversationSettings, PAGE_SIZE, type SettingsSnapshot } from './components.tsx'
@@ -32,7 +32,7 @@ export function apply(ctx: ClientContext): void {
   ctx.effect(() => adoptReferenceIconProjection(), 'reference-anything.client.icon-projection')
   let remote: ReferenceAnythingRemoteFace | undefined
   const scope = createSnapshotStore<SettingsSnapshot>({
-    settings: { opencliPath: 'opencli', profile: '', detailConcurrency: 8, autoSync: false, syncOnStartup: false, autoSyncMinutes: 60, historyMode: 'metadata-only', enabledProviders: [...ALL_PROVIDERS], enabledAgents: [...ALL_LOCAL_AGENTS], maxReadTurns: 10, inputRenderMode: 'pill', cloudDriveDownloadDirectory: '' }, loading: true,
+    settings: { opencliPath: 'opencli', profile: '', detailConcurrency: 8, autoSync: false, syncOnStartup: false, autoSyncMinutes: 60, historyMode: 'metadata-only', syncHistoryDays: null, enabledProviders: [...ALL_PROVIDERS], enabledAgents: [...ALL_LOCAL_AGENTS], maxReadTurns: 10, inputRenderMode: 'pill', cloudDriveDownloadDirectory: '' }, loading: true,
   })
   let currentJob = ''
   let lastSyncFinishedAt: string | undefined
@@ -54,6 +54,7 @@ export function apply(ctx: ClientContext): void {
     if (!remote) return
     try {
       const status = unwrap(await remote.openListStatus())
+      scope.set({ ...scope.getSnapshot(), openList: status })
       const [drivers, mounts] = status.mode === undefined ? [undefined, undefined] : await Promise.all([
         remote.openListDrivers().then(unwrap).catch(() => undefined), remote.openListMounts().then(unwrap).catch(() => undefined),
       ])
@@ -63,7 +64,13 @@ export function apply(ctx: ClientContext): void {
       const before = previousMounts?.map(mount => `${mount.id}:${mount.name}:${mount.enabled}:${mount.status}`).join('|') ?? ''
       const after = mounts?.map(mount => `${mount.id}:${mount.name}:${mount.enabled}:${mount.status}`).join('|') ?? ''
       if (before !== after) void activeDriveSource?.refreshCachedMenu({ refetch: true })
-    } catch { /* the normal settings panel remains available if OpenList is absent */ }
+    } catch (error) {
+      scope.set({ ...scope.getSnapshot(), error: message(error), notice: undefined })
+    }
+  }
+  const refreshAgentStats = async (): Promise<void> => {
+    if (!remote) return
+    try { scope.set({ ...scope.getSnapshot(), agentStats: unwrap(await remote.agentStats()) }) } catch { /* Optional local-agent source. */ }
   }
   /** Refresh settings and local mirror figures without starting OpenCLI. */
   const refreshLocal = async (): Promise<void> => {
@@ -80,6 +87,7 @@ export function apply(ctx: ClientContext): void {
       scope.set({ ...scope.getSnapshot(), settings: currentSettings, stats, storage: unwrap(storageResult),
         error: statsUnavailable && !stats ? 'Local conversation statistics are unavailable until the DSH host is restarted.' : undefined, loading: false })
       void refreshOpenList()
+      void refreshAgentStats()
     } catch (error) {
       if (generation === refreshGeneration) scope.set({ ...scope.getSnapshot(), error: error instanceof Error ? error.message : String(error), loading: false })
     }
@@ -102,6 +110,7 @@ export function apply(ctx: ClientContext): void {
       scope.set({ ...scope.getSnapshot(), settings: currentSettings, health: unwrap(health), profiles, stats, storage: unwrap(storageResult),
         error: statsUnavailable && !stats ? 'Local conversation statistics are unavailable until the DSH host is restarted.' : undefined, loading: false })
       void refreshOpenList()
+      void refreshAgentStats()
     } catch (error) {
       if (generation === refreshGeneration) scope.set({ ...scope.getSnapshot(), error: error instanceof Error ? error.message : String(error), loading: false })
     }
@@ -299,16 +308,6 @@ export function apply(ctx: ClientContext): void {
       notices.show(t('notice.cleared', { count }), { error: undefined })
     } catch (error) { scope.set({ ...scope.getSnapshot(), error: message(error) }) }
   }
-  const clearOlder = async (days: number): Promise<void> => {
-    if (!remote) return
-    try {
-      const count = unwrap(await remote.clearOlder({ days }))
-      await Promise.all([refreshStats(), refreshStorage()])
-      const current = scope.getSnapshot().browse
-      if (current) await browse(current.query, current.provider, 0)
-      notices.show(t('notice.cleared', { count }), { error: undefined })
-    } catch (error) { scope.set({ ...scope.getSnapshot(), error: message(error) }) }
-  }
   applySources = (picker) => {
     const next = picker ?? defaultPickerSettings()
     // Settings unrelated to the @ picker (for example Auto sync) use the
@@ -380,11 +379,21 @@ export function apply(ctx: ClientContext): void {
     name: 'settings.section', id: 'reference-anything', order: 56, label: () => t('settings.title'), locale: REFERENCE_ANYTHING_NS,
     inject: () => ({
       hooks: { scope }, close: () => undefined, save, sync: startSync, refresh, quickRefreshOnOpen,
-      browse, deleteConversation, clearProvider, clearOlder, clearRemoteMissing, clearOldAccounts, refreshStats,
+      browse, deleteConversation, clearProvider, clearRemoteMissing, clearOldAccounts, refreshStats,
       refreshOpenList,
+      pickAgentDirectory: async (agent: LocalAgent) => {
+        const path = await pickDirectoryWithError(ctx.workspaces, error => { scope.set({ ...scope.getSnapshot(), error: message(error), notice: undefined }) })
+        if (!path) return
+        const settings = scope.getSnapshot().settings
+        if (await save({ ...settings, agentDirectories: { ...(settings.agentDirectories ?? {}), [agent]: path } })) await refreshAgentStats()
+      },
       pickCloudDriveDownloadDirectory: () => pickDirectoryWithError(ctx.workspaces, error => {
         scope.set({ ...scope.getSnapshot(), error: message(error), notice: undefined })
       }),
+      openCloudDriveDownloadDirectory: async () => {
+        try { if (remote) unwrap(await remote.openDownloadDirectory()) }
+        catch (error) { scope.set({ ...scope.getSnapshot(), error: message(error), notice: undefined }) }
+      },
       openListInstall: async () => { if (!remote) return; await runOpenListOperation('downloading', () => remote!.openListInstall()) },
       openListUpgrade: async (rollback = false) => { if (!remote) return; await runOpenListOperation(!rollback && scope.getSnapshot().openList?.upgradeAvailable ? 'upgrade' : 'downloading', () => remote!.openListUpgrade({ rollback })) },
       openListConnectExternal: async (input: { endpoint: string; username?: string; password?: string; token?: string }) => { if (!remote) return; try { unwrap(await remote.openListConnectExternal(input)); await refreshOpenList() } catch (error) { scope.set({ ...scope.getSnapshot(), error: message(error) }); throw error } },
@@ -407,6 +416,7 @@ export function apply(ctx: ClientContext): void {
           const previous = scope.getSnapshot().update
           const update = {
             currentVersion: result.version, latestVersion: result.version, updateAvailable: false, checkedAt: Date.now(),
+            releaseNotes: previous?.releaseNotes, releaseUrl: previous?.releaseUrl,
           }
           notices.show(result.restartRequired ? t('notice.updateInstalled', { version: result.version }) : t('notice.upToDate', { version: previous?.currentVersion || result.version }), { update, error: undefined })
         } catch (error) { scope.set({ ...scope.getSnapshot(), error: message(error), notice: undefined }) }

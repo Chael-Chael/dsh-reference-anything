@@ -37,6 +37,7 @@ import {
   parseTimestamp,
   pushAssistant,
   pushContentBlocks,
+  pushToolResults,
 } from './shared.ts'
 
 /** Reads Grok Build chat histories. */
@@ -62,6 +63,7 @@ export const grokbuildAdapter: TranscriptAdapter = {
     if (record === undefined) return []
 
     if (record['type'] === 'user') {
+      pushToolResults(state, record['content'], options)
       const text = contentBlockUserText(record['content'])
       return text === undefined ? [] : emitUser(state, text)
     }

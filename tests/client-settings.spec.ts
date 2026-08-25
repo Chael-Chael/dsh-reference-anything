@@ -33,7 +33,7 @@ describe('settings source registration guard', () => {
       opencliPath: 'opencli', profile: '', detailConcurrency: 2, autoSync: false,
       autoSyncMinutes: 60, historyMode: 'metadata-only', referenceUiMode: 'official',
     })
-    expect(value).toMatchObject({ syncOnStartup: false, maxReadTurns: 10, inputRenderMode: 'pill', cloudDriveDownloadDirectory: '' })
+    expect(value).toMatchObject({ syncOnStartup: false, syncHistoryDays: null, maxReadTurns: 10, inputRenderMode: 'pill', cloudDriveDownloadDirectory: '' })
     expect(value).not.toHaveProperty('referenceUiMode')
     expect(value.enabledProviders).toEqual(['chatgpt', 'claude', 'gemini', 'deepseek', 'grok', 'kimi'])
     expect(value.enabledAgents).toEqual(['claude-code', 'codex', 'cursor', 'qoder', 'reasonix', 'openclaw', 'kimi', 'grokbuild', 'hermes', 'gemini-cli', 'pi', 'opencode', 'mimocode', 'zcode'])

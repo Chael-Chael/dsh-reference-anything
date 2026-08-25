@@ -132,6 +132,29 @@ describe('reference_list', () => {
 })
 
 describe('reference_read', () => {
+  it('defaults external Agent reads to summary and allows a full reread', async () => {
+    const agentRef = { source: 'local-agent', id: 'codex:session.jsonl' }
+    const details: Array<string | undefined> = []
+    const scoped = await mount({
+      id: 'local-agent',
+      requiresGrant: false,
+      read: (_target, window) => {
+        details.push(window.detail)
+        return Promise.resolve({
+          ref: agentRef,
+          label: 'Agent session',
+          body: { kind: 'conversation' as const, items: [{ role: 'assistant' as const, text: '[tool: exec]' }], startIndex: 0, totalTurns: 1, hasOlder: false },
+          partial: false,
+          capturedAt: 0,
+        })
+      },
+    })
+    const uri = encodeReferenceUri(agentRef)
+    expect(textOf(await run(scoped, 'reference_read', { uri }))).toContain('detail: "full"')
+    await run(scoped, 'reference_read', { uri, detail: 'full' })
+    expect(details).toEqual(['summary', 'full'])
+  })
+
   it('returns the conversation inside the untrusted frame', async () => {
     const result = await run(ctx, 'reference_read', { uri: encodeReferenceUri(ref) })
     expect(result.isError).toBeFalsy()

@@ -33,6 +33,7 @@ import {
   parseTimestamp,
   pushAssistant,
   renderToolCall,
+  pushToolResults,
   stringField,
 } from './shared.ts'
 
@@ -131,7 +132,7 @@ export const claudeCodeAdapter: TranscriptAdapter = {
 function stepUser(
   record: Record<string, unknown>,
   state: AdapterState,
-  _options: ConvertOptions,
+  options: ConvertOptions,
 ): readonly ParsedTurn[] {
   if (record['isCompactSummary'] === true || record['subtype'] === 'compact_boundary') {
     state.compacted = true
@@ -141,6 +142,7 @@ function stepUser(
       ? closed
       : [...closed, { role: 'assistant', text: `${COMPACTION_MARKER}\n\n${summary}` }]
   }
+  pushToolResults(state, objectField(record, 'message')?.['content'], options)
   const text = userText(record)
   return text === undefined ? [] : emitUser(state, text)
 }

@@ -1,6 +1,7 @@
-import type { ChatProvider } from '../wire.ts'
+import type { ChatProvider, LocalAgent } from '../wire.ts'
+import { Children, isValidElement, type ReactElement, type ReactNode } from 'react'
 import {
-  PICKER_ICON_MARKER, PICKER_ICON_NODES, PICKER_ICON_STROKE_WIDTH, PROVIDER_ICON_MARKER, PROVIDER_ICON_PATH,
+  LOCAL_AGENT_ICON_MARKER, PICKER_ICON_MARKER, PICKER_ICON_NODES, PICKER_ICON_STROKE_WIDTH, PROVIDER_ICON_MARKER, PROVIDER_ICON_PATH, agentLogoElement,
   type PickerIconKind,
 } from './provider-icons.tsx'
 import type { TranslateNS } from '@deepseek-ai/dsh-client-locale/client'
@@ -14,11 +15,13 @@ const css = `
 [data-composer-card] [role="listbox"]:has([role="presentation"][data-source]){box-sizing:border-box!important;width:100%!important;min-width:0!important;max-width:100%!important;border-radius:22px!important}
 [data-composer-card] [role="listbox"] [role="presentation"][data-source]{position:sticky;top:0;z-index:2;box-sizing:border-box;padding-top:6px!important;background:var(--dsw-alias-bg-layer-1,#fff)}
 [data-composer-card] [role="listbox"] [role="presentation"][data-source]:not(:first-child){margin-top:8px}
+[data-composer-card] [role="listbox"] [role="option"]{scroll-margin-block-start:30px;scroll-margin-block-end:4px}
 [data-composer-card] [role="listbox"]>[data-dsh-ref-menu-settling]{overflow-anchor:none!important}
 [data-composer-card] [role="listbox"]>[data-dsh-ref-menu-settling] [role="option"][aria-selected="false"]:hover{background:transparent!important}
 [data-composer-card] [role="listbox"] [role="option"][data-dsh-ref-menu-action]{color:var(--dsw-alias-label-tertiary,#737780)!important}
 [data-composer-card] [role="listbox"] [role="option"][data-dsh-ref-menu-action]>span:last-child:not(:first-child){display:none!important}
 [data-composer-card] [role="listbox"] .dsh_ref_projected_icon,[data-composer-card] [role="listbox"] .dsh_ref_picker_icon{display:inline-flex!important;align-items:center!important;justify-content:center!important;flex:none;width:16px!important;height:16px!important;line-height:1!important;color:var(--dsw-alias-label-secondary,#5f636b)}
+[data-composer-card] [role="listbox"] .dsh_ref_dual_icon{width:36px!important;gap:4px}
 [data-composer-card] [role="listbox"] :is(.dsh_ref_projected_icon,.dsh_ref_picker_icon)>svg{display:block;width:16px;height:16px;overflow:visible}
 [data-composer-card] [data-decoration="chip"][data-dsh-ref-chip-icon]>:first-child>svg{visibility:hidden!important}
 [data-composer-card] [data-decoration="chip"][data-dsh-ref-chip-icon]>:first-child:after{content:"";position:absolute;top:50%;left:50%;display:block;width:16px;height:16px;transform:translate(-50%,-50%);background:currentColor;-webkit-mask:var(--dsh-ref-chip-icon-mask) center/contain no-repeat;mask:var(--dsh-ref-chip-icon-mask) center/contain no-repeat;pointer-events:none}
@@ -46,7 +49,7 @@ const css = `
 .dsh_ref_toggle{position:relative}
 body[data-ds-dark-theme] .dsh_ref_settings{--dsh-ref-card-surface:var(--dsw-alias-bg-layer-1,#303038);--dsh-ref-control-surface:var(--dsw-alias-bg-layer-2,#363640)}
 .dsh_ref_header{padding:2px 2px 4px}.dsh_ref_header h2{font-size:26px;font-weight:700;letter-spacing:-.025em}.dsh_ref_header p{max-width:660px;color:var(--dsw-alias-label-dimmed,var(--dsw-alias-label-primary));line-height:1.55}.dsh_ref_settings button{border-color:var(--dsh-ref-line);border-radius:9px;background:transparent;color:var(--dsw-alias-label-primary);font-weight:600;transition:background .16s ease,border-color .16s ease,color .16s ease,transform .16s ease}.dsh_ref_settings button:hover:not(:disabled){border-color:var(--dsh-ref-blue-line);background:var(--dsh-ref-blue-soft);color:var(--dsh-ref-blue)}
-.dsh_ref_update_bar{display:flex;align-items:center;justify-content:space-between;gap:18px;padding:13px 14px;border:1px solid var(--dsh-ref-line);border-radius:12px;background:var(--dsh-ref-surface)}.dsh_ref_update_bar.is_available{border-color:var(--dsh-ref-blue-line);background:var(--dsh-ref-blue-soft)}.dsh_ref_update_copy{display:grid;min-width:0;gap:3px}.dsh_ref_update_copy strong{font-size:12px}.dsh_ref_update_copy small{color:#64748b;font-size:10px;line-height:1.45;overflow-wrap:anywhere}.dsh_ref_update_actions{display:flex;align-items:center;flex:none;gap:8px}.dsh_ref_settings .dsh_ref_button{display:inline-flex;align-items:center;justify-content:center;min-height:34px;padding:0 13px;border:1px solid var(--dsh-ref-line);border-radius:9px;background:transparent;color:var(--dsw-alias-label-primary);font-size:12px;font-weight:600;text-decoration:none;transition:background .16s ease,border-color .16s ease,color .16s ease,transform .16s ease}.dsh_ref_settings .dsh_ref_button:hover{border-color:var(--dsh-ref-blue-line);background:var(--dsh-ref-blue-soft);color:var(--dsh-ref-blue)}.dsh_ref_settings .dsh_ref_button:active{transform:translateY(1px)}.dsh_ref_update_actions .is_primary{border-color:var(--dsh-ref-blue);background:var(--dsh-ref-blue);color:#fff}.dsh_ref_update_actions .is_primary:hover:not(:disabled){background:var(--dsh-ref-blue);color:#fff;filter:brightness(.94)}body[data-ds-dark-theme] .dsh_ref_update_copy small{color:var(--dsw-alias-label-tertiary,#94a3b8)}
+.dsh_ref_update_bar{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:18px;padding:13px 14px;border:1px solid var(--dsh-ref-line);border-radius:12px;background:var(--dsh-ref-surface)}.dsh_ref_update_bar.is_available{border-color:var(--dsh-ref-blue-line);background:var(--dsh-ref-blue-soft)}.dsh_ref_update_copy{display:grid;min-width:0;gap:3px}.dsh_ref_update_copy strong{font-size:12px}.dsh_ref_update_copy small{color:#64748b;font-size:10px;line-height:1.45;overflow-wrap:anywhere}.dsh_ref_update_actions{display:flex;align-items:center;flex:none;gap:8px}.dsh_ref_update_notes{display:grid;flex:0 0 100%;gap:8px;padding-top:12px;border-top:1px solid var(--dsh-ref-line);font-size:11px}.dsh_ref_update_markdown{max-height:260px;overflow:auto;overflow-wrap:anywhere;line-height:1.55}.dsh_ref_update_markdown>:first-child{margin-top:0}.dsh_ref_update_markdown>:last-child{margin-bottom:0}.dsh_ref_update_markdown :is(h1,h2,h3,h4,h5,h6){margin:14px 0 6px;font-size:12px}.dsh_ref_update_markdown :is(p,ul,ol,blockquote,pre){margin:6px 0}.dsh_ref_update_markdown :is(ul,ol){padding-left:22px}.dsh_ref_update_markdown blockquote{padding-left:10px;border-left:2px solid var(--dsh-ref-line);opacity:.78}.dsh_ref_update_markdown code{padding:1px 4px;border-radius:4px;background:var(--dsh-ref-surface);font-family:"Geist Mono",Consolas,monospace}.dsh_ref_update_markdown pre{overflow:auto;padding:9px;border:1px solid var(--dsh-ref-line);border-radius:7px;background:var(--dsh-ref-surface)}.dsh_ref_update_markdown pre code{padding:0;background:transparent}.dsh_ref_update_notes a{justify-self:start;color:var(--dsh-ref-blue);font-size:10px;font-weight:650}.dsh_ref_settings .dsh_ref_button{display:inline-flex;align-items:center;justify-content:center;min-height:34px;padding:0 13px;border:1px solid var(--dsh-ref-line);border-radius:9px;background:transparent;color:var(--dsw-alias-label-primary);font-size:12px;font-weight:600;text-decoration:none;transition:background .16s ease,border-color .16s ease,color .16s ease,transform .16s ease}.dsh_ref_settings .dsh_ref_button:hover{border-color:var(--dsh-ref-blue-line);background:var(--dsh-ref-blue-soft);color:var(--dsh-ref-blue)}.dsh_ref_settings .dsh_ref_button:active{transform:translateY(1px)}.dsh_ref_update_actions .is_primary{border-color:var(--dsh-ref-blue);background:var(--dsh-ref-blue);color:#fff}.dsh_ref_update_actions .is_primary:hover:not(:disabled){background:var(--dsh-ref-blue);color:#fff;filter:brightness(.94)}body[data-ds-dark-theme] .dsh_ref_update_copy small{color:var(--dsw-alias-label-tertiary,#94a3b8)}
 .dsh_ref_recheck{border-color:var(--dsh-ref-blue-line)!important;color:var(--dsh-ref-blue)!important;background:var(--dsh-ref-blue-soft)!important}.dsh_ref_recheck:hover:not(:disabled){background:var(--dsh-ref-blue)!important;color:#fff!important}
 .dsh_ref_workspace{gap:12px;border:0;border-radius:0;background:transparent;overflow:visible}.dsh_ref_workspace>.dsh_ref_panel,.dsh_ref_workspace>.dsh_ref_sources{padding:20px;border:1px solid var(--dsh-ref-line);border-radius:14px;background:var(--dsh-ref-surface)}.dsh_ref_workspace>.dsh_ref_panel:last-child{border-bottom:1px solid var(--dsh-ref-line)}.dsh_ref_workspace>.dsh_ref_error{margin:0;border-color:rgba(239,68,68,.3);border-radius:12px;background:rgba(239,68,68,.06)}.dsh_ref_notice_layer{position:sticky;top:12px;z-index:20;display:flex;align-items:flex-start;justify-content:center;height:0;margin-bottom:-20px;pointer-events:none}.dsh_ref_notice{width:max-content;max-width:calc(100% - 32px);padding:10px 14px;border:1px solid var(--dsh-ref-blue);border-radius:10px;background:var(--dsh-ref-blue);color:#fff;animation:dsh_ref_notice_drop .18s ease-out both}@keyframes dsh_ref_notice_drop{from{opacity:0;transform:translateY(-12px)}to{opacity:1;transform:translateY(0)}}
 .dsh_ref_section_head h3{font-size:16px;font-weight:700;letter-spacing:-.015em}.dsh_ref_section_head p{color:var(--dsw-alias-label-dimmed,var(--dsw-alias-label-primary));line-height:1.5}.dsh_ref_health,.dsh_ref_syncing{border-color:var(--dsh-ref-blue-line);border-radius:999px;background:var(--dsh-ref-blue-soft);color:var(--dsh-ref-blue);font-weight:650}.dsh_ref_checklist{gap:13px}.dsh_ref_check>span{border-color:var(--dsh-ref-blue-line);background:var(--dsh-ref-blue-soft);color:var(--dsh-ref-blue)}.dsh_ref_check small{color:var(--dsw-alias-label-dimmed,var(--dsw-alias-label-primary));line-height:1.45}
@@ -63,20 +66,21 @@ body[data-ds-dark-theme] .dsh_ref_settings{--dsh-ref-card-surface:var(--dsw-alia
 body[data-ds-dark-theme] .dsh_ref_header p,body[data-ds-dark-theme] .dsh_ref_section_head p,body[data-ds-dark-theme] .dsh_ref_check small,body[data-ds-dark-theme] .dsh_ref_install span,body[data-ds-dark-theme] .dsh_ref_picker_limit,body[data-ds-dark-theme] .dsh_ref_provider>small,body[data-ds-dark-theme] .dsh_ref_field_note,body[data-ds-dark-theme] .dsh_ref_render_mode small{color:var(--dsw-alias-label-tertiary,#94a3b8)}
 .dsh_ref_header_brand{display:flex;align-items:flex-start;gap:14px}.dsh_ref_header_brand img{flex:none;width:42px;height:42px;object-fit:contain;border-radius:10px}
 .dsh_ref_provider{grid-template-columns:38px minmax(0,1fr);grid-template-rows:auto;align-items:stretch;column-gap:12px;padding:13px 14px}.dsh_ref_provider>.dsh_ref_provider_mark{grid-column:1;grid-row:1;align-self:center}.dsh_ref_provider_content{grid-column:2;display:grid;gap:9px;min-width:0}.dsh_ref_provider_summary{display:grid;grid-template-columns:minmax(120px,1fr) minmax(90px,.45fr) minmax(210px,1fr);align-items:baseline;gap:18px;min-width:0}.dsh_ref_provider_summary h4{grid-column:1;grid-row:auto;margin:0;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13px}.dsh_ref_provider_summary>strong{display:inline-flex;align-items:baseline;gap:3px;font-family:"Geist Mono",Consolas,monospace;font-size:18px;white-space:nowrap}.dsh_ref_provider_summary>strong span{font-family:Geist,"Segoe UI",sans-serif;font-size:11px;font-weight:600}.dsh_ref_provider_summary>small{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--dsw-alias-label-primary);font-size:10px;opacity:.78}.dsh_ref_provider_controls{display:flex;align-items:center;justify-content:space-between;gap:16px;min-width:0}.dsh_ref_provider_controls>.dsh_ref_toggle{flex:none;gap:6px;white-space:nowrap}.dsh_ref_provider_controls>.dsh_ref_toggle>span{width:28px;height:16px}.dsh_ref_provider_controls>.dsh_ref_toggle>span:after{top:2px;left:2px}.dsh_ref_provider_controls>.dsh_ref_toggle input:checked+span:after{transform:translateX(12px)}.dsh_ref_provider_controls>.dsh_ref_provider_actions{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:6px}.dsh_ref_provider_controls>.dsh_ref_provider_actions button{min-height:29px;padding:0 10px;font-size:10px;white-space:nowrap}.dsh_ref_provider_error{display:block;margin:0;padding-top:8px;border-top:1px dashed rgba(220,38,38,.28);color:#dc2626;font-size:10px;font-style:normal;line-height:1.45;overflow-wrap:anywhere}
-.dsh_ref_storage{display:grid;gap:18px}.dsh_ref_storage_header{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:start;gap:24px}.dsh_ref_storage_header h3{margin:0 0 4px;font-size:17px;letter-spacing:-.02em}.dsh_ref_storage_header p{margin:0;max-width:650px;color:#64748b;font-size:12px;line-height:1.55}.dsh_ref_storage_metric{display:grid;justify-items:end;gap:3px;min-width:116px;padding:8px 12px;border:1px solid var(--dsh-ref-blue-line);border-radius:9px;background:var(--dsh-ref-blue-soft)}.dsh_ref_storage_metric span{color:var(--dsw-alias-label-primary);font-size:10px;font-weight:650;opacity:.78}.dsh_ref_storage_metric strong{color:var(--dsw-alias-label-primary);font-family:"Geist Mono",Consolas,monospace;font-size:15px;line-height:1.25;white-space:nowrap}.dsh_ref_storage_cleanup{display:flex;align-items:flex-end;flex-wrap:wrap;gap:10px;padding-top:16px;border-top:1px solid var(--dsh-ref-line)}.dsh_ref_storage_cleanup>label{display:grid;gap:7px;color:var(--dsw-alias-label-primary);font-size:11px;font-weight:650}.dsh_ref_number_field{display:flex;align-items:center;width:190px;height:36px;overflow:hidden;border:1px solid var(--dsh-ref-line);border-radius:8px;background:var(--dsh-ref-control-surface)}.dsh_ref_number_field:focus-within{outline:2px solid var(--dsh-ref-blue-line);outline-offset:1px}.dsh_ref_number_field input{min-width:0;width:100%;height:100%;padding:0 10px;border:0;outline:0;background:transparent;color:var(--dsw-alias-label-primary);font:12px "Geist Mono",Consolas,monospace}.dsh_ref_number_field b{display:grid;place-items:center;align-self:stretch;min-width:42px;border-left:1px solid var(--dsh-ref-line);color:var(--dsw-alias-label-primary);font-size:11px;font-weight:650;opacity:.78}.dsh_ref_storage_cleanup>button{height:36px}
+.dsh_ref_storage{display:grid;gap:18px}.dsh_ref_storage_header{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:start;gap:24px}.dsh_ref_storage_header h3{margin:0 0 4px;font-size:17px;letter-spacing:-.02em}.dsh_ref_storage_header p{margin:0;max-width:650px;color:#64748b;font-size:12px;line-height:1.55}.dsh_ref_storage_metric{display:grid;justify-items:end;gap:3px;min-width:116px;padding:8px 12px;border:1px solid var(--dsh-ref-blue-line);border-radius:9px;background:var(--dsh-ref-blue-soft)}.dsh_ref_storage_metric span{color:var(--dsw-alias-label-primary);font-size:10px;font-weight:650;opacity:.78}.dsh_ref_storage_metric strong{color:var(--dsw-alias-label-primary);font-family:"Geist Mono",Consolas,monospace;font-size:15px;line-height:1.25;white-space:nowrap}
 body[data-ds-dark-theme] .dsh_ref_storage_header p{color:var(--dsw-alias-label-tertiary,#94a3b8)}
 @media(max-width:720px){.dsh_ref_storage_header{grid-template-columns:1fr}.dsh_ref_storage_metric{justify-items:start;justify-self:start}.dsh_ref_provider_summary{grid-template-columns:minmax(100px,1fr) auto}.dsh_ref_provider_summary>small{grid-column:1 / -1}.dsh_ref_provider_controls{align-items:flex-start;flex-direction:column}.dsh_ref_provider_controls>.dsh_ref_provider_actions{justify-content:flex-start}}
-@media(max-width:520px){.dsh_ref_provider{grid-template-columns:34px minmax(0,1fr)}.dsh_ref_provider_summary{grid-template-columns:1fr auto;gap:6px 10px}.dsh_ref_provider_controls>.dsh_ref_provider_actions{justify-content:flex-start}.dsh_ref_storage_cleanup{align-items:stretch;flex-direction:column}.dsh_ref_number_field{width:100%}.dsh_ref_storage_cleanup>button{align-self:flex-start}}
+@media(max-width:520px){.dsh_ref_provider{grid-template-columns:34px minmax(0,1fr)}.dsh_ref_provider_summary{grid-template-columns:1fr auto;gap:6px 10px}.dsh_ref_provider_controls>.dsh_ref_provider_actions{justify-content:flex-start}}
 /* General is a layout group, not a card. Keep only the actual picker list framed. */
 .dsh_ref_workspace>.dsh_ref_panel.dsh_ref_general_settings{padding:0;border:0;border-radius:0;background:transparent}
 /* The remaining sections keep their structural outline, but not a filled grey card. */
 .dsh_ref_workspace>.dsh_ref_panel,.dsh_ref_workspace>.dsh_ref_sources{background:transparent}.dsh_ref_check>span.is_ready{border-color:rgba(22,163,74,.35);background:rgba(22,163,74,.1);color:#16a34a}.dsh_ref_check>span.is_neutral{border-color:rgba(100,116,139,.35);background:rgba(100,116,139,.1);color:#64748b}.dsh_ref_check>span.is_error{border-color:rgba(220,38,38,.35);background:rgba(220,38,38,.08);color:#dc2626}.dsh_ref_check small.is_warning,.dsh_ref_provider>em,.dsh_ref_error{color:#dc2626}
 .dsh_ref_health.is_ready{border-color:rgba(22,163,74,.35);background:rgba(22,163,74,.1);color:#16a34a}.dsh_ref_check_body{flex:1}.dsh_ref_check_actions{display:flex!important;align-items:center;flex-wrap:wrap;gap:7px!important;margin-top:6px}.dsh_ref_check_actions>button{min-height:28px;padding:0 9px;border-color:var(--dsh-ref-blue-line);border-radius:7px;color:var(--dsh-ref-blue);font-size:10px}.dsh_ref_check_profile{display:flex!important;grid-template-columns:none!important;align-items:center;gap:7px!important}.dsh_ref_check_profile select{height:29px;max-width:220px;padding:0 8px;border:1px solid var(--dsh-ref-line);border-radius:7px;background:var(--dsh-ref-control-surface);color:var(--dsw-alias-label-primary);font:11px Geist,"Segoe UI",sans-serif}.dsh_ref_store_fallback{margin:14px 0 0;padding:10px 12px;border:1px solid rgba(220,38,38,.3);border-radius:9px;background:rgba(220,38,38,.06);color:#dc2626;font-size:11px}.dsh_ref_store_fallback a{color:inherit;font-weight:700}.dsh_ref_setup_step{margin:14px 0 0;padding:9px 11px;border:1px solid var(--dsh-ref-blue-line);border-radius:9px;background:var(--dsh-ref-blue-soft);color:var(--dsh-ref-blue);font-size:11px;font-weight:650}
 .dsh_ref_chat{gap:0}.dsh_ref_chat_divider{height:0;margin:20px 0;border-top:1px solid var(--dsh-ref-line)}
-.dsh_ref_cloud{display:grid;gap:14px;padding:20px;border:1px solid var(--dsh-ref-line);border-radius:14px;background:transparent}.dsh_ref_cloud_actions,.dsh_ref_cloud_cards article>div{display:flex;gap:8px;flex-wrap:wrap}.dsh_ref_cloud_connect,.dsh_ref_cloud_mount_form{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;padding-top:14px;border-top:1px solid var(--dsh-ref-line)}.dsh_ref_cloud label{display:grid;gap:5px;font-size:11px;font-weight:650}.dsh_ref_cloud input,.dsh_ref_cloud select,.dsh_ref_cloud textarea{min-width:0;padding:0 9px;border:1px solid var(--dsh-ref-line);border-radius:7px;background:var(--dsh-ref-control-surface);color:var(--dsw-alias-label-primary);font:12px Geist,"Segoe UI",sans-serif}.dsh_ref_cloud input,.dsh_ref_cloud select{height:34px}.dsh_ref_cloud textarea{padding-block:8px;resize:vertical}.dsh_ref_cloud .dsh_ref_masked_secret{-webkit-text-security:disc}.dsh_ref_cloud input[type=checkbox]{width:16px;height:16px;padding:0}.dsh_ref_cloud_mount_form h4{grid-column:1 / -1;margin:0;font-size:13px}.dsh_ref_cloud_cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:10px}.dsh_ref_cloud_cards article{display:grid;gap:7px;padding:12px;border:1px solid var(--dsh-ref-line);border-radius:10px;background:var(--dsh-ref-card-surface)}.dsh_ref_cloud_cards strong{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13px}.dsh_ref_cloud_cards span,.dsh_ref_cloud_cards small{font-size:10px;opacity:.76}.dsh_ref_cloud_cards button{min-height:28px;padding:0 9px;font-size:10px}@media(max-width:640px){.dsh_ref_cloud_connect,.dsh_ref_cloud_mount_form{grid-template-columns:1fr}}
-.dsh_ref_cloud_download{display:grid;grid-template-columns:minmax(180px,.8fr) minmax(240px,1.4fr) auto;align-items:end;gap:10px;padding:14px;border:1px solid var(--dsh-ref-line);border-radius:10px;background:var(--dsh-ref-card-surface)}.dsh_ref_cloud_download_copy{display:grid;gap:3px;align-self:center}.dsh_ref_cloud_download_copy strong{font-size:12px}.dsh_ref_cloud_download_copy small{font-size:10px;line-height:1.45;opacity:.72}.dsh_ref_cloud_download_state{justify-self:start;margin-top:3px;padding:2px 6px;border:1px solid var(--dsh-ref-blue-line);border-radius:999px;color:var(--dsh-ref-blue);font-size:9px;font-weight:700}.dsh_ref_cloud_download_actions{display:flex;gap:7px;flex-wrap:wrap}.dsh_ref_cloud_download_actions button{min-height:34px;padding-inline:10px;font-size:10px}@media(max-width:800px){.dsh_ref_cloud_download{grid-template-columns:1fr}.dsh_ref_cloud_download_actions{justify-content:flex-start}}
+.dsh_ref_cloud{display:grid;gap:14px}.dsh_ref_cloud_actions,.dsh_ref_cloud_cards article>div{display:flex;gap:8px;flex-wrap:wrap}.dsh_ref_cloud_connect,.dsh_ref_cloud_mount_form{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;padding-top:14px;border-top:1px solid var(--dsh-ref-line)}.dsh_ref_cloud label{display:grid;gap:5px;font-size:11px;font-weight:650}.dsh_ref_cloud input,.dsh_ref_cloud select,.dsh_ref_cloud textarea{min-width:0;padding:0 9px;border:1px solid var(--dsh-ref-line);border-radius:7px;background:var(--dsh-ref-control-surface);color:var(--dsw-alias-label-primary);font:12px Geist,"Segoe UI",sans-serif}.dsh_ref_cloud input,.dsh_ref_cloud select{height:34px}.dsh_ref_cloud textarea{padding-block:8px;resize:vertical}.dsh_ref_cloud .dsh_ref_masked_secret{-webkit-text-security:disc}.dsh_ref_cloud input[type=checkbox]{width:16px;height:16px;padding:0}.dsh_ref_cloud_mount_form h4{grid-column:1 / -1;margin:0;font-size:13px}.dsh_ref_cloud_cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:10px}.dsh_ref_cloud_cards article{display:grid;gap:7px;padding:12px;border:1px solid var(--dsh-ref-line);border-radius:10px;background:var(--dsh-ref-card-surface)}.dsh_ref_cloud_cards strong{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13px}.dsh_ref_cloud_cards span,.dsh_ref_cloud_cards small{font-size:10px;opacity:.76}.dsh_ref_cloud_cards button{min-height:28px;padding:0 9px;font-size:10px}@media(max-width:640px){.dsh_ref_cloud_connect,.dsh_ref_cloud_mount_form{grid-template-columns:1fr}}
+.dsh_ref_cloud_download{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:end;gap:10px;padding:14px;border:1px solid var(--dsh-ref-line);border-radius:10px;background:var(--dsh-ref-card-surface)}.dsh_ref_cloud_download_copy{display:grid;grid-column:1 / -1;gap:3px}.dsh_ref_cloud_download_copy strong{font-size:12px}.dsh_ref_cloud_download_copy small{font-size:10px;line-height:1.45;opacity:.72}.dsh_ref_cloud_download_state{justify-self:start;margin-top:3px;padding:2px 6px;border:1px solid var(--dsh-ref-blue-line);border-radius:999px;color:var(--dsh-ref-blue);font-size:9px;font-weight:700}.dsh_ref_cloud_download_actions{display:flex;gap:7px;flex-wrap:wrap}.dsh_ref_cloud_download_actions button{min-height:34px;padding-inline:10px;font-size:10px}@media(max-width:800px){.dsh_ref_cloud_download{grid-template-columns:1fr}.dsh_ref_cloud_download_actions{justify-content:flex-start}}
 .dsh_ref_source_filter{display:grid;gap:14px}.dsh_ref_filter_actions{display:flex;gap:8px}.dsh_ref_choice_grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px}.dsh_ref_choice_grid>label,.dsh_ref_mount_visibility{display:flex!important;align-items:center;gap:9px;padding:9px 10px;border:1px solid var(--dsh-ref-line);border-radius:9px;background:var(--dsh-ref-card-surface);cursor:pointer}.dsh_ref_choice_grid input,.dsh_ref_mount_visibility input{width:16px!important;height:16px!important;flex:0 0 auto}.dsh_ref_choice_grid span,.dsh_ref_mount_visibility span{display:grid;gap:2px}.dsh_ref_choice_grid b,.dsh_ref_mount_visibility b{font-size:11px}.dsh_ref_choice_grid small,.dsh_ref_mount_visibility small{font-size:9px;opacity:.66}.dsh_ref_mount_visibility:has(input:disabled){opacity:.55;cursor:not-allowed}
 .dsh_ref_reference_choices{display:grid;gap:14px}.dsh_ref_mount_selection_head{margin-top:8px}.dsh_ref_selection_card .dsh_ref_provider_summary{grid-template-columns:minmax(120px,1fr) minmax(120px,1fr)}.dsh_ref_selection_card .dsh_ref_provider_summary>small{grid-column:2}.dsh_ref_selection_card .dsh_ref_provider_controls{justify-content:flex-start}.dsh_ref_text_mark{font-size:13px;font-weight:750}.dsh_ref_cloud_steps{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:0;padding:0;list-style:none}.dsh_ref_cloud_steps li{display:flex;align-items:center;gap:9px;min-width:0;padding:10px;border:1px solid var(--dsh-ref-line);border-radius:10px;opacity:.65}.dsh_ref_cloud_steps li.is_current,.dsh_ref_cloud_steps li.is_done{opacity:1}.dsh_ref_cloud_steps li.is_current{border-color:var(--dsh-ref-blue)}.dsh_ref_cloud_steps li>b{display:grid;place-items:center;flex:0 0 24px;width:24px;height:24px;border:1px solid var(--dsh-ref-blue-line);border-radius:999px;color:var(--dsh-ref-blue);font-size:10px}.dsh_ref_cloud_steps li.is_done>b{border-color:var(--dsh-ref-blue);background:var(--dsh-ref-blue);color:#fff}.dsh_ref_cloud_steps span{display:grid;gap:2px;min-width:0}.dsh_ref_cloud_steps strong{font-size:11px}.dsh_ref_cloud_steps small{font-size:9px;line-height:1.35;opacity:.72}.dsh_ref_cloud_quick{display:grid;grid-template-columns:minmax(160px,1fr) auto;gap:10px;padding:14px;border:1px solid var(--dsh-ref-blue-line);border-radius:11px;background:var(--dsh-ref-blue-soft)}.dsh_ref_cloud_quick h4,.dsh_ref_cloud_quick label:has(textarea){grid-column:1 / -1}.dsh_ref_advanced_toggle{justify-self:start}@media(max-width:640px){.dsh_ref_cloud_steps{grid-template-columns:1fr}.dsh_ref_cloud_quick{grid-template-columns:1fr}.dsh_ref_cloud_quick h4,.dsh_ref_cloud_quick label:has(textarea){grid-column:auto}.dsh_ref_selection_card .dsh_ref_provider_summary{grid-template-columns:1fr}.dsh_ref_selection_card .dsh_ref_provider_summary>small{grid-column:1}}
+.dsh_ref_agent_provider .dsh_ref_provider_controls>button{min-height:28px;margin-left:auto;padding:0 9px;font-size:10px}
 .dsh_ref_cloud_quick_guide{grid-column:1 / -1;margin:0;color:var(--dsw-alias-label-primary);font-size:10px;line-height:1.55;opacity:.78}
 .dsh_ref_cloud_quick{display:block;padding:16px}.dsh_ref_cloud_quick_head{margin-bottom:14px}.dsh_ref_cloud_quick_head h4{margin:0 0 4px}.dsh_ref_cloud_quick_head p{margin:0;font-size:11px;line-height:1.55;opacity:.78}.dsh_ref_quick_tasks{display:grid;gap:10px;margin:0;padding:0;list-style:none}.dsh_ref_quick_tasks>li{display:grid;grid-template-columns:28px minmax(0,1fr);gap:10px;padding:12px;border:1px solid var(--dsh-ref-line);border-radius:10px;background:var(--dsw-alias-background-primary)}.dsh_ref_quick_tasks>li.is_current{border-color:var(--dsh-ref-blue)}.dsh_ref_quick_tasks>li>b{display:grid;place-items:center;width:26px;height:26px;border:1px solid var(--dsh-ref-blue-line);border-radius:999px;color:var(--dsh-ref-blue);font-size:11px}.dsh_ref_quick_tasks>li.is_done>b{background:var(--dsh-ref-blue);color:#fff}.dsh_ref_quick_tasks>li>div{display:grid;gap:8px;min-width:0}.dsh_ref_quick_tasks strong{font-size:12px}.dsh_ref_quick_tasks p,.dsh_ref_quick_tasks small{margin:0;font-size:10px;line-height:1.55;opacity:.76}.dsh_ref_quick_tasks label{display:grid;gap:5px}.dsh_ref_quick_tasks .dsh_ref_button{justify-self:start;min-height:38px}.dsh_ref_quick_summary{display:flex;justify-content:space-between;gap:12px;margin-top:12px;padding:10px 12px;border-radius:9px;background:var(--dsw-alias-background-secondary);font-size:11px}.dsh_ref_quick_submit{width:100%;min-height:42px;margin-top:10px}@media(max-width:640px){.dsh_ref_quick_summary{align-items:flex-start;flex-direction:column;gap:3px}.dsh_ref_quick_tasks .dsh_ref_button{justify-self:stretch;text-align:center}}
 .dsh_ref_api_pages_guide{display:grid;gap:7px;padding:10px 12px;border-left:3px solid var(--dsh-ref-blue);border-radius:0 8px 8px 0;background:var(--dsh-ref-blue-soft)}.dsh_ref_api_pages_guide>strong{font-size:11px}.dsh_ref_api_pages_guide ol{display:grid;gap:5px;margin:0;padding-left:19px}.dsh_ref_api_pages_guide li{font-size:10px;line-height:1.5}
@@ -508,8 +512,10 @@ function ensureAnchorScrollRange(viewport: HTMLElement, desiredScrollTop: number
 export function adoptReferenceIconProjection(): () => void {
   const providers = Object.keys(PROVIDER_ICON_MARKER) as ChatProvider[]
   const pickerKinds = Object.keys(PICKER_ICON_MARKER) as PickerIconKind[]
+  const agentKinds = Object.keys(LOCAL_AGENT_ICON_MARKER) as LocalAgent[]
   const providerMasks = Object.fromEntries(providers.map(provider => [provider, providerIconMask(PROVIDER_ICON_PATH[provider])])) as Record<ChatProvider, string>
   const pickerMasks = Object.fromEntries(pickerKinds.map(kind => [kind, pickerIconMask(kind)])) as Record<PickerIconKind, string>
+  const agentMasks = Object.fromEntries(agentKinds.map(agent => [agent, reactIconMask(agentLogoElement(agent)!)])) as Partial<Record<LocalAgent, string>>
   const project = (root: ParentNode): void => {
     const selector = '[data-composer-card] [role="listbox"]'
     const menus = new Set<Element>()
@@ -532,6 +538,26 @@ export function adoptReferenceIconProjection(): () => void {
             node.classList.add('dsh_ref_projected_icon')
             node.dataset.dshRefMenuIcon = provider
           } else {
+            const agent = agentKinds.find(item => text.includes(LOCAL_AGENT_ICON_MARKER[item] ?? ''))
+            if (agent !== undefined) {
+              node.replaceChildren(createReactIcon(agentLogoElement(agent)!))
+              node.classList.remove('dsh_ref_picker_icon')
+              node.classList.add('dsh_ref_projected_icon')
+              node.dataset.dshRefMenuIcon = agent
+              node = walker.nextNode()
+              continue
+            }
+            if (text.includes(PICKER_ICON_MARKER.drive)) {
+              const fileKind = pickerKinds.find(item => item !== 'drive' && text.includes(PICKER_ICON_MARKER[item]))
+              if (fileKind !== undefined) {
+                node.replaceChildren(createPickerIcon('drive'), createPickerIcon(fileKind))
+                node.classList.remove('dsh_ref_projected_icon')
+                node.classList.add('dsh_ref_picker_icon', 'dsh_ref_dual_icon')
+                node.dataset.dshRefMenuIcon = 'drive'
+                node = walker.nextNode()
+                continue
+              }
+            }
             const kind = pickerKinds.find(item => text.includes(PICKER_ICON_MARKER[item]))
             if (kind !== undefined) {
               node.replaceChildren(createPickerIcon(kind))
@@ -544,7 +570,7 @@ export function adoptReferenceIconProjection(): () => void {
         node = walker.nextNode()
       }
     }
-    projectComposerChips(root, providerMasks, pickerMasks)
+    projectComposerChips(root, providerMasks, pickerMasks, agentMasks)
   }
   project(document)
   const observer = new MutationObserver(records => {
@@ -570,12 +596,17 @@ export function adoptReferenceIconProjection(): () => void {
 const CHIP_PROVIDER_LABEL: Readonly<Record<ChatProvider, string>> = {
   chatgpt: 'ChatGPT', claude: 'Claude', gemini: 'Gemini', deepseek: 'DeepSeek', grok: 'Grok', kimi: 'Kimi',
 }
-const LOCAL_AGENT_CHIP_LABELS = ['Claude Code', 'Codex', 'Cursor', 'Qoder', 'Reasonix', 'OpenClaw', 'Kimi CLI', 'Grok Build', 'Hermes', 'Gemini CLI', 'Pi', 'opencode', 'mimocode', 'zcode'] as const
+const LOCAL_AGENT_CHIP_LABEL: Readonly<Record<LocalAgent, string>> = {
+  'claude-code': 'Claude Code', codex: 'Codex', cursor: 'Cursor', qoder: 'Qoder', reasonix: 'Reasonix',
+  openclaw: 'OpenClaw', kimi: 'Kimi CLI', grokbuild: 'Grok Build', hermes: 'Hermes', 'gemini-cli': 'Gemini CLI',
+  pi: 'Pi', opencode: 'opencode', mimocode: 'mimocode', zcode: 'zcode',
+}
 
 function projectComposerChips(
   root: ParentNode,
   providerMasks: Readonly<Record<ChatProvider, string>>,
   pickerMasks: Readonly<Record<PickerIconKind, string>>,
+  agentMasks: Readonly<Partial<Record<LocalAgent, string>>>,
 ): void {
   const selector = '[data-composer-card] [data-decoration="chip"][data-reference-appearance]'
   const chips = new Set<HTMLElement>()
@@ -589,11 +620,12 @@ function projectComposerChips(
     const appearance = chip.dataset.referenceAppearance
     if (appearance === 'session') {
       const referenceSource = chip.dataset.referenceSource
-      if (referenceSource === 'Local agent conversations' || referenceSource === 'local-agent') {
-        applyChipIcon(chip, 'agent', pickerMasks.agent)
+      const agent = (Object.keys(LOCAL_AGENT_CHIP_LABEL) as LocalAgent[]).find(item => label.startsWith(`${LOCAL_AGENT_CHIP_LABEL[item]}·`))
+      if (agent !== undefined) {
+        applyChipIcon(chip, agent, agentMasks[agent] ?? pickerMasks.agent)
         continue
       }
-      if (LOCAL_AGENT_CHIP_LABELS.some(agent => label.startsWith(`${agent}·`))) {
+      if (referenceSource === 'Local agent conversations' || referenceSource === 'local-agent') {
         applyChipIcon(chip, 'agent', pickerMasks.agent)
         continue
       }
@@ -602,6 +634,10 @@ function projectComposerChips(
       if (provider !== undefined) applyChipIcon(chip, provider, providerMasks[provider])
       else applyChipIcon(chip, 'session', pickerMasks.session)
     } else if (appearance === 'file') {
+      if (chip.dataset.referenceSource === 'Cloud drive files' || chip.dataset.referenceSource === 'cloud-drive') {
+        applyChipIcon(chip, 'drive', pickerMasks.drive)
+        continue
+      }
       const kind = workspacePathIconKind(label, 'file')
       applyChipIcon(chip, kind, pickerMasks[kind])
     } else {
@@ -622,6 +658,21 @@ function clearChipIcon(chip: HTMLElement): void {
 }
 
 const SVG_NS = 'http://www.w3.org/2000/svg'
+
+function createReactIcon(element: ReactElement): SVGSVGElement {
+  const create = (item: ReactElement): SVGElement => {
+    const node = document.createElementNS(SVG_NS, item.type as string)
+    for (const [name, value] of Object.entries(item.props as Record<string, unknown>)) {
+      if (name === 'children' || name === 'style' || value == null || typeof value === 'object') continue
+      node.setAttribute(name === 'fillRule' ? 'fill-rule' : name === 'clipRule' ? 'clip-rule' : name, String(value))
+    }
+    for (const child of Children.toArray((item.props as { children?: ReactNode }).children)) {
+      if (isValidElement(child) && typeof child.type === 'string') node.append(create(child))
+    }
+    return node
+  }
+  return create(element) as SVGSVGElement
+}
 
 function createProviderIcon(path: string): SVGSVGElement {
   const svg = document.createElementNS(SVG_NS, 'svg')
@@ -654,6 +705,12 @@ function createPickerIcon(kind: PickerIconKind): SVGSVGElement {
 
 function providerIconMask(path: string): string {
   return svgMask(`<path fill="black" fill-rule="evenodd" d="${path}"/>`)
+}
+
+function reactIconMask(element: ReactElement): string {
+  const svg = createReactIcon(element)
+  svg.querySelector('title')?.remove()
+  return svgMask(svg.innerHTML.replaceAll('currentColor', 'black'))
 }
 
 function pickerIconMask(kind: PickerIconKind): string {

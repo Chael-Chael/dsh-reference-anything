@@ -36,6 +36,7 @@ import {
   parseTimestamp,
   pushAssistant,
   renderToolCall,
+  renderToolResult,
   stringField,
 } from './shared.ts'
 
@@ -83,9 +84,12 @@ export const codexAdapter: TranscriptAdapter = {
       case 'local_shell_call':
         pushAssistant(state, renderToolCall(payload['name'], payload['input'], options.toolCalls, options.toolSummaryChars))
         return []
+      case 'function_call_output':
+      case 'custom_tool_call_output':
+        pushAssistant(state, renderToolResult(payload['output'], options.toolResults, options.toolSummaryChars))
+        return []
       default:
-        // `function_call_output` / `custom_tool_call_output` are tool results,
-        // which this projection drops by design. `agent_message` here is not
+        // `agent_message` here is not
         // the assistant answering the user — it carries `author` and
         // `recipient` and is one agent dispatching work to another — so it is
         // plumbing too.

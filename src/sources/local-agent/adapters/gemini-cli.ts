@@ -35,6 +35,7 @@ import {
   parseTimestamp,
   pushAssistant,
   renderToolCall,
+  renderToolResult,
   takeHeld,
 } from './shared.ts'
 
@@ -130,6 +131,8 @@ function pushGemini(entry: Record<string, unknown>, state: AdapterState, options
     const it = asRecord(call)
     if (it === undefined) continue
     pushAssistant(state, renderToolCall(it['name'], it['args'], options.toolCalls, options.toolSummaryChars))
+    const output = it['result'] ?? it['output'] ?? it['response']
+    if (output !== undefined) pushAssistant(state, renderToolResult(output, options.toolResults, options.toolSummaryChars))
   }
 }
 

@@ -6,13 +6,13 @@ import { ConversationSettings, ManageConversations, PAGE_SIZE, type BrowseState,
 import type { Health, ManagedConversation } from '../src/client/remote.ts'
 import { en } from '../src/client/locale.ts'
 import { pickDirectoryWithError } from '../src/client/directory-picker.ts'
-import { ALL_LOCAL_AGENTS, defaultPickerSettings, type SettingsRecord } from '../src/wire.ts'
+import { ALL_LOCAL_AGENTS, defaultPickerSettings, type LocalAgent, type SettingsRecord } from '../src/wire.ts'
 
 // React only flushes effects synchronously inside act() when it is told it is
 // in a test environment; without this every act() call warns and defers.
 ;(globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
-const settings = { opencliPath: 'opencli', profile: '', detailConcurrency: 8, autoSync: false, syncOnStartup: false, autoSyncMinutes: 60, historyMode: 'metadata-only' as const, enabledProviders: ['chatgpt', 'claude', 'gemini', 'deepseek', 'grok', 'kimi'] as Array<'chatgpt' | 'claude' | 'gemini' | 'deepseek' | 'grok' | 'kimi'>, enabledAgents: [...ALL_LOCAL_AGENTS], maxReadTurns: 10, inputRenderMode: 'pill' as const, cloudDriveDownloadDirectory: '' }
+const settings = { opencliPath: 'opencli', profile: '', detailConcurrency: 8, autoSync: false, syncOnStartup: false, autoSyncMinutes: 60, historyMode: 'metadata-only' as const, syncHistoryDays: null, enabledProviders: ['chatgpt', 'claude', 'gemini', 'deepseek', 'grok', 'kimi'] as Array<'chatgpt' | 'claude' | 'gemini' | 'deepseek' | 'grok' | 'kimi'>, enabledAgents: [...ALL_LOCAL_AGENTS], maxReadTurns: 10, inputRenderMode: 'pill' as const, cloudDriveDownloadDirectory: '' }
 const t = ((key: keyof typeof en, values?: Record<string, string | number>) => Object.entries(values ?? {}).reduce((text, [name, value]) => text.replace(`{${name}}`, String(value)), en[key])) as never
 
 function conversation(overrides: Partial<ManagedConversation> = {}): ManagedConversation {
@@ -61,6 +61,8 @@ type SettingsActions = {
   checkUpdate?: () => Promise<void>; installUpdate?: () => Promise<void>
   quickRefreshOnOpen?: () => Promise<void>
   pickCloudDriveDownloadDirectory?: () => Promise<string | null>
+  pickAgentDirectory?: (agent: LocalAgent) => Promise<void>
+  openCloudDriveDownloadDirectory?: () => Promise<void>
 }
 function settingsElement(current: SettingsSnapshot, actions: SettingsActions = {}) {
   const noop = async () => {}
@@ -69,7 +71,8 @@ function settingsElement(current: SettingsSnapshot, actions: SettingsActions = {
     useScope={useScope} save={actions.save ?? noop} sync={noop} cancel={noop} refresh={actions.refresh ?? noop} quickRefreshOnOpen={actions.quickRefreshOnOpen ?? noop}
     setupAll={actions.setupAll ?? noop} discoverOpenCli={actions.discoverOpenCli ?? noop} installOpenCli={actions.installOpenCli ?? noop}
     useProfile={actions.useProfile ?? noop} install={actions.install ?? noop} restartDaemon={noop} checkUpdate={actions.checkUpdate ?? noop} installUpdate={actions.installUpdate ?? noop} browse={noop} deleteConversation={noop}
-    clearProvider={noop} clearOlder={noop} refreshStats={noop} pickCloudDriveDownloadDirectory={actions.pickCloudDriveDownloadDirectory} t={t} />
+    clearProvider={noop} refreshStats={noop} pickCloudDriveDownloadDirectory={actions.pickCloudDriveDownloadDirectory}
+    pickAgentDirectory={actions.pickAgentDirectory} openCloudDriveDownloadDirectory={actions.openCloudDriveDownloadDirectory} t={t} />
 }
 function renderSettings(current: SettingsSnapshot, actions: SettingsActions = {}): HTMLElement {
   return render(settingsElement(current, actions))
@@ -81,6 +84,13 @@ function rerenderSettings(current: SettingsSnapshot, actions: SettingsActions = 
 
 describe('cloud-drive download directory', () => {
   const directoryInput = (el: HTMLElement) => el.querySelector<HTMLInputElement>('input[aria-label="Cloud-drive download directory"]')!
+
+  it('opens the active download directory', async () => {
+    const open = vi.fn(async () => {})
+    const el = renderSettings({ settings }, { openCloudDriveDownloadDirectory: open })
+    await act(async () => { Array.from(el.querySelectorAll<HTMLButtonElement>('.dsh_ref_cloud_download button')).find(button => button.textContent === 'Open directory')!.click() })
+    expect(open).toHaveBeenCalledOnce()
+  })
 
   it('distinguishes the system temporary directory from a custom directory', () => {
     const system = renderSettings({ settings })
@@ -285,9 +295,37 @@ describe('settings update bar', () => {
     expect(installUpdate).toHaveBeenCalledOnce()
     expect(confirmation).toHaveBeenCalledTimes(2)
   })
+
+  it('shows release notes below an available update on request', async () => {
+    const update = { ...currentUpdate, latestVersion: '0.2.2', updateAvailable: true, releaseNotes: '## New\n\n- **Faster** sync with [details](https://example.com/details)', releaseUrl: 'https://example.com/v0.2.2' }
+    const el = renderSettings({ settings, update })
+
+    expect(el.querySelector('.dsh_ref_update_notes')).toBeNull()
+    await act(async () => { Array.from(el.querySelectorAll<HTMLButtonElement>('.dsh_ref_update_actions button')).find(button => button.textContent === 'View release notes')!.click() })
+    expect(el.querySelector('.dsh_ref_update_notes')?.textContent).toContain('Faster sync')
+    expect(el.querySelector('.dsh_ref_update_markdown h2')?.textContent).toBe('New')
+    expect(el.querySelector('.dsh_ref_update_markdown strong')?.textContent).toBe('Faster')
+    expect(el.querySelector<HTMLAnchorElement>('.dsh_ref_update_markdown a')?.target).toBe('_blank')
+    expect(el.querySelector<HTMLAnchorElement>('.dsh_ref_update_notes > a')?.href).toBe('https://example.com/v0.2.2')
+  })
+
+  it('shows the installed version release notes when up to date', async () => {
+    const el = renderSettings({ settings, update: { ...currentUpdate, releaseNotes: 'Current release notes' } })
+
+    await act(async () => { Array.from(el.querySelectorAll<HTMLButtonElement>('.dsh_ref_update_actions button')).find(button => button.textContent === 'View release notes')!.click() })
+    expect(el.querySelector('.dsh_ref_update_notes')?.textContent).toContain('Current release notes')
+  })
 })
 
 describe('local agent source selection', () => {
+  it('shows recognized conversation counts and lets each Agent choose a directory', async () => {
+    const pick = vi.fn(async (_agent: LocalAgent) => {})
+    const el = renderSettings({ settings, agentStats: [{ agent: 'claude-code', conversations: 7 }] }, { pickAgentDirectory: pick })
+    const card = el.querySelector<HTMLElement>('[data-local-agent="claude-code"]')!
+    expect(card.textContent).toContain('7chats')
+    await act(async () => { Array.from(card.querySelectorAll('button')).find(button => button.textContent === 'Custom location')!.click() })
+    expect(pick).toHaveBeenCalledWith('claude-code')
+  })
   it('shows every supported agent and saves an explicit selection', async () => {
     const saved: SettingsRecord[] = []
     const el = renderSettings({ settings }, { save: async value => { saved.push(value) } })
@@ -298,17 +336,23 @@ describe('local agent source selection', () => {
     expect(saved.at(-1)?.enabledAgents).toHaveLength(13)
   })
 
-  it('places agent and drive choices directly below external conversation cards', async () => {
+  it('places Agent and cloud-drive details in separate cards above external conversations', async () => {
     const saved: SettingsRecord[] = []
     const el = renderSettings({ settings, openListMounts: [
       { id: '1', name: '/work', driver: 'OneDrive', enabled: true, status: 'ready' },
       { id: '2', name: '/archive', driver: 'Aliyundrive', enabled: true, status: 'ready' },
     ] }, { save: async value => { saved.push(value) } })
-    const providerGrid = el.querySelector('.dsh_ref_provider_grid')!
+    const providerGrid = el.querySelector('.dsh_ref_chat > .dsh_ref_provider_grid')!
+    const agentCard = el.querySelector('.dsh_ref_agent_sources')!
+    const driveCard = el.querySelector('.dsh_ref_drive_sources')!
     const agentChoices = el.querySelector('.dsh_ref_agent_choices')!
     const cloudSetup = el.querySelector('.dsh_ref_cloud')!
     const driveChoices = el.querySelector('.dsh_ref_drive_choices')!
-    expect(providerGrid.compareDocumentPosition(agentChoices) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0)
+    expect(agentCard.contains(agentChoices)).toBe(true)
+    expect(agentCard.contains(driveChoices)).toBe(false)
+    expect(driveCard.contains(driveChoices)).toBe(true)
+    expect(agentCard.compareDocumentPosition(driveCard) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0)
+    expect(driveCard.compareDocumentPosition(providerGrid) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0)
     expect(cloudSetup.compareDocumentPosition(driveChoices) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0)
     const driveToggles = driveChoices.querySelectorAll<HTMLInputElement>('input')
     expect(driveToggles).toHaveLength(2)
@@ -448,11 +492,24 @@ describe('manage synced conversations', () => {
 describe('general settings editing', () => {
   const noop = async () => {}
 
+  it('defaults the chat history range to unlimited and saves days or unlimited', async () => {
+    const saved: SettingsRecord[] = []
+    const el = renderSettings({ settings }, { save: async value => { saved.push(value) } })
+    const input = el.querySelector<HTMLInputElement>('input[aria-label="Chat history sync range (days)"]')!
+
+    expect(input.value).toBe('')
+    expect(input.placeholder).toBe('Unlimited')
+    await act(async () => { setNativeValue(input, '60'); input.dispatchEvent(new Event('input', { bubbles: true })); input.dispatchEvent(new FocusEvent('focusout', { bubbles: true })) })
+    expect(saved.at(-1)?.syncHistoryDays).toBe(60)
+    await act(async () => { setNativeValue(input, ''); input.dispatchEvent(new Event('input', { bubbles: true })); input.dispatchEvent(new FocusEvent('focusout', { bubbles: true })) })
+    expect(saved.at(-1)?.syncHistoryDays).toBeNull()
+  })
+
   it('allows a picker limit to be temporarily empty, then validates it on commit', () => {
     const saved: SettingsRecord[] = []
     const current: SettingsSnapshot = { settings: { ...settings, picker: defaultPickerSettings() }, loading: true }
     const useScope = ((selector: (value: SettingsSnapshot) => unknown) => selector(current)) as never
-    const el = render(<ConversationSettings close={() => {}} useSessions={(() => []) as never} useWorkspaces={(() => []) as never} useScope={useScope} save={async value => { saved.push(value) }} sync={noop} cancel={noop} refresh={noop} setupAll={noop} discoverOpenCli={noop} installOpenCli={noop} useProfile={noop} install={noop} restartDaemon={noop} checkUpdate={noop} installUpdate={noop} browse={noop} deleteConversation={noop} clearProvider={noop} clearOlder={noop} refreshStats={noop} t={t} />)
+    const el = render(<ConversationSettings close={() => {}} useSessions={(() => []) as never} useWorkspaces={(() => []) as never} useScope={useScope} save={async value => { saved.push(value) }} sync={noop} cancel={noop} refresh={noop} setupAll={noop} discoverOpenCli={noop} installOpenCli={noop} useProfile={noop} install={noop} restartDaemon={noop} checkUpdate={noop} installUpdate={noop} browse={noop} deleteConversation={noop} clearProvider={noop} refreshStats={noop} t={t} />)
     const input = el.querySelector('.dsh_ref_picker_limit input') as HTMLInputElement
 
     act(() => { setNativeValue(input, ''); input.dispatchEvent(new Event('input', { bubbles: true })) })
@@ -471,7 +528,7 @@ describe('general settings editing', () => {
     const saved: SettingsRecord[] = []
     const current: SettingsSnapshot = { settings: { ...settings, picker: defaultPickerSettings() }, loading: true }
     const useScope = ((selector: (value: SettingsSnapshot) => unknown) => selector(current)) as never
-    const el = render(<ConversationSettings close={() => {}} useSessions={(() => []) as never} useWorkspaces={(() => []) as never} useScope={useScope} save={async value => { saved.push(value) }} sync={noop} cancel={noop} refresh={noop} setupAll={noop} discoverOpenCli={noop} installOpenCli={noop} useProfile={noop} install={noop} restartDaemon={noop} checkUpdate={noop} installUpdate={noop} browse={noop} deleteConversation={noop} clearProvider={noop} clearOlder={noop} refreshStats={noop} t={t} />)
+    const el = render(<ConversationSettings close={() => {}} useSessions={(() => []) as never} useWorkspaces={(() => []) as never} useScope={useScope} save={async value => { saved.push(value) }} sync={noop} cancel={noop} refresh={noop} setupAll={noop} discoverOpenCli={noop} installOpenCli={noop} useProfile={noop} install={noop} restartDaemon={noop} checkUpdate={noop} installUpdate={noop} browse={noop} deleteConversation={noop} clearProvider={noop} refreshStats={noop} t={t} />)
     const select = el.querySelector('.dsh_ref_render_mode select') as HTMLSelectElement
 
     act(() => { setNativeValue(select, 'native-scroll'); select.dispatchEvent(new Event('change', { bubbles: true })) })

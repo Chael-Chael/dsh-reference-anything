@@ -128,8 +128,38 @@ export function renderToolCall(
   if (mode === 'drop') return undefined
   const label = typeof name === 'string' && name.trim() !== '' ? name.trim() : 'unknown'
   if (mode === 'elide') return `[tool: ${label}]`
+  if (mode === 'full') {
+    const detail = fullInput(input)
+    return detail === '' ? `[tool: ${label}]` : `[tool: ${label}] ${detail}`
+  }
   const detail = summarizeInput(input, summaryChars)
   return detail === '' ? `[tool: ${label}]` : `[tool: ${label}] ${detail}`
+}
+
+/** Render one tool result with the same fidelity policy as its call. */
+export function renderToolResult(output: unknown, mode: ToolCallMode, summaryChars: number): string | undefined {
+  if (mode === 'drop') return undefined
+  if (mode === 'elide') return '[tool output]'
+  const detail = mode === 'full' ? fullInput(output) : summarizeInput(output, summaryChars)
+  return detail === '' ? '[tool output]' : `[tool output] ${detail}`
+}
+
+/** Append Anthropic-style tool_result blocks attributed to the user role. */
+export function pushToolResults(state: AdapterState, blocks: unknown, options: ConvertOptions): void {
+  if (!Array.isArray(blocks)) return
+  for (const block of blocks) {
+    if (typeof block !== 'object' || block === null) continue
+    const entry = block as Record<string, unknown>
+    if (entry['type'] === 'tool_result') {
+      pushAssistant(state, renderToolResult(entry['content'], options.toolResults, options.toolSummaryChars))
+    }
+  }
+}
+
+/** Serialize a call's complete argument payload without truncating or flattening it. */
+function fullInput(input: unknown): string {
+  if (input === undefined || input === null) return ''
+  return typeof input === 'string' ? input : safeStringify(input)
 }
 
 /** Flatten a call's arguments to one bounded line. */
@@ -238,8 +268,11 @@ export function pushContentBlocks(state: AdapterState, blocks: unknown, options:
           options.toolSummaryChars,
         ))
         break
+      case 'tool_result':
+        pushAssistant(state, renderToolResult(entry['content'], options.toolResults, options.toolSummaryChars))
+        break
       default:
-        // `tool_result`, `redacted_thinking`, images, and whatever a later
+        // `redacted_thinking`, images, and whatever a later
         // build adds carry nothing this projection can use. Skipping silently
         // is what keeps a new block type from breaking an old adapter.
         break
@@ -389,7 +422,8 @@ export function parseTimestamp(value: unknown): number | undefined {
 /** Default projection settings, used by tests and by any caller that has no config. */
 export const DEFAULT_CONVERT_OPTIONS: ConvertOptions = {
   includeThinking: false,
-  toolCalls: 'elide',
+  toolCalls: 'full',
+  toolResults: 'full',
   includeSidechains: false,
   stripEnvironmentPreamble: true,
   toolSummaryChars: 200,

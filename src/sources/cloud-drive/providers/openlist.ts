@@ -83,14 +83,7 @@ export class OpenListDriveProvider implements DriveProvider {
     if (bounded === 0) return []
     const needle = query.trim()
     if (needle.startsWith('/')) return this.listDirectory(needle.replace(/\/+$/u, '') || '/', bounded, signal)
-    // The picker can only insert files. OpenList roots normally contain mount
-    // directories, so returning the root listing made a bare `@drive:` look
-    // empty after the source correctly removed directories. Walk a bounded
-    // number of folders instead and offer the most recent readable files.
-    if (needle === '') {
-      return [...await this.walkFor('', bounded, signal, false)]
-        .sort((left, right) => (right.modifiedAt ?? 0) - (left.modifiedAt ?? 0))
-    }
+    if (needle === '') return this.listDirectory(this.root, bounded, signal)
     try {
       const data = await this.api('/api/fs/search', {
         parent: this.root, keywords: needle, scope: 0, case_sensitive: false, page: 1, per_page: bounded,

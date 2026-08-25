@@ -514,7 +514,9 @@ export function apply(ctx: Context, config: Config = {}): void {
  */
 function rank(entries: readonly DriveEntry[], query: string): DriveEntry[] {
   if (query === '') {
-    return [...entries].sort((a, b) => (b.modifiedAt ?? 0) - (a.modifiedAt ?? 0))
+    return [...entries].sort((a, b) =>
+      a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' })
+      || (b.modifiedAt ?? 0) - (a.modifiedAt ?? 0))
   }
   const scored: { entry: DriveEntry, match: TitleMatch }[] = []
   // A semantic search returns hits whose relevance the filename cannot show,

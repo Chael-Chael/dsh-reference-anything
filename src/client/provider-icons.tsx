@@ -1,4 +1,18 @@
-import type { ChatProvider } from '../wire.ts'
+import * as ClaudeCode from '@lobehub/icons/es/ClaudeCode/components/Mono.js'
+import * as Codex from '@lobehub/icons/es/Codex/components/Mono.js'
+import * as Cursor from '@lobehub/icons/es/Cursor/components/Mono.js'
+import * as GeminiCLI from '@lobehub/icons/es/GeminiCLI/components/Mono.js'
+import * as Grok from '@lobehub/icons/es/Grok/components/Mono.js'
+import * as HermesAgent from '@lobehub/icons/es/HermesAgent/components/Mono.js'
+import * as Kimi from '@lobehub/icons/es/Kimi/components/Mono.js'
+import * as OpenClaw from '@lobehub/icons/es/OpenClaw/components/Mono.js'
+import * as OpenCode from '@lobehub/icons/es/OpenCode/components/Mono.js'
+import * as Pi from '@lobehub/icons/es/Pi/components/Mono.js'
+import * as Qoder from '@lobehub/icons/es/Qoder/components/Mono.js'
+import * as XiaomiMiMo from '@lobehub/icons/es/XiaomiMiMo/components/Mono.js'
+import * as ZAI from '@lobehub/icons/es/ZAI/components/Mono.js'
+import { createElement, type ComponentType, type ReactElement } from 'react'
+import type { ChatProvider, LocalAgent } from '../wire.ts'
 
 /** Paths are shared by Settings and the DOM projection used by @ candidates/chips. */
 export const PROVIDER_ICON_PATH: Readonly<Record<ChatProvider, string>> = {
@@ -33,6 +47,12 @@ export const SKILL_ICON_MARKER = PICKER_ICON_MARKER.skill
 export const COMMAND_ICON_MARKER = PICKER_ICON_MARKER.command
 export const AGENT_ICON_MARKER = PICKER_ICON_MARKER.agent
 export const DRIVE_ICON_MARKER = PICKER_ICON_MARKER.drive
+
+export const LOCAL_AGENT_ICON_MARKER: Readonly<Partial<Record<LocalAgent, string>>> = {
+  'claude-code': '\uE118', codex: '\uE119', cursor: '\uE11A', qoder: '\uE11B',
+  openclaw: '\uE11C', kimi: '\uE11D', grokbuild: '\uE11E', hermes: '\uE11F',
+  'gemini-cli': '\uE120', pi: '\uE121', opencode: '\uE122', mimocode: '\uE123', zcode: '\uE124',
+}
 
 type PickerIconNode = Readonly<{
   tag: 'path' | 'rect' | 'circle'
@@ -151,7 +171,24 @@ export function ProviderLogo({ provider, size = 22 }: { provider: ChatProvider; 
   return <svg fill="currentColor" fillRule="evenodd" width={size} height={size} viewBox="0 0 24 24" aria-hidden><path d={PROVIDER_ICON_PATH[provider]} /></svg>
 }
 
-export function AgentLogo({ size = 22 }: { size?: number }) {
+const AGENT_LOGO = {
+  'claude-code': ClaudeCode.default, codex: Codex.default, cursor: Cursor.default, qoder: Qoder.default,
+  openclaw: OpenClaw.default, kimi: Kimi.default, grokbuild: Grok.default, hermes: HermesAgent.default,
+  'gemini-cli': GeminiCLI.default, pi: Pi.default, opencode: OpenCode.default,
+  mimocode: XiaomiMiMo.default, zcode: ZAI.default,
+} as const
+
+type MemoLogo = ComponentType<{ 'aria-hidden'?: boolean }> & { type: (props: { 'aria-hidden'?: boolean }) => ReactElement }
+
+export function agentLogoElement(agent: LocalAgent): ReactElement | undefined {
+  const Logo = AGENT_LOGO[agent as keyof typeof AGENT_LOGO] as unknown as ComponentType<{ 'aria-hidden'?: boolean }> | undefined
+  return Logo ? (Logo as MemoLogo).type({ 'aria-hidden': true }) : undefined
+}
+
+
+export function AgentLogo({ agent, size = 22 }: { agent: LocalAgent; size?: number }) {
+  const Logo = AGENT_LOGO[agent as keyof typeof AGENT_LOGO] as unknown as ComponentType<{ size?: string | number; 'aria-hidden'?: boolean }> | undefined
+  if (Logo) return createElement(Logo, { size, 'aria-hidden': true })
   return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={PICKER_ICON_STROKE_WIDTH} strokeLinecap="round" strokeLinejoin="round" aria-hidden>{PICKER_ICON_NODES.agent.map((node, index) => {
     const Tag = node.tag
     return <Tag key={index} {...node.attrs} />

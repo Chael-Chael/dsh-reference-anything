@@ -8,7 +8,9 @@
 
 One `@` for them all.
 
-**English** · [简体中文](./README_zh-CN.md) · [📰 News](#-news) · [🧭 Roadmap](#-roadmap) · [📦 Installation](#-installation) · [🚀 Usage](#-usage) · [🐛 Report Bug][github-issues-link]
+**English** · [简体中文](./README_zh-CN.md)
+
+[📰 News](#-news) · [🧭 Roadmap](#-roadmap) · [📦 Installation](#-installation) · [🚀 Usage](#-usage) · [🐛 Report Bug][github-issues-link]
 
 <!-- SHIELD GROUP -->
 
@@ -22,6 +24,7 @@ One `@` for them all.
 [![][github-license-shield]][github-license-link]<br/>
 ![awesome · DSH plugin](https://awesome-dsh-plugin.com/badge.svg)
 [![][npm-downloads-shield]][npm-package-link]
+[![dshfind](https://dshfind.com/api/badge/Chael-Chael/dsh-reference-anything?lang=zh)](https://dshfind.com/zh/plugins/Chael-Chael/dsh-reference-anything?ref=badge)
 
 </div>
 
@@ -37,16 +40,16 @@ After typing `@`, you can browse and click items in the menu with your mouse, or
 
 Use one `@` menu to reference:
 
-- DSH commands and Skills
-- Workspace files and folders
-- DSH session history
-- Transcripts left on disk by other local agent CLIs (Claude Code, Codex, Cursor, and eleven more)
+- 🧩 DSH commands and Skills
+- 📁 Workspace files and folders
+- 💬 DSH session history
+- 🖥️ **NEW: Transcripts left on disk by other local agent CLIs (Claude Code, Codex, Cursor, and eleven more)**
 - ✨ **NEW: Historical conversations from online chatbots like ChatGPT, Claude, Gemini, DeepSeek, Grok, and Kimi**
-- Files from cloud drives connected through OpenList
+- ☁️ **NEW: Files from cloud drives connected through OpenList**
 
 Beyond extending what `@` can reference, Reference Anything also enhances the `@` menu itself:
 
-- Customize visible groups: enable or hide `Commands`, `Skills`, files, DSH sessions, local agent conversations, and external conversations, then arrange them in any order
+- Customize visible groups: enable or hide `Commands`, `Skills`, files, DSH sessions, local agent conversations, external conversations, and cloud-drive files, then arrange them in any order
 - Customize result counts: set each group's collapsed row count and hard candidate cap independently
 - Choose how to browse: expand or collapse individual groups, or use DSH's native scrolling list
 - Enhanced visual icons: distinguish reference sources with type icons and platform logos, making menu items easier to identify
@@ -74,17 +77,16 @@ Type `@`, search across enabled sources, and insert the selected reference into 
 
 ## 📰 News
 
+- **2026-08-25 · v0.3.2** — Settings now show detected local-agent conversation counts and let users choose a custom folder when needed. Web AI conversation sync can be limited by age. Cloud drives support folder-by-folder browsing and quick access to the download folder. Update notes are available in Settings, and local-agent tool details are concise by default with full detail still available on demand.
 - **2026-08-20 · v0.3.1** — Added a sixth `@` group, `Local agent conversations`: the sessions fourteen other agent CLIs leave on disk — Claude Code, Codex, Cursor, Qoder, Reasonix, OpenClaw, Kimi, Grok Build, Hermes, Gemini CLI, Pi, and the three SQLite-backed ones (opencode, mimocode, zcode) — are now listed and referenced like any other source. Reference-only: nothing is imported into DSH's session store, and a transcript is streamed only when the model calls `reference_read`. Reads are bounded, workspace-scoped by default, and gated by the same per-task authorization the external conversations use, which is now source-qualified rather than hard-coded to one source. The rc.8 build now resolves its development SDKs from published packages, and workspace scoping normalizes both sides of a path comparison for reliable Windows matching.
 - **2026-08-20 · v0.3.0** — Completed the native DSH `@` integration: five independently configurable sources, official file/session Remotes, native Composer references with source logos, in-place expand/collapse and sync actions, and a one-click switch between Reference Anything and the official DSH `@` list. The legacy `dsh-file:` protocol and custom Composer interaction layer were removed.
 - **2026-08-19 · v0.2.4** — Added automatic version checks and in-settings updates, Pill/Raw text input rendering modes, and reusable background browser sessions for more reliable OpenCLI synchronization and input interactions.
-- **2026-08-18 · v0.2.0** — A redesigned Reference Anything settings page with local session statistics, paginated management, Provider/Profile selection, and sync status checks.
-- **2026-08-18** — Introduced on-demand read protocol: references default to safe pointers, and the agent reads the body and attachments only after authorization.
-- **2026-08-17** — Unified ChatGPT, Claude, Gemini, DeepSeek, Grok, and Kimi under the DSH `@` menu.
 
 ## 🧭 Roadmap
 
 - [x] Support referencing historical conversations from other local agents
-- [ ] Support referencing files from cloud drives and performing operations on them (in progress)
+- [x] Reference cloud-drive files through OpenList
+- [ ] Manage cloud-drive files inside the plugin (in progress; current access is read-only)
 - [ ] Support more keyword matching rules, including blacklists and whitelists, especially for file search
 - [ ] Support more AI conversation platforms
 - [ ] Provide a quieter AI conversation synchronization mechanism
@@ -134,18 +136,18 @@ Reference Anything registers seven sources in the native DSH `@` menu rather tha
 
 1. Open `Settings → Reference Anything` in DSH Web.
 2. Under **Availability check**, confirm that OpenCLI, Browser Bridge, the browser extension, and the conversation adapter are ready.
-3. Under **External conversation sync settings**, choose a connected browser Profile, history storage mode, and sync mode. Then click **Sync enabled sources now**, or sync an individual Provider from its card.
+3. Under **Web AI conversation sync settings**, choose a browser profile, storage mode, sync mode, and history range, then start syncing.
 4. Type `@` in the input box and choose from the `Commands`, `Skills`, `Files and folders`, `DSH sessions`, `Local agent conversations`, `External conversations`, or `Cloud drive files` groups.
 5. Type a keyword to filter candidates, for example `@cache-design`.
 
-The default **Read bodies on demand** mode stores only the title index locally and uses the browser when an agent calls `reference_read`. Choose **Store full bodies locally** for offline reading and full-text search; this mode keeps only the latest version of each conversation. The Composer uses native DSH reference occurrences for files, DSH sessions, and external conversations; Reference Anything adds source-specific logos without replacing native wrapping, caret, selection, deletion, draft, clipboard, or serialization behavior. The plugin checks npm for updates when it loads; restart DSH after installing an update from the settings page.
+The default **Read bodies on demand** mode stores only the title index locally and uses the browser when an agent needs the conversation. Choose **Store full bodies locally** for offline reading and full-text search. The plugin checks for new versions when it loads; release notes are available in Settings, and installed updates take effect after restarting DSH.
 
 > [!WARNING]
 > To protect your account and conversation data, external conversations are imported and synchronized through OpenCLI using your existing logged-in browser session. A browser window may temporarily open during use or synchronization. In most cases, leave it open in the background: the plugin will reuse it without interrupting your work. The window may also display OpenCLI debugging information. This is expected—please do not be alarmed or close it manually; wait for the operation to finish. Due to current OpenCLI limitations, we temporarily use slower serial synchronization to reduce how often browser windows open. Once the upstream OpenCLI repository is updated, we will switch to faster parallel synchronization.
 
 ### 🧩 One `@` menu, multiple sources
 
-The `@` menu contains seven groups: `Commands`, `Skills`, `Files and folders`, `DSH sessions`, `Local agent conversations`, `External conversations`, and `Cloud drive files`. Each group shows six rows before its expand action by default and accepts a separate hard candidate cap from 1 to 50. In collapse mode, each expand action reveals five more rows and updates the mounted menu without jumping back to the top; collapse restores the configured compact count. The external-conversation group keeps its sync action first and updates that row and the visible results in place while synchronization runs and completes. Under `Settings → Reference Anything → General`, you can enable or disable groups, reorder them, and choose **Collapse / expand** or **Native DSH scrolling**.
+The `@` menu contains seven groups: `Commands`, `Skills`, `Files and folders`, `DSH sessions`, `Local agent conversations`, `External conversations`, and `Cloud drive files`. The cloud-drive group browses folders and supported files from drives connected through OpenList; access is read-only, and connections are managed in Settings. Each group shows six rows before its expand action by default and accepts a separate hard candidate cap from 1 to 50. In collapse mode, each expand action reveals five more rows and updates the mounted menu without jumping back to the top; collapse restores the configured compact count. The external-conversation group keeps its sync action first and updates that row and the visible results in place while synchronization runs and completes. Under `Settings → Reference Anything → General`, you can enable or disable groups, reorder them, and choose **Collapse / expand** or **Native DSH scrolling**.
 
 #### ⌨️ @Commands — DSH native commands
 
@@ -211,7 +213,7 @@ This group is **reference-only**. Nothing is copied into DSH's session store and
 | mimocode | `@mimocode:` `@mimo:` | `~/.local/share/mimocode` |
 | zcode | `@zcode:` | `~/.zcode/cli/db` |
 
-An agent whose directory does not exist is treated as not installed rather than as an error, so the menu simply omits it. Additional roots can be added through `extraRoots`, each with the format it holds; roots are written `~/`-relative so a profile stays portable between machines.
+Settings show how many conversations were detected for each agent. If history is stored elsewhere, choose a custom folder for that agent. Missing history is not treated as an error.
 
 **The last three formats are databases, not files.** opencode, mimocode, and zcode keep every session they have ever run in one SQLite file rather than one file per conversation, so each conversation is listed on its own and its reference id names both the database and the session inside it (`opencode:opencode.db#ses_…`). Reading them needs Node's built-in `node:sqlite`, which exists from Node 22.5; on an older runtime those three simply do not list. Set `sqlite: false` to keep the driver out of the process entirely — with no root of those kinds resolved, no database is ever opened. A database read is bounded by `maxSessionRecords` (2000 messages, counted from the newest) rather than by `maxScanBytes`, because a database cannot be streamed the way a JSONL file can.
 
@@ -220,9 +222,9 @@ An agent whose directory does not exist is treated as not installed rather than 
 
 **Prefix collisions with External conversations:** bare `@claude:`, `@gemini:`, `@grok:`, and `@kimi:` keep meaning the browser platform, because that is what the bare word means to most people. The on-disk CLI transcripts of those same brands are reachable only under their qualified names — `@claude-code:`, `@gemini-cli:`, `@grokbuild:`, `@kimi-cli:`.
 
-**Scope:** by default only transcripts whose recorded working directory matches the current session's are listed, so opening `@` in one project does not enumerate every conversation on the machine. Set `scope: 'all'` (or type `@agents:all`) to widen it.
+**Scope:** all detected local-agent conversations are available by default. Configuration can narrow the list to the current workspace when preferred.
 
-**Reading:** adjacent assistant records are merged into one turn and tool results are dropped, so a turn count here will not match the record count the originating agent's own UI shows. Thinking blocks are dropped unless `includeThinking` is set, tool calls render as `[tool: Bash]` under the default `toolCalls: 'elide'`, and a transcript larger than `maxScanBytes` (32 MiB) is read anchored to its tail and reported as partial rather than truncated silently. Attachments are inlined as text notes; this group emits no attachment handles.
+**Reading:** conversation text and tool names are included by default, while lengthy tool arguments and results are omitted. The agent can request full detail when useful. Oversized records are clearly marked as partial.
 
 **Two formats are still left out:**
 - **ChatGPT web exports** — not for the original reason. A `conversations.json` holds many conversations at once, which is exactly what the three databases above do, and the `file#id` scheme built for them would carry it too. What is left is that an export is a snapshot the user has to produce by hand and re-produce to refresh, while the same history is already live in the `External conversations` group. Reachable, then, but not yet built.
@@ -285,6 +287,8 @@ At 4000 characters a block, 64 KiB is at most seventeen blocks, which fits insid
 **Text and on-demand document files.** Files on the configurable `extensions` allowlist are decoded as text; a read whose bytes turn out to be binary is refused instead of emitting mojibake. Common documents, spreadsheets, presentations, PDFs, and images use an explicit `file` attachment handle and are downloaded only through `reference_attachment_read`. Other extensions and directories stay out of the reference results.
 
 **Download directory.** Under **Settings → Cloud drives**, choose a host directory for those on-demand document downloads, or leave it blank to use the system temporary directory. An absolute host path can always be entered manually if the native folder picker is unavailable. Each file is materialized inside a new random `dsh-reference-drive-*` child directory; the plugin cleans up only that child, never the selected base directory or its other contents. Successful downloads expire after one hour, while failed downloads and plugin disposal clean up immediately. This setting applies only to cloud-drive attachments—Web-conversation attachments continue to use the system temporary directory.
+
+Settings can also open the active download directory. Selecting a cloud-drive folder keeps the `@` menu open and continues browsing inside it.
 
 **Authorization.** These are your personal remote files, so this group uses the same per-task gate as the external conversations: the model may read a drive file only after you named it in the current task. A signed download URL never leaves the host — it appears in no candidate, no reference summary, and no error text.
 
@@ -360,7 +364,7 @@ The `reference_anything` storage domain contains:
 - `attachments`: stable locators and metadata without temporary signed URLs
 - `sync_states`: Provider cursor, profile, progress, and errors
 
-Remote records are marked `remoteMissing` only after a full remote pagination pass succeeds. Local history is never auto-deleted. DOM fallback is used only after an API request fails, and fallback data is always marked `partial=true`.
+Remote records are marked `remoteMissing` only after a full remote pagination pass succeeds. The sync history range defaults to unlimited; once a day count is set, web chats last updated before that range are deleted locally and skipped by later syncs. DOM fallback is used only after an API request fails, and fallback data is always marked `partial=true`.
 
 In `metadata-only` mode, the current browser account is checked inside the same detail operation that reads a referenced body; reads are rejected when it does not match the account scope cached by sync. Conversation management includes bulk actions for records marked `remoteMissing` and for local chats owned by non-current accounts of providers whose current account is known.
 

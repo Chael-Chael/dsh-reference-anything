@@ -1,8 +1,9 @@
 import type { InjectFace, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import type { ObservableSnapshot } from '@deepseek-ai/dsh-client-runtime/client'
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react'
+import ReactMarkdown from 'react-markdown'
 import { ALL_LOCAL_AGENTS, LOCAL_AGENT_LABEL, defaultPickerSettings, type ChatProvider, type LocalAgent, type PickerSettings, type PickerSource, type SettingsRecord } from '../wire.ts'
-import { syncProgressFraction, type BrowsePage, type BrowserProfile, type Health, type OpenListDriver, type OpenListMount, type OpenListStatus, type PackageUpdateStatus, type ProviderStats, type StorageStats, type SyncStatus } from './remote.ts'
+import { syncProgressFraction, type AgentStats, type BrowsePage, type BrowserProfile, type Health, type OpenListDriver, type OpenListMount, type OpenListStatus, type PackageUpdateStatus, type ProviderStats, type StorageStats, type SyncStatus } from './remote.ts'
 import { AgentLogo, ProviderLogo } from './provider-icons.tsx'
 import { type REFERENCE_ANYTHING_NS } from './locale.ts'
 import type { TranslateNS } from '@deepseek-ai/dsh-client-locale/client'
@@ -10,7 +11,7 @@ import { OPENCLI_EXTENSION_STORE_URL, openExtensionStore, setupReady, type Setup
 
 /** Current query/filter/page of the "Manage synced conversations" list, plus its last fetched page. */
 export interface BrowseState { query: string; provider?: ChatProvider; offset: number; page?: BrowsePage }
-export interface SettingsSnapshot { settings: SettingsRecord; health?: Health; update?: PackageUpdateStatus; profiles?: readonly BrowserProfile[]; stats?: readonly ProviderStats[]; storage?: StorageStats; sync?: SyncStatus; openList?: OpenListStatus; openListDrivers?: readonly OpenListDriver[]; openListMounts?: readonly OpenListMount[]; error?: string; notice?: string; loading?: boolean; browse?: BrowseState; setupStep?: SetupStage }
+export interface SettingsSnapshot { settings: SettingsRecord; health?: Health; update?: PackageUpdateStatus; profiles?: readonly BrowserProfile[]; stats?: readonly ProviderStats[]; agentStats?: readonly AgentStats[]; storage?: StorageStats; sync?: SyncStatus; openList?: OpenListStatus; openListDrivers?: readonly OpenListDriver[]; openListMounts?: readonly OpenListMount[]; error?: string; notice?: string; loading?: boolean; browse?: BrowseState; setupStep?: SetupStage }
 export interface SettingsInjected {
   hooks: { scope: ObservableSnapshot<SettingsSnapshot> }
   save(value: SettingsRecord): Promise<boolean | void>
@@ -30,7 +31,6 @@ export interface SettingsInjected {
   browse(query: string, provider: ChatProvider | undefined, offset: number): Promise<void>
   deleteConversation(uriId: string): Promise<void>
   clearProvider(provider: ChatProvider): Promise<void>
-  clearOlder(days: number): Promise<void>
   clearRemoteMissing?: () => Promise<void>
   clearOldAccounts?: () => Promise<void>
   refreshStats(): Promise<void>
@@ -43,6 +43,8 @@ export interface SettingsInjected {
   openListRemoveMount?(id: string): Promise<void>
   openListReindex?(id: string): Promise<{ supported: boolean; reason?: string }>
   pickCloudDriveDownloadDirectory?(): Promise<string | null>
+  pickAgentDirectory?(agent: LocalAgent): Promise<void>
+  openCloudDriveDownloadDirectory?(): Promise<void>
 }
 type T = TranslateNS<typeof REFERENCE_ANYTHING_NS>
 type SettingsProps = PropsRuntime<'settings.section'> & InjectFace<SettingsInjected> & { t: T }
@@ -74,24 +76,25 @@ const PICKER_SOURCES: ReadonlyArray<{ id: PickerSource; label: keyof typeof SOUR
 const SOURCE_KEYS = { commands: 'source.commands', skills: 'source.skills', files: 'source.files', sessions: 'source.sessions', agents: 'source.agents', conversations: 'source.conversations', drives: 'source.drives' } as const
 const REFERENCE_ANYTHING_LOGO = '__REFERENCE_ANYTHING_LOGO_DATA_URI__'
 const GITHUB_REPOSITORY_URL = 'https://github.com/Chael-Chael/dsh-reference-anything'
-export function ConversationSettings({ useScope, save, sync, cancel, refresh, refreshOpenList = async () => undefined, quickRefreshOnOpen, setupAll, discoverOpenCli, installOpenCli, useProfile, install, restartDaemon, checkUpdate, installUpdate, browse, deleteConversation, clearProvider, clearOlder, clearRemoteMissing, clearOldAccounts, refreshStats, openListInstall = async () => undefined, openListUpgrade = async () => undefined, openListConnectExternal = async () => undefined, openListDisconnect = async () => undefined, openListCreateMount = async () => undefined, openListDisableMount = async () => undefined, openListRemoveMount = async () => undefined, openListReindex = async () => ({ supported: false }), pickCloudDriveDownloadDirectory, t }: SettingsProps) {
+export function ConversationSettings({ useScope, save, sync, cancel, refresh, refreshOpenList = async () => undefined, quickRefreshOnOpen, setupAll, discoverOpenCli, installOpenCli, useProfile, install, restartDaemon, checkUpdate, installUpdate, browse, deleteConversation, clearProvider, clearRemoteMissing, clearOldAccounts, refreshStats, openListInstall = async () => undefined, openListUpgrade = async () => undefined, openListConnectExternal = async () => undefined, openListDisconnect = async () => undefined, openListCreateMount = async () => undefined, openListDisableMount = async () => undefined, openListRemoveMount = async () => undefined, openListReindex = async () => ({ supported: false }), pickCloudDriveDownloadDirectory, pickAgentDirectory, openCloudDriveDownloadDirectory, t }: SettingsProps) {
   const state = useScope(value => value)
   const settings = state.settings
   const picker = settings.picker ?? defaultPickerSettings()
   const [busyAction, setBusyAction] = useState<string>()
+  const [showReleaseNotes, setShowReleaseNotes] = useState(false)
   const busyActionRef = useRef(false)
   const [storeBlocked, setStoreBlocked] = useState(false)
   const [opencliPath, setOpencliPath] = useState(settings.opencliPath)
   const [profile, setProfile] = useState(settings.profile)
   const [detailConcurrency, setDetailConcurrency] = useState(String(settings.detailConcurrency))
   const [autoSyncMinutes, setAutoSyncMinutes] = useState(String(settings.autoSyncMinutes))
-  const [cleanupDays, setCleanupDays] = useState('90')
+  const [syncHistoryDays, setSyncHistoryDays] = useState(settings.syncHistoryDays === null ? '' : String(settings.syncHistoryDays))
   const [maxReadTurns, setMaxReadTurns] = useState(String(settings.maxReadTurns))
   const [repairProfile, setRepairProfile] = useState('')
   const [pickerLimits, setPickerLimits] = useState<Record<PickerSource, string>>(() => pickerLimitDrafts(picker))
   const [pickerMaxCandidates, setPickerMaxCandidates] = useState<Record<PickerSource, string>>(() => pickerMaxCandidateDrafts(picker))
   const automaticQuickRefresh = useRef(quickRefreshOnOpen)
-  useEffect(() => { setOpencliPath(settings.opencliPath); setProfile(settings.profile); setDetailConcurrency(String(settings.detailConcurrency)); setAutoSyncMinutes(String(settings.autoSyncMinutes)); setMaxReadTurns(String(settings.maxReadTurns)) }, [settings.opencliPath, settings.profile, settings.detailConcurrency, settings.autoSyncMinutes, settings.maxReadTurns])
+  useEffect(() => { setOpencliPath(settings.opencliPath); setProfile(settings.profile); setDetailConcurrency(String(settings.detailConcurrency)); setAutoSyncMinutes(String(settings.autoSyncMinutes)); setSyncHistoryDays(settings.syncHistoryDays === null ? '' : String(settings.syncHistoryDays)); setMaxReadTurns(String(settings.maxReadTurns)) }, [settings.opencliPath, settings.profile, settings.detailConcurrency, settings.autoSyncMinutes, settings.syncHistoryDays, settings.maxReadTurns])
   useEffect(() => { setPickerLimits(pickerLimitDrafts(picker)) }, [picker.commands.limit, picker.skills.limit, picker.files.limit, picker.sessions.limit, picker.agents.limit, picker.conversations.limit, picker.drives.limit])
   useEffect(() => { setPickerMaxCandidates(pickerMaxCandidateDrafts(picker)) }, [picker.commands.maxCandidates, picker.skills.maxCandidates, picker.files.maxCandidates, picker.sessions.maxCandidates, picker.agents.maxCandidates, picker.conversations.maxCandidates, picker.drives.maxCandidates])
   automaticQuickRefresh.current = quickRefreshOnOpen
@@ -123,6 +126,8 @@ export function ConversationSettings({ useScope, save, sync, cancel, refresh, re
   }
   const autoSyncMinutesValue = Number(autoSyncMinutes)
   const hasValidAutoSyncMinutes = Number.isInteger(autoSyncMinutesValue) && autoSyncMinutesValue >= 15 && autoSyncMinutesValue <= 1440
+  const syncHistoryDaysValue = Number(syncHistoryDays)
+  const hasValidSyncHistoryDays = syncHistoryDays === '' || Number.isInteger(syncHistoryDaysValue) && syncHistoryDaysValue >= 1 && syncHistoryDaysValue <= 36500
   const syncMode = settings.autoSync ? 'interval' : settings.syncOnStartup ? 'startup' : 'manual'
   const enabled = new Set(settings.enabledProviders)
   const enabledAgents = new Set(settings.enabledAgents)
@@ -205,9 +210,11 @@ export function ConversationSettings({ useScope, save, sync, cancel, refresh, re
         {state.update?.updateAvailable && <button className="is_primary" type="button" disabled={Boolean(busyAction)} onClick={() => {
           if (window.confirm(t('settings.updateConfirm', { version: state.update?.latestVersion ?? '' }))) runAction('package-update', installUpdate)
         }}>{busyAction === 'package-update' ? t('settings.updating') : t('settings.updateNow', { version: state.update.latestVersion })}</button>}
+        {state.update?.releaseNotes && <button type="button" aria-expanded={showReleaseNotes} onClick={() => { setShowReleaseNotes(value => !value) }}>{t(showReleaseNotes ? 'settings.hideReleaseNotes' : 'settings.showReleaseNotes')}</button>}
         <button type="button" disabled={Boolean(busyAction)} onClick={() => { runAction('update-check', checkUpdate) }}>{busyAction === 'update-check' ? t('settings.checkingUpdate') : t('settings.checkUpdate')}</button>
         <a className="dsh_ref_button" href={GITHUB_REPOSITORY_URL} target="_blank" rel="noreferrer">{t('settings.github')}</a>
       </div>
+      {showReleaseNotes && state.update?.releaseNotes && <div className="dsh_ref_update_notes"><strong>{t('settings.updateContents')}</strong><div className="dsh_ref_update_markdown"><ReactMarkdown disallowedElements={['img']} components={{ a: ({ node: _node, ...props }) => <a {...props} target="_blank" rel="noreferrer" /> }}>{state.update.releaseNotes}</ReactMarkdown></div>{state.update.releaseUrl && <a href={state.update.releaseUrl} target="_blank" rel="noreferrer">{t('settings.fullReleaseNotes')}</a>}</div>}
     </section>
     <div className="dsh_ref_workspace">
     {state.error && <div className="dsh_ref_error" role="alert"><strong>{t('settings.actionFailed')}</strong><span>{state.error}</span></div>}
@@ -219,6 +226,13 @@ export function ConversationSettings({ useScope, save, sync, cancel, refresh, re
         <label className="dsh_ref_picker_limit"><span>{t('settings.maxCandidates')}</span><input type="number" min={1} max={50} inputMode="numeric" value={pickerMaxCandidates[row.id]} aria-invalid={pickerMaxCandidates[row.id] !== '' && !validPickerLimit(pickerMaxCandidates[row.id])} onChange={event => { setPickerMaxCandidates(current => ({ ...current, [row.id]: event.target.value })) }} onBlur={() => { commitPickerMaxCandidates(row.id) }} onKeyDown={event => { if (event.key === 'Enter') event.currentTarget.blur() }} /></label>
         <div className="dsh_ref_picker_order"><button type="button" disabled={index === 0} aria-label={t('settings.moveUp', { item: t(SOURCE_KEYS[row.label]) })} onClick={() => { movePicker(row.id, -1) }}>↑</button><button type="button" disabled={index === rows.length - 1} aria-label={t('settings.moveDown', { item: t(SOURCE_KEYS[row.label]) })} onClick={() => { movePicker(row.id, 1) }}>↓</button></div>
       </div>)}</div>
+    </section>
+    <section className="dsh_ref_sources dsh_ref_agent_sources">
+      <AgentSelectionCards enabledAgents={enabledAgents} stats={state.agentStats} directories={settings.agentDirectories} onEnabled={setAgentEnabled} onPickDirectory={pickAgentDirectory} t={t} />
+    </section>
+    <section className="dsh_ref_sources dsh_ref_drive_sources">
+      <CloudDrives state={state} save={save} pickDownloadDirectory={pickCloudDriveDownloadDirectory} openDownloadDirectory={openCloudDriveDownloadDirectory} refreshOpenList={refreshOpenList} install={openListInstall} upgrade={openListUpgrade} connect={openListConnectExternal} disconnect={openListDisconnect} createMount={openListCreateMount} disableMount={openListDisableMount} removeMount={openListRemoveMount} reindexMount={openListReindex} t={t} />
+      <DriveSelectionCards state={state} save={save} t={t} />
     </section>
     <section className="dsh_ref_sources dsh_ref_chat"><div className="dsh_ref_section_head"><div><h3>{t('settings.sources')}</h3><p>{t('settings.sourcesDetail')}</p></div>{state.sync?.status === 'running' && <span className="dsh_ref_syncing">{t('settings.syncing', { source: t('settings.sources'), completed: state.sync.completed, total: state.sync.total })}</span>}</div>
       <section className="dsh_ref_viability"><div className="dsh_ref_section_head"><div><h3>{t('settings.viability')}</h3><p>{t('settings.viabilityDetail')}</p></div><div className="dsh_ref_viability_actions"><button className="dsh_ref_recheck" type="button" disabled={state.loading || Boolean(busyAction)} onClick={() => { runAction('refresh', refresh) }}>{busyAction === 'refresh' ? t('settings.checking') : t('settings.recheck')}</button></div></div>
@@ -242,17 +256,13 @@ export function ConversationSettings({ useScope, save, sync, cancel, refresh, re
       </section>
       <div className="dsh_ref_chat_divider" />
       <div className="dsh_ref_provider_grid">{PROVIDERS.map((provider, index) => <ProviderCard key={provider} provider={provider} index={index} stats={state.stats?.find(row => row.provider === provider)} busy={state.sync?.status === 'running'} autoSync={settings.autoSync} enabled={enabled.has(provider)} onEnabled={value => { setProviderEnabled(provider, value) }} onSync={(mode) => { void sync([provider], mode) }} onClear={() => { if (window.confirm(t('storage.clearProviderConfirm', { provider: PROVIDER_LABEL[provider] }))) void clearProvider(provider) }} t={t} />)}</div>
-      <div className="dsh_ref_chat_divider" />
-      <AgentSelectionCards enabledAgents={enabledAgents} onEnabled={setAgentEnabled} t={t} />
       {!state.loading && state.stats?.every(item => item.conversations === 0) && <div className="dsh_ref_empty">{t('settings.empty')}</div>}
-      <div className="dsh_ref_chat_divider" />
-      <CloudDrives state={state} save={save} pickDownloadDirectory={pickCloudDriveDownloadDirectory} refreshOpenList={refreshOpenList} install={openListInstall} upgrade={openListUpgrade} connect={openListConnectExternal} disconnect={openListDisconnect} createMount={openListCreateMount} disableMount={openListDisableMount} removeMount={openListRemoveMount} reindexMount={openListReindex} t={t} />
-      <DriveSelectionCards state={state} save={save} t={t} />
       <div className="dsh_ref_chat_divider" />
       <div className="dsh_ref_sync_settings"><div className="dsh_ref_section_head"><div><h3>{t('settings.syncSettings')}</h3><p>{t('settings.syncSettingsDetail')}</p></div></div>
       <div className="dsh_ref_form_grid">
         <label><span>{t('settings.syncMode')}</span><select value={syncMode} onChange={event => { const mode = event.target.value; void save({ ...settings, autoSync: mode === 'interval', syncOnStartup: mode === 'startup' || mode === 'interval' }) }}><option value="manual">{t('settings.syncManual')}</option><option value="startup">{t('settings.syncStartup')}</option><option value="interval">{t('settings.syncInterval')}</option></select><small className="dsh_ref_field_note">{syncMode === 'manual' ? t('settings.syncManualDetail') : syncMode === 'startup' ? t('settings.syncStartupDetail') : t('settings.autoNote', { minutes: settings.autoSyncMinutes })}</small></label>
         <label><span>{t('settings.historyMode')}</span><select value={settings.historyMode} onChange={event => { void save({ ...settings, historyMode: event.target.value as SettingsRecord['historyMode'] }) }}><option value="metadata-only">{t('settings.metadataOnly')}</option><option value="offline-mirror">{t('settings.offlineMirror')}</option></select><small className="dsh_ref_field_note">{settings.historyMode === 'metadata-only' ? t('settings.metadataOnlyDetail') : t('settings.offlineMirrorDetail')}</small></label>
+        <label><span>{t('settings.syncHistoryDays')}</span><input aria-label={t('settings.syncHistoryDays')} type="number" min={1} max={36500} inputMode="numeric" value={syncHistoryDays} placeholder={t('settings.historyUnlimited')} aria-invalid={!hasValidSyncHistoryDays} onChange={event => { setSyncHistoryDays(event.target.value) }} onBlur={() => { if (hasValidSyncHistoryDays) void save({ ...settings, syncHistoryDays: syncHistoryDays === '' ? null : syncHistoryDaysValue }); else setSyncHistoryDays(settings.syncHistoryDays === null ? '' : String(settings.syncHistoryDays)) }} /><small className="dsh_ref_field_note">{t('settings.syncHistoryDaysDetail')}</small></label>
         <label><span>{t('settings.opencli')}</span><input value={opencliPath} onChange={event => { setOpencliPath(event.target.value) }} onBlur={() => { if (opencliPath.trim()) void save({ ...settings, opencliPath: opencliPath.trim() }).then(refresh) }} /><small className="dsh_ref_field_note">{t('settings.opencliDetail')}</small></label>
         <label><span>{t('settings.chromeProfile')}</span><input list="dsh-ref-profiles" value={profile} placeholder={t('settings.defaultProfile')} onChange={event => { setProfile(event.target.value) }} onBlur={() => { void save({ ...settings, profile: profile.trim() }).then(refresh) }} /><datalist id="dsh-ref-profiles">{state.profiles?.filter(item => item.connected).map(item => <option key={item.id} value={item.alias || item.id}>{item.id}</option>)}</datalist><small className="dsh_ref_field_note">{t('settings.chromeProfileDetail')}</small></label>
         <label><span>{t('settings.detailConcurrency')}</span><input type="number" min={1} max={8} value={detailConcurrency} aria-invalid={!(Number(detailConcurrency) >= 1 && Number(detailConcurrency) <= 8)} onChange={event => { setDetailConcurrency(event.target.value) }} onBlur={saveConcurrency} /><small className="dsh_ref_field_note">{t('settings.detailConcurrencyDetail')}</small></label>
@@ -264,7 +274,7 @@ export function ConversationSettings({ useScope, save, sync, cancel, refresh, re
       {state.sync?.error && <p className="dsh_ref_inline_error">{state.sync.error}</p>}
       </div>
       <div className="dsh_ref_chat_divider" />
-      <section className="dsh_ref_storage"><div className="dsh_ref_storage_header"><div><h3>{t('storage.title')}</h3><p>{t('storage.detail')}</p></div><div className="dsh_ref_storage_metric"><span>{t('storage.usage')}</span><strong>{formatBytes(state.storage?.bytes ?? 0)}</strong></div></div><div className="dsh_ref_storage_cleanup"><label><span>{t('storage.olderThan')}</span><div className="dsh_ref_number_field"><input type="number" min={1} max={36500} value={cleanupDays} onChange={event => { setCleanupDays(event.target.value) }} /><b>{t('storage.days')}</b></div></label><button className="is_danger" type="button" disabled={state.sync?.status === 'running' || !(Number(cleanupDays) >= 1)} onClick={() => { const days = Number(cleanupDays); if (window.confirm(t('storage.clearOlderConfirm', { days }))) void clearOlder(days) }}>{t('storage.clearOlder')}</button></div></section>
+      <section className="dsh_ref_storage"><div className="dsh_ref_storage_header"><div><h3>{t('storage.title')}</h3><p>{t('storage.detail')}</p></div><div className="dsh_ref_storage_metric"><span>{t('storage.usage')}</span><strong>{formatBytes(state.storage?.bytes ?? 0)}</strong></div></div></section>
       <div className="dsh_ref_chat_divider" />
       <ManageConversations state={state} syncing={state.sync?.status === 'running'} browse={browse} deleteConversation={deleteConversation} clearRemoteMissing={clearRemoteMissing} clearOldAccounts={clearOldAccounts} t={t} />
     </section>
@@ -286,12 +296,14 @@ export function SyncProgress({ sync, t }: { sync: SyncStatus; t: T }) {
 }
 
 /** A separate, read-only-with-respect-to-drive-files OpenList control plane. */
-export function CloudDrives({ state, save, pickDownloadDirectory, refreshOpenList, install, upgrade, connect, disconnect, createMount, disableMount, removeMount, reindexMount, t }: {
+export function CloudDrives({ state, save, pickDownloadDirectory, openDownloadDirectory, refreshOpenList, install, upgrade, connect, disconnect, createMount, disableMount, removeMount, reindexMount, t }: {
   state: SettingsSnapshot; refreshOpenList(): Promise<void>; install(): Promise<void>; upgrade(rollback?: boolean): Promise<void>
-  save(value: SettingsRecord): Promise<boolean | void>; pickDownloadDirectory?(): Promise<string | null>
+  save(value: SettingsRecord): Promise<boolean | void>; pickDownloadDirectory?(): Promise<string | null>; openDownloadDirectory?(): Promise<void>
   connect(input: { endpoint: string; username?: string; password?: string; token?: string }): Promise<void>; disconnect(): Promise<void>
   createMount(input: { id?: string; mountPath: string; driver: string; addition: Record<string, unknown> }): Promise<void>; disableMount(id: string, disabled?: boolean): Promise<void>; removeMount(id: string): Promise<void>; reindexMount(id: string): Promise<{ supported: boolean; reason?: string }>; t: T
 }) {
+  const initialRefresh = useRef(refreshOpenList)
+  useEffect(() => { void initialRefresh.current() }, [])
   const [endpoint, setEndpoint] = useState('')
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
@@ -418,7 +430,7 @@ export function CloudDrives({ state, save, pickDownloadDirectory, refreshOpenLis
     <div className="dsh_ref_cloud_download">
       <div className="dsh_ref_cloud_download_copy"><strong>{t('cloud.downloadDirectory')}</strong><small>{t('cloud.downloadDirectoryDetail')}</small><span className="dsh_ref_cloud_download_state">{configuredDownloadDirectory ? t('cloud.downloadDirectoryCustom') : t('cloud.downloadDirectorySystem')}</span></div>
       <label><span>{t('cloud.downloadDirectory')}</span><input aria-label={t('cloud.downloadDirectory')} value={downloadDirectory} placeholder={t('cloud.downloadDirectoryPlaceholder')} disabled={downloadDirectoryBusy} onChange={event => { setDownloadDirectory(event.target.value) }} onBlur={commitDownloadDirectory} onKeyDown={event => { if (event.key === 'Enter') { event.preventDefault(); commitDownloadDirectory() } }} /></label>
-      <div className="dsh_ref_cloud_download_actions"><button type="button" disabled={downloadDirectoryBusy} onClick={() => { void chooseDownloadDirectory() }}>{t('cloud.chooseDirectory')}</button><button type="button" disabled={downloadDirectoryBusy || !configuredDownloadDirectory} onClick={() => { setDownloadDirectory(''); void saveDownloadDirectory('') }}>{t('cloud.resetDownloadDirectory')}</button></div>
+      <div className="dsh_ref_cloud_download_actions"><button type="button" disabled={downloadDirectoryBusy} onClick={() => { void chooseDownloadDirectory() }}>{t('cloud.chooseDirectory')}</button><button type="button" disabled={downloadDirectoryBusy} onClick={() => { void openDownloadDirectory?.() }}>{t('cloud.openDirectory')}</button><button type="button" disabled={downloadDirectoryBusy || !configuredDownloadDirectory} onClick={() => { setDownloadDirectory(''); void saveDownloadDirectory('') }}>{t('cloud.resetDownloadDirectory')}</button></div>
     </div>
     {status?.error && <p className="dsh_ref_inline_error">{status.error}</p>}
     <div className="dsh_ref_cloud_actions">
@@ -747,10 +759,10 @@ function ProviderCard({ provider, stats, busy, autoSync, enabled, onEnabled, onS
   return <article className={`dsh_ref_provider dsh_ref_provider_${provider}`} style={{ '--dsh-ref-index': index } as CSSProperties}><span className="dsh_ref_provider_mark"><ProviderLogo provider={provider} /></span><div className="dsh_ref_provider_content"><div className="dsh_ref_provider_summary"><h4>{label}</h4><strong>{stats?.conversations ?? 0}<span>{t('provider.localConversations')}</span></strong><small>{t('provider.lastUpdated', { date })}</small></div><div className="dsh_ref_provider_controls"><label className="dsh_ref_toggle"><input type="checkbox" checked={enabled} onChange={event => { onEnabled(event.target.checked) }} /><span/><b>{t('provider.enabled')}</b></label><div className="dsh_ref_provider_actions"><button type="button" disabled={busy} onClick={() => { onSync('incremental') }}>{t('provider.syncNow')}</button><button type="button" disabled={busy} onClick={() => { if (window.confirm(t('provider.fullConfirm', { provider: label }))) onSync('full') }}>{t('provider.fullResync')}</button><button className="is_danger" type="button" disabled={busy || !stats?.conversations} onClick={onClear}>{t('storage.clearProvider')}</button></div></div>{stats?.error && <em className="dsh_ref_provider_error">{stats.error}</em>}</div></article>
 }
 
-export function AgentSelectionCards({ enabledAgents, onEnabled, t }: { enabledAgents: ReadonlySet<LocalAgent>; onEnabled(agent: LocalAgent, value: boolean): void; t: T }) {
+export function AgentSelectionCards({ enabledAgents, stats, directories, onEnabled, onPickDirectory, t }: { enabledAgents: ReadonlySet<LocalAgent>; stats?: readonly AgentStats[]; directories?: Partial<Record<LocalAgent, string>>; onEnabled(agent: LocalAgent, value: boolean): void; onPickDirectory?(agent: LocalAgent): Promise<void>; t: T }) {
   return <div className="dsh_ref_reference_choices dsh_ref_agent_choices">
     <div className="dsh_ref_section_head dsh_ref_agent_heading"><div><h3>{t('settings.localAgents')}</h3><p>{t('settings.localAgentsDetail')}</p></div></div>
-    <div className="dsh_ref_provider_grid dsh_ref_agent_grid dsh_ref_selection_grid">{ALL_LOCAL_AGENTS.map((agent, index) => <AgentCard key={agent} agent={agent} index={index} enabled={enabledAgents.has(agent)} onEnabled={value => { onEnabled(agent, value) }} t={t} />)}</div>
+    <div className="dsh_ref_provider_grid dsh_ref_agent_grid dsh_ref_selection_grid">{ALL_LOCAL_AGENTS.map((agent, index) => <AgentCard key={agent} agent={agent} index={index} enabled={enabledAgents.has(agent)} conversations={stats?.find(row => row.agent === agent)?.conversations} directory={directories?.[agent]} onEnabled={value => { onEnabled(agent, value) }} onPickDirectory={onPickDirectory} t={t} />)}</div>
   </div>
 }
 
@@ -765,8 +777,8 @@ export function DriveSelectionCards({ state, save, t }: { state: SettingsSnapsho
   </div>
 }
 
-function AgentCard({ agent, enabled, onEnabled, index, t }: { agent: LocalAgent; enabled: boolean; onEnabled(value: boolean): void; index: number; t: T }) {
-  return <article className="dsh_ref_provider dsh_ref_agent_provider" data-local-agent={agent} style={{ '--dsh-ref-index': index } as CSSProperties}><span className="dsh_ref_provider_mark"><AgentLogo /></span><div className="dsh_ref_provider_content"><div className="dsh_ref_provider_summary"><h4>{LOCAL_AGENT_LABEL[agent]}</h4><small>{t('settings.localAgentOnDisk')}</small></div><div className="dsh_ref_provider_controls"><label className="dsh_ref_toggle"><input type="checkbox" checked={enabled} onChange={event => { onEnabled(event.target.checked) }} /><span/><b>{t('provider.enabled')}</b></label></div></div></article>
+function AgentCard({ agent, enabled, conversations, directory, onEnabled, onPickDirectory, index, t }: { agent: LocalAgent; enabled: boolean; conversations?: number; directory?: string; onEnabled(value: boolean): void; onPickDirectory?(agent: LocalAgent): Promise<void>; index: number; t: T }) {
+  return <article className="dsh_ref_provider dsh_ref_agent_provider" data-local-agent={agent} style={{ '--dsh-ref-index': index } as CSSProperties}><span className="dsh_ref_provider_mark"><AgentLogo agent={agent} /></span><div className="dsh_ref_provider_content"><div className="dsh_ref_provider_summary"><h4>{LOCAL_AGENT_LABEL[agent]}</h4>{conversations === undefined ? <small>{t('settings.agentScanning')}</small> : <strong>{conversations}<span>{t('provider.localConversations')}</span></strong>}<small title={directory}>{directory ?? t('settings.localAgentOnDisk')}</small></div><div className="dsh_ref_provider_controls"><label className="dsh_ref_toggle"><input type="checkbox" checked={enabled} onChange={event => { onEnabled(event.target.checked) }} /><span/><b>{t('provider.enabled')}</b></label><button type="button" onClick={() => { void onPickDirectory?.(agent) }}>{t('settings.agentCustomDirectory')}</button></div></div></article>
 }
 
 function formatBytes(bytes: number): string {

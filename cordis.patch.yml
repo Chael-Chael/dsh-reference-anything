@@ -106,9 +106,9 @@
                  'kimi', 'grokbuild', 'hermes', 'gemini-cli', 'pi',
                  'opencode', 'mimocode', 'zcode']
         extraRoots: []
-        # Only sessions recorded in this workspace. `all` lists every transcript
-        # on the machine, which is a lot of other projects' titles.
-        scope: 'workspace'
+        # The @ menu is a cross-project history picker; the per-Agent enable
+        # switches remain the explicit visibility boundary.
+        scope: 'all'
         maxTranscripts: 200
         maxReadTurns: 20
         maxScanBytes: 33554432
@@ -118,7 +118,7 @@
         maxLineBytes: 1048576
         directoryTtlMs: 5000
         includeThinking: false
-        toolCalls: 'elide'
+        toolCalls: 'full'
         includeSidechains: false
         stripEnvironmentPreamble: true
         # The last three formats keep every conversation in one SQLite database

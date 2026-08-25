@@ -48,26 +48,28 @@ export type AgentKind =
   | 'zcode'
 
 /**
- * How much of a tool call survives projection.
+ * How much of a tool call and its result survive projection.
  *
  * A coding transcript is mostly tool traffic, so this is the single knob with
  * the largest effect on what a read costs: `'drop'` hides that any work
- * happened, `'summarize'` can let one `Bash` invocation outweigh the answer it
- * produced, and `'elide'` keeps the shape of the work at a fixed ~15 bytes.
+ * happened, `'full'` keeps the exact recorded arguments, `'summarize'` bounds
+ * them, and `'elide'` keeps the shape of the work at a fixed ~15 bytes.
  */
-export type ToolCallMode = 'elide' | 'summarize' | 'drop'
+export type ToolCallMode = 'full' | 'elide' | 'summarize' | 'drop'
 
 /** How a transcript is projected into turns; fixed for the whole of one read. */
 export interface ConvertOptions {
   /** Keep assistant reasoning blocks, which are usually noise and sometimes the answer. */
   readonly includeThinking: boolean
-  /** How much of each tool call survives. */
+  /** How much of each tool call and result survives. */
   readonly toolCalls: ToolCallMode
+  /** How much of each tool result survives. */
+  readonly toolResults: ToolCallMode
   /** Keep records belonging to a spawned subagent rather than the main thread. */
   readonly includeSidechains: boolean
   /** Drop harness-injected preambles that were never typed by a person. */
   readonly stripEnvironmentPreamble: boolean
-  /** Longest single tool-call summary, in characters, under `'summarize'`. */
+  /** Longest single tool-call or result summary, in characters, under `'summarize'`. */
   readonly toolSummaryChars: number
 }
 

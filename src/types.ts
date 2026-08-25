@@ -98,6 +98,8 @@ export interface ReferenceWindow {
   readonly before?: number
   /** Opaque revision-pinned continuation returned by a previous read. */
   readonly cursor?: string
+  /** Local-agent tool fidelity for this read; other sources ignore it. */
+  readonly detail?: 'summary' | 'full'
 }
 
 /**

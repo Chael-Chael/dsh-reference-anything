@@ -9,6 +9,7 @@ import { promisify } from 'node:util'
 const execFile = promisify(nodeExecFile)
 export const PACKAGE_NAME = 'dsh-reference-anything'
 export const NPM_LATEST_URL = `https://registry.npmjs.org/${PACKAGE_NAME}/latest`
+export const GITHUB_RELEASE_URL = 'https://api.github.com/repos/Chael-Chael/dsh-reference-anything/releases/tags'
 const PACKAGE_ROOT = resolve(fileURLToPath(new URL('../', import.meta.url)))
 const UPDATE_TIMEOUT_MS = 5 * 60_000
 const CHECK_TIMEOUT_MS = 10_000
@@ -18,6 +19,8 @@ export interface PackageUpdateStatus {
   latestVersion: string
   updateAvailable: boolean
   checkedAt: number
+  releaseNotes?: string
+  releaseUrl?: string
   error?: string
 }
 
@@ -30,6 +33,7 @@ interface UpdateManagerOptions {
   packageRoot?: string
   dshHome?: string
   fetchLatest?: (signal?: AbortSignal) => Promise<string>
+  fetchReleaseNotes?: (version: string, signal?: AbortSignal) => Promise<Pick<PackageUpdateStatus, 'releaseNotes' | 'releaseUrl'>>
   install?: (profileDir: string, version: string, signal?: AbortSignal) => Promise<void>
   afterInstall?: (profileDir: string, version: string, signal?: AbortSignal) => Promise<void>
 }
@@ -39,6 +43,7 @@ export class PackageUpdateManager {
   private readonly packageRoot: string
   private readonly dshHome?: string
   private readonly fetchLatest: (signal?: AbortSignal) => Promise<string>
+  private readonly fetchReleaseNotes: (version: string, signal?: AbortSignal) => Promise<Pick<PackageUpdateStatus, 'releaseNotes' | 'releaseUrl'>>
   private readonly install: (profileDir: string, version: string, signal?: AbortSignal) => Promise<void>
   private readonly afterInstall?: (profileDir: string, version: string, signal?: AbortSignal) => Promise<void>
   private cached?: PackageUpdateStatus
@@ -48,6 +53,7 @@ export class PackageUpdateManager {
     this.packageRoot = resolve(options.packageRoot ?? PACKAGE_ROOT)
     this.dshHome = options.dshHome
     this.fetchLatest = options.fetchLatest ?? fetchLatestVersion
+    this.fetchReleaseNotes = options.fetchReleaseNotes ?? fetchGitHubReleaseNotes
     this.install = options.install ?? installPackageVersion
     this.afterInstall = options.afterInstall
   }
@@ -82,6 +88,8 @@ export class PackageUpdateManager {
       latestVersion: status.latestVersion,
       updateAvailable: false,
       checkedAt: Date.now(),
+      releaseNotes: status.releaseNotes,
+      releaseUrl: status.releaseUrl,
     }
     return { version: status.latestVersion, restartRequired: true }
   }
@@ -92,11 +100,15 @@ export class PackageUpdateManager {
     try {
       currentVersion = await readPackageVersion(this.packageRoot)
       const latestVersion = await this.fetchLatest(signal)
+      const updateAvailable = compareVersions(latestVersion, currentVersion) > 0
+      let release: Pick<PackageUpdateStatus, 'releaseNotes' | 'releaseUrl'> = {}
+      try { release = await this.fetchReleaseNotes(latestVersion, signal) } catch { /* Release notes are advisory. */ }
       const status: PackageUpdateStatus = {
         currentVersion,
         latestVersion,
-        updateAvailable: compareVersions(latestVersion, currentVersion) > 0,
+        updateAvailable,
         checkedAt,
+        ...release,
       }
       this.cached = status
       return status
@@ -127,6 +139,21 @@ export async function fetchLatestVersion(signal?: AbortSignal): Promise<string> 
   const body = await response.json() as { version?: unknown }
   if (typeof body.version !== 'string' || !isVersion(body.version)) throw new Error('npm registry returned an invalid version')
   return body.version
+}
+
+export async function fetchGitHubReleaseNotes(version: string, signal?: AbortSignal): Promise<Pick<PackageUpdateStatus, 'releaseNotes' | 'releaseUrl'>> {
+  if (!isVersion(version)) throw new Error('refusing to request an invalid release version')
+  const timeout = AbortSignal.timeout(CHECK_TIMEOUT_MS)
+  const response = await fetch(`${GITHUB_RELEASE_URL}/v${version}`, {
+    headers: { accept: 'application/vnd.github+json', 'user-agent': PACKAGE_NAME, 'x-github-api-version': '2022-11-28' },
+    signal: signal ? AbortSignal.any([signal, timeout]) : timeout,
+  })
+  if (!response.ok) throw new Error(`GitHub returned HTTP ${String(response.status)}`)
+  const body = await response.json() as { body?: unknown; html_url?: unknown }
+  return {
+    releaseNotes: typeof body.body === 'string' ? body.body.trim().slice(0, 12_000) || undefined : undefined,
+    releaseUrl: typeof body.html_url === 'string' ? body.html_url : undefined,
+  }
 }
 
 export async function readPackageVersion(packageRoot = PACKAGE_ROOT): Promise<string> {

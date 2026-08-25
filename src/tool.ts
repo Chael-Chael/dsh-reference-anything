@@ -208,6 +208,11 @@ export function apply(ctx: Context, config: Config = {}): void {
         type: 'string',
         description: 'Opaque nextCursor returned by the previous page. Do not combine with before.',
       },
+      detail: {
+        type: 'string',
+        enum: ['summary', 'full'],
+        description: 'For external Agent sessions: summary (default) keeps only tool names; full includes complete arguments and outputs.',
+      },
     },
     output: {
       schema: {
@@ -242,6 +247,7 @@ export function apply(ctx: Context, config: Config = {}): void {
               },
             },
           },
+          toolDetail: { type: 'string', enum: ['summary', 'full'] },
         },
       },
       render: (_args, value) => [{
@@ -257,7 +263,7 @@ export function apply(ctx: Context, config: Config = {}): void {
           ...value.totalTurns === undefined ? {} : { totalTurns: value.totalTurns },
           hasOlder: value.hasOlder,
           ...value.nextCursor === undefined ? {} : { nextCursor: value.nextCursor },
-        })}`,
+        })}${value.toolDetail === 'summary' ? '\n\n(Tool arguments and outputs are omitted. Rerun this window with detail: "full" when needed.)' : ''}`,
       }],
       presentationMeta: (_args, value) => ({
         label: value.label,
@@ -270,12 +276,14 @@ export function apply(ctx: Context, config: Config = {}): void {
     isConcurrencySafe: () => true,
     async execute(args, exec) {
       const ref = decodeReferenceUri(args.uri)
-      ctx.references.assertGranted(exec.agent ? String(exec.agent.session.id) : undefined, ref)
+      ctx.references.assertSessionGranted(exec.agent?.session, ref)
       const chatHistory = ctx.get('referenceChatHistory')
       const userMaximum = ref.source === 'web-chat' && chatHistory
         ? Math.min(maxReadTurns, chatHistory.store.settings.maxReadTurns)
         : maxReadTurns
-      const window = parseWindow(args, Math.min(readTurns, userMaximum), userMaximum)
+      const toolDetail = ref.source === 'local-agent' ? args.detail ?? 'summary' : undefined
+      const window = { ...parseWindow(args, Math.min(readTurns, userMaximum), userMaximum),
+        ...toolDetail === undefined ? {} : { detail: toolDetail } }
       const snapshot = await ctx.references.read(ref, window, exec.signal)
       const slice = snapshot.body
       // The turn window is the model's bound; this byte budget is only a
@@ -302,6 +310,7 @@ export function apply(ctx: Context, config: Config = {}): void {
         omittedBytes: outcome.omittedBytes,
         ...(snapshot.revision ? { revision: snapshot.revision } : {}),
         ...(slice.nextCursor && dropped === 0 ? { nextCursor: slice.nextCursor } : {}),
+        ...toolDetail === undefined ? {} : { toolDetail },
         messages: outcome.items.map(item => ({ role: item.role, text: item.text })),
       }
     },
@@ -581,7 +590,7 @@ export function apply(ctx: Context, config: Config = {}): void {
     isConcurrencySafe: () => true,
     async execute(args, exec) {
       const ref = decodeReferenceUri(args.uri)
-      ctx.references.assertGranted(exec.agent ? String(exec.agent.session.id) : undefined, ref)
+      ctx.references.assertSessionGranted(exec.agent?.session, ref)
       if (ref.source === 'cloud-drive') {
         if (args.attachmentId !== 'file') {
           throw new ReferenceAnythingError(
@@ -708,7 +717,7 @@ export function apply(ctx: Context, config: Config = {}): void {
  * @returns the window to request.
  */
 export function parseWindow(
-  args: { limit?: number; before?: number; cursor?: string },
+  args: { limit?: number; before?: number; cursor?: string; detail?: 'summary' | 'full' },
   fallback: number,
   ceiling: number,
 ): ReferenceWindow {

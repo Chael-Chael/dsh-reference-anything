@@ -11,8 +11,11 @@
  */
 
 import { Context, Service } from '@deepseek-ai/cordis'
+import type { ContentBlock } from '@deepseek-ai/dsh-llm'
+import type { Session } from '@deepseek-ai/dsh-session'
 import z from '@deepseek-ai/schemastery'
 import { ReferenceAnythingError } from './errors.ts'
+import { mayContainReference, parseReferenceText } from './uri.ts'
 import type {
   ReferenceRef,
   ReferenceSnapshot,
@@ -123,6 +126,18 @@ export default class ReferenceRuntime extends Service {
    */
   private static grantKey(ref: ReferenceRef): string { return `${ref.source}\u0000${ref.id}` }
 
+  private static contentMentions(blocks: readonly ContentBlock[], key: string): boolean {
+    return blocks.some(block => {
+      if (block.type === 'tool-result') return ReferenceRuntime.contentMentions(block.content, key)
+      if (block.type !== 'text' || !mayContainReference(block.text)) return false
+      try {
+        return parseReferenceText(block.text).references.some(input => ReferenceRuntime.grantKey(input.ref) === key)
+      } catch {
+        return false
+      }
+    })
+  }
+
   /** Authorize one task to read a gated reference named by its user or discovery tool. */
   grant(sessionId: string, ref: ReferenceRef): void {
     // Recorded unconditionally: a source may register after the mention that
@@ -141,6 +156,20 @@ export default class ReferenceRuntime extends Service {
         'CONVERSATION_REFERENCE_NOT_GRANTED',
       )
     }
+  }
+
+  /** Allow a gated URI granted live or named in this task's durable user/tool-result history. */
+  assertSessionGranted(session: Session | undefined, ref: ReferenceRef): void {
+    const key = ReferenceRuntime.grantKey(ref)
+    if (session && !this.grants.get(String(session.id))?.has(key)) {
+      const mentioned = session.events.some(event => {
+        if (event.type === 'user/message') return ReferenceRuntime.contentMentions(event.data.content, key)
+        if (event.type === 'tool/result') return ReferenceRuntime.contentMentions(event.data.message.content, key)
+        return false
+      })
+      if (mentioned) this.grant(String(session.id), ref)
+    }
+    this.assertGranted(session && String(session.id), ref)
   }
 
   /** Release task-local grants when a host knows the task is gone. */

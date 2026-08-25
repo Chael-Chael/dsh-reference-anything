@@ -40,7 +40,7 @@ const codexMessage = (role: string, ...texts: string[]) => ({
 })
 
 describe('claude-code adapter', () => {
-  it('takes a string user record as a turn and a tool_result array as plumbing', () => {
+  it('takes a string user record as a turn and keeps tool_result output', () => {
     const { turns } = convert(claudeCodeAdapter, [
       claudeUser('how should we key the cache?'),
       claudeAssistant({ type: 'text', text: 'by request hash' }),
@@ -49,7 +49,7 @@ describe('claude-code adapter', () => {
     ])
     expect(turns).toEqual([
       { role: 'user', text: 'how should we key the cache?' },
-      { role: 'assistant', text: 'by request hash\n\ndone' },
+      { role: 'assistant', text: 'by request hash\n\n[tool output] ok\n\ndone' },
     ])
   })
 
@@ -68,7 +68,7 @@ describe('claude-code adapter', () => {
       claudeAssistant({ type: 'text', text: 'second' }),
     ])
     expect(turns).toHaveLength(2)
-    expect(turns[1]).toEqual({ role: 'assistant', text: 'first\n\n[tool: Bash]\n\nsecond' })
+    expect(turns[1]).toEqual({ role: 'assistant', text: 'first\n\n[tool: Bash] {"command":"ls"}\n\nsecond' })
   })
 
   it('drops meta records that read as the user speaking', () => {
@@ -109,6 +109,28 @@ describe('claude-code adapter', () => {
     )
     expect(turns[1]?.text.length).toBeLessThanOrEqual('[tool: Bash] '.length + 40)
     expect(turns[1]?.text.endsWith('…')).toBe(true)
+  })
+
+  it('keeps complete tool-call arguments by default', () => {
+    const input = { command: 'printf "one\\ntwo"', paths: ['a', 'b'] }
+    const records = [
+      { type: 'user', message: { role: 'user', content: 'run it' } },
+      { type: 'assistant', message: { role: 'assistant', content: [{ type: 'tool_use', name: 'Bash', input }] } },
+    ]
+    expect(convert(claudeCodeAdapter, records).turns[1]?.text)
+      .toBe(`[tool: Bash] ${JSON.stringify(input)}`)
+  })
+
+  it('keeps complete multiline tool output by default', () => {
+    const output = 'first line\nsecond line\n' + 'x'.repeat(500)
+    const records = [
+      claudeUser('run it'),
+      claudeAssistant({ type: 'tool_use', name: 'Bash', input: { command: 'test' } }),
+      { type: 'user', message: { role: 'user', content: [{ type: 'tool_result', content: output }] } },
+    ]
+    expect(convert(claudeCodeAdapter, records).turns[1]?.text)
+      .toBe(`[tool: Bash] {"command":"test"}\n\n[tool output] ${output}`)
+    expect(convert(claudeCodeAdapter, records, { toolCalls: 'drop', toolResults: 'drop' }).turns).toHaveLength(1)
   })
 
   it('drops sidechain records unless they are asked for', () => {
@@ -238,7 +260,7 @@ describe('codex adapter', () => {
     expect(turns[1]).toEqual({ role: 'assistant', text: 'done' })
   })
 
-  it('merges tool calls into the open assistant run and drops their outputs', () => {
+  it('merges tool calls and complete outputs into the open assistant run', () => {
     const { turns } = convert(codexAdapter, [
       codexMessage('user', 'go'),
       { type: 'response_item', payload: { type: 'custom_tool_call', name: 'exec', input: 'pwd' } },
@@ -248,7 +270,7 @@ describe('codex adapter', () => {
     ])
     expect(turns).toEqual([
       { role: 'user', text: 'go' },
-      { role: 'assistant', text: '[tool: exec]\n\n[tool: wait]\n\nfinished' },
+      { role: 'assistant', text: '[tool: exec] pwd\n\n[tool output] [{"type":"input_text","text":"/w"}]\n\n[tool: wait] {"ms":10}\n\nfinished' },
     ])
   })
 
@@ -315,7 +337,7 @@ describe('cursor adapter', () => {
     ])
     expect(turns).toEqual([
       { role: 'user', text: 'why is the build slow?' },
-      { role: 'assistant', text: 'Checking the cache.\n\n[tool: read_file]' },
+      { role: 'assistant', text: 'Checking the cache.\n\n[tool: read_file] {"path":"vite.config.ts"}' },
     ])
   })
 
@@ -384,7 +406,7 @@ describe('qoder adapter', () => {
 })
 
 describe('reasonix adapter', () => {
-  it('reads both tool-call shapes and drops the results they produced', () => {
+  it('reads both tool-call shapes and the results they produced', () => {
     const { turns } = convert(reasonixAdapter, [
       { role: 'user', content: 'run the tests' },
       { role: 'assistant', content: 'On it.', tool_calls: [{ id: 'c1', function: { name: 'shell', arguments: '{"cmd":"pnpm test"}' } }] },
@@ -393,7 +415,7 @@ describe('reasonix adapter', () => {
     ])
     expect(turns).toEqual([
       { role: 'user', text: 'run the tests' },
-      { role: 'assistant', text: 'On it.\n\n[tool: shell]\n\n[tool: shell]' },
+      { role: 'assistant', text: 'On it.\n\n[tool: shell] {"cmd":"pnpm test"}\n\n[tool output] 42 passed\n\n[tool: shell] {"cmd":"git status"}' },
     ])
   })
 
@@ -430,7 +452,7 @@ describe('reasonix adapter', () => {
 describe('openclaw adapter', () => {
   const openclawMessage = (role: string, content: unknown) => ({ type: 'message', message: { role, content } })
 
-  it('strips the gateway’s routing marker and drops its tool-result role', () => {
+  it('strips the gateway’s routing marker and keeps its tool-result role', () => {
     const { turns } = convert(openclawAdapter, [
       { type: 'session', cwd: '/w/app', timestamp: '2026-08-05T12:00:00.000Z' },
       openclawMessage('user', 'ping the gateway\n[message_id: 7f3a]'),
@@ -439,7 +461,7 @@ describe('openclaw adapter', () => {
     ])
     expect(turns).toEqual([
       { role: 'user', text: 'ping the gateway' },
-      { role: 'assistant', text: 'Pinged.' },
+      { role: 'assistant', text: 'Pinged.\n\n[tool output] exit 0' },
     ])
   })
 
@@ -479,7 +501,7 @@ describe('kimi adapter', () => {
     ])
     expect(turns).toEqual([
       { role: 'user', text: 'refactor the parser' },
-      { role: 'assistant', text: 'I will start with the lexer.\n\n[tool: edit]' },
+      { role: 'assistant', text: 'I will start with the lexer.\n\n[tool: edit] {"path":"lexer.ts"}' },
     ])
   })
 
@@ -518,7 +540,7 @@ describe('kimi adapter', () => {
     ])
     expect(turns).toEqual([
       { role: 'user', text: 'add a test' },
-      { role: 'assistant', text: 'Adding one now.\n\n[tool: write]' },
+      { role: 'assistant', text: 'Adding one now.\n\n[tool: write] {"path":"t.spec.ts"}\n\n[tool output] ok' },
     ])
   })
 
@@ -648,7 +670,7 @@ describe('gemini-cli adapter', () => {
     const { turns } = convert(geminiCliAdapter, [chat])
     expect(turns).toEqual([
       { role: 'user', text: 'explain the router' },
-      { role: 'assistant', text: 'It maps paths to handlers.\n\n[tool: read_file]' },
+      { role: 'assistant', text: 'It maps paths to handlers.\n\n[tool: read_file] {"path":"router.ts"}' },
     ])
   })
 
@@ -657,7 +679,7 @@ describe('gemini-cli adapter', () => {
     // `includeThinking` can be read. Defaulting them there would silently ignore
     // the caller’s configuration for exactly these two formats.
     expect(convert(geminiCliAdapter, [chat], { includeThinking: true }).turns[1]?.text)
-      .toBe('It maps paths to handlers.\n\nScope：read the router first\n\n[tool: read_file]')
+      .toBe('It maps paths to handlers.\n\nScope：read the router first\n\n[tool: read_file] {"path":"router.ts"}')
     expect(convert(geminiCliAdapter, [chat], { toolCalls: 'drop' }).turns[1]?.text)
       .toBe('It maps paths to handlers.')
   })
@@ -752,7 +774,7 @@ describe('pi adapter', () => {
     expect(turns[1]).toEqual({ role: 'assistant', text: '[summary of an earlier branch]\n\nThe other attempt stalled.' })
   })
 
-  it('drops results and notes an image the user attached', () => {
+  it('keeps results and notes an image the user attached', () => {
     const { turns } = convert(piAdapter, [
       piMessage('m1', undefined, 'user', [{ type: 'text', text: 'why does this render wrong?' }, { type: 'image', mimeType: 'image/png' }]),
       piMessage('m2', 'm1', 'toolResult', 'exit 0'),
@@ -760,7 +782,7 @@ describe('pi adapter', () => {
     ])
     expect(turns).toEqual([
       { role: 'user', text: 'why does this render wrong?\n[image: image/png]' },
-      { role: 'assistant', text: 'A stale style.' },
+      { role: 'assistant', text: '[tool output] exit 0\n\nA stale style.' },
     ])
   })
 

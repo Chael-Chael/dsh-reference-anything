@@ -43,6 +43,7 @@ import {
   parseTimestamp,
   pushAssistant,
   renderToolCall,
+  renderToolResult,
 } from './shared.ts'
 
 /** Marks the tail of `state.pending` as an open run of streamed text. */
@@ -152,6 +153,10 @@ function stepLegacy(
       ))
       return []
     }
+    case 'ToolResult':
+      closeRun(state)
+      pushAssistant(state, renderToolResult(payload['result'] ?? payload['output'] ?? payload['content'], options.toolResults, options.toolSummaryChars))
+      return []
     case 'StepBegin':
     case 'TurnEnd':
       // A step boundary ends the streamed run without ending the turn: the
@@ -160,7 +165,7 @@ function stepLegacy(
       return []
     default:
       // `ToolCallPart` restates arguments the final `ToolCall` already carries,
-      // `ToolResult` is plumbing, `SubagentEvent` mirrors another file, and
+      // `SubagentEvent` mirrors another file, and
       // the status events carry no conversation at all.
       return []
   }
@@ -221,12 +226,16 @@ function stepLoopEvent(
         event['name'], event['args'], options.toolCalls, options.toolSummaryChars,
       ))
       return []
+    case 'tool.result':
+      closeRun(state)
+      pushAssistant(state, renderToolResult(event['output'] ?? event['result'] ?? event['content'], options.toolResults, options.toolSummaryChars))
+      return []
     case 'step.begin':
     case 'step.end':
       closeRun(state)
       return []
     default:
-      // `tool.result` is plumbing; everything else is internal bookkeeping.
+      // Everything else is internal bookkeeping.
       return []
   }
 }

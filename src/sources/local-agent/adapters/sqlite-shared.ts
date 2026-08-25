@@ -16,7 +16,7 @@
  */
 
 import type { AdapterState, ConvertOptions, ParsedTurn, SqliteReader } from '../types.ts'
-import { cleanUserText, emitUser, pushAssistant, renderToolCall } from './shared.ts'
+import { cleanUserText, emitUser, pushAssistant, renderToolCall, renderToolResult } from './shared.ts'
 
 /**
  * Message ids bound into one `IN (…)` clause.
@@ -155,6 +155,11 @@ export function pushSessionParts(
           ? (state_ as Record<string, unknown>)['input']
           : undefined
         pushAssistant(state, renderToolCall(part['tool'], input, options.toolCalls, options.toolSummaryChars))
+        if (typeof state_ === 'object' && state_ !== null) {
+          const result = state_ as Record<string, unknown>
+          const output = result['output'] ?? result['result']
+          if (output !== undefined) pushAssistant(state, renderToolResult(output, options.toolResults, options.toolSummaryChars))
+        }
         break
       }
       case 'file':

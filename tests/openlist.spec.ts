@@ -155,6 +155,16 @@ describe('OpenList provider', () => {
     expect((await provider.list('needle', 10))[0]).not.toHaveProperty('searchIncomplete')
     expect((await provider.list('', 10))[0]).not.toHaveProperty('searchIncomplete')
   })
+  it('lists the configured drive layer when no query is given', async () => {
+    const paths: string[] = []
+    const provider = new OpenListDriveProvider({ endpoint: 'http://localhost:5244', token: 'private', root: '/baidunetdisk', fetch: async (_url, init) => {
+      const path = (JSON.parse(String(init?.body)) as { path: string }).path
+      paths.push(path)
+      return json({ code: 200, data: { content: [{ name: 'output', is_dir: true }] } })
+    } })
+    expect(await provider.list('', 10)).toMatchObject([{ name: 'output', isDirectory: true }])
+    expect(paths).toEqual(['/baidunetdisk'])
+  })
   it('treats an empty HTTP 500 search response as an unavailable index', async () => {
     const fetch = vi.fn(async (url: string) => url.endsWith('/api/fs/search') ? new Response('', { status: 500 }) : json({ code: 200, data: { content: [{ name: 'needle.md', is_dir: false }] } }))
     const provider = new OpenListDriveProvider({ endpoint: 'http://localhost:5244', token: 'private', fetch, walkDirectories: 1 })
