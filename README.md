@@ -84,6 +84,7 @@ Type `@`, search across enabled sources, and insert the selected reference into 
 ## 🧭 Roadmap
 
 - [x] Support referencing historical conversations from other local agents
+- [ ] Support continuing referenced local-agent sessions
 - [x] Reference cloud-drive files through OpenList
 - [ ] Manage cloud-drive files inside the plugin (in progress; current access is read-only)
 - [ ] Support more keyword matching rules, including blacklists and whitelists, especially for file search
