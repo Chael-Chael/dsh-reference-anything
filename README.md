@@ -71,15 +71,16 @@ Type `@`, search across enabled sources, and insert the selected reference into 
 
 > [!IMPORTANT]
 > This version targets DSH `0.1.0-rc.8` or newer. It uses the native `@` trigger menu, official file/session Remotes, and the native Composer reference renderer.
+> The `0.3.x` line remains on the current stable DSH SDK (`0.1.0-rc.8 ~ 0.1.1-rc.2`). Due to breaking changes, starting with version `v0.4.0-alpha.1`, development releases will target DSH `v0.1.2-alpha.1` or newer, use the npm `alpha` tag, and no longer support older DSH releases.
 
 > [!NOTE]
 > DSH is currently in Beta, so its underlying capabilities and interfaces may change as it evolves. This plugin will adapt alongside those changes. Because of some current DSH limitations, parts of the implementation may not yet be ideal; we will continue to follow DSH updates and improve the plugin over time. See the relevant sections below for specific limitations and usage notes.
 
 ## 📰 News
 
+- **2026-08-28 · v0.3.3** — Improved dark-theme backgrounds for the reference menu and settings panels, added project screenshot metadata, and refreshed the documentation. This is the final release line targeting the current stable DeepSeek Harness SDK; the next development release, `v0.4.0-alpha.1`, will migrate to DeepSeek Harness `v0.1.2-alpha.1` under the npm `alpha` tag and will not support older DSH releases.
 - **2026-08-25 · v0.3.2** — Added local-agent conversation references, with detected session counts and custom-folder support. Web AI sync can be age-limited; cloud drives now support folder browsing and quick download-folder access. Settings include update notes, and local-agent tool details stay concise unless expanded.
 - **2026-08-20 · v0.3.0** — Completed the native DSH `@` integration: five independently configurable sources, official file/session Remotes, native Composer references with source logos, in-place expand/collapse and sync actions, and a one-click switch between Reference Anything and the official DSH `@` list. The legacy `dsh-file:` protocol and custom Composer interaction layer were removed.
-- **2026-08-19 · v0.2.4** — Added automatic version checks and in-settings updates, Pill/Raw text input rendering modes, and reusable background browser sessions for more reliable OpenCLI synchronization and input interactions.
 
 ## 🧭 Roadmap
 
@@ -100,11 +101,19 @@ Prerequisites:
 - `dsh` is installed and running; automatic OpenCLI installation requires the `npm` bundled with Node.js.
 - The target platforms are already logged in under the selected Chrome Profile.
 
-Install the DSH plugin from npm:
+Install the stable `0.3.x` line for the current stable DSH SDK:
 
 ```powershell
-dsh plugin --profile web add dsh-reference-anything
+dsh plugin --profile web add dsh-reference-anything@latest
 ```
+
+Starting with `v0.4.0-alpha.1`, users on DSH `v0.1.2-alpha.1` can install the development line separately:
+
+```powershell
+dsh plugin --profile web add dsh-reference-anything@alpha
+```
+
+After the DSH alpha API stabilizes and the migration is verified, the `alpha` line will be promoted to `latest` and become the default installation.
 
 For development, install the published DSH rc.8 SDK dependencies, run the verification gate, then install the repository from a local path:
 
