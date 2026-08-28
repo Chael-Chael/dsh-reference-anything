@@ -32,7 +32,7 @@ export interface PackageUpdateResult {
 interface UpdateManagerOptions {
   packageRoot?: string
   dshHome?: string
-  fetchLatest?: (signal?: AbortSignal) => Promise<string>
+  fetchLatest?: (signal?: AbortSignal, tag?: string) => Promise<string>
   fetchReleaseNotes?: (version: string, signal?: AbortSignal) => Promise<Pick<PackageUpdateStatus, 'releaseNotes' | 'releaseUrl'>>
   install?: (profileDir: string, version: string, signal?: AbortSignal) => Promise<void>
   afterInstall?: (profileDir: string, version: string, signal?: AbortSignal) => Promise<void>
@@ -42,7 +42,7 @@ interface UpdateManagerOptions {
 export class PackageUpdateManager {
   private readonly packageRoot: string
   private readonly dshHome?: string
-  private readonly fetchLatest: (signal?: AbortSignal) => Promise<string>
+  private readonly fetchLatest: (signal?: AbortSignal, tag?: string) => Promise<string>
   private readonly fetchReleaseNotes: (version: string, signal?: AbortSignal) => Promise<Pick<PackageUpdateStatus, 'releaseNotes' | 'releaseUrl'>>
   private readonly install: (profileDir: string, version: string, signal?: AbortSignal) => Promise<void>
   private readonly afterInstall?: (profileDir: string, version: string, signal?: AbortSignal) => Promise<void>
@@ -99,7 +99,8 @@ export class PackageUpdateManager {
     let currentVersion = '0.0.0'
     try {
       currentVersion = await readPackageVersion(this.packageRoot)
-      const latestVersion = await this.fetchLatest(signal)
+      const tag = currentVersion.split('-')[1]?.split('.')[0] ?? 'latest'
+      const latestVersion = await this.fetchLatest(signal, tag)
       const updateAvailable = compareVersions(latestVersion, currentVersion) > 0
       let release: Pick<PackageUpdateStatus, 'releaseNotes' | 'releaseUrl'> = {}
       try { release = await this.fetchReleaseNotes(latestVersion, signal) } catch { /* Release notes are advisory. */ }
@@ -126,9 +127,10 @@ export class PackageUpdateManager {
   }
 }
 
-export async function fetchLatestVersion(signal?: AbortSignal): Promise<string> {
+export async function fetchLatestVersion(signal?: AbortSignal, tag = 'latest'): Promise<string> {
+  if (!/^[0-9A-Za-z][0-9A-Za-z._-]*$/.test(tag)) throw new Error('refusing to request an invalid npm tag')
   const timeout = AbortSignal.timeout(CHECK_TIMEOUT_MS)
-  const response = await fetch(NPM_LATEST_URL, {
+  const response = await fetch(NPM_LATEST_URL.replace(/latest$/, tag), {
     // The registry's package metadata endpoint accepts the install-v1 media
     // type, but its `/latest` dist-tag endpoint responds 406 to that same
     // header. Request ordinary JSON because this endpoint returns one manifest.
