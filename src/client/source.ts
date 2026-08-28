@@ -32,6 +32,9 @@ export const DRIVE_SOURCE = 'Cloud drive files'
 export const COMMAND_SOURCE = 'Commands'
 export const SKILL_SOURCE = 'Skills'
 
+const driveMenuKinds = new Map<string, WorkspaceIconKind>()
+export const driveMenuIconKind = (description: string): WorkspaceIconKind | undefined => driveMenuKinds.get(description)
+
 type WorkspaceIconKind = Extract<PickerIconKind,
   'folder' | 'file' | 'image' | 'text' | 'code' | 'data' | 'archive' |
   'spreadsheet' | 'audio' | 'video' | 'presentation' | 'font'>
@@ -470,6 +473,7 @@ export function createCloudDriveSource(
   const source: InputTriggerSource = {
     trigger: '@', name: DRIVE_SOURCE, order: options.order,
     async candidates(_session, { query, quoted, signal }) {
+      driveMenuKinds.clear()
       const scoped = scopedQuery(query, 'drives')
       if (scoped === undefined) return []
       // A bare quoted token belongs to workspace files. A drive-qualified one
@@ -486,15 +490,17 @@ export function createCloudDriveSource(
       // same name in two folders, so the ordinal suffix earns its place here.
       const candidates = disambiguate(rows.map((row): InputTriggerCandidate => {
         const name = row.label.trim() || 'Untitled'
+        const description = row.isDirectory === true ? row.origin ?? t('source.drives') : describeDriveRow(row, t)
+        driveMenuKinds.set(description, workspacePathIconKind(name, row.isDirectory === true ? 'directory' : 'file'))
         if (row.isDirectory === true) return {
           name,
-          description: row.origin ?? t('source.drives'),
+          description,
           icon: driveIcon(row),
           value: encodeCandidate({ kind: 'drive-folder', path: row.origin ?? '/' }),
         }
         return {
           name,
-          description: describeDriveRow(row, t),
+          description,
           icon: driveIcon(row),
           value: encodeCandidate({
             kind: 'drive',
@@ -543,7 +549,8 @@ export function createCloudDriveSource(
 }
 
 function driveIcon(row: DriveCandidate): InputTriggerCandidate['icon'] {
-  return row.isDirectory === true ? 'folder' : 'file'
+  const file = PICKER_ICON_MARKER[workspacePathIconKind(row.label, row.isDirectory === true ? 'directory' : 'file')]
+  return `${DRIVE_ICON_MARKER}${file}` as InputTriggerCandidate['icon']
 }
 
 function displayDriveProvider(row: DriveCandidate): string {

@@ -16,10 +16,12 @@ describe('reference DOM customization', () => {
     adoptStyles()
     const text = document.getElementById('dsh-reference-anything-style')?.textContent ?? ''
     expect(text).toContain('[data-composer-card] [role="listbox"]:has')
+    expect(text).toContain('[data-trigger-menu]:has(> [role="listbox"] [role="presentation"][data-source]){border-radius:22px}')
+    expect(text).not.toContain('border-radius:22px!important')
     expect(text).toContain('[role="presentation"][data-source]{position:sticky;top:0')
     expect(text).toContain('padding-top:6px!important')
-    expect(text).toContain('background:var(--dsw-alias-background-primary,var(--dsw-alias-bg-layer-1,#fff))')
-    expect(text).toContain('body[data-ds-dark-theme] [data-composer-card] [role="listbox"] [role="presentation"][data-source]{background:#343438}')
+    expect(text).toContain('background:var(--dsw-specific-menu,var(--dsw-alias-background-primary,var(--dsw-alias-bg-layer-1,#fff)))')
+    expect(text).not.toContain('[data-source]{background:#343438}')
     expect(text).toContain('[role="presentation"][data-source]:not(:first-child)')
     expect(text).toContain('[data-dsh-ref-menu-settling]{overflow-anchor:none!important}')
     expect(text).toContain('[aria-selected="false"]:hover{background:transparent!important}')
@@ -33,6 +35,7 @@ describe('reference DOM customization', () => {
     expect(text).not.toContain('.dsh_ref_panel.dsh_ref_general_settings{padding:0;border:0')
     expect(text).toContain('grid-template-columns:minmax(150px,1fr) auto auto auto')
     expect(text).toContain('[data-decoration="chip"][data-dsh-ref-chip-icon]')
+    expect(text).toContain('[data-composer-chip][data-dsh-ref-chip-icon]')
     expect(text).toContain('--dsh-ref-chip-icon-mask')
     expect(text).not.toContain('[data-decoration="text-ref"]')
     expect(text).not.toContain('dsh_ref_adaptive_caret')
@@ -41,7 +44,7 @@ describe('reference DOM customization', () => {
     expect(text).not.toContain('dsh_ref_menu_expand')
   })
 
-  it.skip('projects Provider, file, and DSH-session logos inside the legacy @ menu', () => {
+  it('projects Provider, file, and DSH-session logos inside the @ menu', () => {
     document.body.innerHTML = `
       <div data-composer-card><div role="listbox">
         <button role="option"><span>\uE101</span><span>Claude chat</span></button>
@@ -59,7 +62,7 @@ describe('reference DOM customization', () => {
     dispose()
   })
 
-  it.skip('projects Agent and drive source logos inside the legacy @ menu', () => {
+  it('projects Agent and drive source logos inside the @ menu', () => {
     document.body.innerHTML = `<div data-composer-card><div role="listbox">
       <button role="option"><span>${LOCAL_AGENT_ICON_MARKER.codex}</span><span>Codex</span></button>
       <button role="option"><span>${PICKER_ICON_MARKER.drive}${PICKER_ICON_MARKER.text}</span><span>Drive</span></button>
@@ -68,6 +71,22 @@ describe('reference DOM customization', () => {
     expect(document.querySelector('[data-dsh-ref-menu-icon="codex"] > svg')).not.toBeNull()
     expect(document.querySelector('[data-dsh-ref-menu-icon="drive"] > svg')).not.toBeNull()
     expect(document.querySelectorAll('[data-dsh-ref-menu-icon="drive"] > svg')).toHaveLength(2)
+    dispose()
+  })
+
+  it('projects the same logos into DSH alpha empty icon slots', () => {
+    document.body.innerHTML = `<div data-composer-card><div role="listbox">
+      <div role="presentation" data-source="External conversations">External conversations</div>
+      <button role="option"><span></span><span>Design chat</span><span>Claude · today</span></button>
+      <div role="presentation" data-source="Local agent conversations">Local agent conversations</div>
+      <button role="option"><span></span><span>Task</span><span>Codex · today</span></button>
+      <div role="presentation" data-source="Files and folders">Files and folders</div>
+      <button role="option"><span></span><span>index.ts</span><span>index.ts</span></button>
+    </div></div>`
+    const dispose = adoptReferenceIconProjection()
+    expect(document.querySelector('[data-dsh-ref-menu-icon="claude"] > svg')).not.toBeNull()
+    expect(document.querySelector('[data-dsh-ref-menu-icon="codex"] > svg')).not.toBeNull()
+    expect(document.querySelector('[data-dsh-ref-menu-icon="code"] > svg')).not.toBeNull()
     dispose()
   })
 
@@ -118,6 +137,27 @@ describe('reference DOM customization', () => {
     dispose()
   })
 
+  it('projects Provider logos into DSH alpha Composer chips', () => {
+    document.body.innerHTML = `<div data-composer-card><span id="alpha" data-composer-chip="External conversations" contenteditable="false">
+      <span><svg width="14" height="14"></svg><span>ChatGPT·Design</span></span>
+    </span></div>`
+    const chip = document.getElementById('alpha')!
+    const dispose = adoptReferenceIconProjection()
+    expect(chip.dataset.dshRefChipIcon).toBe('chatgpt')
+    expect(chip.style.getPropertyValue('--dsh-ref-chip-icon-mask')).toContain('data:image/svg+xml')
+    dispose()
+  })
+
+  it('projects file types into DSH alpha Composer chips', () => {
+    document.body.innerHTML = `<div data-composer-card><span id="alpha-file" data-composer-chip="Files and folders" contenteditable="false">
+      <span><svg width="14" height="14"></svg><span>07_Customer_Feedback.csv</span></span>
+    </span></div>`
+    const chip = document.getElementById('alpha-file')!
+    const dispose = adoptReferenceIconProjection()
+    expect(chip.dataset.dshRefChipIcon).toBe('spreadsheet')
+    dispose()
+  })
+
   it('projects local-agent chips with their logo without confusing same-named Web providers', () => {
     document.body.innerHTML = `<div data-composer-card>
       <span id="agent" data-decoration="chip" data-reference-appearance="session"><span><svg/></span><span>Kimi CLI·Agent task</span></span>
@@ -144,7 +184,7 @@ describe('reference DOM customization', () => {
     dispose()
   })
 
-  it.skip('projects a logo when React inserts an option inside the legacy listbox', async () => {
+  it('projects a logo when React inserts an option inside an existing listbox', async () => {
     document.body.innerHTML = '<div data-composer-card><div role="listbox"><div></div></div></div>'
     const dispose = adoptReferenceIconProjection()
     const option = document.createElement('button')
@@ -159,7 +199,7 @@ describe('reference DOM customization', () => {
     dispose()
   })
 
-  it.skip('reprojects the logo when a legacy result reuses an indexed menu row', async () => {
+  it('reprojects the logo when a refreshed result reuses an indexed menu row', async () => {
     document.body.innerHTML = `
       <div data-composer-card><div role="listbox"><div id="viewport">
         <button id="row" role="option"><span id="icon">\uE104</span><span>Older Grok row</span></button>

@@ -6,15 +6,15 @@ import {
 } from './provider-icons.tsx'
 import type { TranslateNS } from '@deepseek-ai/dsh-client-locale/client'
 import type { REFERENCE_ANYTHING_NS } from './locale.ts'
-import { workspacePathIconKind } from './source.ts'
+import { driveMenuIconKind, workspacePathIconKind } from './source.ts'
 
 const css = `
   /* Reference Anything customizes the public @ menu and only the visual glyph
      inside matching Composer reference chips. Native text continues to own all
      caret, selection, wrapping, and message geometry. */
-[data-composer-card] [role="listbox"]:has([role="presentation"][data-source]){box-sizing:border-box!important;width:100%!important;min-width:0!important;max-width:100%!important;border-radius:22px!important}
-[data-composer-card] [role="listbox"] [role="presentation"][data-source]{position:sticky;top:0;z-index:2;box-sizing:border-box;padding-top:6px!important;background:var(--dsw-alias-background-primary,var(--dsw-alias-bg-layer-1,#fff))}
-body[data-ds-dark-theme] [data-composer-card] [role="listbox"] [role="presentation"][data-source]{background:#343438}
+[data-composer-card] [role="listbox"]:has([role="presentation"][data-source]){box-sizing:border-box!important;width:100%!important;min-width:0!important;max-width:100%!important}
+[data-trigger-menu]:has(> [role="listbox"] [role="presentation"][data-source]){border-radius:22px}
+[data-composer-card] [role="listbox"] [role="presentation"][data-source]{position:sticky;top:0;z-index:2;box-sizing:border-box;padding-top:6px!important;background:var(--dsw-specific-menu,var(--dsw-alias-background-primary,var(--dsw-alias-bg-layer-1,#fff)))}
 [data-composer-card] [role="listbox"] [role="presentation"][data-source]:not(:first-child){margin-top:8px}
 [data-composer-card] [role="listbox"] [role="option"]{scroll-margin-block-start:30px;scroll-margin-block-end:4px}
 [data-composer-card] [role="listbox"]>[data-dsh-ref-menu-settling]{overflow-anchor:none!important}
@@ -26,6 +26,8 @@ body[data-ds-dark-theme] [data-composer-card] [role="listbox"] [role="presentati
 [data-composer-card] [role="listbox"] :is(.dsh_ref_projected_icon,.dsh_ref_picker_icon)>svg{display:block;width:16px;height:16px;overflow:visible}
 [data-composer-card] [data-decoration="chip"][data-dsh-ref-chip-icon]>:first-child>svg{visibility:hidden!important}
 [data-composer-card] [data-decoration="chip"][data-dsh-ref-chip-icon]>:first-child:after{content:"";position:absolute;top:50%;left:50%;display:block;width:16px;height:16px;transform:translate(-50%,-50%);background:currentColor;-webkit-mask:var(--dsh-ref-chip-icon-mask) center/contain no-repeat;mask:var(--dsh-ref-chip-icon-mask) center/contain no-repeat;pointer-events:none}
+[data-composer-card] [data-composer-chip][data-dsh-ref-chip-icon]>:first-child>svg{background:currentColor;-webkit-mask:var(--dsh-ref-chip-icon-mask) center/contain no-repeat;mask:var(--dsh-ref-chip-icon-mask) center/contain no-repeat}
+[data-composer-card] [data-composer-chip][data-dsh-ref-chip-icon]>:first-child>svg>*{display:none!important}
 .dsh_ref_settings{display:flex;flex-direction:column;gap:18px;width:min(100%,1060px);padding:0 0 36px;color:var(--dsw-alias-label-primary);font-family:Geist,"Segoe UI",sans-serif}.dsh_ref_settings *{box-sizing:border-box}.dsh_ref_header{display:flex;align-items:flex-start;justify-content:space-between;gap:24px;padding:0 0 10px}.dsh_ref_header h2{margin:0 0 7px;font-size:28px;line-height:1.1;letter-spacing:-.035em}.dsh_ref_header p{margin:0;max-width:620px;color:var(--dsw-alias-label-primary);font-size:13px;line-height:1.5}.dsh_ref_settings button{min-height:34px;padding:0 13px;border:1px solid var(--dsw-alias-label-primary);border-radius:5px;background:transparent;color:var(--dsw-alias-label-primary);font:inherit;font-size:12px;font-weight:650;cursor:pointer}.dsh_ref_settings button:hover:not(:disabled){background:var(--dsw-alias-label-primary);color:var(--dsw-alias-bg-layer-1)}.dsh_ref_settings button:active:not(:disabled){transform:translateY(1px)}.dsh_ref_settings button:disabled{cursor:not-allowed;opacity:.42}
 .dsh_ref_workspace{display:flex;flex-direction:column;border:1px solid var(--dsw-alias-label-primary);border-radius:0;background:transparent;overflow:hidden}.dsh_ref_workspace>.dsh_ref_panel,.dsh_ref_workspace>.dsh_ref_sources{margin:0;padding:24px;border:0;border-bottom:1px solid var(--dsw-alias-label-primary);border-radius:0;background:transparent}.dsh_ref_workspace>.dsh_ref_panel:last-child{border-bottom:0}.dsh_ref_workspace>.dsh_ref_error{margin:20px 24px 0}.dsh_ref_section_head{display:flex;align-items:flex-start;justify-content:space-between;gap:18px}.dsh_ref_section_head h3{margin:0 0 4px;font-size:17px;letter-spacing:-.02em}.dsh_ref_section_head p{margin:0;color:var(--dsw-alias-label-primary);font-size:12px;line-height:1.45}.dsh_ref_health,.dsh_ref_syncing{display:inline-flex;align-items:center;min-height:25px;padding:0 9px;border:1px solid var(--dsw-alias-label-primary);border-radius:4px;background:transparent;color:var(--dsw-alias-label-primary);font-size:10px;font-weight:700}
 .dsh_ref_checklist{display:grid;gap:14px;margin-top:20px}.dsh_ref_check{display:flex;align-items:flex-start;gap:11px;min-height:40px}.dsh_ref_check>span{display:grid;place-items:center;flex:none;width:22px;height:22px;margin-top:2px;border:1px solid var(--dsw-alias-label-primary);border-radius:50%;background:transparent;color:var(--dsw-alias-label-primary);font-size:11px;font-weight:800}.dsh_ref_check div{display:grid;min-width:0;gap:2px}.dsh_ref_check strong{font-size:13px}.dsh_ref_check small{overflow-wrap:anywhere;color:var(--dsw-alias-label-primary);font-size:11px;opacity:.7}.dsh_ref_install{display:flex;align-items:center;justify-content:space-between;gap:18px;margin-top:20px;padding:14px;border:1px solid var(--dsw-alias-label-primary);background:transparent}.dsh_ref_install>div{display:grid;gap:3px}.dsh_ref_install strong{font-size:12px}.dsh_ref_install span{color:var(--dsw-alias-label-primary);font-size:11px;opacity:.7}.dsh_ref_service_actions{display:flex!important;flex:none;gap:8px}.dsh_ref_error{display:grid;gap:4px;padding:13px;border:1px solid var(--dsw-alias-label-primary);background:transparent;color:var(--dsw-alias-label-primary);font-size:11px}.dsh_ref_skeleton{display:grid;gap:12px;margin-top:20px}.dsh_ref_skeleton i{height:40px;border:1px solid var(--dsw-alias-label-primary);opacity:.25}
@@ -516,6 +518,49 @@ export function adoptReferenceIconProjection(): () => void {
   const providerMasks = Object.fromEntries(providers.map(provider => [provider, providerIconMask(PROVIDER_ICON_PATH[provider])])) as Record<ChatProvider, string>
   const pickerMasks = Object.fromEntries(pickerKinds.map(kind => [kind, pickerIconMask(kind)])) as Record<PickerIconKind, string>
   const agentMasks = Object.fromEntries(agentKinds.map(agent => [agent, reactIconMask(agentLogoElement(agent)!)])) as Partial<Record<LocalAgent, string>>
+  const paintPicker = (node: HTMLElement, kind: PickerIconKind, secondary?: PickerIconKind): void => {
+    node.replaceChildren(createPickerIcon(kind), ...(secondary === undefined ? [] : [createPickerIcon(secondary)]))
+    node.classList.remove('dsh_ref_projected_icon')
+    node.classList.add('dsh_ref_picker_icon')
+    node.classList.toggle('dsh_ref_dual_icon', secondary !== undefined)
+    node.dataset.dshRefMenuIcon = kind
+  }
+  const paintProvider = (node: HTMLElement, provider: ChatProvider): void => {
+    node.replaceChildren(createProviderIcon(PROVIDER_ICON_PATH[provider]))
+    node.classList.remove('dsh_ref_picker_icon', 'dsh_ref_dual_icon')
+    node.classList.add('dsh_ref_projected_icon')
+    node.dataset.dshRefMenuIcon = provider
+  }
+  const paintAgent = (node: HTMLElement, agent: LocalAgent): void => {
+    const logo = agentLogoElement(agent)
+    if (logo === undefined) return paintPicker(node, 'agent')
+    node.replaceChildren(createReactIcon(logo))
+    node.classList.remove('dsh_ref_picker_icon', 'dsh_ref_dual_icon')
+    node.classList.add('dsh_ref_projected_icon')
+    node.dataset.dshRefMenuIcon = agent
+  }
+  const projectAlphaOption = (option: Element): void => {
+    const icon = option.firstElementChild
+    if (!(icon instanceof HTMLElement) || icon.childElementCount > 0 || (icon.textContent ?? '') !== '') return
+    let heading = option.previousElementSibling
+    while (heading !== null && !(heading.getAttribute('role') === 'presentation' && heading.hasAttribute('data-source'))) heading = heading.previousElementSibling
+    const source = heading?.getAttribute('data-source')
+    const name = option.children.item(1)?.textContent?.trim() ?? ''
+    const description = option.children.item(2)?.textContent?.trim() ?? ''
+    if (source === 'Commands') return paintPicker(icon, 'command')
+    if (source === 'Skills') return paintPicker(icon, 'skill')
+    if (source === 'Files and folders') return paintPicker(icon, workspacePathIconKind(name, name.endsWith('/') ? 'directory' : 'file'))
+    if (source === 'DSH sessions') return paintPicker(icon, 'session')
+    if (source === 'Local agent conversations') {
+      const agent = (Object.keys(LOCAL_AGENT_CHIP_LABEL) as LocalAgent[]).find(item => description.startsWith(`${LOCAL_AGENT_CHIP_LABEL[item]} ·`))
+      return agent === undefined ? paintPicker(icon, 'agent') : paintAgent(icon, agent)
+    }
+    if (source === 'External conversations') {
+      const provider = providers.find(item => description.startsWith(`${CHIP_PROVIDER_LABEL[item]} ·`))
+      return provider === undefined ? paintPicker(icon, 'refresh') : paintProvider(icon, provider)
+    }
+    if (source === 'Cloud drive files') paintPicker(icon, 'drive', driveMenuIconKind(description) ?? workspacePathIconKind(name, name.endsWith('/') ? 'directory' : 'file'))
+  }
   const project = (root: ParentNode): void => {
     const selector = '[data-composer-card] [role="listbox"]'
     const menus = new Set<Element>()
@@ -526,6 +571,7 @@ export function adoptReferenceIconProjection(): () => void {
     }
     for (const menu of Array.from(root.querySelectorAll(selector))) menus.add(menu)
     for (const menu of menus) {
+      for (const option of Array.from(menu.querySelectorAll('[role="option"]'))) projectAlphaOption(option)
       const walker = document.createTreeWalker(menu, NodeFilter.SHOW_ELEMENT)
       let node = walker.nextNode()
       while (node !== null) {
@@ -608,7 +654,7 @@ function projectComposerChips(
   pickerMasks: Readonly<Record<PickerIconKind, string>>,
   agentMasks: Readonly<Partial<Record<LocalAgent, string>>>,
 ): void {
-  const selector = '[data-composer-card] [data-decoration="chip"][data-reference-appearance]'
+  const selector = '[data-composer-card] :is([data-decoration="chip"][data-reference-appearance],[data-composer-chip])'
   const chips = new Set<HTMLElement>()
   if (root instanceof Element) {
     const chip = root.matches(selector) ? root : root.closest(selector)
@@ -617,9 +663,9 @@ function projectComposerChips(
   for (const chip of Array.from(root.querySelectorAll(selector))) if (chip instanceof HTMLElement) chips.add(chip)
   for (const chip of chips) {
     const label = (chip.textContent ?? '').trim().replace(/^@/u, '')
-    const appearance = chip.dataset.referenceAppearance
+    const referenceSource = chip.dataset.referenceSource ?? chip.dataset.composerChip
+    const appearance = chip.dataset.referenceAppearance ?? (referenceSource === 'Cloud drive files' || referenceSource === 'Files and folders' ? 'file' : 'session')
     if (appearance === 'session') {
-      const referenceSource = chip.dataset.referenceSource
       const agent = (Object.keys(LOCAL_AGENT_CHIP_LABEL) as LocalAgent[]).find(item => label.startsWith(`${LOCAL_AGENT_CHIP_LABEL[item]}·`))
       if (agent !== undefined) {
         applyChipIcon(chip, agent, agentMasks[agent] ?? pickerMasks.agent)

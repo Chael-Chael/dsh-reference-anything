@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 import {
   AGENT_SOURCE, CONVERSATION_SOURCE, DRIVE_SOURCE, agentReferenceUri, conversationReferenceUri, createCloudDriveSource,
   createCommandSource, createConversationSource, createFileSource, createLocalAgentSource, createSearchDebounce,
-  createSessionSource, createSkillSource, driveReferenceUri,
+  createSessionSource, createSkillSource, driveMenuIconKind, driveReferenceUri,
   describeRow, disambiguate, parseQuery, scopedQuery, workspaceIconKind,
   type PickerSourceOptions,
 } from '../src/client/source.ts'
@@ -105,7 +105,7 @@ describe('native @ sources', () => {
     const row = searchRow({ title: 'BiWM SFT Loss 解释' })
     const source = createConversationSource(async () => [row])
     const candidate = (await source.candidates(session, request()))[0]!
-    expect(candidate.icon).toBe('session')
+    expect(candidate.icon).toBe('\uE100')
     const outcome = source.onPick(pick(candidate))
     if (outcome === undefined || outcome === 'handled' || !('insert' in outcome)) throw new Error('expected insert')
     expect(outcome.insert).toMatchObject({
@@ -368,11 +368,18 @@ describe('cloud drive files', () => {
     const candidates = await source.candidates(session, request('drives'))
     expect(source.name).toBe(DRIVE_SOURCE)
     expect(candidates.map(row => row.name)).toEqual(['quarterly-notes.md', 'quarterly-notes.md (2)', 'Untitled'])
-    expect(candidates[0]?.icon).toBe('file')
+    expect(candidates[0]?.icon).toBe(`${DRIVE_ICON_MARKER}${PICKER_ICON_MARKER.text}`)
     expect(candidates[0]?.description).toBe('OpenList · /notes')
+    expect(driveMenuIconKind(candidates[0]?.description ?? '')).toBe('text')
     // Neither the drive nor the folder is known for this one; the group's own
     // name is the honest fallback.
     expect(candidates[2]?.description).toBe('Cloud drive files')
+  })
+
+  it('retains exact cloud folder types for the alpha menu projection', async () => {
+    const source = createCloudDriveSource(async () => [driveRow({ label: 'docs', origin: '/docs', isDirectory: true })], undefined, options({ order: 35 }))
+    const candidate = (await source.candidates(session, request('drives')))[0]!
+    expect(driveMenuIconKind(candidate.description ?? '')).toBe('folder')
   })
 
   it('warns that fallback results may be incomplete without changing the reference id', async () => {
@@ -405,7 +412,7 @@ describe('cloud drive files', () => {
   it('uses the mounted Baidu source logo', async () => {
     const source = createCloudDriveSource(async () => [driveRow({ origin: '/baidunetdisk/docs' })], undefined, options({ order: 35 }))
     const candidate = (await source.candidates(session, request('drives')))[0]!
-    expect(candidate.icon).toBe('file')
+    expect(candidate.icon).toBe(`${DRIVE_ICON_MARKER}${PICKER_ICON_MARKER.text}`)
     const outcome = source.onPick(pick(candidate))
     if (outcome === undefined || outcome === 'handled' || !('insert' in outcome)) throw new Error('expected insert')
     expect(outcome.insert.label).toBe('BaiduNetdisk·quarterly-notes.md')

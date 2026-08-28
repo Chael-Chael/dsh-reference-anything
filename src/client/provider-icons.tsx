@@ -29,9 +29,9 @@ export const PROVIDER_ICON_PATH: Readonly<Record<ChatProvider, string>> = {
 
 type InputTriggerCandidateIcon = NonNullable<InputTriggerCandidate['icon']>
 
-export const PROVIDER_ICON_MARKER: Readonly<Record<ChatProvider, InputTriggerCandidateIcon>> = {
-  chatgpt: 'session', claude: 'session', gemini: 'session', deepseek: 'session', grok: 'session', kimi: 'session',
-}
+export const PROVIDER_ICON_MARKER = {
+  chatgpt: '\uE100', claude: '\uE101', gemini: '\uE102', deepseek: '\uE103', grok: '\uE104', kimi: '\uE105',
+} as unknown as Readonly<Record<ChatProvider, InputTriggerCandidateIcon>>
 
 export type PickerIconKind =
   | 'command' | 'skill' | 'session' | 'refresh' | 'agent' | 'drive'
@@ -39,23 +39,23 @@ export type PickerIconKind =
   | 'archive' | 'spreadsheet' | 'audio' | 'video' | 'presentation' | 'font'
 
 /** Private-use markers let the host's string-only icon API carry an SVG identity. */
-export const PICKER_ICON_MARKER: Readonly<Record<PickerIconKind, InputTriggerCandidateIcon>> = {
-  session: 'session', skill: 'file', command: 'file', folder: 'folder', file: 'file',
-  image: 'file', text: 'file', code: 'file', data: 'file', archive: 'file',
-  spreadsheet: 'file', audio: 'file', video: 'file', presentation: 'file', font: 'file',
-  refresh: 'session', agent: 'session', drive: 'file',
-}
+export const PICKER_ICON_MARKER = {
+  session: '\uE106', skill: '\uE107', command: '\uE108', folder: '\uE109', file: '\uE10A',
+  image: '\uE10B', text: '\uE10C', code: '\uE10D', data: '\uE10E', archive: '\uE10F',
+  spreadsheet: '\uE110', audio: '\uE111', video: '\uE112', presentation: '\uE113', font: '\uE114',
+  refresh: '\uE115', agent: '\uE116', drive: '\uE117',
+} as unknown as Readonly<Record<PickerIconKind, InputTriggerCandidateIcon>>
 export const SESSION_ICON_MARKER = PICKER_ICON_MARKER.session
 export const SKILL_ICON_MARKER = PICKER_ICON_MARKER.skill
 export const COMMAND_ICON_MARKER = PICKER_ICON_MARKER.command
 export const AGENT_ICON_MARKER = PICKER_ICON_MARKER.agent
 export const DRIVE_ICON_MARKER = PICKER_ICON_MARKER.drive
 
-export const LOCAL_AGENT_ICON_MARKER: Readonly<Partial<Record<LocalAgent, InputTriggerCandidateIcon>>> = {
-  'claude-code': 'session', codex: 'session', cursor: 'session', qoder: 'session',
-  openclaw: 'session', kimi: 'session', grokbuild: 'session', hermes: 'session',
-  'gemini-cli': 'session', pi: 'session', opencode: 'session', mimocode: 'session', zcode: 'session',
-}
+export const LOCAL_AGENT_ICON_MARKER = {
+  'claude-code': '\uE118', codex: '\uE119', cursor: '\uE11A', qoder: '\uE11B',
+  openclaw: '\uE11C', kimi: '\uE11D', grokbuild: '\uE11E', hermes: '\uE11F',
+  'gemini-cli': '\uE120', pi: '\uE121', opencode: '\uE122', mimocode: '\uE123', zcode: '\uE124',
+} as unknown as Readonly<Partial<Record<LocalAgent, InputTriggerCandidateIcon>>>
 
 type PickerIconNode = Readonly<{
   tag: 'path' | 'rect' | 'circle'

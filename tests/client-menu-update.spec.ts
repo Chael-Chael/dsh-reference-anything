@@ -59,7 +59,30 @@ describe('in-place picker menu updates', () => {
     expect(b.state.hit).toEqual(hit)
     expect(b.state.groups[0]?.items).toEqual([{ name: 'plan' }])
     expect(b.state.groups[1]?.items.map(item => item.name)).toEqual(['old', 'new', 'Show 5 more'])
-    expect(b.state.highlight).toBeNull()
+    expect(b.state.highlight).toEqual({ source: 'External conversations', index: 0 })
+  })
+
+  it('continues from the first newly expanded row instead of jumping to the top', () => {
+    const b = bench()
+    const expand = { name: 'Show 5 more', value: JSON.stringify({ kind: 'action', action: 'expand' }) }
+    b.set({
+      ...b.state,
+      groups: [b.state.groups[0]!, { source: 'External conversations', status: 'ready', items: [{ name: 'old' }, expand] }],
+      highlight: { source: 'External conversations', index: 1 },
+    })
+
+    b.update({
+      sessionId: 'session-1' as never,
+      source: 'External conversations',
+      query: '',
+      candidates: [{ name: 'old' }, { name: 'new' }, expand],
+      reopen: true,
+      anchor: 'viewport',
+    })
+    b.close()
+    b.run()
+
+    expect(b.state.highlight).toEqual({ source: 'External conversations', index: 1 })
   })
 
   it('does not reopen a menu closed before a background update lands', () => {

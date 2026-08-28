@@ -57,13 +57,23 @@ export function createPickerMenuUpdater(
       const groups = base.groups.map(group => group.source === update.source
         ? { ...group, status: 'ready' as const, items: update.candidates }
         : group)
-      const highlight = update.reopen || !validHighlight(base, update.candidates, update.source)
-        ? null
-        : base.highlight
+      const highlight = update.reopen
+        ? retainedHighlight(before, update.candidates, update.source)
+        : validHighlight(base, update.candidates, update.source) ? base.highlight : null
       controller.menu.set({ ...base, open: true, groups, highlight })
     })
     return true
   }
+}
+
+function retainedHighlight(
+  state: MenuState,
+  candidates: readonly InputTriggerCandidate[],
+  source: string,
+): MenuState['highlight'] {
+  if (state.highlight?.source !== source) return state.highlight
+  if (candidates.length === 0) return null
+  return { source, index: Math.min(state.highlight.index, candidates.length - 1) }
 }
 
 /**
