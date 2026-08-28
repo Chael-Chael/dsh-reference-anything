@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import type { ISessions } from '@deepseek-ai/dsh-client-runtime/client'
+import type { ISessions } from '@deepseek-ai/dsh-api-session-controller/client'
 import type {
   InputTriggerServiceContract, MenuState,
 } from '@deepseek-ai/dsh-client-ui-input-trigger/client'

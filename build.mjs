@@ -11,7 +11,8 @@ rmSync(outputDirectory, { recursive: true, force: true })
 // be bundled into this external plugin, matching DSH's client build policy.
 const clientExternals = [
   '@deepseek-ai/cordis',
-  '@deepseek-ai/dsh-client-runtime/client',
+  '@deepseek-ai/dsh-api-session-controller/client',
+  '@deepseek-ai/dsh-client-store',
   'react',
   'react-dom',
   'react/jsx-runtime',

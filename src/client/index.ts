@@ -2,7 +2,11 @@ import type { ConnectionHandle } from '@deepseek-ai/dsh-api-remotes/client'
 import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
 import type {} from '@deepseek-ai/dsh-client-locale/client'
-import { createSnapshotStore, type ClientContext, type ISessions } from '@deepseek-ai/dsh-client-runtime/client'
+import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
+import type {} from '@deepseek-ai/dsh-client-ui-workspace/client'
+import type { Context as ClientContext } from '@deepseek-ai/cordis'
+import type { ISessions } from '@deepseek-ai/dsh-api-session-controller/client'
+import { createSnapshotStore } from '@deepseek-ai/dsh-client-store'
 import type { InputTriggerServiceContract } from '@deepseek-ai/dsh-client-ui-input-trigger/client'
 import { ALL_LOCAL_AGENTS, ALL_PROVIDERS, defaultPickerSettings, samePickerSettings, type ChatProvider, type LocalAgent, type PickerSettings, type SettingsRecord } from '../wire.ts'
 import { REFERENCE_ANYTHING_REMOTE, type AgentCandidate, type DriveCandidate, type ReferenceAnythingRemoteFace, type SearchResult, type SyncStatus } from './remote.ts'
@@ -23,7 +27,7 @@ import { pickDirectoryWithError } from './directory-picker.ts'
 // the input-trigger menu then removes the Commands group as a failed source.
 export const inject = [
   'inputTriggers', 'remote', 'remote.commands', 'remote.fileReferences', 'remote.sessionReferenceResolver',
-  'slots', 'connection', 'locale', 'sessions', 'workspaces',
+  'slots', 'connection', 'locale', 'sessions', 'uiWorkspace',
 ]
 
 export function apply(ctx: ClientContext): void {
@@ -382,12 +386,12 @@ export function apply(ctx: ClientContext): void {
       browse, deleteConversation, clearProvider, clearRemoteMissing, clearOldAccounts, refreshStats,
       refreshOpenList,
       pickAgentDirectory: async (agent: LocalAgent) => {
-        const path = await pickDirectoryWithError(ctx.workspaces, error => { scope.set({ ...scope.getSnapshot(), error: message(error), notice: undefined }) })
+        const path = await pickDirectoryWithError(ctx.uiWorkspace, error => { scope.set({ ...scope.getSnapshot(), error: message(error), notice: undefined }) })
         if (!path) return
         const settings = scope.getSnapshot().settings
         if (await save({ ...settings, agentDirectories: { ...(settings.agentDirectories ?? {}), [agent]: path } })) await refreshAgentStats()
       },
-      pickCloudDriveDownloadDirectory: () => pickDirectoryWithError(ctx.workspaces, error => {
+      pickCloudDriveDownloadDirectory: () => pickDirectoryWithError(ctx.uiWorkspace, error => {
         scope.set({ ...scope.getSnapshot(), error: message(error), notice: undefined })
       }),
       openCloudDriveDownloadDirectory: async () => {

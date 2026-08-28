@@ -8,6 +8,7 @@ import {
 } from '../src/client/source.ts'
 import { AGENT_ICON_MARKER, DRIVE_ICON_MARKER, LOCAL_AGENT_ICON_MARKER, PICKER_ICON_MARKER } from '../src/client/provider-icons.tsx'
 import type { PickerMenuUpdate } from '../src/client/menu-update.ts'
+import type { InputTriggerCandidate } from '@deepseek-ai/dsh-client-ui-input-trigger/client'
 import type { AgentCandidate, DriveCandidate, SearchResult } from '../src/client/remote.ts'
 import { REFERENCE_ANYTHING_INVOCATIONS } from '../src/contract.ts'
 import { decodeReferenceUri } from '../src/uri.ts'
@@ -17,10 +18,10 @@ const options = (overrides: Partial<PickerSourceOptions> = {}): PickerSourceOpti
 })
 const session = { sessionId: 'session-1' as never }
 const request = (query = '', quoted = false) => ({
-  query, quoted, position: 'inline' as const, signal: new AbortController().signal,
+  query, quoted, position: 'inline' as const, drilled: false, signal: new AbortController().signal,
 })
-const pick = (candidate: { name: string; description?: string; icon?: string; hint?: string; section?: string; value?: string }) => ({
-  candidate, session, position: 'inline' as const, via: 'menu' as const,
+const pick = (candidate: InputTriggerCandidate) => ({
+  candidate, session, position: 'inline' as const, via: 'menu' as const, action: 'pick' as const,
   span: { start: 0, end: 1, draftRev: 1 },
 })
 
@@ -104,7 +105,7 @@ describe('native @ sources', () => {
     const row = searchRow({ title: 'BiWM SFT Loss 解释' })
     const source = createConversationSource(async () => [row])
     const candidate = (await source.candidates(session, request()))[0]!
-    expect(candidate.icon).toBe('')
+    expect(candidate.icon).toBe('session')
     const outcome = source.onPick(pick(candidate))
     if (outcome === undefined || outcome === 'handled' || !('insert' in outcome)) throw new Error('expected insert')
     expect(outcome.insert).toMatchObject({
@@ -120,7 +121,7 @@ describe('native @ sources', () => {
   it('does not offer conversations or sessions inside an open quoted file token', async () => {
     const conversations = createConversationSource(async () => [searchRow()])
     const sessions = createSessionSource(async () => [{
-      sessionId: 'source' as never, label: 'Other', createdAt: 1, mention: '@[Other](dsh-session:abc)',
+      sessionId: 'source' as never, label: 'Other', createdAt: 1, mention: '@[Other](dsh-session:abc)', sameWorkspace: false,
     }])
     await expect(conversations.candidates(session, request('path with', true))).resolves.toEqual([])
     await expect(sessions.candidates(session, request('path with', true))).resolves.toEqual([])
@@ -159,7 +160,7 @@ describe('native @ sources', () => {
   it('passes through the official canonical dsh-session mention', async () => {
     const mention = '@[项目聊天导出](dsh-session:InNvdXJjZSI)'
     const source = createSessionSource(async () => [{
-      sessionId: 'source' as never, label: '项目聊天导出', cwd: 'fixture-repo', createdAt: 1, mention,
+      sessionId: 'source' as never, label: '项目聊天导出', cwd: 'fixture-repo', createdAt: 1, mention, sameWorkspace: true,
     }])
     const candidate = (await source.candidates(session, request()))[0]!
     expect(candidate.icon).toBe(PICKER_ICON_MARKER.session)
@@ -367,7 +368,7 @@ describe('cloud drive files', () => {
     const candidates = await source.candidates(session, request('drives'))
     expect(source.name).toBe(DRIVE_SOURCE)
     expect(candidates.map(row => row.name)).toEqual(['quarterly-notes.md', 'quarterly-notes.md (2)', 'Untitled'])
-    expect(candidates[0]?.icon).toBe(`${DRIVE_ICON_MARKER}${PICKER_ICON_MARKER.text}`)
+    expect(candidates[0]?.icon).toBe('file')
     expect(candidates[0]?.description).toBe('OpenList · /notes')
     // Neither the drive nor the folder is known for this one; the group's own
     // name is the honest fallback.
@@ -404,7 +405,7 @@ describe('cloud drive files', () => {
   it('uses the mounted Baidu source logo', async () => {
     const source = createCloudDriveSource(async () => [driveRow({ origin: '/baidunetdisk/docs' })], undefined, options({ order: 35 }))
     const candidate = (await source.candidates(session, request('drives')))[0]!
-    expect(candidate.icon).toBe(`${DRIVE_ICON_MARKER}${PICKER_ICON_MARKER.text}`)
+    expect(candidate.icon).toBe('file')
     const outcome = source.onPick(pick(candidate))
     if (outcome === undefined || outcome === 'handled' || !('insert' in outcome)) throw new Error('expected insert')
     expect(outcome.insert.label).toBe('BaiduNetdisk·quarterly-notes.md')

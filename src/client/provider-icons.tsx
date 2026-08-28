@@ -12,6 +12,7 @@ import * as Qoder from '@lobehub/icons/es/Qoder/components/Mono.js'
 import * as XiaomiMiMo from '@lobehub/icons/es/XiaomiMiMo/components/Mono.js'
 import * as ZAI from '@lobehub/icons/es/ZAI/components/Mono.js'
 import { createElement, type ComponentType, type ReactElement } from 'react'
+import type { InputTriggerCandidate } from '@deepseek-ai/dsh-client-ui-input-trigger/client'
 import type { ChatProvider, LocalAgent } from '../wire.ts'
 
 /** Paths are shared by Settings and the DOM projection used by @ candidates/chips. */
@@ -26,8 +27,10 @@ export const PROVIDER_ICON_PATH: Readonly<Record<ChatProvider, string>> = {
   kimi: 'M21.846 0a1.923 1.923 0 110 3.846H20.15a.226.226 0 01-.227-.226V1.923C19.923.861 20.784 0 21.846 0zM11.065 11.199l7.257-7.2c.137-.136.06-.41-.116-.41H14.3a.164.164 0 00-.117.051l-7.82 7.756c-.122.12-.302.013-.302-.179V3.82c0-.127-.083-.23-.185-.23H3.186c-.103 0-.186.103-.186.23V19.77c0 .128.083.23.186.23h2.69c.103 0 .186-.102.186-.23v-3.25c0-.069.025-.135.069-.178l2.424-2.406a.158.158 0 01.205-.023l6.484 4.772a7.677 7.677 0 003.453 1.283c.108.012.2-.095.2-.23v-3.06c0-.117-.07-.212-.164-.227a5.028 5.028 0 01-2.027-.807l-5.613-4.064c-.117-.078-.132-.279-.028-.381z',
 }
 
-export const PROVIDER_ICON_MARKER: Readonly<Record<ChatProvider, string>> = {
-  chatgpt: '\uE100', claude: '\uE101', gemini: '\uE102', deepseek: '\uE103', grok: '\uE104', kimi: '\uE105',
+type InputTriggerCandidateIcon = NonNullable<InputTriggerCandidate['icon']>
+
+export const PROVIDER_ICON_MARKER: Readonly<Record<ChatProvider, InputTriggerCandidateIcon>> = {
+  chatgpt: 'session', claude: 'session', gemini: 'session', deepseek: 'session', grok: 'session', kimi: 'session',
 }
 
 export type PickerIconKind =
@@ -36,11 +39,11 @@ export type PickerIconKind =
   | 'archive' | 'spreadsheet' | 'audio' | 'video' | 'presentation' | 'font'
 
 /** Private-use markers let the host's string-only icon API carry an SVG identity. */
-export const PICKER_ICON_MARKER: Readonly<Record<PickerIconKind, string>> = {
-  session: '\uE106', skill: '\uE107', command: '\uE108', folder: '\uE109', file: '\uE10A',
-  image: '\uE10B', text: '\uE10C', code: '\uE10D', data: '\uE10E', archive: '\uE10F',
-  spreadsheet: '\uE110', audio: '\uE111', video: '\uE112', presentation: '\uE113', font: '\uE114',
-  refresh: '\uE115', agent: '\uE116', drive: '\uE117',
+export const PICKER_ICON_MARKER: Readonly<Record<PickerIconKind, InputTriggerCandidateIcon>> = {
+  session: 'session', skill: 'file', command: 'file', folder: 'folder', file: 'file',
+  image: 'file', text: 'file', code: 'file', data: 'file', archive: 'file',
+  spreadsheet: 'file', audio: 'file', video: 'file', presentation: 'file', font: 'file',
+  refresh: 'session', agent: 'session', drive: 'file',
 }
 export const SESSION_ICON_MARKER = PICKER_ICON_MARKER.session
 export const SKILL_ICON_MARKER = PICKER_ICON_MARKER.skill
@@ -48,10 +51,10 @@ export const COMMAND_ICON_MARKER = PICKER_ICON_MARKER.command
 export const AGENT_ICON_MARKER = PICKER_ICON_MARKER.agent
 export const DRIVE_ICON_MARKER = PICKER_ICON_MARKER.drive
 
-export const LOCAL_AGENT_ICON_MARKER: Readonly<Partial<Record<LocalAgent, string>>> = {
-  'claude-code': '\uE118', codex: '\uE119', cursor: '\uE11A', qoder: '\uE11B',
-  openclaw: '\uE11C', kimi: '\uE11D', grokbuild: '\uE11E', hermes: '\uE11F',
-  'gemini-cli': '\uE120', pi: '\uE121', opencode: '\uE122', mimocode: '\uE123', zcode: '\uE124',
+export const LOCAL_AGENT_ICON_MARKER: Readonly<Partial<Record<LocalAgent, InputTriggerCandidateIcon>>> = {
+  'claude-code': 'session', codex: 'session', cursor: 'session', qoder: 'session',
+  openclaw: 'session', kimi: 'session', grokbuild: 'session', hermes: 'session',
+  'gemini-cli': 'session', pi: 'session', opencode: 'session', mimocode: 'session', zcode: 'session',
 }
 
 type PickerIconNode = Readonly<{

@@ -4,7 +4,7 @@ import type { SessionReferenceMentionCandidate } from '@deepseek-ai/dsh-session-
 import type {
   CandidateRequest, ClientSessionContext, InputTriggerCandidate, InputTriggerSource,
 } from '@deepseek-ai/dsh-client-ui-input-trigger/client'
-import type { SessionId } from '@deepseek-ai/dsh-client-runtime/client'
+import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import type { TranslateNS } from '@deepseek-ai/dsh-client-locale/client'
 import type { ChatProvider, PickerDisplayMode } from '../wire.ts'
 import { parseProviderQuery } from '../search.ts'
@@ -542,9 +542,8 @@ export function createCloudDriveSource(
   return withDisplayPolicy(source, options, t, candidate => candidate, true)
 }
 
-function driveIcon(row: DriveCandidate): string {
-  const file = PICKER_ICON_MARKER[workspacePathIconKind(row.label, row.isDirectory === true ? 'directory' : 'file')]
-  return `${DRIVE_ICON_MARKER}${file}`
+function driveIcon(row: DriveCandidate): InputTriggerCandidate['icon'] {
+  return row.isDirectory === true ? 'folder' : 'file'
 }
 
 function displayDriveProvider(row: DriveCandidate): string {
@@ -632,7 +631,7 @@ export function createSkillSource(
 
 interface CachedSourceCandidates {
   session: ClientSessionContext
-  request: Pick<CandidateRequest, 'query' | 'quoted' | 'position'>
+  request: Pick<CandidateRequest, 'query' | 'quoted' | 'position' | 'drilled'>
   pinned: InputTriggerCandidate[]
   normal: InputTriggerCandidate[]
   revision: number
@@ -685,7 +684,7 @@ function withDisplayPolicy(
   }) ?? false
   const cacheCandidates = (
     session: ClientSessionContext,
-    request: Pick<CandidateRequest, 'query' | 'quoted' | 'position'>,
+    request: Pick<CandidateRequest, 'query' | 'quoted' | 'position' | 'drilled'>,
     all: readonly InputTriggerCandidate[],
     revision: number,
   ): CachedSourceCandidates => ({
@@ -719,7 +718,7 @@ function withDisplayPolicy(
       }
       const all = await source.candidates(session, request)
       const cache = cacheCandidates(session, {
-        query: request.query, quoted: request.quoted, position: request.position,
+        query: request.query, quoted: request.quoted, position: request.position, drilled: request.drilled,
       }, all, (previous?.revision ?? 0) + 1)
       if (!request.signal.aborted) caches.set(session.sessionId, cache)
       options.guardMenuActions?.(session.sessionId, source.name)

@@ -1,5 +1,5 @@
 import type { InjectFace, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
-import type { ObservableSnapshot } from '@deepseek-ai/dsh-client-runtime/client'
+import type { ObservableSnapshot } from '@deepseek-ai/dsh-client-store'
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import ReactMarkdown from 'react-markdown'
 import { ALL_LOCAL_AGENTS, LOCAL_AGENT_LABEL, defaultPickerSettings, type ChatProvider, type LocalAgent, type PickerSettings, type PickerSource, type SettingsRecord } from '../wire.ts'
@@ -47,7 +47,7 @@ export interface SettingsInjected {
   openCloudDriveDownloadDirectory?(): Promise<void>
 }
 type T = TranslateNS<typeof REFERENCE_ANYTHING_NS>
-type SettingsProps = PropsRuntime<'settings.section'> & InjectFace<SettingsInjected> & { t: T }
+type SettingsProps = Omit<PropsRuntime<'settings.section'>, 'useSessionPendingInteraction'> & InjectFace<SettingsInjected> & { t: T }
 const PROVIDERS: ChatProvider[] = ['chatgpt', 'claude', 'gemini', 'deepseek', 'grok', 'kimi']
 /** Keystrokes to ride out before a typed filter re-queries the Host. */
 const SEARCH_DEBOUNCE_MS = 300

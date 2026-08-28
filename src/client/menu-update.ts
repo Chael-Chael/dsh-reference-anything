@@ -1,4 +1,6 @@
-import type { ISessions, SessionId } from '@deepseek-ai/dsh-client-runtime/client'
+import type { ISessions } from '@deepseek-ai/dsh-api-session-controller/client'
+import type { SessionId } from '@deepseek-ai/dsh-session/types'
+import type { Context } from '@deepseek-ai/cordis'
 import type {
   InputTriggerCandidate, InputTriggerServiceContract, MenuState,
 } from '@deepseek-ai/dsh-client-ui-input-trigger/client'
@@ -40,7 +42,7 @@ export function createPickerMenuUpdater(
   return (update) => {
     const actx = sessions.scope(update.sessionId)
     if (actx === undefined) return false
-    const controller = inputTriggers.sessionOf(actx)
+    const controller = inputTriggers.sessionOf(actx as Context)
     const before = controller.menu.getSnapshot()
     if (!matches(before, update) || !before.groups.some(group => group.source === update.source)) return false
 
@@ -79,7 +81,7 @@ export function createPickerMenuActionGuard(
   return (sessionId, source) => {
     const actx = sessions.scope(sessionId)
     if (actx === undefined) return false
-    const controller = inputTriggers.sessionOf(actx)
+    const controller = inputTriggers.sessionOf(actx as Context)
     const existing = patched.get(controller)
     if (existing !== undefined) {
       existing.add(source)
