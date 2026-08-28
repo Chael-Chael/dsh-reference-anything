@@ -14,7 +14,8 @@ One `@` for them all.
 
 <!-- SHIELD GROUP -->
 
-[![][github-version-shield]][github-version-link]
+[![][stable-version-shield]][stable-version-link]
+[![][alpha-version-shield]][alpha-version-link]
 [![][typescript-shield]][typescript-link]
 [![][dsh-plugin-shield]][repository-link]
 <br/>
@@ -343,8 +344,10 @@ This project is licensed under the [MIT License](./LICENSE). Third-party copyrig
 [typescript-link]: https://www.typescriptlang.org/
 [typescript-shield]: https://img.shields.io/badge/TypeScript-3178C6?labelColor=black&logo=typescript&logoColor=white&style=flat-square
 [dsh-plugin-shield]: https://img.shields.io/badge/DSH-plugin-ffffff?labelColor=black&style=flat-square
-[github-version-shield]: https://img.shields.io/github/package-json/v/Chael-Chael/dsh-reference-anything/main?color=369eff&label=version&labelColor=black&style=flat-square
-[github-version-link]: https://github.com/Chael-Chael/dsh-reference-anything/blob/main/package.json
+[stable-version-shield]: https://img.shields.io/github/package-json/v/Chael-Chael/dsh-reference-anything/main?color=369eff&label=stable&labelColor=black&style=flat-square
+[stable-version-link]: https://github.com/Chael-Chael/dsh-reference-anything/tree/main
+[alpha-version-shield]: https://img.shields.io/github/package-json/v/Chael-Chael/dsh-reference-anything/alpha?color=f59e0b&label=alpha&labelColor=black&style=flat-square
+[alpha-version-link]: https://github.com/Chael-Chael/dsh-reference-anything/tree/alpha
 [npm-downloads-shield]: https://img.shields.io/npm/dt/dsh-reference-anything?color=cb3837&label=downloads&labelColor=black&style=flat-square
 [npm-package-link]: https://www.npmjs.com/package/dsh-reference-anything
 [github-stars-link]: https://github.com/Chael-Chael/dsh-reference-anything/stargazers
