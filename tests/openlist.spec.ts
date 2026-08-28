@@ -15,6 +15,8 @@ import { decodeDriveId, encodeDriveId, normalizeOpenListPath } from '../src/sour
 import { authenticateOpenList, installOpenList, ManagedOpenListRuntime, OpenListHostClient, OPENLIST_FIXED_VERSION, OPENLIST_RELEASE, parseRandomAdminPassword, recoverInterruptedReplacement, selectOpenListAsset, validateOpenListEndpoint, verifyOpenListAsset, writeManagedOpenListConfig, writeOpenListCredentials } from '../src/openlist/host.ts'
 import { OpenListService, repairRecoveryCredentials } from '../src/openlist/index.ts'
 
+const removeTemporaryRoot = (root: string) => rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 })
+
 describe('OpenList drive reference ids', () => {
   it('uses a versioned base64url JSON payload and normalizes absolute paths', () => {
     const id = encodeDriveId('openlist', '//notes/./plan.md')
@@ -311,7 +313,7 @@ describe('OpenList host controls', () => {
       const modes: Array<[string, number]> = []
       const installed = await installOpenList(root, { version: OPENLIST_FIXED_VERSION, assets: [{ platform: 'linux', arch: 'x64', url: 'https://example.test/openlist', sha256: hash, archive: 'zip', binary: 'openlist' }] }, { fetch: async () => new Response(bytes as unknown as BodyInit), chmod: async (path, mode) => { modes.push([String(path), Number(mode)]); await import('node:fs/promises').then(fs => fs.chmod(path, mode)) } }, 'linux', 'x64')
       expect(modes.some(([path, mode]) => path.includes('.openlist-') && mode === 0o700)).toBe(true)
-    } finally { await rm(root, { recursive: true, force: true }) }
+    } finally { await removeTemporaryRoot(root) }
   })
   it('recovers a Windows executable missing after an interrupted two-move replacement', async () => {
     const root = await mkdtemp(join(tmpdir(), 'openlist-recover-')); const target = join(root, 'openlist.exe'); const backup = join(root, '.openlist.exe.replacement-backup'); const marker = join(root, '.openlist.exe.replacement-pending')
@@ -320,7 +322,7 @@ describe('OpenList host controls', () => {
       await recoverInterruptedReplacement(target, backup, marker, {}, true)
       expect(await readFile(target, 'utf8')).toBe('known-good')
       await expect(readFile(marker)).rejects.toMatchObject({ code: 'ENOENT' })
-    } finally { await rm(root, { recursive: true, force: true }) }
+    } finally { await removeTemporaryRoot(root) }
   })
   it('does not recover marker and backup owned by a live Windows replacement transaction', async () => {
     const root = await mkdtemp(join(tmpdir(), 'openlist-live-replace-'))
@@ -350,7 +352,7 @@ describe('OpenList host controls', () => {
       expect(await readFile(target, 'utf8')).toBe('new-binary')
       await expect(readFile(backup)).rejects.toMatchObject({ code: 'ENOENT' })
       await expect(readFile(marker)).rejects.toMatchObject({ code: 'ENOENT' })
-    } finally { await rm(root, { recursive: true, force: true }) }
+    } finally { await removeTemporaryRoot(root) }
   })
   it('keeps the rollback backup when Windows commit-marker cleanup fails', async () => {
     const root = await mkdtemp(join(tmpdir(), 'openlist-marker-failure-'))
@@ -375,7 +377,7 @@ describe('OpenList host controls', () => {
       await expect(transaction.finish(false)).resolves.toBeUndefined()
       expect(await readFile(target, 'utf8')).toBe('old-binary')
       await expect(readFile(marker)).rejects.toMatchObject({ code: 'ENOENT' })
-    } finally { await rm(root, { recursive: true, force: true }) }
+    } finally { await removeTemporaryRoot(root) }
   })
   it('commits durably before best-effort Windows backup cleanup and removes the stale backup later', async () => {
     const root = await mkdtemp(join(tmpdir(), 'openlist-backup-cleanup-'))
@@ -404,7 +406,7 @@ describe('OpenList host controls', () => {
       await recoverInterruptedReplacement(target, backup, marker, {}, true)
       await expect(readFile(backup)).rejects.toMatchObject({ code: 'ENOENT' })
       expect(await readFile(target, 'utf8')).toBe('new-binary')
-    } finally { await rm(root, { recursive: true, force: true }) }
+    } finally { await removeTemporaryRoot(root) }
   })
   it('returns sanitized mount shapes and never exposes authorization', async () => {
     const client = new OpenListHostClient({ endpoint: 'http://127.0.0.1:5244', token: 'do-not-leak' }, { fetch: async () => json({ code: 200, data: { content: [{ id: 4, name: 'disk', driver: 'S3', disabled: false, password: 'secret' }] } }) })
