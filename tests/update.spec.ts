@@ -38,6 +38,19 @@ describe('package update manager', () => {
     }))
   })
 
+  it('checks prerelease installations against their npm dist-tag', async () => {
+    const { packageRoot } = await installedProfile('0.4.0-alpha.1')
+    const request = vi.fn(async () => new Response(JSON.stringify({ version: '0.4.0-alpha.2' }), {
+      status: 200, headers: { 'content-type': 'application/json' },
+    }))
+    vi.stubGlobal('fetch', request)
+
+    await expect(new PackageUpdateManager({ packageRoot, fetchReleaseNotes: async () => ({}) }).check()).resolves.toMatchObject({
+      latestVersion: '0.4.0-alpha.2', updateAvailable: true,
+    })
+    expect(request).toHaveBeenCalledWith(NPM_LATEST_URL.replace(/latest$/, 'alpha'), expect.any(Object))
+  })
+
   it('requests release notes for the exact npm version', async () => {
     const request = vi.fn(async () => new Response(JSON.stringify({ body: 'Fixed the thing.', html_url: 'https://github.com/example/release' }), { status: 200 }))
     vi.stubGlobal('fetch', request)
