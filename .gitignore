@@ -5,3 +5,4 @@ social/
 *.tgz
 *.log
 .DS_Store
+.codex-tmp
