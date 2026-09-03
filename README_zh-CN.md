@@ -73,7 +73,7 @@
 
 > [!IMPORTANT]
 > v0.4.0 适配 DSH `>=0.1.2-rc.1`，使用 RC1 Skills Remote、Session 快照 API、原生 `@` 触发菜单、官方文件/会话 Remote 与原生 Composer 引用渲染；不兼容低于 `0.1.2-rc.1` 的 DSH 版本。
-> `0.3.x` 系列继续面向当前 DSH 稳定版 SDK (`0.1.0-rc.8 ~ 0.1.1-rc.2`)。由于最新版 DSH 的破坏性改动，从插件的 `v0.4.0-alpha.1` 起，开发版将面向 DSH `v0.1.2-alpha.1` 或者更高版本，通过 npm `alpha` 标签发布，且不再支持旧版 DSH。
+> `0.3.x` 系列继续面向当前 DSH 稳定版 SDK (`0.1.0-rc.8 ~ 0.1.1-rc.2`)。由于最新版 DSH 的破坏性改动，从插件的 `v0.4.0` 起，开发版将面向 DSH `v0.1.2-rc.1` 或者更高版本，通过 npm `alpha` 标签发布，且不再支持旧版 DSH。
 
 > [!NOTE]
 > DSH 目前仍处于 Beta 阶段，其底层能力和接口可能随版本迭代而变化，本插件的功能与实现也会相应调整。受 DSH 当前部分限制的影响，现阶段的实现可能尚不完善；我们会持续跟进 DSH 的更新并逐步改进。具体限制和使用注意事项请参阅下方对应章节。
@@ -82,7 +82,7 @@
 
 - **2026-09-03 · v0.4.0** — **适配版本：DSH `>=0.1.2-rc.1`。** 将 Skills 发现迁移至 DSH RC1 Skills Remote，通过 RC1 Session 快照 API 恢复历史引用授权，并完成针对 DSH `0.1.2-rc.1` 的验证。
 
-- **2026-08-28 · v0.3.3** — 改进引用菜单与设置面板的深色主题背景，新增项目截图元数据并更新文档。这是最后一个面向当前 DeepSeek Harness 稳定版 SDK 的发布系列；下一个开发版 `v0.4.0-alpha.1` 将迁移至 DeepSeek Harness `v0.1.2-alpha.1`，通过 npm `alpha` 标签发布，且不再支持旧版 DSH。
+- **2026-08-28 · v0.3.3** — 改进引用菜单与设置面板的深色主题背景，新增项目截图元数据并更新文档。这是最后一个面向当前 DeepSeek Harness 稳定版 SDK 的发布系列；下一个开发版 `v0.4.0` 将迁移至 DeepSeek Harness `v0.1.2-rc.1`，通过 npm `alpha` 标签发布，且不再支持旧版 DSH。
 - **2026-08-25 · v0.3.2** — 新增本地 Agent 对话引用，支持显示检测到的会话数量及自定义文件夹。Web AI 对话同步可按时间范围限制；云盘支持逐级浏览文件夹和快速访问下载目录。设置中新增更新说明，本地 Agent 工具详情默认简洁展示，按需可展开查看。
 - **2026-08-20 · v0.3.0** — 完成 DSH 原生 `@` 整合：五个来源可独立配置，文件与 DSH 会话复用官方 Remote，原生 Composer 引用支持来源 Logo，展开/折叠与同步操作均在菜单原位更新，并可一键在 Reference Anything 与 DSH 官方 `@` 列表之间切换；同时删除旧 `dsh-file:` 协议和自建 Composer 交互层。
 - **2026-08-19 · v0.2.4** — 新增插件版本自动检查与设置页内更新，提供 Pill/Raw text 两种输入框渲染方式，并通过可复用的后台浏览器会话提升 OpenCLI 同步稳定性及输入交互兼容性。
@@ -112,7 +112,7 @@
 dsh plugin --profile web add dsh-reference-anything@latest
 ```
 
-从 `v0.4.0-alpha.1` 起，使用 DSH `v0.1.2-alpha.1` 的用户可单独安装开发版系列：
+从 `v0.4.0` 起，使用 DSH `v0.1.2-rc.1` 的用户可单独安装开发版系列：
 
 ```powershell
 dsh plugin --profile web add dsh-reference-anything@alpha
@@ -129,7 +129,7 @@ npm run check
 dsh plugin --profile web add .
 ```
 
-配合 DSH `v0.1.2-alpha.1` 或更高版本在本地安装 alpha 版源码：
+配合 DSH `v0.1.2-rc.1` 或更高版本在本地安装 alpha 版源码：
 
 ```powershell
 git switch alpha
