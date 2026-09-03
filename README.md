@@ -79,6 +79,8 @@ Type `@`, search across enabled sources, and insert the selected reference into 
 
 ## 📰 News
 
+- **2026-09-03 · v0.4.0** — Migrated Skills discovery to the DSH RC1 Skills Remote, restored historical reference grants through the RC1 Session snapshot API, and verified the plugin against DSH `0.1.2-rc.1`.
+
 - **2026-08-28 · v0.3.3** — Improved dark-theme backgrounds for the reference menu and settings panels, added project screenshot metadata, and refreshed the documentation. This is the final release line targeting the current stable DeepSeek Harness SDK; the next development release, `v0.4.0-alpha.1`, will migrate to DeepSeek Harness `v0.1.2-alpha.1` under the npm `alpha` tag and will not support older DSH releases.
 - **2026-08-25 · v0.3.2** — Added local-agent conversation references, with detected session counts and custom-folder support. Web AI sync can be age-limited; cloud drives now support folder browsing and quick download-folder access. Settings include update notes, and local-agent tool details stay concise unless expanded.
 - **2026-08-20 · v0.3.0** — Completed the native DSH `@` integration: five independently configurable sources, official file/session Remotes, native Composer references with source logos, in-place expand/collapse and sync actions, and a one-click switch between Reference Anything and the official DSH `@` list. The legacy `dsh-file:` protocol and custom Composer interaction layer were removed.
