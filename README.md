@@ -79,31 +79,7 @@ Type `@`, search across enabled sources, and insert the selected reference into 
 
 ## 📰 News
 
-- **2026-09-03 · v0.4.0** — **Compatibility: DSH `v0.1.2-rc.1` or newer.** This release completes the DSH 0.1.2 migration and promotes the alpha line to stable.
-
-  **Important**
-
-  This release requires DSH `v0.1.2-rc.1` or newer and is incompatible with DSH `v0.1.0-rc.8 ~ v0.1.1-rc.2`. Users on older DSH releases should continue using the stable `0.3.x` line.
-
-  ### DSH RC1 Compatibility
-
-  - **Migrated Skills discovery to the RC1 Skills Remote** — Uses `ctx.remote.skills.list` and the RC1 `remote.skills` injection.
-  - **Restored historical reference authorization** — Rebuilds task grants from `Session.snapshotEvents()` after a session is restored.
-  - **Updated the DSH SDK dependency range** — Peer and development dependencies now require `>=0.1.2-rc.1`.
-  - **Fixed plugin startup compatibility** — Updated the profile's `dshmarket` and `dsh-context` dependencies to RC1-compatible releases.
-
-  ### Reference Menu and Sources
-
-  - **Preserved the custom `@` menu** — Commands, Skills, files, DSH sessions, local-agent conversations, web conversations, and cloud-drive files remain independently configurable.
-  - **Preserved source icons and Composer chips** — File types, provider logos, and native reference chips continue to render across sources.
-  - **Preserved cloud-drive browsing** — OpenList folders and files retain their source and type metadata.
-
-  ### Quality Improvements
-
-  - Added regression coverage using real RC1 Session objects for restored grants and denied unmentioned references.
-  - Updated the settings and client tests for RC1 interfaces.
-  - Verified the plugin in the real DSH `v0.1.2-rc.1` Web interface.
-  - Full verification passed with **772 tests passing and 7 skipped**.
+- **2026-09-03 · v0.4.0** — **Compatibility: DSH `>=0.1.2-rc.1`.** Migrated Skills discovery to the DSH RC1 Skills Remote, restored historical reference grants through the RC1 Session snapshot API, and verified the plugin against DSH `0.1.2-rc.1`.
 
 - **2026-08-28 · v0.3.3** — Improved dark-theme backgrounds for the reference menu and settings panels, added project screenshot metadata, and refreshed the documentation. This is the final release line targeting the current stable DeepSeek Harness SDK; the next development release, `v0.4.0`, will migrate to DeepSeek Harness `v0.1.2-rc.1` under the npm `alpha` tag and will not support older DSH releases.
 - **2026-08-25 · v0.3.2** — Added local-agent conversation references, with detected session counts and custom-folder support. Web AI sync can be age-limited; cloud drives now support folder browsing and quick download-folder access. Settings include update notes, and local-agent tool details stay concise unless expanded.
