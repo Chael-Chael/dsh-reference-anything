@@ -110,7 +110,7 @@ Install the stable `0.3.x` line for the current stable DSH SDK:
 dsh plugin --profile web add dsh-reference-anything@latest
 ```
 
-Starting with `v0.4.0`, users on DSH `v0.1.2-rc.1` can install the development line separately:
+Install `v0.4.0` on DSH `>=0.1.2-rc.1`:
 
 ```powershell
 dsh plugin --profile web add dsh-reference-anything@alpha

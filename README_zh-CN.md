@@ -112,7 +112,7 @@
 dsh plugin --profile web add dsh-reference-anything@latest
 ```
 
-从 `v0.4.0` 起，使用 DSH `v0.1.2-rc.1` 的用户可单独安装开发版系列：
+在 DSH `>=0.1.2-rc.1` 上安装 `v0.4.0`：
 
 ```powershell
 dsh plugin --profile web add dsh-reference-anything@alpha
