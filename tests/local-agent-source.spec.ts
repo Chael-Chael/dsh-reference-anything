@@ -2,7 +2,8 @@ import { appendFile, mkdir, mkdtemp, rm, symlink, truncate, writeFile } from 'no
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Context } from '@deepseek-ai/cordis'
-import type { Session } from '@deepseek-ai/dsh-session'
+import { Session, SessionId } from '@deepseek-ai/dsh-session'
+import { createToolResultMessage, createUserMessage, ToolCallId } from '@deepseek-ai/dsh-llm'
 import type { Domain, DomainSpec, KvTable } from '@deepseek-ai/dsh-storage-domain'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import ReferenceRuntime from '../src/index.ts'
@@ -492,30 +493,36 @@ describe('as a mounted plugin', () => {
 
   it('recovers a grant from a URI mentioned in durable task history', async () => {
     const { ctx, dispose } = await mount()
-    const session = {
-      id: 'task-history',
-      events: [{
-        type: 'user/message',
-        data: { content: [{ type: 'text', text: `read ${encodeReferenceUri(CLAUDE_REF)}` }] },
-      }],
-    } as unknown as Session
-    expect(() => ctx.references.assertSessionGranted(session, CLAUDE_REF)).not.toThrow()
+    const session = Session.create(SessionId('task-history'))
+    session.append('user/message', createUserMessage({
+      content: [{ type: 'text', text: `read ${encodeReferenceUri(CLAUDE_REF)}` }],
+      source: { kind: 'user' },
+    }), { surfaceOp: 'append' })
+    const restored = Session.create(session.id, session.snapshotEvents())
+    expect(() => ctx.references.assertSessionGranted(restored, CLAUDE_REF)).not.toThrow()
     expect(() => ctx.references.assertGranted('task-history', CLAUDE_REF)).not.toThrow()
     await dispose()
   })
 
   it('recovers a grant from a URI returned by a tool', async () => {
     const { ctx, dispose } = await mount()
-    const session = {
-      id: 'task-tool-result',
-      events: [{
-        type: 'tool/result',
-        data: { message: { content: [{ type: 'tool-result', content: [
-          { type: 'text', text: encodeReferenceUri(CLAUDE_REF) },
-        ] }] } },
-      }],
-    } as unknown as Session
+    const session = Session.create(SessionId('task-tool-result'))
+    session.append('tool/result', {
+      turn: 1, step: 1,
+      message: createToolResultMessage({
+        callId: ToolCallId('reference-list'), isError: false,
+        content: [{ type: 'text', text: encodeReferenceUri(CLAUDE_REF) }],
+      }),
+    }, { surfaceOp: 'append' })
     expect(() => ctx.references.assertSessionGranted(session, CLAUDE_REF)).not.toThrow()
+    await dispose()
+  })
+
+  it('rejects an unmentioned reference in a real session without granting access', async () => {
+    const { ctx, dispose } = await mount()
+    const session = Session.create(SessionId('task-no-grant'))
+    expect(() => ctx.references.assertSessionGranted(session, CLAUDE_REF))
+      .toThrow(expect.objectContaining({ code: 'CONVERSATION_REFERENCE_NOT_GRANTED' }))
     await dispose()
   })
 

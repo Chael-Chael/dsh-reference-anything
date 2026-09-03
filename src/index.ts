@@ -162,7 +162,7 @@ export default class ReferenceRuntime extends Service {
   assertSessionGranted(session: Session | undefined, ref: ReferenceRef): void {
     const key = ReferenceRuntime.grantKey(ref)
     if (session && !this.grants.get(String(session.id))?.has(key)) {
-      const mentioned = session.events.some(event => {
+      const mentioned = session.snapshotEvents().some(event => {
         if (event.type === 'user/message') return ReferenceRuntime.contentMentions(event.data.content, key)
         if (event.type === 'tool/result') return ReferenceRuntime.contentMentions(event.data.message.content, key)
         return false

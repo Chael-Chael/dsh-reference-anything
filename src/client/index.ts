@@ -1,4 +1,4 @@
-import type { ConnectionHandle } from '@deepseek-ai/dsh-api-remotes/client'
+import type {} from '@deepseek-ai/dsh-api-remotes/client'
 import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
 import type {} from '@deepseek-ai/dsh-client-locale/client'
@@ -26,8 +26,8 @@ import { pickDirectoryWithError } from './directory-picker.ts'
 // `remote` lets the @ source register, but its candidate request can fail and
 // the input-trigger menu then removes the Commands group as a failed source.
 export const inject = [
-  'inputTriggers', 'remote', 'remote.commands', 'remote.fileReferences', 'remote.sessionReferenceResolver',
-  'slots', 'connection', 'locale', 'sessions', 'uiWorkspace',
+  'inputTriggers', 'remote', 'remote.commands', 'remote.skills', 'remote.fileReferences', 'remote.sessionReferenceResolver',
+  'slots', 'locale', 'sessions', 'uiWorkspace',
 ]
 
 export function apply(ctx: ClientContext): void {
@@ -220,7 +220,6 @@ export function apply(ctx: ClientContext): void {
   const sessions = (ctx as unknown as { sessions: ISessions }).sessions
   const updateMenu = createPickerMenuUpdater(inputTriggers, sessions)
   const guardMenuActions = createPickerMenuActionGuard(inputTriggers, sessions)
-  const connection = ctx.get('connection') as ConnectionHandle
   let sourceDisposers: Array<() => void> = []
   let appliedPicker: PickerSettings | undefined
   const registerSources = (picker: PickerSettings) => {
@@ -262,7 +261,7 @@ export function apply(ctx: ClientContext): void {
     if (picker.conversations.enabled) disposers.push(inputTriggers.registerSource(source))
     if (picker.commands.enabled) disposers.push(inputTriggers.registerSource(createCommandSource(async (sessionId, signal) => { signal.throwIfAborted(); return unwrap(await ctx.remote.commands.list(sessionId)) }, t, optionsFor('commands'))))
     if (picker.skills.enabled) disposers.push(inputTriggers.registerSource(createSkillSource(async (sessionId, signal) => {
-        const { result } = await connection.api.skills.list({ sessionId }, signal)
+        const result = await ctx.remote.skills.list({ sessionId }, signal)
         if (!result.ok) throw new Error(`${result.error.code}: ${result.error.message}`)
         return result.value.skills
       }, t, optionsFor('skills'))))
