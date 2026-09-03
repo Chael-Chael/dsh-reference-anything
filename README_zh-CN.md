@@ -118,12 +118,21 @@ dsh plugin --profile web add dsh-reference-anything@alpha
 
 待 DSH alpha API 稳定且迁移验证完成后，`alpha` 系列将提升为 `latest`，并成为默认安装版本。
 
-开发时请先安装已发布的 DSH rc.8 SDK 依赖并运行完整验证，再通过本地路径安装仓库：
+配合 DSH `v0.1.0-rc.8 ~ v0.1.1-rc.2` 在本地安装稳定版源码：
 
 ```powershell
-# 在仓库根目录执行
+git switch main
 pnpm install
-pnpm run check
+npm run check
+dsh plugin --profile web add .
+```
+
+配合 DSH `v0.1.2-alpha.1` 或更高版本在本地安装 alpha 版源码：
+
+```powershell
+git switch alpha
+pnpm install
+npm run check
 dsh plugin --profile web add .
 ```
 

@@ -116,12 +116,21 @@ dsh plugin --profile web add dsh-reference-anything@alpha
 
 After the DSH alpha API stabilizes and the migration is verified, the `alpha` line will be promoted to `latest` and become the default installation.
 
-For development, install the published DSH rc.8 SDK dependencies, run the verification gate, then install the repository from a local path:
+To install the stable source locally with DSH `v0.1.0-rc.8 ~ v0.1.1-rc.2`:
 
 ```powershell
-# Run from the repository root
+git switch main
 pnpm install
-pnpm run check
+npm run check
+dsh plugin --profile web add .
+```
+
+To install the alpha source locally with DSH `v0.1.2-alpha.1` or newer:
+
+```powershell
+git switch alpha
+pnpm install
+npm run check
 dsh plugin --profile web add .
 ```
 
