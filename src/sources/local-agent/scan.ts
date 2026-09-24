@@ -18,8 +18,8 @@
  */
 
 import { createReadStream } from 'node:fs'
-import { open, readdir, stat } from 'node:fs/promises'
-import { join, relative } from 'node:path'
+import { open, readdir, readFile, stat } from 'node:fs/promises'
+import { basename, join, relative, resolve } from 'node:path'
 import { ReferenceAnythingError } from '../../errors.ts'
 import { withDatabase } from './sqlite.ts'
 import type {
@@ -58,6 +58,15 @@ export interface TranscriptDescriptor {
   readonly relPath: string
   readonly mtimeMs: number
   readonly size: number
+  /**
+   * A title supplied by an index beside a file-backed transcript.
+   *
+   * Codex keeps its user-facing session title in `~/.codex/session_index.jsonl`,
+   * while the rollout itself only contains the opening prompt. This value is
+   * kept on the descriptor so a fresh index title can override an older
+   * first-prompt bookmark without changing the transcript adapter contract.
+   */
+  readonly title?: string
   /**
    * The session row, for a database-backed format only.
    *
@@ -158,7 +167,10 @@ export async function listTranscripts(
   for (const root of roots) {
     const adapter = adapters.get(root.kind)
     if (adapter === undefined) continue
-    await walk(root, root.path, 0, adapter, found, signal, maxTranscripts)
+    const titles = root.kind === 'codex' && !isQueryAdapter(adapter)
+      ? await readCodexTitleIndex(root.path)
+      : undefined
+    await walk(root, root.path, 0, adapter, found, signal, maxTranscripts, titles)
   }
   found.sort((left, right) => right.mtimeMs - left.mtimeMs)
   return found.slice(0, maxTranscripts)
@@ -172,6 +184,7 @@ async function walk(
   found: TranscriptDescriptor[],
   signal?: AbortSignal,
   maxSessions = 200,
+  titles?: CodexTitleIndex,
 ): Promise<void> {
   signal?.throwIfAborted()
   if (depth > MAX_DEPTH) return
@@ -181,7 +194,7 @@ async function walk(
   for (const entry of entries) {
     const path = join(dir, entry.name)
     if (entry.isDirectory()) {
-      await walk(root, path, depth + 1, adapter, found, signal, maxSessions)
+      await walk(root, path, depth + 1, adapter, found, signal, maxSessions, titles)
       continue
     }
     if (!entry.isFile()) continue
@@ -193,8 +206,66 @@ async function walk(
       found.push(...await expandSessions(root.kind, path, relPath, stats.mtimeMs, stats.size, adapter, maxSessions))
       continue
     }
-    found.push({ kind: root.kind, path, relPath, mtimeMs: stats.mtimeMs, size: stats.size })
+    found.push({
+      kind: root.kind,
+      path,
+      relPath,
+      mtimeMs: stats.mtimeMs,
+      size: stats.size,
+      ...titles === undefined ? {} : titleForCodexPath(path, titles),
+    })
   }
+}
+
+interface CodexTitleIndex {
+  readonly byPath: ReadonlyMap<string, string>
+  readonly bySessionId: ReadonlyMap<string, string>
+}
+
+/** Read the Codex title index once per configured sessions root. */
+async function readCodexTitleIndex(sessionsRoot: string): Promise<CodexTitleIndex | undefined> {
+  const indexPath = resolve(sessionsRoot, '..', 'session_index.jsonl')
+  const raw = await readFile(indexPath, 'utf8').catch(() => undefined)
+  if (raw === undefined) return undefined
+
+  const byPath = new Map<string, string>()
+  const bySessionId = new Map<string, string>()
+  for (const line of raw.split(/\r?\n/u)) {
+    if (line.trim() === '') continue
+    let record: unknown
+    try {
+      record = JSON.parse(line)
+    } catch {
+      continue
+    }
+    if (typeof record !== 'object' || record === null) continue
+    const row = record as Record<string, unknown>
+    const title = typeof row['thread_name'] === 'string' ? row['thread_name'].trim() : ''
+    if (title === '') continue
+    const id = typeof row['id'] === 'string' ? row['id'].trim() : ''
+    if (id !== '') bySessionId.set(id, title)
+    const rolloutPath = typeof row['rollout_path'] === 'string' ? row['rollout_path'].trim() : ''
+    if (rolloutPath !== '') byPath.set(normalizeIndexedPath(rolloutPath), title)
+  }
+  return { byPath, bySessionId }
+}
+
+function titleForCodexPath(path: string, index: CodexTitleIndex): { title?: string } {
+  const direct = index.byPath.get(normalizeIndexedPath(path))
+  if (direct !== undefined) return { title: direct }
+  const match = basename(path).match(/-([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})(?:_[^.]*)?\.jsonl$/iu)
+  const sessionId = match?.[1]
+  const title = sessionId === undefined ? undefined : index.bySessionId.get(sessionId)
+  return title === undefined ? {} : { title }
+}
+
+/** Normalize Windows paths from the index and from the active filesystem. */
+function normalizeIndexedPath(path: string): string {
+  return path
+    .replace(/^\\\\\?\\/u, '')
+    .replace(/[\\/]+/gu, '\\')
+    .replace(/\\$/u, '')
+    .toLocaleLowerCase()
 }
 
 /**
