@@ -122,8 +122,11 @@ export const piAdapter: TranscriptAdapter = {
         createdAt ??= parseTimestamp(record['timestamp'])
         continue
       }
-      // A rename writes another `session_info`, so the newest one wins.
-      if (record['type'] === 'session_info') named = stringField(record, 'name') ?? named
+      // A rename writes another `session_info`, so the newest one wins. Some
+      // Pi-compatible writers call the same field `title`.
+      if (record['type'] === 'session_info') {
+        named = stringField(record, 'name') ?? stringField(record, 'title') ?? named
+      }
     }
 
     for (const line of headLines) {
