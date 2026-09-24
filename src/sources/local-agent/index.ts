@@ -794,7 +794,9 @@ function foldsToNothing(
 }
 
 function labelFor(descriptor: TranscriptDescriptor, bookmark: AgentBookmark | undefined): string {
-  const title = bookmark?.title.trim() ?? ''
+  // Some file-backed agents expose a title index beside the transcript. It is
+  // fresher than a persisted first-prompt bookmark and must win when present.
+  const title = descriptor.title?.trim() || bookmark?.title.trim() || ''
   return title === '' ? basename(descriptor.relPath) : title
 }
 
