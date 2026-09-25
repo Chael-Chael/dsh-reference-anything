@@ -82,6 +82,7 @@ export const SESSION_SEPARATOR = '#'
 
 /** Directory depth walked below each root. */
 const MAX_DEPTH = 6
+const MAX_CODEX_TITLE_INDEX_BYTES = 16 * 1024 * 1024
 
 /** Probe windows, in bytes, tried in order until enough lines are recovered. */
 const PROBE_STEPS = [32 * 1024, 256 * 1024, 2 * 1024 * 1024] as const
@@ -225,6 +226,10 @@ interface CodexTitleIndex {
 /** Read the Codex title index once per configured sessions root. */
 async function readCodexTitleIndex(sessionsRoot: string): Promise<CodexTitleIndex | undefined> {
   const indexPath = resolve(sessionsRoot, '..', 'session_index.jsonl')
+  const indexStats = await stat(indexPath).catch(() => undefined)
+  // Keep discovery bounded; an unexpectedly large index must not turn a
+  // keystroke-triggered scan into an unbounded allocation.
+  if (indexStats === undefined || indexStats.size > MAX_CODEX_TITLE_INDEX_BYTES) return undefined
   const raw = await readFile(indexPath, 'utf8').catch(() => undefined)
   if (raw === undefined) return undefined
 
