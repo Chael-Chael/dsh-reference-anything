@@ -14,8 +14,6 @@ const css = `
      caret, selection, wrapping, and message geometry. */
 [data-composer-card] [role="listbox"]:has([role="presentation"][data-source]){box-sizing:border-box!important;width:100%!important;min-width:0!important;max-width:100%!important}
 [data-trigger-menu]:has(> [role="listbox"] [role="presentation"][data-source]){border-radius:22px}
-[data-composer-card] [role="listbox"] [role="presentation"][data-source]{position:sticky;top:0;z-index:2;box-sizing:border-box;padding-top:6px!important;background:var(--dsw-specific-menu,var(--dsw-alias-background-primary,var(--dsw-alias-bg-layer-1,#fff)))}
-[data-composer-card] [role="listbox"] [role="presentation"][data-source]:not(:first-child){margin-top:8px}
 [data-composer-card] [role="listbox"] [role="option"]{scroll-margin-block-start:30px;scroll-margin-block-end:4px}
 [data-composer-card] [role="listbox"]>[data-dsh-ref-menu-settling]{overflow-anchor:none!important}
 [data-composer-card] [role="listbox"]>[data-dsh-ref-menu-settling] [role="option"][aria-selected="false"]:hover{background:transparent!important}

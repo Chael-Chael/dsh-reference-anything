@@ -18,11 +18,8 @@ describe('reference DOM customization', () => {
     expect(text).toContain('[data-composer-card] [role="listbox"]:has')
     expect(text).toContain('[data-trigger-menu]:has(> [role="listbox"] [role="presentation"][data-source]){border-radius:22px}')
     expect(text).not.toContain('border-radius:22px!important')
-    expect(text).toContain('[role="presentation"][data-source]{position:sticky;top:0')
-    expect(text).toContain('padding-top:6px!important')
-    expect(text).toContain('background:var(--dsw-specific-menu,var(--dsw-alias-background-primary,var(--dsw-alias-bg-layer-1,#fff)))')
-    expect(text).not.toContain('[data-source]{background:#343438}')
-    expect(text).toContain('[role="presentation"][data-source]:not(:first-child)')
+    expect(text).not.toContain('[role="presentation"][data-source]{position:sticky')
+    expect(text).not.toContain('[role="presentation"][data-source]:not(:first-child)')
     expect(text).toContain('[data-dsh-ref-menu-settling]{overflow-anchor:none!important}')
     expect(text).toContain('[aria-selected="false"]:hover{background:transparent!important}')
     expect(text).toContain('[data-dsh-ref-menu-action]{color:var(--dsw-alias-label-tertiary')
@@ -278,7 +275,7 @@ describe('reference DOM customization', () => {
     dispose()
   })
 
-  it('makes every source heading sticky at the menu viewport top', () => {
+  it('leaves source headings to the native menu layout', () => {
     adoptStyles()
     document.body.innerHTML = `
       <div data-composer-card><div role="listbox"><div>
@@ -289,10 +286,10 @@ describe('reference DOM customization', () => {
     `
     for (const id of ['commands-heading', 'skills-heading']) {
       const style = getComputedStyle(document.getElementById(id)!)
-      expect(style.position).toBe('sticky')
-      expect(style.top).toBe('0px')
-      expect(style.zIndex).toBe('2')
-      expect(style.paddingTop).toBe('6px')
+      expect(style.position).toBe('')
+      expect(style.top).toBe('')
+      expect(style.zIndex).toBe('')
+      expect(style.paddingTop).toBe('')
     }
     expect(getComputedStyle(document.querySelector('[role="option"]')!).scrollMarginBlockStart).toBe('30px')
   })
