@@ -49,6 +49,22 @@ describe('listTranscripts', () => {
     expect(found.map(entry => entry.relPath).sort()).toEqual([join('a', 'deep', 'two.jsonl'), join('a', 'one.jsonl')])
   })
 
+  it('uses the Codex session index title for a rollout', async () => {
+    const id = '01a0d161-2d75-75b3-aa7c-c76b308ae639'
+    const sessionsRoot = join(dir, 'codex', 'sessions')
+    const rollout = join(sessionsRoot, '2026', '09', '24', `rollout-2026-09-24T03-07-12-${id}.jsonl`)
+    await mkdir(join(rollout, '..'), { recursive: true })
+    await writeFile(rollout, `${JSON.stringify(userRecord('the opening prompt'))}\n`, 'utf8')
+    await writeFile(
+      join(dir, 'codex', 'session_index.jsonl'),
+      `${JSON.stringify({ id, thread_name: 'Actual session title' })}\n`,
+      'utf8',
+    )
+
+    const [entry] = await listTranscripts([{ kind: 'codex', path: sessionsRoot }], ADAPTERS, 10)
+    expect(entry?.title).toBe('Actual session title')
+  })
+
   it('reports size and mtime without reading the file', async () => {
     await write('p/one.jsonl', [userRecord('hello')])
     const [entry] = await listTranscripts([{ kind: 'claude-code', path: join(dir, 'p') }], ADAPTERS, 10)
