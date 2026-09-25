@@ -801,6 +801,12 @@ describe('pi adapter', () => {
     expect(piAdapter.head(head, []).title).toBe('the opening ask')
   })
 
+  it('accepts title as the session_info field used by Pi-compatible writers', () => {
+    const head = [JSON.stringify({ type: 'session', cwd: '/w/app' })]
+    const tail = [JSON.stringify({ type: 'session_info', id: 'i2', title: 'Parser rewrite' })]
+    expect(piAdapter.head(head, tail).title).toBe('Parser rewrite')
+  })
+
   it('declares that it must be read whole', () => {
     expect(piAdapter.document).toBe(true)
   })
