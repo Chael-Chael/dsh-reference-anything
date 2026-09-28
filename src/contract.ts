@@ -28,7 +28,7 @@ export const driveCandidateSchema = z.object({
  * lookup back to DSH's native Remotes and removed its last other caller.
  */
 const agentLookup = { name: 'agent', wire: 'agentId', source: 'lookup' as const, lookup: 'agent' as const,
-  codec: { mode: 'strict' as const, typeSymbol: '@deepseek-ai/dsh-session/types#SessionId', schema: z.string().min(1) } }
+  codec: { mode: 'strict' as const, typeSymbol: '@deepseek-ai/dsh-session/types#SessionId', schema: z.string().min(1), create: () => z.string().min(1) } }
 
 export const searchInputSchema = z.object({
   query: z.string(), provider: providerSchema.optional(), limit: z.number().int().min(1).max(100),
@@ -165,8 +165,8 @@ export const REFERENCE_ANYTHING_INVOCATIONS: readonly InvocationDescriptor[] = [
   descriptor('openListReindex', [{ name: 'input', wire: 'input', source: 'json', codec: strict('OpenListMountInput', openListMountInputSchema) }], strict('OpenListReindex', z.object({ supported: z.boolean(), reason: z.string().optional() }).readonly()), true),
 ]
 
-function strict(type: string, schema: z.ZodType): { mode: 'strict'; typeSymbol: string; schema: z.ZodType } {
-  return { mode: 'strict', typeSymbol: `dsh-reference-anything#${type}`, schema }
+function strict(type: string, schema: z.ZodType): { mode: 'strict'; typeSymbol: string; schema: z.ZodType; create: () => z.ZodType } {
+  return { mode: 'strict', typeSymbol: `dsh-reference-anything#${type}`, schema, create: () => schema }
 }
 
 function descriptor(

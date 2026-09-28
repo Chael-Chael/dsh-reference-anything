@@ -20,8 +20,11 @@ const css = `
 [data-composer-card] [role="listbox"] [role="option"][data-dsh-ref-menu-action]{color:var(--dsw-alias-label-tertiary,#737780)!important}
 [data-composer-card] [role="listbox"] [role="option"][data-dsh-ref-menu-action]>span:last-child:not(:first-child){display:none!important}
 [data-composer-card] [role="listbox"] .dsh_ref_projected_icon,[data-composer-card] [role="listbox"] .dsh_ref_picker_icon{display:inline-flex!important;align-items:center!important;justify-content:center!important;flex:none;width:16px!important;height:16px!important;line-height:1!important;color:var(--dsw-alias-label-secondary,#5f636b)}
+[data-composer-card] [role="listbox"] .dsh_ref_command_icon{width:18px!important;height:18px!important}
+[data-composer-card] [role="listbox"] .dsh_ref_command_icon>svg{width:18px!important;height:18px!important}
 [data-composer-card] [role="listbox"] .dsh_ref_dual_icon{width:36px!important;gap:4px}
 [data-composer-card] [role="listbox"] :is(.dsh_ref_projected_icon,.dsh_ref_picker_icon)>svg{display:block;width:16px;height:16px;overflow:visible}
+[data-composer-card] [role="listbox"] .dsh_ref_command_icon,[data-composer-card] [role="listbox"] .dsh_ref_command_icon>svg{width:18px!important;height:18px!important}
 [data-composer-card] [data-decoration="chip"][data-dsh-ref-chip-icon]>:first-child>svg{visibility:hidden!important}
 [data-composer-card] [data-decoration="chip"][data-dsh-ref-chip-icon]>:first-child:after{content:"";position:absolute;top:50%;left:50%;display:block;width:16px;height:16px;transform:translate(-50%,-50%);background:currentColor;-webkit-mask:var(--dsh-ref-chip-icon-mask) center/contain no-repeat;mask:var(--dsh-ref-chip-icon-mask) center/contain no-repeat;pointer-events:none}
 [data-composer-card] [data-composer-chip][data-dsh-ref-chip-icon]>:first-child>svg{background:currentColor;-webkit-mask:var(--dsh-ref-chip-icon-mask) center/contain no-repeat;mask:var(--dsh-ref-chip-icon-mask) center/contain no-repeat}
@@ -520,6 +523,7 @@ export function adoptReferenceIconProjection(): () => void {
     node.replaceChildren(createPickerIcon(kind), ...(secondary === undefined ? [] : [createPickerIcon(secondary)]))
     node.classList.remove('dsh_ref_projected_icon')
     node.classList.add('dsh_ref_picker_icon')
+    node.classList.toggle('dsh_ref_command_icon', ['goal', 'plan', 'feedback', 'compact', 'permission', 'export'].includes(kind))
     node.classList.toggle('dsh_ref_dual_icon', secondary !== undefined)
     node.dataset.dshRefMenuIcon = kind
   }
@@ -545,7 +549,10 @@ export function adoptReferenceIconProjection(): () => void {
     const source = heading?.getAttribute('data-source')
     const name = option.children.item(1)?.textContent?.trim() ?? ''
     const description = option.children.item(2)?.textContent?.trim() ?? ''
-    if (source === 'Commands') return paintPicker(icon, 'command')
+    if (source === 'Commands') {
+      const commandIcons: Readonly<Record<string, PickerIconKind>> = { goal: 'goal', plan: 'plan', feedback: 'feedback', compact: 'compact', permission: 'permission', export: 'export' }
+      return paintPicker(icon, commandIcons[name.toLocaleLowerCase()] ?? 'command')
+    }
     if (source === 'Skills') return paintPicker(icon, 'skill')
     if (source === 'Files and folders') return paintPicker(icon, workspacePathIconKind(name, name.endsWith('/') ? 'directory' : 'file'))
     if (source === 'DSH sessions') return paintPicker(icon, 'session')

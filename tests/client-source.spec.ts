@@ -175,7 +175,8 @@ describe('native @ sources', () => {
   it('keeps Commands and Skills in @ while returning native slash text', async () => {
     const commands = createCommandSource(async () => [{ name: 'plan', description: 'Plan mode' }])
     const command = (await commands.candidates(session, request('pla')))[0]!
-    expect(command).toMatchObject({ name: 'plan', icon: PICKER_ICON_MARKER.command })
+    expect(command?.name).toContain('plan')
+    expect(command?.icon).toBe(PICKER_ICON_MARKER.plan)
     expect(commands.onPick(pick(command))).toEqual({ text: '/plan' })
 
     const skills = createSkillSource(async () => [{ name: 'review', description: 'Review code', modelInvocable: false }])

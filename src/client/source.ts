@@ -580,7 +580,22 @@ function formatDriveMention(reference: DriveReference): string {
   return `@[${escapeLabel(reference.label)}](${driveReferenceUri(reference.id)})`
 }
 
-interface CommandCandidate { name: string; description?: string; input?: { hint?: string } }
+interface CommandCandidate { name: string; description?: string; icon?: NonNullable<InputTriggerCandidate['icon']>; input?: { hint?: string } }
+const COMMAND_ICON_KIND: Readonly<Record<string, PickerIconKind>> = {
+  goal: 'goal', plan: 'plan', feedback: 'feedback', compact: 'compact', permission: 'permission', export: 'export',
+}
+const COMMAND_DESCRIPTION_EN: Readonly<Record<string, string>> = {
+  goal: 'Set or view the goal for a long-running task', plan: 'Enter or leave plan mode', feedback: 'Record feedback about this session', compact: 'Compact older conversation history', permission: 'Switch the permission preset (sandbox mode + approval policy)', export: 'Download this Session log as a ZIP archive',
+}
+const COMMAND_DESCRIPTION_ZH: Readonly<Record<string, string>> = {
+  goal: '设置或查看长期任务目标', plan: '进入或退出计划模式', feedback: '发送关于当前会话的反馈', compact: '压缩以上对话内容', permission: '切换权限预设（沙箱模式与审批策略）', export: '将当前会话内容导出为 ZIP',
+}
+const COMMAND_LABEL_EN: Readonly<Record<string, string>> = {
+  goal: 'Goal', plan: 'Plan', feedback: 'Feedback', compact: 'Compact', permission: 'Permission', export: 'Export', model: 'Model',
+}
+const COMMAND_LABEL_ZH: Readonly<Record<string, string>> = {
+  goal: '目标', plan: '计划', feedback: '反馈', compact: '压缩', permission: '权限', export: '下载日志', model: '模型',
+}
 interface SkillCandidate { name: string; description: string; modelInvocable?: boolean }
 
 export function createCommandSource(
@@ -596,10 +611,12 @@ export function createCommandSource(
       const needle = scoped.toLocaleLowerCase()
       return (await load(session.sessionId, signal))
         .filter(row => row.name.toLocaleLowerCase().includes(needle))
-        .map(row => ({
-          name: row.name, description: row.description, hint: row.input?.hint,
-          icon: COMMAND_ICON_MARKER, value: encodeCandidate({ kind: 'command', name: row.name }),
-        }))
+        .map(row => {
+          return {
+          name: (() => { const key = row.name.toLocaleLowerCase(); const zh = navigator.language.toLowerCase().startsWith('zh'); return zh ? `${COMMAND_LABEL_ZH[key] ?? row.name} ${row.name}` : (COMMAND_LABEL_EN[key] ?? row.name) })(), description: (navigator.language.toLowerCase().startsWith('zh') ? COMMAND_DESCRIPTION_ZH[row.name.toLocaleLowerCase()] : COMMAND_DESCRIPTION_EN[row.name.toLocaleLowerCase()]) ?? row.description, hint: row.input?.hint,
+          icon: PICKER_ICON_MARKER[COMMAND_ICON_KIND[row.name.toLocaleLowerCase()] ?? 'command'], value: encodeCandidate({ kind: 'command', name: row.name }),
+          }
+        })
     },
     onPick({ candidate }) {
       const value = decodeCandidate(candidate.value)

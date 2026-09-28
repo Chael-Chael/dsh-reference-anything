@@ -75,6 +75,8 @@ Type `@`, search across enabled sources, and insert the selected reference into 
 
 ## 📰 News
 
+- **2026-09-28 · v0.4.2 — Important update** — Fixed a fatal plugin compatibility error with the current DSH interface. During plugin loading, DSH now requires every strict `agentSearch` registration codec to provide a `create()` validator factory; v0.4.1 supplied only validation rules, so DSH rejected the plugin before search could run. This release adds the required factory and fixes command icon sizing plus bilingual command labels in the native picker.
+
 - **2026-09-25 · v0.4.1** — We're back!!🎉🎉 Improved local-agent session titles by reading Codex's own `session_index.jsonl` and added Pi/Codex title support. Restored the native DSH handling for `@` menu group headings to avoid translucent overlap and unnecessary custom blur rendering; bounded index reads to 16 MiB for predictable resource use.
 
 - **2026-09-03 · v0.4.0** — **Compatibility: DSH `>=0.1.2-rc.1`.** Migrated Skills discovery to the DSH RC1 Skills Remote, restored historical reference grants through the RC1 Session snapshot API, and verified the plugin against DSH `0.1.2-rc.1`.
@@ -108,7 +110,7 @@ Install the stable `0.3.x` line for the current stable DSH SDK:
 dsh plugin --profile web add dsh-reference-anything@latest
 ```
 
-Install `v0.4.1` on DSH `>=0.1.2-rc.1`:
+Install `v0.4.2` on DSH `>=0.1.2-rc.1`:
 
 ```powershell
 dsh plugin --profile web add dsh-reference-anything@alpha

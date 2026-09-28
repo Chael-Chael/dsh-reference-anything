@@ -75,6 +75,8 @@
 
 ## 📰 新闻
 
+- **2026-09-28 · v0.4.2 — 重要更新** — 修复插件与当前 DSH 接口格式不匹配导致的致命兼容性错误：当前 DSH 在加载插件时要求 `agentSearch` 的严格接口登记信息提供 `create()` 数据校验器工厂函数，而 v0.4.1 只提供了校验规则，导致插件在加载阶段就被 DSH 拒绝，搜索功能尚未运行。此版本补齐所需的 `create()` 工厂函数，并修复原生菜单中的命令图标尺寸及中英文命令名称展示。
+
 - **2026-09-25 · v0.4.1** — 最近闲下来，重启更新!!🎉🎉 改进本地 Agent 会话标题：读取 Codex 自己的 `session_index.jsonl`，并支持 Pi/Codex 标题显示；恢复 DSH 原生的 `@` 菜单分组标题处理，避免透明叠加和多余的自定义模糊渲染；索引读取限制为 16 MiB，保证资源使用可控。
 - **2026-09-03 · v0.4.0** — **适配版本：DSH `>=0.1.2-rc.1`。** 将 Skills 发现迁移至 DSH RC1 Skills Remote，通过 RC1 Session 快照 API 恢复历史引用授权，并完成针对 DSH `0.1.2-rc.1` 的验证。
 - **2026-08-28 · v0.3.3** — 改进引用菜单与设置面板的深色主题背景，新增项目截图元数据并更新文档。这是最后一个面向当前 DeepSeek Harness 稳定版 SDK 的发布系列；`v0.4.0` 已迁移至 DeepSeek Harness `v0.1.2-rc.1`，通过 npm `alpha` 标签发布，且不再支持旧版 DSH。
@@ -107,7 +109,7 @@
 dsh plugin --profile web add dsh-reference-anything@latest
 ```
 
-在 DSH `>=0.1.2-rc.1` 上安装 `v0.4.1`：
+在 DSH `>=0.1.2-rc.1` 上安装 `v0.4.2`：
 
 ```powershell
 dsh plugin --profile web add dsh-reference-anything@alpha
