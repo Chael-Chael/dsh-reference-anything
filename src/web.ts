@@ -5,11 +5,10 @@ import { ReferenceAnythingRemote } from './host.ts'
 import { TYPERT_MANIFEST } from './typert.ts'
 
 export const name = 'reference-anything-web'
-// `referenceCloudDrive` is consumed lazily by ReferenceAnythingRemote when the
-// composer asks for @drive candidates. Declare it here so Cordis exposes the
-// sibling service in this plugin scope instead of making driveSearch silently
-// look like an unconfigured installation.
-export const inject = ['typert', 'referenceChatHistory', 'openListManager', 'referenceCloudDrive']
+// ReferenceAnythingRemote looks up optional sources through ctx.get(). Making
+// cloud drives a required injection blocks all conversation endpoints when
+// that source is disabled or unavailable in the active profile.
+export const inject = ['typert', 'referenceChatHistory', 'openListManager']
 
 export function apply(ctx: Context): void {
   new ReferenceAnythingRemote(ctx)
