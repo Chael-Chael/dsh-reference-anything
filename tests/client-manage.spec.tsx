@@ -67,7 +67,7 @@ type SettingsActions = {
 function settingsElement(current: SettingsSnapshot, actions: SettingsActions = {}) {
   const noop = async () => {}
   const useScope = ((selector: (value: SettingsSnapshot) => unknown) => selector(current)) as never
-  return <ConversationSettings close={() => {}} useSessions={(() => []) as never} useWorkspaces={(() => []) as never}
+  return <ConversationSettings close={() => {}} useWorkspaces={(() => []) as never}
     useScope={useScope} save={actions.save ?? noop} sync={noop} cancel={noop} refresh={actions.refresh ?? noop} quickRefreshOnOpen={actions.quickRefreshOnOpen ?? noop}
     setupAll={actions.setupAll ?? noop} discoverOpenCli={actions.discoverOpenCli ?? noop} installOpenCli={actions.installOpenCli ?? noop}
     useProfile={actions.useProfile ?? noop} install={actions.install ?? noop} restartDaemon={noop} checkUpdate={actions.checkUpdate ?? noop} installUpdate={actions.installUpdate ?? noop} browse={noop} deleteConversation={noop}
@@ -509,7 +509,7 @@ describe('general settings editing', () => {
     const saved: SettingsRecord[] = []
     const current: SettingsSnapshot = { settings: { ...settings, picker: defaultPickerSettings() }, loading: true }
     const useScope = ((selector: (value: SettingsSnapshot) => unknown) => selector(current)) as never
-    const el = render(<ConversationSettings close={() => {}} useSessions={(() => []) as never} useWorkspaces={(() => []) as never} useScope={useScope} save={async value => { saved.push(value) }} sync={noop} cancel={noop} refresh={noop} setupAll={noop} discoverOpenCli={noop} installOpenCli={noop} useProfile={noop} install={noop} restartDaemon={noop} checkUpdate={noop} installUpdate={noop} browse={noop} deleteConversation={noop} clearProvider={noop} refreshStats={noop} t={t} />)
+    const el = render(<ConversationSettings close={() => {}} useWorkspaces={(() => []) as never} useScope={useScope} save={async value => { saved.push(value) }} sync={noop} cancel={noop} refresh={noop} setupAll={noop} discoverOpenCli={noop} installOpenCli={noop} useProfile={noop} install={noop} restartDaemon={noop} checkUpdate={noop} installUpdate={noop} browse={noop} deleteConversation={noop} clearProvider={noop} refreshStats={noop} t={t} />)
     const input = el.querySelector('.dsh_ref_picker_limit input') as HTMLInputElement
 
     act(() => { setNativeValue(input, ''); input.dispatchEvent(new Event('input', { bubbles: true })) })
@@ -528,7 +528,7 @@ describe('general settings editing', () => {
     const saved: SettingsRecord[] = []
     const current: SettingsSnapshot = { settings: { ...settings, picker: defaultPickerSettings() }, loading: true }
     const useScope = ((selector: (value: SettingsSnapshot) => unknown) => selector(current)) as never
-    const el = render(<ConversationSettings close={() => {}} useSessions={(() => []) as never} useWorkspaces={(() => []) as never} useScope={useScope} save={async value => { saved.push(value) }} sync={noop} cancel={noop} refresh={noop} setupAll={noop} discoverOpenCli={noop} installOpenCli={noop} useProfile={noop} install={noop} restartDaemon={noop} checkUpdate={noop} installUpdate={noop} browse={noop} deleteConversation={noop} clearProvider={noop} refreshStats={noop} t={t} />)
+    const el = render(<ConversationSettings close={() => {}} useWorkspaces={(() => []) as never} useScope={useScope} save={async value => { saved.push(value) }} sync={noop} cancel={noop} refresh={noop} setupAll={noop} discoverOpenCli={noop} installOpenCli={noop} useProfile={noop} install={noop} restartDaemon={noop} checkUpdate={noop} installUpdate={noop} browse={noop} deleteConversation={noop} clearProvider={noop} refreshStats={noop} t={t} />)
     const select = el.querySelector('.dsh_ref_render_mode select') as HTMLSelectElement
 
     act(() => { setNativeValue(select, 'native-scroll'); select.dispatchEvent(new Event('change', { bubbles: true })) })

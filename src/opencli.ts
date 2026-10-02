@@ -1,6 +1,6 @@
 import { execFile as nodeExecFile } from 'node:child_process'
 import { existsSync } from 'node:fs'
-import { dirname, join, resolve } from 'node:path'
+import { delimiter, dirname, join, resolve } from 'node:path'
 import { promisify } from 'node:util'
 import { createHash } from 'node:crypto'
 import type { ChatProvider } from './store/spec.ts'
@@ -390,16 +390,36 @@ function openCliCandidates(configured: string): string[] {
 }
 
 function resolveNpmInvocation(): { file: string; prefix: string[] } | undefined {
+  const node = resolveNodeExecutable()
   const npmExecPath = process.env.npm_execpath
   if (npmExecPath && existsSync(npmExecPath)) {
     return /\.(?:c?js|mjs)$/i.test(npmExecPath)
-      ? { file: process.execPath, prefix: [npmExecPath] }
+      ? { file: node, prefix: [npmExecPath] }
       : { file: npmExecPath, prefix: [] }
   }
-  const besideNode = join(dirname(process.execPath), 'node_modules', 'npm', 'bin', 'npm-cli.js')
-  if (existsSync(besideNode)) return { file: process.execPath, prefix: [besideNode] }
+  const npmEntries = [
+    join(dirname(node), 'node_modules', 'npm', 'bin', 'npm-cli.js'),
+    join(dirname(node), '..', 'node_modules', 'npm', 'bin', 'npm-cli.js'),
+  ]
+  for (const entry of npmEntries) if (existsSync(entry)) return { file: node, prefix: [entry] }
   if (process.platform !== 'win32') return { file: 'npm', prefix: [] }
   return undefined
+}
+
+/** Electron Node mode still advertises Electron, so CLI parsers misread argv. */
+function resolveNodeExecutable(shimDirectory?: string): string {
+  if (!process.versions.electron) return process.execPath
+  const binary = process.platform === 'win32' ? 'node.exe' : 'node'
+  const resources = process.platform === 'darwin'
+    ? resolve(dirname(process.execPath), '..', 'Resources')
+    : join(dirname(process.execPath), 'resources')
+  const candidates = [
+    ...(shimDirectory ? [join(shimDirectory, binary)] : []),
+    // Official Desktop ships a standalone dependency runtime as well as Electron.
+    join(resources, 'runtime', 'primary-runtime', 'dependencies', 'node', 'bin', binary),
+    ...(process.env.PATH ?? '').split(delimiter).filter(Boolean).map(path => join(path.replace(/^"|"$/g, ''), binary)),
+  ]
+  return candidates.find(candidate => existsSync(candidate) && resolve(candidate) !== resolve(process.execPath)) ?? 'node'
 }
 
 function normalizeVersion(value: string): string { return value.trim().replace(/^v/i, '').split(/\s+/)[0] ?? '' }
@@ -420,11 +440,11 @@ function resolveInvocation(configured: string): { file: string; prefix: string[]
   const explicit = resolve(configured)
   if (/\.cmd$/i.test(configured) && existsSync(explicit)) {
     const entry = join(explicit, '..', 'node_modules', '@jackwener', 'opencli', 'dist', 'src', 'main.js')
-    if (existsSync(entry)) return { file: process.execPath, prefix: [entry] }
+    if (existsSync(entry)) return { file: resolveNodeExecutable(dirname(explicit)), prefix: [entry] }
   }
   if (process.platform === 'win32' && configured === 'opencli') {
     const entry = process.env.APPDATA && join(process.env.APPDATA, 'npm', 'node_modules', '@jackwener', 'opencli', 'dist', 'src', 'main.js')
-    if (entry && existsSync(entry)) return { file: process.execPath, prefix: [entry] }
+    if (entry && existsSync(entry)) return { file: resolveNodeExecutable(join(process.env.APPDATA!, 'npm')), prefix: [entry] }
   }
   return { file: configured, prefix: [] }
 }
