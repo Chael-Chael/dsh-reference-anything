@@ -42,7 +42,7 @@ const css = `
 .dsh_ref_pagination{display:flex;align-items:center;justify-content:space-between;gap:12px;color:var(--dsw-alias-label-primary);font-size:10px}.dsh_ref_pagination button{min-height:29px;padding:0 10px;font-size:10px}
 @media(max-width:640px){.dsh_ref_manage_filters{grid-template-columns:1fr}.dsh_ref_manage_row{align-items:flex-start;flex-direction:column}.dsh_ref_manage_title{max-width:100%}}
 @media(max-width:850px){.dsh_ref_provider_grid{grid-template-columns:1fr 1fr}}@media(max-width:640px){.dsh_ref_header,.dsh_ref_section_head,.dsh_ref_install{align-items:stretch;flex-direction:column}.dsh_ref_workspace>.dsh_ref_panel,.dsh_ref_workspace>.dsh_ref_sources{padding:18px}.dsh_ref_provider_grid,.dsh_ref_form_grid,.dsh_ref_picker_row{grid-template-columns:1fr}.dsh_ref_picker_limit{justify-content:space-between}.dsh_ref_recheck,.dsh_ref_install button{align-self:flex-start}}
-/* DSH-style settings surface: quiet neutral groups, one blue accent, and
+.dsh_ref_settings button:focus-visible,.dsh_ref_settings input:focus-visible,.dsh_ref_settings select:focus-visible{outline:2px solid var(--dsw-alias-state-business-primary,#4d6bfe);outline-offset:3px}\r\n/* DSH-style settings surface: quiet neutral groups, one blue accent, and
    rounded controls. These overrides deliberately use plugin-local classes so
    they cannot restyle DSH settings owned by other plugins. */
 .dsh_ref_settings{--dsh-ref-blue:var(--dsw-alias-state-business-primary,#3b82f6);--dsh-ref-blue-soft:rgba(59,130,246,.11);--dsh-ref-blue-line:rgba(59,130,246,.28);--dsh-ref-line:rgba(100,116,139,.20);--dsh-ref-surface:rgba(148,163,184,.055);--dsh-ref-card-surface:rgba(255,255,255,.26);--dsh-ref-control-surface:rgba(255,255,255,.38);gap:20px;color:var(--dsw-alias-label-primary)}
