@@ -95,7 +95,9 @@ body[data-ds-dark-theme] .dsh_ref_storage_header p{color:var(--dsw-alias-label-t
 .dsh_ref_form_grid>label>span{grid-column:1;grid-row:1;font-size:16px;font-weight:500}.dsh_ref_form_grid>label>.dsh_ref_field_note{grid-column:1;grid-row:2;font-size:13px;color:var(--dsw-alias-label-dimmed,var(--dsw-alias-label-primary))}.dsh_ref_form_grid>label>input,.dsh_ref_form_grid>label>select{grid-column:2;grid-row:1 / span 2;width:144px;height:54px;border:0;border-radius:14px;background:var(--dsh-ref-control-surface);font-size:15px;text-align:center}
 .dsh_ref_provider_grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;border:0;border-radius:0;background:transparent}.dsh_ref_provider{min-height:124px;padding:18px;border:1px solid var(--dsh-ref-line);border-radius:16px;background:var(--dsh-ref-card-surface)}
 @media(max-width:640px){.dsh_ref_form_grid>label{grid-template-columns:1fr}.dsh_ref_form_grid>label>input,.dsh_ref_form_grid>label>select{grid-column:1;grid-row:3;width:100%;text-align:left}.dsh_ref_provider_grid{grid-template-columns:1fr}}
-`\r\n\r\nexport function adoptStyles(): void {
+`
+
+export function adoptStyles(): void {
   if (document.getElementById('dsh-reference-anything-style')) return
   const style = document.createElement('style')
   style.id = 'dsh-reference-anything-style'
