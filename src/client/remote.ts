@@ -24,7 +24,7 @@ export interface Health {
   daemonRunning: boolean; extensionConnected: boolean; extensionState: ExtensionState
   extensionVersion?: string; profileCount?: number
   opencliCompatible: boolean; daemonVersion?: string; daemonStale: boolean
-  connectivityOk: boolean; connectivityChecked: boolean; pluginVersion?: string; adapterCommandsReady: boolean; adapterCompatible: boolean
+  connectivityOk: boolean; connectivityChecked: boolean; pluginVersion?: string; adapterCommandsReady: boolean; adapterCompatible: boolean; latestVersion?: string; updateAvailable: boolean
   versionError?: string; daemonError?: string; pluginError?: string; doctorError?: string
 }
 export interface BrowserProfile { id: string; alias?: string; connected: boolean; isDefault: boolean }

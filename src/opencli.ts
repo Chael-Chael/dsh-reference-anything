@@ -2,6 +2,7 @@ import { execFile as nodeExecFile } from 'node:child_process'
 import { existsSync } from 'node:fs'
 import { delimiter, dirname, join, resolve } from 'node:path'
 import { promisify } from 'node:util'
+import { spawn } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import type { ChatProvider } from './store/spec.ts'
 import type { ProviderConversationRow, ProviderTurnRow } from './store/store.ts'
@@ -57,6 +58,8 @@ export interface OpenCliHealth {
   pluginVersion?: string
   adapterCommandsReady: boolean
   adapterCompatible: boolean
+  latestVersion?: string
+  updateAvailable: boolean
   versionError?: string
   daemonError?: string
   pluginError?: string
@@ -193,9 +196,10 @@ export class OpenCliRunner {
   }
 
   private async inspectHealth(checkConnectivity: boolean, signal?: AbortSignal): Promise<OpenCliHealth> {
-    const [version, daemon, plugins, doctor] = await Promise.all([
+    const [version, daemon, plugins, doctor, latest] = await Promise.all([
       this.probe(['--version'], signal), this.probe(['daemon', 'status'], signal), this.probe(['plugin', 'list'], signal),
       checkConnectivity ? this.probe(['doctor'], signal) : Promise.resolve({ value: '', diagnostic: '' }),
+      latestOpenCliVersion(signal),
     ])
     const status = parseDaemonStatus(daemon.value)
     const cliVersion = normalizeVersion(version.value)
@@ -218,6 +222,8 @@ export class OpenCliRunner {
       ...(pluginVersion ? { pluginVersion: normalizeVersion(pluginVersion) } : {}),
       adapterCommandsReady,
       adapterCompatible: pluginInstalled && adapterCommandsReady && versionAtLeast(pluginVersion ?? '', MIN_ADAPTER_VERSION),
+      ...(latest.value.trim() ? { latestVersion: normalizeVersion(latest.value) } : {}),
+      updateAvailable: Boolean(latest.value.trim() && versionAtLeast(normalizeVersion(latest.value), cliVersion) && normalizeVersion(latest.value) !== cliVersion),
       ...(version.error ? { versionError: version.error } : {}),
       ...(daemon.error ? { daemonError: daemon.error } : {}),
       ...(plugins.error || adapterLoadError ? { pluginError: plugins.error || adapterLoadError } : {}),
@@ -241,6 +247,21 @@ export class OpenCliRunner {
       return [{ id: match[1]!, ...(match[2] && match[2] !== 'default' ? { alias: match[2] } : {}),
         connected: match[3] === 'connected' && (disconnected < 0 || position < disconnected), isDefault: /\sdefault\s+—/.test(line) }]
     })
+  }
+
+  async ensureBrowser(signal?: AbortSignal): Promise<void> {
+    if ((await this.profiles(signal)).some(profile => profile.connected)) return
+    const child = process.platform === 'win32'
+      ? spawn('cmd.exe', ['/c', 'start', '', 'msedge.exe', 'about:blank'], { detached: true, stdio: 'ignore', windowsHide: true })
+      : process.platform === 'darwin'
+        ? spawn('open', ['-a', 'Google Chrome', 'about:blank'], { detached: true, stdio: 'ignore' })
+        : spawn('xdg-open', ['about:blank'], { detached: true, stdio: 'ignore' })
+    child.unref()
+    for (let i = 0; i < 20; i++) {
+      await new Promise(resolve => setTimeout(resolve, 500))
+      if ((await this.profiles(signal)).some(profile => profile.connected)) return
+    }
+    throw new OpenCliError('Browser started, but the OpenCLI extension did not connect', 'EXTENSION_NOT_CONNECTED')
   }
 
   async installPlugin(pluginUrl: string, signal?: AbortSignal): Promise<void> {
@@ -328,6 +349,15 @@ export class OpenCliRunner {
       throw new OpenCliError(stderr || `OpenCLI exited with ${String(detail.code)}`, code, { cause: error })
     }
   }
+}
+
+async function latestOpenCliVersion(signal?: AbortSignal): Promise<{ value: string; diagnostic: string }> {
+  const npm = resolveNpmInvocation()
+  if (!npm) return { value: '', diagnostic: '' }
+  try {
+    const result = await execFile(npm.file, [...npm.prefix, 'view', OPENCLI_NPM_PACKAGE, 'version'], { encoding: 'utf8', timeout: 15_000, signal })
+    return { value: String(result.stdout).trim(), diagnostic: '' }
+  } catch { return { value: '', diagnostic: '' } }
 }
 
 /** Keep successful-process diagnostics: OpenCLI reports plugin import failures on stderr while exiting zero. */

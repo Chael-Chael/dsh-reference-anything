@@ -45,7 +45,7 @@ export const healthSchema = z.object({
   daemonRunning: z.boolean(), extensionConnected: z.boolean(), extensionState: extensionStateSchema,
   extensionVersion: z.string().optional(), profileCount: z.number().int().nonnegative().optional(),
   opencliCompatible: z.boolean(), daemonVersion: z.string().optional(), daemonStale: z.boolean(),
-  connectivityOk: z.boolean(), connectivityChecked: z.boolean(), pluginVersion: z.string().optional(), adapterCommandsReady: z.boolean(), adapterCompatible: z.boolean(),
+  connectivityOk: z.boolean(), connectivityChecked: z.boolean(), pluginVersion: z.string().optional(), adapterCommandsReady: z.boolean(), adapterCompatible: z.boolean(), latestVersion: z.string().optional(), updateAvailable: z.boolean(),
   versionError: z.string().optional(), daemonError: z.string().optional(), pluginError: z.string().optional(), doctorError: z.string().optional(),
 }).readonly()
 export const browserProfileSchema = z.object({ id: z.string(), alias: z.string().optional(), connected: z.boolean(), isDefault: z.boolean() }).readonly()

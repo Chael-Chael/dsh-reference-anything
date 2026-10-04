@@ -138,6 +138,22 @@ async function inTemporaryTab(page, task) {
   }
 }
 
+async function navigate(page, url, options) {
+  let last
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try { await page.goto(url, options); return } catch (error) {
+      last = error
+      if (!/Navigation rejected/i.test(String(error?.message || error)) || attempt === 2) throw error
+      if (attempt > 0 && typeof page.newTab === 'function' && typeof page.setActivePage === 'function') {
+        const pageId = await page.newTab(url).catch(() => undefined)
+        if (pageId) { await page.setActivePage(pageId); return }
+      }
+      await new Promise(resolve => setTimeout(resolve, 250 * (attempt + 1)))
+    }
+  }
+  throw last
+}
+
 export function registerProvider(config) {
   const browserSession = SYNC_BROWSER_SESSION
 
@@ -154,7 +170,7 @@ export function registerProvider(config) {
     args: [],
     columns: ['identity'],
     func: async (page) => inTemporaryTab(page, async () => {
-      await page.goto(config.home, { waitUntil: 'none' })
+      await navigate(page, config.home, { waitUntil: 'none' })
       const result = await evaluateWhenProviderReady(
         page, config.whoamiScript, {}, `${config.site} whoami`, { accepts: terminalIdentityResult },
       )
@@ -180,7 +196,7 @@ export function registerProvider(config) {
     func: async (page, kwargs) => inTemporaryTab(page, async () => {
       const since = String(kwargs.since || '').trim()
       if (since && Number.isNaN(Date.parse(since))) throw new ArgumentError('since must be an ISO 8601 instant')
-      await page.goto(config.home, { waitUntil: 'none' })
+      await navigate(page, config.home, { waitUntil: 'none' })
       const identity = await evaluateWhenProviderReady(
         page, config.whoamiScript, {}, `${config.site} sync-index identity`, { accepts: terminalIdentityResult },
       )
@@ -217,7 +233,7 @@ export function registerProvider(config) {
     func: async (page, kwargs) => inTemporaryTab(page, async () => {
       const since = String(kwargs.since || '').trim()
       if (since && Number.isNaN(Date.parse(since))) throw new ArgumentError('since must be an ISO 8601 instant')
-      await page.goto(config.home, { waitUntil: 'none' })
+      await navigate(page, config.home, { waitUntil: 'none' })
       const rows = assertResult(
         await evaluateWhenProviderReady(page, config.historyScript, { since }, `${config.site} history-all`),
         config.domain,
@@ -245,7 +261,7 @@ export function registerProvider(config) {
     func: async (page, kwargs) => inTemporaryTab(page, async () => {
       const id = String(kwargs.id || '').trim()
       if (!id) throw new ArgumentError('id must be a non-empty conversation id')
-      await page.goto(config.home, { settleMs: 600 })
+      await navigate(page, config.home, { settleMs: 600 })
       const expectedScope = parseExpectedAccountScope(kwargs.accountScope)
       if (expectedScope) {
         const identity = await evaluate(page, config.whoamiScript, {}, `${config.site} detail identity`)
@@ -257,7 +273,7 @@ export function registerProvider(config) {
       }
       let result = await evaluate(page, config.detailScript, { id }, `${config.site} detail`)
       if (result?.ok !== true && result?.code !== 'AUTH' && result?.code !== 'RATE_LIMIT' && config.fallbackScript) {
-        await page.goto(config.conversationUrl(id), { settleMs: 1800 })
+        await navigate(page, config.conversationUrl(id), { settleMs: 1800 })
         result = await evaluate(page, config.fallbackScript, { id }, `${config.site} detail fallback`)
       }
       const rows = assertResult(result, config.domain, `${config.site} detail`)
@@ -291,7 +307,7 @@ export function registerProvider(config) {
       if (!Number.isInteger(maxBytes) || maxBytes < 1 || maxBytes > 26_214_400) {
         throw new ArgumentError('maxBytes must be between 1 and 26214400')
       }
-      await page.goto(config.home, { settleMs: 500 })
+      await navigate(page, config.home, { settleMs: 500 })
       const expectedScope = parseExpectedAccountScope(kwargs.accountScope)
       if (expectedScope) {
         const identity = await evaluateWhenProviderReady(

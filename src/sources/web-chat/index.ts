@@ -166,6 +166,7 @@ export default class WebChatHistoryService extends Service implements ReferenceS
     if (window.cursor !== undefined) end = decodeLiveCursor(window.cursor, conversationKey)
     let rows: ProviderTurnRow[]
     try {
+      await this.ensureBrowser(signal)
       rows = await this.runner().detail(conversation.provider, conversation.externalId, signal, conversation.accountScope)
     } catch (error) {
       if (signal?.aborted) throw signal.reason
@@ -263,7 +264,12 @@ export default class WebChatHistoryService extends Service implements ReferenceS
     if (this.sync.isRunning()) throw new ReferenceAnythingError('wait for the current conversation sync to finish before updating', 'REFERENCE_SYNC_IN_PROGRESS')
     return this.packageUpdates.update(signal)
   }
-  async restartDaemon(signal?: AbortSignal): Promise<boolean> { await this.runner().restartDaemon(signal); return true }
+  async restartDaemon(signal?: AbortSignal): Promise<boolean> {
+    const runner = this.runner()
+    await runner.restartDaemon(signal)
+    await this.ensureBrowser(signal)
+    return true
+  }
   async discoverOpenCli(signal?: AbortSignal): Promise<OpenCliDiscovery> {
     return discoverOpenCli(this.store.settings.opencliPath, signal)
   }
@@ -326,6 +332,20 @@ export default class WebChatHistoryService extends Service implements ReferenceS
     const settings = this.store.settings
     return new OpenCliRunner({ executable: settings.opencliPath, profile: '',
       timeoutMs: this.config.timeoutMs, maxStdoutBytes: this.config.maxStdoutBytes }).profiles(signal)
+  }
+
+  async ensureBrowser(signal?: AbortSignal): Promise<void> {
+    const settings = this.store.settings
+    const runner = this.runner()
+    const connected = await runner.profiles(signal)
+    const selected = connected.find(profile => profile.connected)
+    if (selected && !settings.profile) {
+      await this.store.setSettings({ ...settings, profile: selected.alias || selected.id })
+      return
+    }
+    await runner.ensureBrowser(signal)
+    const after = (await runner.profiles(signal)).find(profile => profile.connected)
+    if (after) await this.store.setSettings({ ...settings, profile: after.alias || after.id })
   }
 
   private runner(): OpenCliRunner {
