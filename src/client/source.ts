@@ -12,7 +12,7 @@ import { encodeReferenceUri } from '../uri-codec.ts'
 import type { AgentCandidate, DriveCandidate, SearchResult, SyncStatus } from './remote.ts'
 import {
   AGENT_ICON_MARKER, COMMAND_ICON_MARKER, DRIVE_ICON_MARKER, LOCAL_AGENT_ICON_MARKER, PICKER_ICON_MARKER, PROVIDER_ICON_MARKER, SESSION_ICON_MARKER, SKILL_ICON_MARKER,
-  type PickerIconKind,
+  candidateIcon, type PickerIconKind,
 } from './provider-icons.tsx'
 import type { REFERENCE_ANYTHING_NS } from './locale.ts'
 import type { MenuViewportAnchor, PickerMenuActionGuard, PickerMenuUpdater } from './menu-update.ts'
@@ -224,7 +224,7 @@ export function createConversationSource(
           description: row.matchedVia === 'content' && row.snippet
             ? row.snippet
             : t('conversation.description', { provider: LABEL[row.provider], date: formatDate(row.updatedAt, t) }),
-          icon: PROVIDER_ICON_MARKER[row.provider],
+          icon: candidateIcon(PROVIDER_ICON_MARKER[row.provider]),
           value: encodeCandidate({ kind: 'conversation', reference: { uriId: row.uriId, label } }),
         }
       }))
@@ -264,7 +264,7 @@ function syncMenuCandidate(actions: ConversationSourceActions, t: T): InputTrigg
   return {
     name: presentation.name,
     description: presentation.description,
-    icon: PICKER_ICON_MARKER.refresh,
+    icon: candidateIcon(PICKER_ICON_MARKER.refresh),
     value: encodeCandidate({ kind: 'action', action: 'sync' }),
   }
 }
@@ -312,7 +312,7 @@ export function createFileSource(
         return [{
           name,
           description: row.path,
-          icon: PICKER_ICON_MARKER[workspaceIconKind(row)],
+          icon: candidateIcon(PICKER_ICON_MARKER[workspaceIconKind(row)]),
           value: encodeCandidate({ kind: 'file', fileKind: row.kind, label: basename, mention }),
         }]
       })
@@ -350,7 +350,7 @@ export function createSessionSource(
       return (await search(session.sessionId, scoped, signal)).map(row => ({
         name: row.label,
         description: [row.cwd, new Date(row.createdAt).toLocaleString()].filter(Boolean).join(' · '),
-        icon: SESSION_ICON_MARKER,
+        icon: candidateIcon(SESSION_ICON_MARKER),
         value: encodeCandidate({ kind: 'session', label: row.label, mention: row.mention }),
       }))
     },
@@ -412,7 +412,7 @@ export function createLocalAgentSource(
         return {
           name: title,
           description: describeAgentRow(row, t),
-          icon: LOCAL_AGENT_ICON_MARKER[row.kind as keyof typeof LOCAL_AGENT_ICON_MARKER] ?? AGENT_ICON_MARKER,
+          icon: candidateIcon(LOCAL_AGENT_ICON_MARKER[row.kind as keyof typeof LOCAL_AGENT_ICON_MARKER] ?? AGENT_ICON_MARKER),
           value: encodeCandidate({ kind: 'agent', reference: { id: row.id, label } }),
         }
       }))
@@ -483,7 +483,7 @@ export function createCloudDriveSource(
       if (rows.length === 0 && scoped === '') return [{
         name: t('drive.searchAction'),
         description: t('drive.searchActionDetail'),
-        icon: DRIVE_ICON_MARKER,
+        icon: candidateIcon(DRIVE_ICON_MARKER),
         value: encodeCandidate({ kind: 'drive-search' }),
       }]
       // Two drives can hold files of the same name, and one drive can hold the
@@ -514,7 +514,7 @@ export function createCloudDriveSource(
       if (scoped.startsWith('/') && scoped.replace(/\/+$/u, '') !== '') {
         const current = scoped.replace(/\/+$/u, '')
         const parent = current.slice(0, current.lastIndexOf('/')) || '/'
-        candidates.unshift({ name: `↩ ${t('drive.parentFolder')}`, description: parent, icon: DRIVE_ICON_MARKER, value: encodeCandidate({ kind: 'drive-folder', path: parent }) })
+        candidates.unshift({ name: `↩ ${t('drive.parentFolder')}`, description: parent, icon: candidateIcon(DRIVE_ICON_MARKER), value: encodeCandidate({ kind: 'drive-folder', path: parent }) })
       }
       return candidates
     },
@@ -550,7 +550,7 @@ export function createCloudDriveSource(
 
 function driveIcon(row: DriveCandidate): InputTriggerCandidate['icon'] {
   const file = PICKER_ICON_MARKER[workspacePathIconKind(row.label, row.isDirectory === true ? 'directory' : 'file')]
-  return `${DRIVE_ICON_MARKER}${file}` as InputTriggerCandidate['icon']
+  return candidateIcon(`${DRIVE_ICON_MARKER}${file}`)
 }
 
 function displayDriveProvider(row: DriveCandidate): string {
@@ -614,7 +614,7 @@ export function createCommandSource(
         .map(row => {
           return {
           name: (() => { const key = row.name.toLocaleLowerCase(); const zh = navigator.language.toLowerCase().startsWith('zh'); return zh ? `${COMMAND_LABEL_ZH[key] ?? row.name} ${row.name}` : (COMMAND_LABEL_EN[key] ?? row.name) })(), description: (navigator.language.toLowerCase().startsWith('zh') ? COMMAND_DESCRIPTION_ZH[row.name.toLocaleLowerCase()] : COMMAND_DESCRIPTION_EN[row.name.toLocaleLowerCase()]) ?? row.description, hint: row.input?.hint,
-          icon: PICKER_ICON_MARKER[COMMAND_ICON_KIND[row.name.toLocaleLowerCase()] ?? 'command'], value: encodeCandidate({ kind: 'command', name: row.name }),
+          icon: candidateIcon(PICKER_ICON_MARKER[COMMAND_ICON_KIND[row.name.toLocaleLowerCase()] ?? 'command']), value: encodeCandidate({ kind: 'command', name: row.name }),
           }
         })
     },
@@ -641,7 +641,7 @@ export function createSkillSource(
       return rows.filter(row => row.name.toLocaleLowerCase().includes(needle)).map(row => ({
         name: row.name,
         description: `${row.modelInvocable === false ? t('skill.userOnly') : ''}${row.description}`,
-        icon: SKILL_ICON_MARKER,
+        icon: candidateIcon(SKILL_ICON_MARKER),
         value: encodeCandidate({ kind: 'skill', name: row.name }),
       }))
     },

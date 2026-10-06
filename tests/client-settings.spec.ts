@@ -6,7 +6,7 @@ import { AGENT_KINDS } from '../src/sources/local-agent/registry.ts'
 import { ALL_LOCAL_AGENTS } from '../src/wire.ts'
 
 const healthy: Health = {
-  version: '1.8.6', daemon: 'Daemon: running (PID 1)', pluginInstalled: true,
+  version: '1.8.6', daemon: 'Daemon: running (PID 1)', pluginInstalled: true, updateAvailable: false,
   daemonRunning: true, extensionConnected: true, extensionState: 'connected',
   opencliCompatible: true, daemonStale: false, connectivityOk: true, connectivityChecked: true, adapterCommandsReady: true, adapterCompatible: true,
 }
@@ -122,7 +122,7 @@ describe('browser extension install', () => {
       discoverOpenCli: async () => { order.push('discover'); return { found: true, executable: 'found-opencli', version: '1.8.6' } },
       selectOpenCli: async () => { order.push('select'); current = { ...current, version: '1.8.6', opencliCompatible: true } },
       installOpenCli: async () => { order.push('install-opencli') },
-      installAdapter: async () => { order.push('adapter'); current = { ...current, pluginInstalled: true, adapterCompatible: true } },
+      installAdapter: async () => { order.push('adapter'); current = { ...current, pluginInstalled: true, updateAvailable: false, adapterCompatible: true } },
       restartDaemon: async () => { order.push('daemon'); current = { ...current, daemonRunning: true, extensionState: 'disconnected' } },
       stage: value => { order.push(`stage:${value}`) },
     })

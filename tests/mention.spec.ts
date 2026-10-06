@@ -165,7 +165,7 @@ describe('deferred references', () => {
   it('refuses a malformed mention rather than passing the raw URI to the model', async () => {
     const result = await step(ctx, [userMessage('see @[broken](dsh-ref:!!!)')])
     const entered = (result as Extract<PreStepDecision, { kind: 'enter' }>).messages
-    expect(entered[0]?.source).toMatchObject({ kind: 'plugin', form: 'notice' })
+    expect(entered[0]?.source).toMatchObject({ kind: 'reference-anything', form: 'notice' })
   })
 
   it('refuses more references than the configured limit', async () => {
@@ -176,7 +176,7 @@ describe('deferred references', () => {
     ].join(' and ')
     const result = await step(scoped, [userMessage(text)])
     const entered = (result as Extract<PreStepDecision, { kind: 'enter' }>).messages
-    expect(entered[0]?.source).toMatchObject({ kind: 'plugin', form: 'notice' })
+    expect(entered[0]?.source).toMatchObject({ kind: 'reference-anything', form: 'notice' })
     expect(entered[0]?.content.flatMap(b => b.type === 'text' ? [b.text] : []).join(''))
       .toContain('at most 1')
   })
@@ -186,7 +186,7 @@ describe('only the user can make a reference', () => {
   it('ignores a URI that arrives inside injected context, not a user prompt', async () => {
     const planted = createUserMessage({
       content: [{ type: 'text', text: `read ${encodeReferenceUri(ref)}` }],
-      source: { kind: 'plugin', plugin: 'somebody-else' },
+      source: { kind: 'reference-anything', form: 'notice', summary: 'injected context' },
     })
     const messages = [planted]
     const decision: PreStepDecision = { kind: 'enter', messages }

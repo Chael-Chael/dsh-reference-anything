@@ -32,9 +32,10 @@ describe('Cloud drives form', () => {
       { name: 'OAuth-looking experimental', quickAuth: false, fields: [{ name: 'oauth_token', label: 'Token', type: 'text', secret: true, required: true }] },
     ] })
     await revealAdd(el, true)
-    const quickOptions = Array.from(el.querySelectorAll<HTMLSelectElement>('.dsh_ref_cloud_quick select option')).map(option => option.textContent)
-    const advancedOptions = Array.from(el.querySelectorAll<HTMLSelectElement>('.dsh_ref_cloud_mount_form select option')).map(option => option.textContent)
-    expect(quickOptions).toEqual(['OneDrive']); expect(advancedOptions).toContain('OAuth-looking experimental')
+    expect(el.querySelector('.dsh_ref_cloud_quick .dsh_ref_menu_trigger')?.textContent).toContain('OneDrive')
+    const driver = el.querySelector('.dsh_ref_cloud_mount_form .dsh_ref_menu_trigger') as HTMLButtonElement
+    await act(async () => { driver.click() })
+    expect(document.body.textContent).toContain('OAuth-looking experimental')
   })
   it('never labels an enabled mount without exact work status as Ready', () => {
     const el = mount({ settings, openList: { state: 'running', installed: true, mode: 'external', supportsRollback: false, upgradeAvailable: false }, openListMounts: [{ id: '1', name: '/unknown', driver: 'Demo', enabled: true, status: 'error' }] })
@@ -107,7 +108,8 @@ describe('Cloud drives form', () => {
     const reauthInputs = el.querySelectorAll<HTMLInputElement>('.dsh_ref_cloud_mount_form input')
     expect(reauthInputs[0]!.value).toBe('')
     act(() => { setNativeValue(reauthInputs[0]!, 'fresh-token'); reauthInputs[0]!.dispatchEvent(new Event('input', { bubbles: true })) })
-    await act(async () => { (el.querySelector('.dsh_ref_cloud_mount_form button') as HTMLButtonElement).click() })
+    const submit = Array.from(el.querySelectorAll<HTMLButtonElement>('.dsh_ref_cloud_mount_form button')).find(item => item.textContent === 'Reauthenticate')!
+    await act(async () => { submit.click() })
     expect(createMount).toHaveBeenCalledWith({ id: '1', mountPath: '/demo', driver: 'Demo', addition: { token: 'fresh-token' } })
   })
   it('renders downloading immediately while a repair is in flight', async () => {
@@ -136,8 +138,17 @@ describe('Cloud drives form', () => {
     const el = mount({ settings, openList: { state: 'running', installed: true, mode: 'external', supportsRollback: true, upgradeAvailable: false }, openListMounts: [{ id: '9', name: '/off', driver: 'Demo', enabled: false, status: 'disabled' }] }, { disableMount })
     expect(el.textContent).not.toContain('Repair install')
     expect(el.textContent).not.toContain('Rollback')
-    await act(async () => { Array.from(el.querySelectorAll('button')).find(button => button.textContent === 'Enable')!.click() })
+    await act(async () => { el.querySelector<HTMLButtonElement>('[role="switch"]')!.click() })
     expect(disableMount).toHaveBeenCalledWith('9', false)
+  })
+  it('disables a mount and its picker selection using only the switch', async () => {
+    const disableMount = vi.fn(async () => {})
+    const save = vi.fn(async () => {})
+    const el = mount({ settings, openListMounts: [{ id: '9', name: '/on', driver: 'Demo', enabled: true }] }, { disableMount, save })
+    expect(Array.from(el.querySelectorAll('button')).some(button => button.textContent === 'Disable')).toBe(false)
+    await act(async () => { el.querySelector<HTMLButtonElement>('[role="switch"]')!.click() })
+    expect(disableMount).toHaveBeenCalledWith('9', true)
+    expect(save).toHaveBeenCalledWith(expect.objectContaining({ enabledDriveMounts: [] }))
   })
   it('masks secret fields even when the official driver declares them as strings', async () => {
     const el = mount({ settings, openList: { state: 'running', installed: true, mode: 'external', supportsRollback: false, upgradeAvailable: false }, openListDrivers: [{ name: '115', fields: [{ name: 'access_token', label: 'Access', type: 'text', secret: true, required: true }, { name: 'refresh_token', label: 'Refresh', type: 'text', secret: true, required: true }] }] })

@@ -89,6 +89,7 @@ export const browsePageSchema = z.object({
 }).readonly()
 export const deleteInputSchema = z.object({ uriId: z.string().min(1) }).readonly()
 export const storageStatsSchema = z.object({
+  systemTempDirectory: z.string().optional(),
   bytes: z.number().int().nonnegative(), conversations: z.number().int().nonnegative(),
   remoteMissing: z.number().int().nonnegative().default(0), oldAccountConversations: z.number().int().nonnegative().default(0),
 }).readonly()

@@ -13,7 +13,7 @@ import { REFERENCE_ANYTHING_REMOTE, type AgentCandidate, type DriveCandidate, ty
 import { createCloudDriveSource, createCommandSource, createConversationSource, createFileSource, createLocalAgentSource, createSearchDebounce, createSessionSource, createSkillSource, type RefreshablePickerSource } from './source.ts'
 import { ConversationSettings, PAGE_SIZE, type SettingsSnapshot } from './components.tsx'
 import {
-  adoptMenuGroupTitleProjection, adoptMenuViewportTracking, adoptReferenceIconProjection, adoptStyles,
+  adoptMenuGroupTitleProjection, adoptMenuViewportTracking, adoptReferenceIconProjection, adoptSettingsIconProjection, adoptStyles,
 } from './styles.ts'
 import { createPickerMenuActionGuard, createPickerMenuUpdater } from './menu-update.ts'
 import { en, REFERENCE_ANYTHING_NS, zh } from './locale.ts'
@@ -32,6 +32,7 @@ export const inject = [
 
 export function apply(ctx: ClientContext): void {
   adoptStyles()
+  ctx.effect(() => adoptSettingsIconProjection(), 'reference-anything.client.settings-icon-projection')
   ctx.effect(() => adoptMenuViewportTracking(), 'reference-anything.client.menu-viewport-tracking')
   ctx.effect(() => adoptReferenceIconProjection(), 'reference-anything.client.icon-projection')
   let remote: ReferenceAnythingRemoteFace | undefined

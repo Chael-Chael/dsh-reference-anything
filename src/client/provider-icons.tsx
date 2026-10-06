@@ -27,7 +27,8 @@ export const PROVIDER_ICON_PATH: Readonly<Record<ChatProvider, string>> = {
   kimi: 'M21.846 0a1.923 1.923 0 110 3.846H20.15a.226.226 0 01-.227-.226V1.923C19.923.861 20.784 0 21.846 0zM11.065 11.199l7.257-7.2c.137-.136.06-.41-.116-.41H14.3a.164.164 0 00-.117.051l-7.82 7.756c-.122.12-.302.013-.302-.179V3.82c0-.127-.083-.23-.185-.23H3.186c-.103 0-.186.103-.186.23V19.77c0 .128.083.23.186.23h2.69c.103 0 .186-.102.186-.23v-3.25c0-.069.025-.135.069-.178l2.424-2.406a.158.158 0 01.205-.023l6.484 4.772a7.677 7.677 0 003.453 1.283c.108.012.2-.095.2-.23v-3.06c0-.117-.07-.212-.164-.227a5.028 5.028 0 01-2.027-.807l-5.613-4.064c-.117-.078-.132-.279-.028-.381z',
 }
 
-type InputTriggerCandidateIcon = NonNullable<InputTriggerCandidate['icon']>
+// Private-use glyph markers are rendered by the plugin projection CSS.
+type InputTriggerCandidateIcon = string
 
 export const PROVIDER_ICON_MARKER = {
   chatgpt: '\uE100', claude: '\uE101', gemini: '\uE102', deepseek: '\uE103', grok: '\uE104', kimi: '\uE105',
@@ -63,7 +64,11 @@ type PickerIconNode = Readonly<{
   attrs: Readonly<Record<string, string>>
 }>
 
-/** Lucide v0.562 icon nodes used by non-provider entries in the @ picker. */
+/**
+ * Inline SVG path data used by non-provider entries in the @ picker.
+ * Command entries mirror DeepSeek Harness's official UI primitives
+ * (MIT-licensed): packages/client/ui-primitives/src/icons/index.tsx.
+ */
 export const PICKER_ICON_NODES = {
   // Command
   command: [{ tag: 'path', attrs: { d: 'M15 6v12a3 3 0 1 0 3-3H6a3 3 0 1 0 3 3V6a3 3 0 1 0-3 3h12a3 3 0 1 0-3-3' } }],
@@ -214,4 +219,14 @@ export function AgentLogo({ agent, size = 22 }: { agent: LocalAgent; size?: numb
     const Tag = node.tag
     return <Tag key={index} {...node.attrs} />
   })}</svg>
+}
+
+/** RC2 accepts icon components; keep the existing projection markers in a node. */
+const candidateIcons = new Map<string, NonNullable<InputTriggerCandidate['icon']>>()
+export function candidateIcon(marker: string): NonNullable<InputTriggerCandidate['icon']> {
+  const cached = candidateIcons.get(marker)
+  if (cached) return cached
+  const icon = marker as unknown as NonNullable<InputTriggerCandidate['icon']>
+  candidateIcons.set(marker, icon)
+  return icon
 }

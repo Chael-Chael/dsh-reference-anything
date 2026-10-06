@@ -75,13 +75,15 @@ Type `@`, search across enabled sources, and insert the selected reference into 
 
 ## 📰 News
 
+- **2026-10-06 · v0.4.3** — Reference Anything now supports DSH Desktop! Enjoy a refreshed and optimized settings page!
+
 - **2026-09-28 · v0.4.2 — Important update** — Fixed a fatal plugin compatibility error with the current DSH interface. During plugin loading, DSH now requires every strict `agentSearch` registration codec to provide a `create()` validator factory; v0.4.1 supplied only validation rules, so DSH rejected the plugin before search could run. This release adds the required factory and fixes command icon sizing plus bilingual command labels in the native picker.
 
 - **2026-09-25 · v0.4.1** — We're back!!🎉🎉 Improved local-agent session titles by reading Codex's own `session_index.jsonl` and added Pi/Codex title support. Restored the native DSH handling for `@` menu group headings to avoid translucent overlap and unnecessary custom blur rendering; bounded index reads to 16 MiB for predictable resource use.
 
-- **2026-09-03 · v0.4.0** — **Compatibility: DSH `>=0.1.2-rc.1`.** Migrated Skills discovery to the DSH RC1 Skills Remote, restored historical reference grants through the RC1 Session snapshot API, and verified the plugin against DSH `0.1.2-rc.1`.
+- **2026-09-03 · v0.4.0** — **Compatibility: DSH `>=0.2.0-rc.2`.** Migrated Skills discovery to the DSH RC1 Skills Remote, restored historical reference grants through the RC1 Session snapshot API, and verified the plugin against DSH `0.2.0-rc.2`.
 
-- **2026-08-28 · v0.3.3** — Improved dark-theme backgrounds for the reference menu and settings panels, added project screenshot metadata, and refreshed the documentation. This was the final release line targeting the current stable DeepSeek Harness SDK; `v0.4.0` migrated to DeepSeek Harness `v0.1.2-rc.1` under the npm `alpha` tag and does not support older DSH releases.
+- **2026-08-28 · v0.3.3** — Improved dark-theme backgrounds for the reference menu and settings panels, added project screenshot metadata, and refreshed the documentation. This was the final release line targeting the current stable DeepSeek Harness SDK; `v0.4.0` migrated to DeepSeek Harness `v0.2.0-rc.2` under the npm `alpha` tag and does not support older DSH releases.
 - **2026-08-25 · v0.3.2** — Added local-agent conversation references, with detected session counts and custom-folder support. Web AI sync can be age-limited; cloud drives now support folder browsing and quick download-folder access. Settings include update notes, and local-agent tool details stay concise unless expanded.
 - **2026-08-20 · v0.3.0** — Completed the native DSH `@` integration: five independently configurable sources, official file/session Remotes, native Composer references with source logos, in-place expand/collapse and sync actions, and a one-click switch between Reference Anything and the official DSH `@` list. The legacy `dsh-file:` protocol and custom Composer interaction layer were removed.
 
@@ -110,7 +112,7 @@ Install the stable `0.3.x` line for the current stable DSH SDK:
 dsh plugin --profile web add dsh-reference-anything@latest
 ```
 
-Install `v0.4.2` on DSH `>=0.1.2-rc.1`:
+Install `v0.4.3` on DSH `>=0.2.0-rc.2`:
 
 ```powershell
 dsh plugin --profile web add dsh-reference-anything@alpha
@@ -127,7 +129,7 @@ npm run check
 dsh plugin --profile web add .
 ```
 
-To install the alpha source locally with DSH `v0.1.2-rc.1` or newer:
+To install the alpha source locally with DSH `v0.2.0-rc.2` or newer:
 
 ```powershell
 git switch alpha

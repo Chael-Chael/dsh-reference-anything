@@ -75,7 +75,7 @@ function clamp(value: number): number {
 
 export interface ManagedConversation extends ConversationRow { remoteMissing: boolean }
 export interface BrowsePage { items: readonly ManagedConversation[]; total: number }
-export interface StorageStats { bytes: number; conversations: number; remoteMissing: number; oldAccountConversations: number }
+export interface StorageStats { bytes: number; conversations: number; remoteMissing: number; oldAccountConversations: number; systemTempDirectory?: string }
 export interface ProviderSyncState {
   provider: ChatProvider; status: 'idle' | 'running' | 'cancelled' | 'failed'
   lastSyncAt: string; lastCompleteScanAt: string; error: string

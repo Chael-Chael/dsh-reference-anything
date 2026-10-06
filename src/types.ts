@@ -248,6 +248,6 @@ export interface ReferenceInput {
 
 declare module '@deepseek-ai/dsh-llm' {
   interface MessageSourceMap {
-    'reference-anything': ReferenceContextSource
+    'reference-anything': ReferenceContextSource | { readonly kind: 'reference-anything'; readonly form: 'notice'; readonly summary: string }
   }
 }

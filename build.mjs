@@ -13,6 +13,7 @@ const clientExternals = [
   '@deepseek-ai/cordis',
   '@deepseek-ai/dsh-api-session-controller/client',
   '@deepseek-ai/dsh-client-store',
+  '@deepseek-ai/dsh-client-ui-primitives',
   'react',
   'react-dom',
   'react/jsx-runtime',
@@ -45,8 +46,11 @@ await build({
 })
 
 const logoDataUri = `data:image/png;base64,${readFileSync(resolve('images/logo.png')).toString('base64')}`
+const monoLogoDataUri = `data:image/png;base64,${readFileSync(resolve('images/logo-mono.png')).toString('base64')}`
 const bundledClient = resolve('lib/client.js')
-const clientSource = readFileSync(bundledClient, 'utf8').replaceAll('__REFERENCE_ANYTHING_LOGO_DATA_URI__', logoDataUri)
+const clientSource = readFileSync(bundledClient, 'utf8')
+  .replaceAll('__REFERENCE_ANYTHING_LOGO_DATA_URI__', logoDataUri)
+  .replaceAll('__REFERENCE_ANYTHING_MONO_LOGO_DATA_URI__', monoLogoDataUri)
 const runtimeRequires = [...clientSource.matchAll(/require\("([^"]+)"\)/gu)].map(match => match[1])
 const unexpectedRequires = [...new Set(runtimeRequires.filter(specifier => !clientExternals.includes(specifier)))]
 if (unexpectedRequires.length > 0) {

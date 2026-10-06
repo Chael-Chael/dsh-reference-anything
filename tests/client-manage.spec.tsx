@@ -26,7 +26,7 @@ function conversation(overrides: Partial<ManagedConversation> = {}): ManagedConv
 function snapshot(browse: BrowseState): SettingsSnapshot { return { settings, browse } }
 
 const healthyHealth: Health = {
-  version: '1.8.6', daemon: 'Daemon: running', pluginInstalled: true, daemonRunning: true,
+  version: '1.8.6', daemon: 'Daemon: running', pluginInstalled: true, updateAvailable: false, daemonRunning: true,
   extensionConnected: true, extensionState: 'connected', opencliCompatible: true,
   daemonVersion: '1.8.6', daemonStale: false, connectivityOk: true, connectivityChecked: true,
   pluginVersion: '0.2.1', adapterCommandsReady: true, adapterCompatible: true,
@@ -93,13 +93,14 @@ describe('cloud-drive download directory', () => {
   })
 
   it('distinguishes the system temporary directory from a custom directory', () => {
-    const system = renderSettings({ settings })
-    expect(system.querySelector('.dsh_ref_cloud_download_state')?.textContent).toBe('System temporary directory')
+    const system = renderSettings({ settings, storage: { bytes: 0, conversations: 0, remoteMissing: 0, oldAccountConversations: 0, systemTempDirectory: 'C:\\Temp' } })
+    expect(system.querySelector('.dsh_ref_cloud_download_state')).toBeNull()
+    expect(directoryInput(system).placeholder).toBe('C:\\Temp')
     expect(directoryInput(system).value).toBe('')
 
     act(() => { root!.unmount() }); host!.remove()
     const custom = renderSettings({ settings: { ...settings, cloudDriveDownloadDirectory: 'D:\\Reference Downloads' } })
-    expect(custom.querySelector('.dsh_ref_cloud_download_state')?.textContent).toBe('Custom directory')
+    expect(custom.querySelector('.dsh_ref_cloud_download_state')).toBeNull()
     expect(directoryInput(custom).value).toBe('D:\\Reference Downloads')
   })
 
@@ -247,7 +248,7 @@ describe('local agent settings', () => {
     const cards = el.querySelectorAll('[data-local-agent]')
     expect(cards).toHaveLength(14)
     expect(Array.from(cards).map(card => card.getAttribute('data-local-agent'))).toContain('codex')
-    const codex = el.querySelector('[data-local-agent="codex"] input') as HTMLInputElement
+    const codex = el.querySelector('[data-local-agent="codex"] button[role="switch"]') as HTMLButtonElement
     await act(async () => { codex.click() })
     expect(save).toHaveBeenCalledWith(expect.objectContaining({ enabledAgents: expect.not.arrayContaining(['codex']) }))
   })
@@ -329,7 +330,7 @@ describe('local agent source selection', () => {
   it('shows every supported agent and saves an explicit selection', async () => {
     const saved: SettingsRecord[] = []
     const el = renderSettings({ settings }, { save: async value => { saved.push(value) } })
-    const choices = el.querySelector('.dsh_ref_selection_grid')!.querySelectorAll<HTMLInputElement>('input')
+    const choices = el.querySelector('.dsh_ref_agent_choices .dsh_ref_selection_grid')!.querySelectorAll<HTMLButtonElement>('button[role="switch"]')
     expect(choices).toHaveLength(14)
     await act(async () => { choices[0]!.click() })
     expect(saved.at(-1)?.enabledAgents).not.toContain('claude-code')
@@ -345,19 +346,13 @@ describe('local agent source selection', () => {
     const providerGrid = el.querySelector('.dsh_ref_chat > .dsh_ref_provider_grid')!
     const agentCard = el.querySelector('.dsh_ref_agent_sources')!
     const driveCard = el.querySelector('.dsh_ref_drive_sources')!
-    const agentChoices = el.querySelector('.dsh_ref_agent_choices')!
     const cloudSetup = el.querySelector('.dsh_ref_cloud')!
-    const driveChoices = el.querySelector('.dsh_ref_drive_choices')!
-    expect(agentCard.contains(agentChoices)).toBe(true)
-    expect(agentCard.contains(driveChoices)).toBe(false)
-    expect(driveCard.contains(driveChoices)).toBe(true)
+    expect(agentCard.querySelectorAll('[data-local-agent]')).toHaveLength(14)
     expect(agentCard.compareDocumentPosition(driveCard) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0)
     expect(driveCard.compareDocumentPosition(providerGrid) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0)
-    expect(cloudSetup.compareDocumentPosition(driveChoices) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0)
-    const driveToggles = driveChoices.querySelectorAll<HTMLInputElement>('input')
-    expect(driveToggles).toHaveLength(2)
-    await act(async () => { driveToggles[0]!.click() })
-    expect(saved.at(-1)?.enabledDriveMounts).toEqual(['/archive'])
+    expect(driveCard.contains(cloudSetup)).toBe(true)
+    expect(driveCard.textContent).toContain('/work')
+    expect(driveCard.textContent).toContain('/archive')
   })
 })
 
@@ -495,7 +490,7 @@ describe('general settings editing', () => {
   it('defaults the chat history range to unlimited and saves days or unlimited', async () => {
     const saved: SettingsRecord[] = []
     const el = renderSettings({ settings }, { save: async value => { saved.push(value) } })
-    const input = el.querySelector<HTMLInputElement>('input[aria-label="Chat history sync range (days)"]')!
+    const input = el.querySelector<HTMLInputElement>('input[aria-label="Sync conversations from the last N days"]')!
 
     expect(input.value).toBe('')
     expect(input.placeholder).toBe('Unlimited')
@@ -524,14 +519,15 @@ describe('general settings editing', () => {
     expect(saved.at(-1)?.picker?.commands.limit).toBe(12)
   })
 
-  it('switches the picker from collapse controls to native DSH scrolling', () => {
+  it('switches the picker from collapse controls to native DSH scrolling', async () => {
     const saved: SettingsRecord[] = []
     const current: SettingsSnapshot = { settings: { ...settings, picker: defaultPickerSettings() }, loading: true }
     const useScope = ((selector: (value: SettingsSnapshot) => unknown) => selector(current)) as never
     const el = render(<ConversationSettings close={() => {}} useWorkspaces={(() => []) as never} useScope={useScope} save={async value => { saved.push(value) }} sync={noop} cancel={noop} refresh={noop} setupAll={noop} discoverOpenCli={noop} installOpenCli={noop} useProfile={noop} install={noop} restartDaemon={noop} checkUpdate={noop} installUpdate={noop} browse={noop} deleteConversation={noop} clearProvider={noop} refreshStats={noop} t={t} />)
-    const select = el.querySelector('.dsh_ref_render_mode select') as HTMLSelectElement
-
-    act(() => { setNativeValue(select, 'native-scroll'); select.dispatchEvent(new Event('change', { bubbles: true })) })
+    const trigger = el.querySelector<HTMLButtonElement>('.dsh_ref_render_mode .dsh_ref_menu_trigger')!
+    await act(async () => { trigger.click() })
+    const option = Array.from(document.querySelectorAll<HTMLButtonElement>('button')).find(button => button.textContent === 'No collapse (native)')!
+    await act(async () => { option.click() })
     expect(saved.at(-1)?.picker?.displayMode).toBe('native-scroll')
   })
 
@@ -623,8 +619,11 @@ describe('viability recovery actions', () => {
       { id: 'personal-id', alias: 'personal', connected: true, isDefault: false },
     ]
     const el = renderSettings({ settings, loading: false, health, profiles }, { useProfile: async profile => { selected.push(profile) } })
-    const button = Array.from(el.querySelectorAll('.dsh_ref_check_profile button'))[0] as HTMLButtonElement
-
+    const trigger = el.querySelector<HTMLButtonElement>('.dsh_ref_check_profile .dsh_ref_menu_trigger')!
+    await act(async () => { trigger.click() })
+    const option = Array.from(document.querySelectorAll<HTMLButtonElement>('button')).find(button => button.textContent === 'work')!
+    await act(async () => { option.click() })
+    const button = Array.from(el.querySelectorAll('.dsh_ref_check_profile button')).find(item => item.textContent === 'Use this profile') as HTMLButtonElement
     await act(async () => { button.click() })
     expect(selected).toEqual(['work-id'])
   })

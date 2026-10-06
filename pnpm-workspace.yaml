@@ -1,3 +1,5 @@
 allowBuilds:
   '@jackwener/opencli': false
   esbuild: true
+overrides:
+  zustand: 5.0.15

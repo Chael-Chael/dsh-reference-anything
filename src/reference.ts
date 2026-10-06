@@ -209,11 +209,10 @@ function notice(summary: string): UserMessage {
       text: `A conversation reference in the previous message could not be resolved: ${summary}`,
     }],
     source: {
-      kind: 'plugin',
-      plugin: name,
+      kind: 'reference-anything',
       form: 'notice',
       summary: boundContextSummary(summary),
-    },
+    } as never,
   })
 }
 

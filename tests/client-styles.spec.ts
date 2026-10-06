@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
-  adoptMenuGroupTitleProjection, adoptMenuViewportTracking, adoptReferenceIconProjection, adoptStyles,
+  adoptMenuGroupTitleProjection, adoptMenuViewportTracking, adoptReferenceIconProjection, adoptSettingsIconProjection, adoptStyles,
   mutateActiveTriggerMenu, refreshActiveTriggerMenu,
 } from '../src/client/styles.ts'
 import { LOCAL_AGENT_ICON_MARKER, PICKER_ICON_MARKER, PROVIDER_ICON_PATH } from '../src/client/provider-icons.tsx'
@@ -12,11 +12,33 @@ afterEach(() => {
 })
 
 describe('reference DOM customization', () => {
+  it('projects the logo only onto its settings entry and restores it on disposal', async () => {
+    document.body.innerHTML = `<div data-shortcut-modal="settings"><nav>
+      <button><svg></svg><span>Reference Anything</span></button>
+      <button><svg></svg><span>Plugin market</span></button>
+    </nav></div><nav><button>Reference Anything</button></nav>`
+    const dispose = adoptSettingsIconProjection()
+    expect(document.querySelectorAll('[data-dsh-ref-settings-icon]')).toHaveLength(1)
+    const nav = document.querySelector('[data-shortcut-modal="settings"] nav')!
+    const later = document.createElement('button')
+    later.textContent = 'Reference Anything'
+    nav.replaceChildren(later)
+    await new Promise(resolve => setTimeout(resolve, 0))
+    expect(later.hasAttribute('data-dsh-ref-settings-icon')).toBe(true)
+    later.textContent = 'Plugin market'
+    await new Promise(resolve => setTimeout(resolve, 0))
+    expect(later.hasAttribute('data-dsh-ref-settings-icon')).toBe(false)
+    later.textContent = 'Reference Anything'
+    await new Promise(resolve => setTimeout(resolve, 0))
+    dispose()
+    expect(document.querySelector('[data-dsh-ref-settings-icon]')).toBeNull()
+  })
+
   it('keeps @ menu and settings styles and scopes the Composer override to the icon slot', () => {
     adoptStyles()
     const text = document.getElementById('dsh-reference-anything-style')?.textContent ?? ''
     expect(text).toContain('[data-composer-card] [role="listbox"]:has')
-    expect(text).toContain('[data-trigger-menu]:has(> [role="listbox"] [role="presentation"][data-source]){border-radius:22px}')
+    expect(text).toContain('[data-trigger-menu]:has(> [role="listbox"] [role="presentation"][data-source]){border-radius:var(--dsw-radius-lg,22px)}')
     expect(text).not.toContain('border-radius:22px!important')
     expect(text).not.toContain('[role="presentation"][data-source]{position:sticky')
     expect(text).not.toContain('[role="presentation"][data-source]:not(:first-child)')
@@ -27,13 +49,29 @@ describe('reference DOM customization', () => {
     expect(text).toContain('.dsh_ref_projected_icon')
     expect(text).toContain('.dsh_ref_picker_icon')
     expect(text).toContain('.dsh_ref_settings')
+    expect(text).toContain('button[data-dsh-ref-settings-icon]::before')
+    expect(text).toContain('background:url("__REFERENCE_ANYTHING_MONO_LOGO_DATA_URI__") center/contain no-repeat')
+    expect(text).toContain('image-rendering:auto')
+    expect(text).toContain('body[data-ds-dark-theme] [data-shortcut-modal="settings"] nav button[data-dsh-ref-settings-icon]::before{filter:invert(1)}')
     expect(text).toContain('--dsh-ref-card-surface:#2c2c30;--dsh-ref-control-surface:var(--dsw-alias-bg-layer-2,#363640)')
     expect(text).toContain('body[data-ds-dark-theme] .dsh_ref_workspace>.dsh_ref_panel,body[data-ds-dark-theme] .dsh_ref_workspace>.dsh_ref_sources{background:#242428}')
+    expect(text).toContain('.dsh_ref_header h2{font-size:20px;line-height:28px;font-weight:500}')
+    expect(text).toContain('.dsh_ref_settings button,.dsh_ref_settings input,.dsh_ref_settings select,.dsh_ref_settings textarea{font-family:inherit}')
+    expect(text).toContain('.dsh_ref_section_head p,.dsh_ref_storage_header p{font-size:12px;line-height:18px}')
+    expect(text).toContain('.dsh_ref_form_grid>label>span,.dsh_ref_render_mode b{font-size:14px;line-height:22px;font-weight:400}')
+    expect(text).toContain('.dsh_ref_form_grid>label>.dsh_ref_field_note,.dsh_ref_render_mode small,.dsh_ref_field_note{font-size:12px;line-height:18px}')
+    expect(text).toContain('.dsh_ref_manage_meta,.dsh_ref_badge,.dsh_ref_manage_row_actions a,.dsh_ref_manage_row_actions button,.dsh_ref_pagination{font-size:12px;line-height:18px}')
+    expect(text).toContain('.dsh_ref_provider_summary{grid-template-columns:minmax(0,1fr) auto;grid-template-rows:auto auto;align-items:baseline;gap:4px 8px}')
+    expect(text).toContain('.dsh_ref_provider_summary>small{grid-column:1 / -1;grid-row:2;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}')
     expect(text).not.toContain('.dsh_ref_panel.dsh_ref_general_settings{padding:0;border:0')
     expect(text).toContain('grid-template-columns:minmax(150px,1fr) auto auto auto')
     expect(text).toContain('[data-decoration="chip"][data-dsh-ref-chip-icon]')
     expect(text).toContain('[data-composer-chip][data-dsh-ref-chip-icon]')
     expect(text).toContain('--dsh-ref-chip-icon-mask')
+    expect(text).toContain('width:min(100%,760px)')
+    expect(text).toContain('min-height:68px;padding:16px 0;border:0;border-bottom:.5px solid var(--dsh-ref-line)')
+    expect(text).toContain('grid-template-columns:repeat(2,minmax(0,1fr));gap:10px')
+    expect(text).toContain('border:.5px solid var(--dsh-ref-card-stroke);border-radius:var(--dsw-radius-xl,16px)')
     expect(text).not.toContain('[data-decoration="text-ref"]')
     expect(text).not.toContain('dsh_ref_adaptive_caret')
     expect(text).not.toContain('dsh_ref_message_reference')

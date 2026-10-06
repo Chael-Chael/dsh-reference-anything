@@ -32,7 +32,7 @@ describe('OpenCLI sync browser lifecycle', () => {
 
   it('uses provider API readiness instead of waiting for SPA DOM stability', async () => {
     const source = await readFile(new URL('../opencli-plugin/common.js', import.meta.url), 'utf8')
-    expect(source.match(/page\.goto\(config\.home, \{ waitUntil: 'none' \}\)/g)).toHaveLength(3)
+    expect(source.match(/navigate\(page, config\.home, \{ waitUntil: 'none' \}\)/g)).toHaveLength(3)
     expect(source).not.toContain('settleMs: 1200')
     // Detail and attachment navigation retain their shorter workflow-specific settle windows.
     expect(source).toContain('settleMs: 600')

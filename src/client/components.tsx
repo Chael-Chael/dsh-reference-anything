@@ -1,7 +1,9 @@
 import type { InjectFace, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import type { ObservableSnapshot } from '@deepseek-ai/dsh-client-store'
-import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react'
+import { Button, Checkbox, Input, Menu, Switch } from '@deepseek-ai/dsh-client-ui-primitives'
+import { useEffect, useId, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import ReactMarkdown from 'react-markdown'
+import Sortable from 'sortablejs'
 import { ALL_LOCAL_AGENTS, LOCAL_AGENT_LABEL, defaultPickerSettings, type ChatProvider, type LocalAgent, type PickerSettings, type PickerSource, type SettingsRecord } from '../wire.ts'
 import { syncProgressFraction, type AgentStats, type BrowsePage, type BrowserProfile, type Health, type OpenListDriver, type OpenListMount, type OpenListStatus, type PackageUpdateStatus, type ProviderStats, type StorageStats, type SyncStatus } from './remote.ts'
 import { AgentLogo, ProviderLogo } from './provider-icons.tsx'
@@ -46,8 +48,38 @@ export interface SettingsInjected {
   pickAgentDirectory?(agent: LocalAgent): Promise<void>
   openCloudDriveDownloadDirectory?(): Promise<void>
 }
+
+function SettingsDisclosure({ title, description, open, onToggle, children, className = '' }: { title: ReactNode; description: ReactNode; open: boolean; onToggle: () => void; children: ReactNode; className?: string }) {
+  const detailsId = useId()
+  return <section className={`setCard dsh_ref_collapsible ${open ? 'setCardOpen' : ''} ${className}`} data-open={open ? 'true' : undefined}>
+    <Button className="setHeader dsh_ref_collapsible_head" type="button" aria-expanded={open} aria-controls={detailsId} onClick={onToggle}>
+      <span className="setHeadText dsh_ref_collapsible_text"><span className="setName dsh_ref_collapsible_title">{title}</span><span className="setDesc dsh_ref_collapsible_description">{description}</span></span><span className="setChevron dsh_ref_collapsible_chevron" aria-hidden="true"/>
+    </Button>
+    <div className="setBody dsh_ref_collapsible_body" id={detailsId} hidden={!open}>{children}</div>
+  </section>
+}
+
+function DshSwitch({ checked, onChange, label, disabled = false, className = '' }: { checked: boolean; onChange(next: boolean): void; label: string; disabled?: boolean; className?: string }) {
+  return <Switch checked={checked} onChange={onChange} label={label} disabled={disabled} className={className} />
+}
+
+function DshMenuSelect({ value, options, onChange, ariaLabel, disabled = false }: { value: string; options: readonly { value: string; label: string }[]; onChange(value: string): void; ariaLabel?: string; disabled?: boolean }) {
+  const [open, setOpen] = useState(false)
+  const selected = options.find(option => option.value === value) ?? options[0]
+  return <Menu
+    className="dsh_ref_official_menu"
+    portal
+    listClassName="dsh_ref_select_menu"
+    open={open}
+    anchor={<Button type="button" className="dsh_ref_menu_trigger" aria-label={ariaLabel} aria-expanded={open} disabled={disabled} onClick={() => { setOpen(current => !current) }}><span>{selected?.label ?? ''}</span><span className="dsh_ref_menu_chevron" aria-hidden="true" /></Button>}
+    items={options.map(option => ({ id: option.value, label: option.label }))}
+    selectedId={value}
+    onSelect={next => { onChange(next); setOpen(false) }}
+    onClose={() => { setOpen(false) }}
+  />
+}
 type T = TranslateNS<typeof REFERENCE_ANYTHING_NS>
-type SettingsProps = Omit<PropsRuntime<'settings.section'>, 'useSessionPendingInteraction'> & InjectFace<SettingsInjected> & { t: T }
+type SettingsProps = Omit<PropsRuntime<'settings.section'>, 'useSessionPendingInteraction' | 'useSessions'> & InjectFace<SettingsInjected> & { t: T }
 const PROVIDERS: ChatProvider[] = ['chatgpt', 'claude', 'gemini', 'deepseek', 'grok', 'kimi']
 /** Keystrokes to ride out before a typed filter re-queries the Host. */
 const SEARCH_DEBOUNCE_MS = 300
@@ -90,10 +122,26 @@ export function ConversationSettings({ useScope, save, sync, cancel, refresh, re
   const [autoSyncMinutes, setAutoSyncMinutes] = useState(String(settings.autoSyncMinutes))
   const [syncHistoryDays, setSyncHistoryDays] = useState(settings.syncHistoryDays === null ? '' : String(settings.syncHistoryDays))
   const [maxReadTurns, setMaxReadTurns] = useState(String(settings.maxReadTurns))
+  const [openSections, setOpenSections] = useState<Record<string, boolean>>({ sync: true, storage: true })
   const [repairProfile, setRepairProfile] = useState('')
   const [pickerLimits, setPickerLimits] = useState<Record<PickerSource, string>>(() => pickerLimitDrafts(picker))
   const [pickerMaxCandidates, setPickerMaxCandidates] = useState<Record<PickerSource, string>>(() => pickerMaxCandidateDrafts(picker))
+  const [draggingPicker, setDraggingPicker] = useState<PickerSource | undefined>()
+  const pickerListRef = useRef<HTMLDivElement>(null)
   const automaticQuickRefresh = useRef(quickRefreshOnOpen)
+  useLayoutEffect(() => {
+    let frame = 0
+    let settleFrame = 0
+    const resetSettingsScroll = () => {
+      const settingsRoot = document.querySelector<HTMLElement>('.dsh_ref_settings')
+      let node = settingsRoot?.parentElement
+      while (node) { node.scrollTop = 0; node = node.parentElement }
+    }
+    resetSettingsScroll()
+    frame = requestAnimationFrame(resetSettingsScroll)
+      settleFrame = requestAnimationFrame(() => { requestAnimationFrame(resetSettingsScroll) })
+      return () => { cancelAnimationFrame(frame); cancelAnimationFrame(settleFrame) }
+  }, [])
   useEffect(() => { setOpencliPath(settings.opencliPath); setProfile(settings.profile); setDetailConcurrency(String(settings.detailConcurrency)); setAutoSyncMinutes(String(settings.autoSyncMinutes)); setSyncHistoryDays(settings.syncHistoryDays === null ? '' : String(settings.syncHistoryDays)); setMaxReadTurns(String(settings.maxReadTurns)) }, [settings.opencliPath, settings.profile, settings.detailConcurrency, settings.autoSyncMinutes, settings.syncHistoryDays, settings.maxReadTurns])
   useEffect(() => { setPickerLimits(pickerLimitDrafts(picker)) }, [picker.commands.limit, picker.skills.limit, picker.files.limit, picker.sessions.limit, picker.agents.limit, picker.conversations.limit, picker.drives.limit])
   useEffect(() => { setPickerMaxCandidates(pickerMaxCandidateDrafts(picker)) }, [picker.commands.maxCandidates, picker.skills.maxCandidates, picker.files.maxCandidates, picker.sessions.maxCandidates, picker.agents.maxCandidates, picker.conversations.maxCandidates, picker.drives.maxCandidates])
@@ -149,10 +197,8 @@ export function ConversationSettings({ useScope, save, sync, cancel, refresh, re
     return opened
   }
   const profileControl = connectedProfiles.length > 0 ? <div className="dsh_ref_check_profile">
-    <select aria-label={t('settings.profileRecoveryChoice')} value={repairProfile} onChange={event => { setRepairProfile(event.target.value) }}>
-      {connectedProfiles.map(item => <option key={item.id} value={item.id}>{item.alias || item.id}</option>)}
-    </select>
-    <button type="button" disabled={!repairProfile || Boolean(busyAction)} onClick={() => { runAction('profile', () => useProfile(repairProfile)) }}>{busyAction === 'profile' ? t('settings.applying') : t('settings.useProfile')}</button>
+    <DshMenuSelect ariaLabel={t('settings.profileRecoveryChoice')} value={repairProfile} options={connectedProfiles.map(item => ({ value: item.id, label: item.alias || item.id }))} onChange={setRepairProfile} />
+    <Button type="button" disabled={!repairProfile || Boolean(busyAction)} onClick={() => { runAction('profile', () => useProfile(repairProfile)) }}>{busyAction === 'profile' ? t('settings.applying') : t('settings.useProfile')}</Button>
   </div> : undefined
   const needsProfileRecovery = state.health?.extensionState === 'profile-required' || state.health?.extensionState === 'profile-disconnected'
   let extensionActionLabel: string | undefined
@@ -195,47 +241,73 @@ export function ConversationSettings({ useScope, save, sync, cancel, refresh, re
     }
     setPickerMaxCandidates(current => ({ ...current, [id]: String(picker[id].maxCandidates) }))
   }
-  const movePicker = (id: PickerSource, direction: -1 | 1) => {
+  const reorderPicker = (from: PickerSource, to: PickerSource) => {
     const ids = [...PICKER_SOURCES].sort((a, b) => picker[a.id].order - picker[b.id].order).map(row => row.id)
-    const index = ids.indexOf(id); const other = ids[index + direction]
-    if (other === undefined) return
-    savePicker({ ...picker, [id]: { ...picker[id], order: picker[other].order }, [other]: { ...picker[other], order: picker[id].order } })
+    const fromIndex = ids.indexOf(from); const toIndex = ids.indexOf(to)
+    if (fromIndex < 0 || toIndex < 0 || fromIndex === toIndex) return
+    ids.splice(fromIndex, 1); ids.splice(toIndex, 0, from)
+    const next = { ...picker }
+    ids.forEach((id, index) => { next[id] = { ...next[id], order: index } })
+    savePicker(next)
   }
+  useEffect(() => {
+    const list = pickerListRef.current
+    if (!list) return
+    const sortable = Sortable.create(list, {
+      animation: 220,
+      easing: 'cubic-bezier(0.2, 0.8, 0.2, 1)',
+      handle: '.dsh_ref_picker_drag_handle',
+      draggable: '.dsh_ref_picker_row',
+      ghostClass: 'dsh_ref_picker_row_is_ghost',
+      onStart: event => { setDraggingPicker(event.item.dataset.pickerId as PickerSource | undefined) },
+      onEnd: event => {
+        const from = event.item.dataset.pickerId as PickerSource | undefined
+        const to = event.newIndex === undefined ? null : event.to.children[event.newIndex]?.getAttribute('data-picker-id') as PickerSource | null
+        if (from && to) reorderPicker(from, to)
+        setDraggingPicker(undefined)
+      },
+    })
+    return () => { sortable.destroy() }
+  }, [picker])
   return <section className="dsh_ref_settings">
     <div className="dsh_ref_notice_layer">{state.notice && <div className="dsh_ref_notice" role="status">{state.notice}</div>}</div>
     <header className="dsh_ref_header"><div className="dsh_ref_header_brand"><img src={REFERENCE_ANYTHING_LOGO} alt=""/><div><h2>{t('settings.title')}</h2><p>{t('settings.subtitle')}</p></div></div></header>
     <section className={`dsh_ref_update_bar${state.update?.updateAvailable ? ' is_available' : ''}`} aria-label={t('settings.updateTitle')}>
       <div className="dsh_ref_update_copy"><strong>{updateTitle(state.update, t)}</strong><small>{updateDetail(state.update, t)}</small></div>
       <div className="dsh_ref_update_actions">
-        {state.update?.updateAvailable && <button className="is_primary" type="button" disabled={Boolean(busyAction)} onClick={() => {
+        {state.update?.updateAvailable && <Button className="is_primary" type="button" disabled={Boolean(busyAction)} onClick={() => {
           if (window.confirm(t('settings.updateConfirm', { version: state.update?.latestVersion ?? '' }))) runAction('package-update', installUpdate)
-        }}>{busyAction === 'package-update' ? t('settings.updating') : t('settings.updateNow', { version: state.update.latestVersion })}</button>}
-        {state.update?.releaseNotes && <button type="button" aria-expanded={showReleaseNotes} onClick={() => { setShowReleaseNotes(value => !value) }}>{t(showReleaseNotes ? 'settings.hideReleaseNotes' : 'settings.showReleaseNotes')}</button>}
-        <button type="button" disabled={Boolean(busyAction)} onClick={() => { runAction('update-check', checkUpdate) }}>{busyAction === 'update-check' ? t('settings.checkingUpdate') : t('settings.checkUpdate')}</button>
+        }}>{busyAction === 'package-update' ? t('settings.updating') : t('settings.updateNow', { version: state.update.latestVersion })}</Button>}
+        {state.update?.releaseNotes && <Button type="button" aria-expanded={showReleaseNotes} onClick={() => { setShowReleaseNotes(value => !value) }}>{t(showReleaseNotes ? 'settings.hideReleaseNotes' : 'settings.showReleaseNotes')}</Button>}
+        <Button type="button" disabled={Boolean(busyAction)} onClick={() => { runAction('update-check', checkUpdate) }}>{busyAction === 'update-check' ? t('settings.checkingUpdate') : t('settings.checkUpdate')}</Button>
         <a className="dsh_ref_button" href={GITHUB_REPOSITORY_URL} target="_blank" rel="noreferrer">{t('settings.github')}</a>
       </div>
       {showReleaseNotes && state.update?.releaseNotes && <div className="dsh_ref_update_notes"><strong>{t('settings.updateContents')}</strong><div className="dsh_ref_update_markdown"><ReactMarkdown disallowedElements={['img']} components={{ a: ({ node: _node, ...props }) => <a {...props} target="_blank" rel="noreferrer" /> }}>{state.update.releaseNotes}</ReactMarkdown></div>{state.update.releaseUrl && <a href={state.update.releaseUrl} target="_blank" rel="noreferrer">{t('settings.fullReleaseNotes')}</a>}</div>}
     </section>
     <div className="dsh_ref_workspace">
     {state.error && <div className="dsh_ref_error" role="alert"><strong>{t('settings.actionFailed')}</strong><span>{state.error}</span></div>}
-    <section className="dsh_ref_panel dsh_ref_general_settings"><div className="dsh_ref_section_head"><div><h3>{t('settings.general')}</h3><p>{t('settings.generalDetail')}</p></div></div>
-      <label className="dsh_ref_render_mode"><span><b>{t('settings.pickerDisplayMode')}</b><small>{t('settings.pickerDisplayModeDetail')}</small></span><select value={picker.displayMode} onChange={event => { savePicker({ ...picker, displayMode: event.target.value as PickerSettings['displayMode'] }) }}><option value="collapse">{t('settings.pickerDisplayCollapse')}</option><option value="native-scroll">{t('settings.pickerDisplayNative')}</option></select></label>
-      <div className="dsh_ref_picker_list">{[...PICKER_SOURCES].sort((a, b) => picker[a.id].order - picker[b.id].order).map((row, index, rows) => <div className="dsh_ref_picker_row" key={row.id}>
-        <label className="dsh_ref_toggle dsh_ref_picker_toggle"><input type="checkbox" checked={picker[row.id].enabled} onChange={event => { patchPicker(row.id, { enabled: event.target.checked }) }} /><span/><b>{t(SOURCE_KEYS[row.label])}</b></label>
-        <label className="dsh_ref_picker_limit"><span>{t('settings.collapsedItems')}</span><input type="number" min={1} max={50} inputMode="numeric" value={pickerLimits[row.id]} aria-invalid={pickerLimits[row.id] !== '' && !validPickerLimit(pickerLimits[row.id])} onChange={event => { setPickerLimits(current => ({ ...current, [row.id]: event.target.value })) }} onBlur={() => { commitPickerLimit(row.id) }} onKeyDown={event => { if (event.key === 'Enter') event.currentTarget.blur() }} /></label>
-        <label className="dsh_ref_picker_limit"><span>{t('settings.maxCandidates')}</span><input type="number" min={1} max={50} inputMode="numeric" value={pickerMaxCandidates[row.id]} aria-invalid={pickerMaxCandidates[row.id] !== '' && !validPickerLimit(pickerMaxCandidates[row.id])} onChange={event => { setPickerMaxCandidates(current => ({ ...current, [row.id]: event.target.value })) }} onBlur={() => { commitPickerMaxCandidates(row.id) }} onKeyDown={event => { if (event.key === 'Enter') event.currentTarget.blur() }} /></label>
-        <div className="dsh_ref_picker_order"><button type="button" disabled={index === 0} aria-label={t('settings.moveUp', { item: t(SOURCE_KEYS[row.label]) })} onClick={() => { movePicker(row.id, -1) }}>↑</button><button type="button" disabled={index === rows.length - 1} aria-label={t('settings.moveDown', { item: t(SOURCE_KEYS[row.label]) })} onClick={() => { movePicker(row.id, 1) }}>↓</button></div>
+    <section className="dsh_ref_panel dsh_ref_settings_card dsh_ref_general_settings"><div className="dsh_ref_section_head"><div><h3>{t('settings.general')}</h3><p>{t('settings.generalDetail')}</p></div></div>
+      <div className="dsh_ref_picker_list" ref={pickerListRef}>{[...PICKER_SOURCES].sort((a, b) => picker[a.id].order - picker[b.id].order).map(row => <div className={`dsh_ref_picker_row${draggingPicker === row.id ? ' is_dragging' : ''}`} data-picker-id={row.id} key={row.id}>
+        <label className="dsh_ref_picker_toggle"><DshSwitch checked={picker[row.id].enabled} label={t(SOURCE_KEYS[row.label])} onChange={value => { patchPicker(row.id, { enabled: value }) }} /><b>{t(SOURCE_KEYS[row.label])}</b></label>
+        <label className="dsh_ref_picker_limit"><span>{t('settings.collapsedItems')}</span><Input type="number" min={1} max={50} inputMode="numeric" value={pickerLimits[row.id]} aria-invalid={pickerLimits[row.id] !== '' && !validPickerLimit(pickerLimits[row.id])} onChange={event => { setPickerLimits(current => ({ ...current, [row.id]: event.target.value })) }} onBlur={() => { commitPickerLimit(row.id) }} onKeyDown={event => { if (event.key === 'Enter') event.currentTarget.blur() }} /></label>
+        <label className="dsh_ref_picker_limit"><span>{t('settings.maxCandidates')}</span><Input type="number" min={1} max={50} inputMode="numeric" value={pickerMaxCandidates[row.id]} aria-invalid={pickerMaxCandidates[row.id] !== '' && !validPickerLimit(pickerMaxCandidates[row.id])} onChange={event => { setPickerMaxCandidates(current => ({ ...current, [row.id]: event.target.value })) }} onBlur={() => { commitPickerMaxCandidates(row.id) }} onKeyDown={event => { if (event.key === 'Enter') event.currentTarget.blur() }} /></label>
+        <div className="dsh_ref_picker_order"><button className="dsh_ref_picker_drag_handle" type="button" aria-label={t('settings.moveUp', { item: t(SOURCE_KEYS[row.label]) })}><span aria-hidden="true">⠿</span></button></div>
       </div>)}</div>
+      <label className="dsh_ref_render_mode"><span><b>{t('settings.pickerDisplayMode')}</b><small>{t('settings.pickerDisplayModeDetail')}</small></span><DshMenuSelect value={picker.displayMode} options={[{ value: 'collapse', label: t('settings.pickerDisplayCollapse') }, { value: 'native-scroll', label: t('settings.pickerDisplayNative') }]} onChange={value => { savePicker({ ...picker, displayMode: value as PickerSettings['displayMode'] }) }} ariaLabel={t('settings.pickerDisplayMode')} /></label>
     </section>
-    <section className="dsh_ref_sources dsh_ref_agent_sources">
-      <AgentSelectionCards enabledAgents={enabledAgents} stats={state.agentStats} directories={settings.agentDirectories} onEnabled={setAgentEnabled} onPickDirectory={pickAgentDirectory} t={t} />
-    </section>
-    <section className="dsh_ref_sources dsh_ref_drive_sources">
+    <SettingsDisclosure className="dsh_ref_agents_section" title={t('settings.localAgents')} description={t('settings.localAgentsDetail')} open={Boolean(openSections.agents)} onToggle={() => { setOpenSections(current => ({ ...current, agents: !current.agents })) }}>
+      <section className="dsh_ref_sources dsh_ref_agent_sources">
+        <AgentSelectionCards enabledAgents={enabledAgents} stats={state.agentStats} directories={settings.agentDirectories} onEnabled={setAgentEnabled} onPickDirectory={pickAgentDirectory} t={t} />
+      </section>
+    </SettingsDisclosure>
+    <SettingsDisclosure className="dsh_ref_drive_section" title={t('cloud.title')} description={t('cloud.detail')} open={Boolean(openSections.drive)} onToggle={() => { setOpenSections(current => ({ ...current, drive: !current.drive })) }}>
+      <section className="dsh_ref_sources dsh_ref_drive_sources">
       <CloudDrives state={state} save={save} pickDownloadDirectory={pickCloudDriveDownloadDirectory} openDownloadDirectory={openCloudDriveDownloadDirectory} refreshOpenList={refreshOpenList} install={openListInstall} upgrade={openListUpgrade} connect={openListConnectExternal} disconnect={openListDisconnect} createMount={openListCreateMount} disableMount={openListDisableMount} removeMount={openListRemoveMount} reindexMount={openListReindex} t={t} />
-      <DriveSelectionCards state={state} save={save} t={t} />
-    </section>
-    <section className="dsh_ref_sources dsh_ref_chat"><div className="dsh_ref_section_head"><div><h3>{t('settings.sources')}</h3><p>{t('settings.sourcesDetail')}</p></div>{state.sync?.status === 'running' && <span className="dsh_ref_syncing">{t('settings.syncing', { source: t('settings.sources'), completed: state.sync.completed, total: state.sync.total })}</span>}</div>
-      <section className="dsh_ref_viability"><div className="dsh_ref_section_head"><div><h3>{t('settings.viability')}</h3><p>{t('settings.viabilityDetail')}</p></div><div className="dsh_ref_viability_actions"><button className="dsh_ref_recheck" type="button" disabled={state.loading || Boolean(busyAction)} onClick={() => { runAction('refresh', refresh) }}>{busyAction === 'refresh' ? t('settings.checking') : t('settings.recheck')}</button></div></div>
+      </section>
+    </SettingsDisclosure>
+    <SettingsDisclosure className="dsh_ref_chat_section" title={t('settings.sources')} description={t('settings.sourcesDetail')} open={Boolean(openSections.chat)} onToggle={() => { setOpenSections(current => ({ ...current, chat: !current.chat })) }}>
+      <section className="dsh_ref_sources dsh_ref_chat">{state.sync?.status === 'running' && <div className="dsh_ref_syncing">{t('settings.syncing', { source: t('settings.sources'), completed: state.sync.completed, total: state.sync.total })}</div>}
+      <section className="dsh_ref_viability dsh_ref_settings_card"><div className="dsh_ref_section_head"><div><h3>{t('settings.viability')}</h3><p>{t('settings.viabilityDetail')}</p></div><div className="dsh_ref_viability_actions"><Button className="dsh_ref_recheck" type="button" disabled={state.loading || Boolean(busyAction)} onClick={() => { runAction('refresh', refresh) }}>{busyAction === 'refresh' ? t('settings.checking') : t('settings.recheck')}</Button></div></div>
         {state.loading ? <div className="dsh_ref_skeleton"><i/><i/><i/></div> : <div className="dsh_ref_checklist">
           <CheckRow label="OpenCLI" detail={openCliStateDetail(state.health, t)} ready={opencliReady}
             actionLabel={!state.health?.version ? t('settings.installOpenCli') : state.health.updateAvailable ? `更新到 v${state.health.latestVersion}` : t('settings.upgradeOpenCli')} actionBusy={busyAction === 'opencli'} actionDisabled={Boolean(busyAction)} onAction={() => { runAction('opencli', installOpenCli) }}
@@ -252,32 +324,33 @@ export function ConversationSettings({ useScope, save, sync, cancel, refresh, re
         </div>}
         {storeBlocked && <p className="dsh_ref_store_fallback" role="alert">{t('settings.extensionStoreBlocked')} <a href={OPENCLI_EXTENSION_STORE_URL} target="_blank" rel="noreferrer">{t('settings.openExtensionStore')}</a></p>}
         {busyAction === 'setup' && state.setupStep && <p className="dsh_ref_setup_step" role="status">{t(`settings.setupStep.${state.setupStep}` as keyof typeof import('./locale.ts').zh)}</p>}
-        <div className="dsh_ref_install"><div><strong>{t('settings.serviceActions')}</strong><span>{t('settings.serviceActionsDetail')}</span></div><div className="dsh_ref_service_actions"><button className="is_primary" type="button" disabled={state.loading || Boolean(busyAction)} onClick={() => { const opened = state.health?.extensionConnected ? true : openStore(); runAction('setup', () => setupAll(opened)) }}>{busyAction === 'setup' ? t('settings.settingUp') : t('settings.oneClickSetup')}</button></div></div>
+        <div className="dsh_ref_install"><div><strong>{t('settings.serviceActions')}</strong><span>{t('settings.serviceActionsDetail')}</span></div><div className="dsh_ref_service_actions"><Button className="is_primary" type="button" disabled={state.loading || Boolean(busyAction)} onClick={() => { const opened = state.health?.extensionConnected ? true : openStore(); runAction('setup', () => setupAll(opened)) }}>{busyAction === 'setup' ? t('settings.settingUp') : t('settings.oneClickSetup')}</Button></div></div>
       </section>
-      <div className="dsh_ref_chat_divider" />
-      <div className="dsh_ref_provider_grid">{PROVIDERS.map((provider, index) => <ProviderCard key={provider} provider={provider} index={index} stats={state.stats?.find(row => row.provider === provider)} busy={state.sync?.status === 'running'} autoSync={settings.autoSync} enabled={enabled.has(provider)} onEnabled={value => { setProviderEnabled(provider, value) }} onSync={(mode) => { void sync([provider], mode) }} onClear={() => { if (window.confirm(t('storage.clearProviderConfirm', { provider: PROVIDER_LABEL[provider] }))) void clearProvider(provider) }} t={t} />)}</div>
+      <div className="dsh_ref_chat_divider dsh_ref_provider_divider" />
+      <div className="dsh_ref_provider_grid">{PROVIDERS.map((provider, index) => <ProviderCard key={provider} provider={provider} index={index} progress={state.sync?.providerProgress.find(row => row.provider === provider)} stats={state.stats?.find(row => row.provider === provider)} busy={state.sync?.status === 'running'} autoSync={settings.autoSync} enabled={enabled.has(provider)} onEnabled={value => { setProviderEnabled(provider, value) }} onSync={(mode) => { void sync([provider], mode) }} onClear={() => { if (window.confirm(t('storage.clearProviderConfirm', { provider: PROVIDER_LABEL[provider] }))) void clearProvider(provider) }} t={t} />)}</div>
       {!state.loading && state.stats?.every(item => item.conversations === 0) && <div className="dsh_ref_empty">{t('settings.empty')}</div>}
-      <div className="dsh_ref_chat_divider" />
-      <div className="dsh_ref_sync_settings"><div className="dsh_ref_section_head"><div><h3>{t('settings.syncSettings')}</h3><p>{t('settings.syncSettingsDetail')}</p></div></div>
+      <div className="dsh_ref_source_actions"><Button className="is_primary" type="button" disabled={state.sync?.status === 'running' || settings.enabledProviders.length === 0} onClick={() => { void sync(settings.enabledProviders, 'incremental') }}>{t('settings.syncAll')}</Button><Button type="button" disabled={state.sync?.status === 'running' || settings.enabledProviders.length === 0} onClick={() => { if (window.confirm(t('settings.fullConfirmAll'))) void sync(settings.enabledProviders, 'full') }}>{t('settings.fullRescanAll')}</Button>{state.sync?.status === 'running' && <Button className="is_danger" type="button" onClick={() => { void cancel() }}>{t('settings.cancel')}</Button>}</div>
+      {state.sync?.error && <p className="dsh_ref_inline_error dsh_ref_source_error">{state.sync.error}</p>}
+      <SettingsDisclosure className="dsh_ref_sync_settings_card" title={t('settings.syncSettings')} description={t('settings.syncSettingsDetail')} open={Boolean(openSections.sync)} onToggle={() => { setOpenSections(current => ({ ...current, sync: !current.sync })) }}>
+      <div className="dsh_ref_sync_settings">
       <div className="dsh_ref_form_grid">
-        <label><span>{t('settings.syncMode')}</span><select value={syncMode} onChange={event => { const mode = event.target.value; void save({ ...settings, autoSync: mode === 'interval', syncOnStartup: mode === 'startup' || mode === 'interval' }) }}><option value="manual">{t('settings.syncManual')}</option><option value="startup">{t('settings.syncStartup')}</option><option value="interval">{t('settings.syncInterval')}</option></select><small className="dsh_ref_field_note">{syncMode === 'manual' ? t('settings.syncManualDetail') : syncMode === 'startup' ? t('settings.syncStartupDetail') : t('settings.autoNote', { minutes: settings.autoSyncMinutes })}</small></label>
-        <label><span>{t('settings.historyMode')}</span><select value={settings.historyMode} onChange={event => { void save({ ...settings, historyMode: event.target.value as SettingsRecord['historyMode'] }) }}><option value="metadata-only">{t('settings.metadataOnly')}</option><option value="offline-mirror">{t('settings.offlineMirror')}</option></select><small className="dsh_ref_field_note">{settings.historyMode === 'metadata-only' ? t('settings.metadataOnlyDetail') : t('settings.offlineMirrorDetail')}</small></label>
-        <label><span>{t('settings.syncHistoryDays')}</span><input aria-label={t('settings.syncHistoryDays')} type="number" min={1} max={36500} inputMode="numeric" value={syncHistoryDays} placeholder={t('settings.historyUnlimited')} aria-invalid={!hasValidSyncHistoryDays} onChange={event => { setSyncHistoryDays(event.target.value) }} onBlur={() => { if (hasValidSyncHistoryDays) void save({ ...settings, syncHistoryDays: syncHistoryDays === '' ? null : syncHistoryDaysValue }); else setSyncHistoryDays(settings.syncHistoryDays === null ? '' : String(settings.syncHistoryDays)) }} /><small className="dsh_ref_field_note">{t('settings.syncHistoryDaysDetail')}</small></label>
-        <label><span>{t('settings.opencli')}</span><input value={opencliPath} onChange={event => { setOpencliPath(event.target.value) }} onBlur={() => { if (opencliPath.trim()) void save({ ...settings, opencliPath: opencliPath.trim() }).then(refresh) }} /><small className="dsh_ref_field_note">{t('settings.opencliDetail')}</small></label>
-        <label><span>{t('settings.chromeProfile')}</span><input list="dsh-ref-profiles" value={profile} placeholder={t('settings.defaultProfile')} onChange={event => { setProfile(event.target.value) }} onBlur={() => { void save({ ...settings, profile: profile.trim() }).then(refresh) }} /><datalist id="dsh-ref-profiles">{state.profiles?.filter(item => item.connected).map(item => <option key={item.id} value={item.alias || item.id}>{item.id}</option>)}</datalist><small className="dsh_ref_field_note">{t('settings.chromeProfileDetail')}</small></label>
-        <label><span>{t('settings.detailConcurrency')}</span><input type="number" min={1} max={8} value={detailConcurrency} aria-invalid={!(Number(detailConcurrency) >= 1 && Number(detailConcurrency) <= 8)} onChange={event => { setDetailConcurrency(event.target.value) }} onBlur={saveConcurrency} /><small className="dsh_ref_field_note">{t('settings.detailConcurrencyDetail')}</small></label>
-        <label><span>{t('settings.maxReadTurns')}</span><input type="number" min={1} max={100} value={maxReadTurns} aria-invalid={!(Number(maxReadTurns) >= 1 && Number(maxReadTurns) <= 100)} onChange={event => { setMaxReadTurns(event.target.value) }} onBlur={() => { const value = Number(maxReadTurns); if (Number.isInteger(value) && value >= 1 && value <= 100) void save({ ...settings, maxReadTurns: value }) }} /><small className="dsh_ref_field_note">{t('settings.maxReadTurnsDetail')}</small></label>
-        <label><span>{t('settings.interval')}</span><input type="number" min={15} max={1440} inputMode="numeric" disabled={!settings.autoSync} value={autoSyncMinutes} aria-invalid={!hasValidAutoSyncMinutes} onChange={event => { setAutoSyncMinutes(event.target.value) }} onBlur={saveAutoSyncMinutes} />{settings.autoSync && <small className="dsh_ref_field_note">{t('settings.autoNote', { minutes: settings.autoSyncMinutes })}</small>}</label>
+        <label><span>{t('settings.syncMode')}</span><DshMenuSelect value={syncMode} options={[{ value: 'manual', label: t('settings.syncManual') }, { value: 'startup', label: t('settings.syncStartup') }, { value: 'interval', label: t('settings.syncInterval') }]} onChange={mode => { void save({ ...settings, autoSync: mode === 'interval', syncOnStartup: mode === 'startup' || mode === 'interval' }) }} ariaLabel={t('settings.syncMode')} /><small className="dsh_ref_field_note">{syncMode === 'manual' ? t('settings.syncManualDetail') : syncMode === 'startup' ? t('settings.syncStartupDetail') : t('settings.autoNote', { minutes: settings.autoSyncMinutes })}</small></label>
+        <label><span>{t('settings.historyMode')}</span><DshMenuSelect value={settings.historyMode} options={[{ value: 'metadata-only', label: t('settings.metadataOnly') }, { value: 'offline-mirror', label: t('settings.offlineMirror') }]} onChange={value => { void save({ ...settings, historyMode: value as SettingsRecord['historyMode'] }) }} ariaLabel={t('settings.historyMode')} /><small className="dsh_ref_field_note">{settings.historyMode === 'metadata-only' ? t('settings.metadataOnlyDetail') : t('settings.offlineMirrorDetail')}</small></label>
+        <label><span>{t('settings.syncHistoryDays')}</span><Input aria-label={t('settings.syncHistoryDays')} type="number" min={1} max={36500} inputMode="numeric" value={syncHistoryDays} placeholder={t('settings.historyUnlimited')} aria-invalid={!hasValidSyncHistoryDays} onChange={event => { setSyncHistoryDays(event.target.value) }} onBlur={() => { if (hasValidSyncHistoryDays) void save({ ...settings, syncHistoryDays: syncHistoryDays === '' ? null : syncHistoryDaysValue }); else setSyncHistoryDays(settings.syncHistoryDays === null ? '' : String(settings.syncHistoryDays)) }} /><small className="dsh_ref_field_note">{t('settings.syncHistoryDaysDetail')}</small></label>
+        <label><span>{t('settings.opencli')}</span><Input value={opencliPath} onChange={event => { setOpencliPath(event.target.value) }} onBlur={() => { if (opencliPath.trim()) void save({ ...settings, opencliPath: opencliPath.trim() }).then(refresh) }} /><small className="dsh_ref_field_note">{t('settings.opencliDetail')}</small></label>
+        <label><span>{t('settings.chromeProfile')}</span><Input list="dsh-ref-profiles" value={profile} placeholder={t('settings.defaultProfile')} onChange={event => { setProfile(event.target.value) }} onBlur={() => { void save({ ...settings, profile: profile.trim() }).then(refresh) }} /><datalist id="dsh-ref-profiles">{state.profiles?.filter(item => item.connected).map(item => <option key={item.id} value={item.alias || item.id}>{item.id}</option>)}</datalist><small className="dsh_ref_field_note">{t('settings.chromeProfileDetail')}</small></label>
+        <label><span>{t('settings.detailConcurrency')}</span><Input type="number" min={1} max={8} value={detailConcurrency} aria-invalid={!(Number(detailConcurrency) >= 1 && Number(detailConcurrency) <= 8)} onChange={event => { setDetailConcurrency(event.target.value) }} onBlur={saveConcurrency} /><small className="dsh_ref_field_note">{t('settings.detailConcurrencyDetail')}</small></label>
+        <label><span>{t('settings.maxReadTurns')}</span><Input type="number" min={1} max={100} value={maxReadTurns} aria-invalid={!(Number(maxReadTurns) >= 1 && Number(maxReadTurns) <= 100)} onChange={event => { setMaxReadTurns(event.target.value) }} onBlur={() => { const value = Number(maxReadTurns); if (Number.isInteger(value) && value >= 1 && value <= 100) void save({ ...settings, maxReadTurns: value }) }} /><small className="dsh_ref_field_note">{t('settings.maxReadTurnsDetail')}</small></label>
+        <label><span>{t('settings.interval')}</span><Input type="number" min={15} max={1440} inputMode="numeric" disabled={!settings.autoSync} value={autoSyncMinutes} aria-invalid={!hasValidAutoSyncMinutes} onChange={event => { setAutoSyncMinutes(event.target.value) }} onBlur={saveAutoSyncMinutes} /><small className="dsh_ref_field_note">{t('settings.intervalDetail')}</small>{settings.autoSync && <small className="dsh_ref_field_note">{t('settings.autoNote', { minutes: settings.autoSyncMinutes })}</small>}</label>
       </div>
-      <div className="dsh_ref_actions"><button className="is_primary" type="button" disabled={state.sync?.status === 'running' || settings.enabledProviders.length === 0} onClick={() => { void sync(settings.enabledProviders, 'incremental') }}>{t('settings.syncAll')}</button><button type="button" disabled={state.sync?.status === 'running' || settings.enabledProviders.length === 0} onClick={() => { if (window.confirm(t('settings.fullConfirmAll'))) void sync(settings.enabledProviders, 'full') }}>{t('settings.fullRescanAll')}</button>{state.sync?.status === 'running' && <button className="is_danger" type="button" onClick={() => { void cancel() }}>{t('settings.cancel')}</button>}</div>
-      {state.sync && <SyncProgress sync={state.sync} t={t} />}
-      {state.sync?.error && <p className="dsh_ref_inline_error">{state.sync.error}</p>}
       </div>
-      <div className="dsh_ref_chat_divider" />
-      <section className="dsh_ref_storage"><div className="dsh_ref_storage_header"><div><h3>{t('storage.title')}</h3><p>{t('storage.detail')}</p></div><div className="dsh_ref_storage_metric"><span>{t('storage.usage')}</span><strong>{formatBytes(state.storage?.bytes ?? 0)}</strong></div></div></section>
-      <div className="dsh_ref_chat_divider" />
-      <ManageConversations state={state} syncing={state.sync?.status === 'running'} browse={browse} deleteConversation={deleteConversation} clearRemoteMissing={clearRemoteMissing} clearOldAccounts={clearOldAccounts} t={t} />
-    </section>
+      </SettingsDisclosure>
+      <SettingsDisclosure className="dsh_ref_storage_section" title={t('storage.title')} description={t('storage.detail')} open={Boolean(openSections.storage)} onToggle={() => { setOpenSections(current => ({ ...current, storage: !current.storage })) }}>
+        <section className="dsh_ref_storage"><div className="dsh_ref_storage_header"><div><h3>{t('storage.title')}</h3><p>{t('storage.detail')}</p></div><div className="dsh_ref_storage_metric"><span>{t('storage.usage')}</span><strong>{formatBytes(state.storage?.bytes ?? 0)}</strong></div></div></section>
+        <ManageConversations state={state} syncing={state.sync?.status === 'running'} browse={browse} deleteConversation={deleteConversation} clearRemoteMissing={clearRemoteMissing} clearOldAccounts={clearOldAccounts} t={t} />
+      </SettingsDisclosure>
+      </section>
+    </SettingsDisclosure>
     </div>
   </section>
 }
@@ -322,6 +395,11 @@ export function CloudDrives({ state, save, pickDownloadDirectory, openDownloadDi
   const [showExternal, setShowExternal] = useState(false)
   const [showAddDrive, setShowAddDrive] = useState(false)
   const [showAdvanced, setShowAdvanced] = useState(false)
+  const selectedMounts = state.settings.enabledDriveMounts ?? (state.openListMounts ?? []).filter(mount => mount.enabled).map(mount => mount.name)
+  const setMountEnabled = (name: string, enabled: boolean) => {
+    const enabledDriveMounts = enabled ? [...new Set([...selectedMounts, name])] : selectedMounts.filter(item => item !== name)
+    return save({ ...state.settings, enabledDriveMounts })
+  }
   const configuredDownloadDirectory = state.settings.cloudDriveDownloadDirectory ?? ''
   const [downloadDirectory, setDownloadDirectory] = useState(configuredDownloadDirectory)
   const [downloadDirectoryBusy, setDownloadDirectoryBusy] = useState(false)
@@ -424,47 +502,47 @@ export function CloudDrives({ state, save, pickDownloadDirectory, openDownloadDi
     }
   }
   return <section className="dsh_ref_cloud" aria-label={t('cloud.title')}>
-    <div className="dsh_ref_section_head"><div><h3>{t('cloud.title')}</h3><p>{t('cloud.detail')}</p></div><span className="dsh_ref_health">{status ? t(`cloud.state.${optimisticState ?? status.state}` as keyof typeof import('./locale.ts').zh) : t('cloud.state.install')}</span></div>
+    {status && <span className="dsh_ref_health dsh_ref_cloud_status">{t(`cloud.state.${optimisticState ?? status.state}` as keyof typeof import('./locale.ts').zh)}</span>}
     <ol className="dsh_ref_cloud_steps"><li className={status?.mode ? 'is_done' : 'is_current'}><b>1</b><span><strong>{t('cloud.stepEnable')}</strong><small>{status?.mode ? t('cloud.stepDone') : t('cloud.stepEnableDetail')}</small></span></li><li className={(state.openListMounts?.length ?? 0) > 0 ? 'is_done' : status?.mode ? 'is_current' : ''}><b>2</b><span><strong>{t('cloud.stepAdd')}</strong><small>{(state.openListMounts?.length ?? 0) > 0 ? t('cloud.stepDone') : t('cloud.stepAddDetail')}</small></span></li><li className={(state.openListMounts?.some(mount => mount.status === 'ready')) ? 'is_done' : ''}><b>3</b><span><strong>{t('cloud.stepUse')}</strong><small>{t('cloud.stepUseDetail')}</small></span></li></ol>
     <p className="dsh_ref_auto_note">{t('cloud.license')} <a href="https://github.com/OpenListTeam/OpenList/tree/v4.2.2" target="_blank" rel="noreferrer">{t('cloud.source')}</a></p>
     <div className="dsh_ref_cloud_download">
-      <div className="dsh_ref_cloud_download_copy"><strong>{t('cloud.downloadDirectory')}</strong><small>{t('cloud.downloadDirectoryDetail')}</small><span className="dsh_ref_cloud_download_state">{configuredDownloadDirectory ? t('cloud.downloadDirectoryCustom') : t('cloud.downloadDirectorySystem')}</span></div>
-      <label><span>{t('cloud.downloadDirectory')}</span><input aria-label={t('cloud.downloadDirectory')} value={downloadDirectory} placeholder={t('cloud.downloadDirectoryPlaceholder')} disabled={downloadDirectoryBusy} onChange={event => { setDownloadDirectory(event.target.value) }} onBlur={commitDownloadDirectory} onKeyDown={event => { if (event.key === 'Enter') { event.preventDefault(); commitDownloadDirectory() } }} /></label>
-      <div className="dsh_ref_cloud_download_actions"><button type="button" disabled={downloadDirectoryBusy} onClick={() => { void chooseDownloadDirectory() }}>{t('cloud.chooseDirectory')}</button><button type="button" disabled={downloadDirectoryBusy} onClick={() => { void openDownloadDirectory?.() }}>{t('cloud.openDirectory')}</button><button type="button" disabled={downloadDirectoryBusy || !configuredDownloadDirectory} onClick={() => { setDownloadDirectory(''); void saveDownloadDirectory('') }}>{t('cloud.resetDownloadDirectory')}</button></div>
+      <div className="dsh_ref_cloud_download_copy"><strong>{t('cloud.downloadDirectory')}</strong><small>{t('cloud.downloadDirectoryDetail')}</small></div>
+      <label><span>{configuredDownloadDirectory || state.storage?.systemTempDirectory || t('cloud.downloadDirectory')}</span><Input aria-label={t('cloud.downloadDirectory')} value={downloadDirectory} placeholder={state.storage?.systemTempDirectory ?? t('cloud.downloadDirectoryPlaceholder')} disabled={downloadDirectoryBusy} onChange={event => { setDownloadDirectory(event.target.value) }} onBlur={commitDownloadDirectory} onKeyDown={event => { if (event.key === 'Enter') { event.preventDefault(); commitDownloadDirectory() } }} /></label>
+      <div className="dsh_ref_cloud_download_actions"><Button type="button" disabled={downloadDirectoryBusy} onClick={() => { void chooseDownloadDirectory() }}>{t('cloud.chooseDirectory')}</Button><Button type="button" disabled={downloadDirectoryBusy} onClick={() => { void openDownloadDirectory?.() }}>{t('cloud.openDirectory')}</Button><Button type="button" disabled={downloadDirectoryBusy || !configuredDownloadDirectory} onClick={() => { setDownloadDirectory(''); void saveDownloadDirectory('') }}>{t('cloud.resetDownloadDirectory')}</Button></div>
     </div>
     {status?.error && <p className="dsh_ref_inline_error">{status.error}</p>}
     <div className="dsh_ref_cloud_actions">
-      {status?.mode !== 'external' && (!status?.installed || !status.mode) && <button className="is_primary" type="button" disabled={busy} onClick={() => act(install, 'downloading')}>{t('cloud.enable')}</button>}
-      {status?.mode && <button className="is_primary" type="button" disabled={busy} onClick={() => { setShowAddDrive(value => { if (value) { setQuickToken(''); setQuickError(undefined) }; return !value }); setShowAdvanced(false) }}>{showAddDrive ? t('cloud.cancelAdd') : t('cloud.addDrive')}</button>}
-      {status?.upgradeAvailable && <button type="button" disabled={busy} onClick={() => act(() => upgrade(false), 'upgrade')}>{t('cloud.upgrade')}</button>}
-      {status?.mode !== 'external' && status?.installed && !status.upgradeAvailable && status.newerVersion !== true && <button type="button" disabled={busy} onClick={() => act(() => upgrade(false), 'downloading')}>{t('cloud.repair')}</button>}
-      {status?.mode !== 'external' && status?.supportsRollback && <button type="button" disabled={busy} onClick={() => act(() => upgrade(true), 'downloading')}>{t('cloud.rollback')}</button>}
-      {status?.mode && <button type="button" disabled={busy} onClick={() => act(disconnect)}>{t('cloud.disconnect')}</button>}
-      {!status?.mode && <button type="button" disabled={busy} onClick={() => setShowExternal(value => !value)}>{showExternal ? t('cloud.hideAdvanced') : t('cloud.connectExisting')}</button>}
+      {status?.mode !== 'external' && (!status?.installed || !status.mode) && <Button className="is_primary" type="button" disabled={busy} onClick={() => act(install, 'downloading')}>{t('cloud.enable')}</Button>}
+      {status?.mode && <Button className="is_primary" type="button" disabled={busy} onClick={() => { setShowAddDrive(value => { if (value) { setQuickToken(''); setQuickError(undefined) }; return !value }); setShowAdvanced(false) }}>{showAddDrive ? t('cloud.cancelAdd') : t('cloud.addDrive')}</Button>}
+      {status?.upgradeAvailable && <Button type="button" disabled={busy} onClick={() => act(() => upgrade(false), 'upgrade')}>{t('cloud.upgrade')}</Button>}
+      {status?.mode !== 'external' && status?.installed && !status.upgradeAvailable && status.newerVersion !== true && <Button type="button" disabled={busy} onClick={() => act(() => upgrade(false), 'downloading')}>{t('cloud.repair')}</Button>}
+      {status?.mode !== 'external' && status?.supportsRollback && <Button type="button" disabled={busy} onClick={() => act(() => upgrade(true), 'downloading')}>{t('cloud.rollback')}</Button>}
+      {status?.mode && <Button type="button" disabled={busy} onClick={() => act(disconnect)}>{t('cloud.disconnect')}</Button>}
+      {!status?.mode && <Button type="button" disabled={busy} onClick={() => setShowExternal(value => !value)}>{showExternal ? t('cloud.hideAdvanced') : t('cloud.connectExisting')}</Button>}
     </div>
     {!status?.mode && showExternal && <div className="dsh_ref_cloud_connect">
-      <label><span>{t('cloud.endpoint')}</span><input value={endpoint} placeholder="https://openlist.example" onChange={event => setEndpoint(event.target.value)} /></label>
-      <label><span>{t('cloud.username')}</span><input value={username} onChange={event => setUsername(event.target.value)} /></label>
-      <label><span>{t('cloud.password')}</span><input type="password" value={password} onChange={event => setPassword(event.target.value)} /></label>
-      <button type="button" disabled={busy || !endpoint.trim()} onClick={submitExternal}>{t('cloud.connect')}</button>
+      <label><span>{t('cloud.endpoint')}</span><Input value={endpoint} placeholder="https://openlist.example" onChange={event => setEndpoint(event.target.value)} /></label>
+      <label><span>{t('cloud.username')}</span><Input value={username} onChange={event => setUsername(event.target.value)} /></label>
+      <label><span>{t('cloud.password')}</span><Input type="password" value={password} onChange={event => setPassword(event.target.value)} /></label>
+      <Button type="button" disabled={busy || !endpoint.trim()} onClick={submitExternal}>{t('cloud.connect')}</Button>
     </div>}
     {status?.mode && showAddDrive && quickDrivers.length > 0 && <div className="dsh_ref_cloud_quick">
       <div className="dsh_ref_cloud_quick_head"><h4>{t('cloud.quickLoginTitle')}</h4><p>{t('cloud.quickLoginDetail')}</p></div>
       <ol className="dsh_ref_quick_tasks">
-        <li className="is_done"><b>1</b><div><strong>{t('cloud.quickStepChoose')}</strong><label><span>{t('cloud.quickChooseLabel')}</span><select value={quickDriver?.name ?? ''} disabled={busy} onChange={event => { setQuickDriverName(event.target.value); setMountPath(defaultOpenListMountPath(event.target.value, mountNames)); setQuickToken(''); setQuickError(undefined) }}>{quickDrivers.map(item => <option key={item.name} value={item.name}>{item.name}</option>)}</select></label></div></li>
+        <li className="is_done"><b>1</b><div><strong>{t('cloud.quickStepChoose')}</strong><label><span>{t('cloud.quickChooseLabel')}</span><DshMenuSelect ariaLabel={t('cloud.quickChooseLabel')} value={quickDriver?.name ?? ''} disabled={busy} options={quickDrivers.map(item => ({ value: item.name, label: item.name }))} onChange={value => { setQuickDriverName(value); setMountPath(defaultOpenListMountPath(value, mountNames)); setQuickToken(''); setQuickError(undefined) }} /></label></div></li>
         <li><b>2</b><div><strong>{t('cloud.quickStepAuthorize', { provider: quickDriver?.name ?? '' })}</strong><p>{t('cloud.quickAuthorizeDetail', { provider: quickDriver?.name ?? '' })}</p><div className="dsh_ref_api_pages_guide"><strong>{t('cloud.quickOnPage')}</strong><ol><li>{t('cloud.quickPageChoose', { option: quickGuide.option })}</li>{quickGuide.parameters === 'official' && <li>{t('cloud.quickPageOfficial')}</li>}{quickGuide.parameters === 'automatic' && <li>{t('cloud.quickPageAutomatic')}</li>}{quickGuide.parameters === 'own' && <li>{t('cloud.quickPageOwn')}</li>}<li>{t('cloud.quickPageGet')}</li><li>{t('cloud.quickPageCopy', { result: quickGuide.result })}</li></ol></div><a className="dsh_ref_button is_primary" href="https://api.oplist.org/" target="_blank" rel="noreferrer">{t('cloud.quickProviderNamed', { provider: quickDriver?.name ?? '' })}</a></div></li>
         <li className={quickToken ? 'is_done' : 'is_current'}><b>3</b><div><strong>{t('cloud.quickStepPaste')}</strong><label><span>{t('cloud.quickPasteLabel')}</span><textarea className="dsh_ref_masked_secret" rows={3} value={quickToken} placeholder={t('cloud.quickPastePlaceholder')} aria-invalid={quickError ? true : undefined} aria-describedby="dsh-ref-quick-secret-note" onChange={event => { setQuickToken(event.target.value); setQuickError(undefined) }} autoComplete="off" spellCheck={false} /></label><small id="dsh-ref-quick-secret-note">{t('cloud.quickSecretNote')}</small>{quickError && <p className="dsh_ref_inline_error" role="alert">{quickError}</p>}</div></li>
       </ol>
       <div className="dsh_ref_quick_summary"><span>{t('cloud.quickWillAdd')}</span><strong>{quickDriver?.name} · {mountPath || (quickDriver ? defaultOpenListMountPath(quickDriver.name, mountNames) : '')}</strong></div>
-      <button className="is_primary dsh_ref_quick_submit" type="button" aria-busy={busy} disabled={busy || !quickDriver || quickProviderAuthFields(quickDriver).length === 0} onClick={submitQuick}>{busy ? t('cloud.quickConnecting') : t('cloud.quickAdd')}</button>
+      <Button className="is_primary dsh_ref_quick_submit" type="button" aria-busy={busy} disabled={busy || !quickDriver || quickProviderAuthFields(quickDriver).length === 0} onClick={submitQuick}>{busy ? t('cloud.quickConnecting') : t('cloud.quickAdd')}</Button>
     </div>}
-    {status?.mode && showAddDrive && !reauthMount && <button className="dsh_ref_advanced_toggle" type="button" onClick={() => setShowAdvanced(value => !value)}>{showAdvanced ? t('cloud.hideAdvanced') : t('cloud.showAdvanced')}</button>}
+    {status?.mode && showAddDrive && !reauthMount && <Button className="dsh_ref_advanced_toggle" type="button" onClick={() => setShowAdvanced(value => !value)}>{showAdvanced ? t('cloud.hideAdvanced') : t('cloud.showAdvanced')}</Button>}
     {status?.mode && (reauthMount !== undefined || (showAddDrive && (showAdvanced || quickDrivers.length === 0))) && <div className="dsh_ref_cloud_mount_form">
       <h4>{reauthMount ? t('cloud.reauthTitle', { name: reauthMount.name }) : t('cloud.advancedConnection')}</h4>
-      <label><span>{t('cloud.driver')}</span><select value={driver?.name ?? ''} disabled={reauthMount !== undefined} onChange={event => { const next = drivers.find(item => item.name === event.target.value); setDriverName(event.target.value); setFields(next ? driverDefaults(next) : {}); setTouchedFields({}); setMountPath(defaultOpenListMountPath(event.target.value, mountNames)) }}>{drivers.map(item => <option key={item.name} value={item.name}>{item.name}</option>)}</select></label>
+      <label><span>{t('cloud.driver')}</span><DshMenuSelect ariaLabel={t('cloud.driver')} value={driver?.name ?? ''} disabled={reauthMount !== undefined} options={drivers.map(item => ({ value: item.name, label: item.name }))} onChange={value => { const next = drivers.find(item => item.name === value); setDriverName(value); setFields(next ? driverDefaults(next) : {}); setTouchedFields({}); setMountPath(defaultOpenListMountPath(value, mountNames)) }} /></label>
       {driver?.description && <small>{driver.description}</small>}
-      {driver?.fields.map(field => <label key={field.name}><span>{field.label}{field.required && !reauthMount ? ' *' : ''}</span>{field.type === 'boolean' ? <input type="checkbox" checked={fields[field.name] === true} onChange={event => { setFields(value => ({ ...value, [field.name]: event.target.checked })); setTouchedFields(value => ({ ...value, [field.name]: true })) }} /> : field.type === 'select' ? <select value={String(fields[field.name] ?? '')} onChange={event => { setFields(value => ({ ...value, [field.name]: event.target.value })); setTouchedFields(value => ({ ...value, [field.name]: true })) }}>{reauthMount && <option value="" disabled>—</option>}{field.options?.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}</select> : <input type={field.secret ? 'password' : field.type === 'number' ? 'number' : 'text'} value={String(fields[field.name] ?? '')} onChange={event => { setFields(value => ({ ...value, [field.name]: event.target.value })); setTouchedFields(value => ({ ...value, [field.name]: true })) }} />}</label>)}
-      {!reauthMount && <label><span>{t('cloud.mountPath')}</span><input value={mountPath} onChange={event => setMountPath(event.target.value)} /></label>}<button type="button" disabled={busy || !driver} onClick={submitMount}>{reauthMount ? t('cloud.reauth') : t('cloud.create')}</button>{formError && <p className="dsh_ref_inline_error">{formError}</p>}
+      {driver?.fields.map(field => <div className="dsh_ref_cloud_field" key={field.name}><span>{field.label}{field.required && !reauthMount ? ' *' : ''}</span>{field.type === 'boolean' ? <Checkbox label={field.label} checked={fields[field.name] === true} onChange={checked => { setFields(value => ({ ...value, [field.name]: checked })); setTouchedFields(value => ({ ...value, [field.name]: true })) }} /> : field.type === 'select' ? <DshMenuSelect ariaLabel={field.label} value={String(fields[field.name] ?? '')} options={[...(reauthMount ? [{ value: '', label: '—' }] : []), ...(field.options ?? [])]} onChange={next => { setFields(value => ({ ...value, [field.name]: next })); setTouchedFields(value => ({ ...value, [field.name]: true })) }} /> : <Input type={field.secret ? 'password' : field.type === 'number' ? 'number' : 'text'} value={String(fields[field.name] ?? '')} onChange={event => { setFields(value => ({ ...value, [field.name]: event.target.value })); setTouchedFields(value => ({ ...value, [field.name]: true })) }} />}</div>)}
+      {!reauthMount && <label><span>{t('cloud.mountPath')}</span><Input value={mountPath} onChange={event => setMountPath(event.target.value)} /></label>}<Button type="button" disabled={busy || !driver} onClick={submitMount}>{reauthMount ? t('cloud.reauth') : t('cloud.create')}</Button>{formError && <p className="dsh_ref_inline_error">{formError}</p>}
     </div>}
     <div className="dsh_ref_cloud_cards">{(state.openListMounts ?? []).map(mount => <article key={mount.id}>
       <strong>{mount.name}</strong>
@@ -473,10 +551,10 @@ export function CloudDrives({ state, save, pickDownloadDirectory, openDownloadDi
       {mount.capacityTotal !== undefined && <small>{formatBytes(mount.capacityUsed ?? 0)} / {formatBytes(mount.capacityTotal)}</small>}
       {mount.indexProgress !== undefined && <div className="dsh_ref_progress_track"><div className="dsh_ref_progress_fill" style={{ width: `${Math.round(mount.indexProgress * 100)}%` }} /></div>}
       <div>
-        <button type="button" disabled={busy} onClick={() => act(() => disableMount(mount.id, mount.enabled))}>{mount.enabled ? t('cloud.disable') : t('cloud.enableMount')}</button>
-        <button type="button" disabled={busy} onClick={() => { setShowAddDrive(true); setReauthMount(mount); setDriverName(mount.driver); setFields({}); setTouchedFields({}) }}>{t('cloud.reauth')}</button>
-        <button type="button" disabled={busy} onClick={() => act(async () => { const result = await reindexMount(mount.id); setFeedback(result.supported ? t('cloud.reindexStarted') : (result.reason ?? t('cloud.reindexUnsupported'))) })}>{t('cloud.reindex')}</button>
-        <button className="is_danger" type="button" disabled={busy} onClick={() => { if (window.confirm(t('cloud.removeConfirm'))) act(() => removeMount(mount.id)) }}>{t('cloud.remove')}</button>
+        <label className="dsh_ref_cloud_mount_enabled"><DshSwitch checked={mount.enabled && selectedMounts.includes(mount.name)} disabled={busy} label={t('provider.enabled')} onChange={value => { act(async () => { await disableMount(mount.id, !value); await setMountEnabled(mount.name, value) }) }} /><b>{t('provider.enabled')}</b></label>
+        <Button type="button" disabled={busy} onClick={() => { setShowAddDrive(true); setReauthMount(mount); setDriverName(mount.driver); setFields({}); setTouchedFields({}) }}>{t('cloud.reauth')}</Button>
+        <Button type="button" disabled={busy} onClick={() => act(async () => { const result = await reindexMount(mount.id); setFeedback(result.supported ? t('cloud.reindexStarted') : (result.reason ?? t('cloud.reindexUnsupported'))) })}>{t('cloud.reindex')}</Button>
+        <Button className="is_danger" type="button" disabled={busy} onClick={() => { if (window.confirm(t('cloud.removeConfirm'))) act(() => removeMount(mount.id)) }}>{t('cloud.remove')}</Button>
       </div>
     </article>)}</div>
     {feedback && <p className="dsh_ref_auto_note" role="status">{feedback}</p>}
@@ -639,15 +717,10 @@ export function ManageConversations({ state, syncing, browse, deleteConversation
   const offset = browseState?.offset ?? 0
 
   return <div className="dsh_ref_manage">
-    <div className="dsh_ref_section_head"><div><h3>{t('manage.title')}</h3><p>{t('manage.detail')}</p></div><div className="dsh_ref_manage_actions"><button className="is_danger" type="button" disabled={syncing || !(state.storage?.oldAccountConversations) || !clearOldAccounts} title={syncing ? t('manage.deleteDisabled') : undefined} onClick={() => { if (window.confirm(t('manage.deleteOldAccountsConfirm'))) void clearOldAccounts?.() }}>{t('manage.deleteOldAccounts')}</button><button className="is_danger" type="button" disabled={syncing || !(state.storage?.remoteMissing) || !clearRemoteMissing} title={syncing ? t('manage.deleteDisabled') : undefined} onClick={() => { if (window.confirm(t('manage.deleteMissingConfirm'))) void clearRemoteMissing?.() }}>{t('manage.deleteMissing')}</button></div></div>
+    <div className="dsh_ref_section_head"><div><h3>{t('manage.title')}</h3><p>{t('manage.detail')}</p></div><div className="dsh_ref_manage_actions"><Button className="is_danger" type="button" disabled={syncing || !(state.storage?.oldAccountConversations) || !clearOldAccounts} title={syncing ? t('manage.deleteDisabled') : undefined} onClick={() => { if (window.confirm(t('manage.deleteOldAccountsConfirm'))) void clearOldAccounts?.() }}>{t('manage.deleteOldAccounts')}</Button><Button className="is_danger" type="button" disabled={syncing || !(state.storage?.remoteMissing) || !clearRemoteMissing} title={syncing ? t('manage.deleteDisabled') : undefined} onClick={() => { if (window.confirm(t('manage.deleteMissingConfirm'))) void clearRemoteMissing?.() }}>{t('manage.deleteMissing')}</Button></div></div>
     <div className="dsh_ref_manage_filters">
-      <input placeholder={t('manage.searchPlaceholder')} value={text} onChange={event => { setText(event.target.value) }} />
-      <select value={browseState?.provider ?? ''} onChange={event => {
-        void browse(text, (event.target.value || undefined) as ChatProvider | undefined, 0)
-      }}>
-        <option value="">{t('manage.allProviders')}</option>
-        {PROVIDERS.map(provider => <option key={provider} value={provider}>{PROVIDER_LABEL[provider]}</option>)}
-      </select>
+      <Input placeholder={t('manage.searchPlaceholder')} value={text} onChange={event => { setText(event.target.value) }} />
+      <DshMenuSelect value={browseState?.provider ?? ''} ariaLabel={t('manage.allProviders')} options={[{ value: '', label: t('manage.allProviders') }, ...PROVIDERS.map(provider => ({ value: provider, label: PROVIDER_LABEL[provider] }))]} onChange={value => { void browse(text, (value || undefined) as ChatProvider | undefined, 0) }} />
     </div>
     {items.length === 0
       ? <p className="dsh_ref_manage_empty">{page === undefined ? t('manage.loading') : t('manage.empty')}</p>
@@ -664,18 +737,18 @@ export function ManageConversations({ state, syncing, browse, deleteConversation
           <div className="dsh_ref_manage_row_actions">
             <a className={item.url ? undefined : 'is_disabled'} href={item.url || undefined} target="_blank" rel="noopener noreferrer"
               aria-disabled={!item.url} onClick={event => { if (!item.url) event.preventDefault() }}>{t('manage.open')}</a>
-            <button type="button" className="is_danger" disabled={syncing}
+            <Button type="button" className="is_danger" disabled={syncing}
               title={syncing ? t('manage.deleteDisabled') : undefined}
               onClick={() => {
                 if (window.confirm(t('manage.deleteConfirm', { title: item.title }))) void deleteConversation(item.uriId)
-              }}>{t('manage.delete')}</button>
+              }}>{t('manage.delete')}</Button>
           </div>
         </li>)}
       </ul>}
     <div className="dsh_ref_pagination">
-      <button type="button" disabled={offset === 0} onClick={() => { void browse(text, browseState?.provider, Math.max(0, offset - PAGE_SIZE)) }}>{t('manage.previous')}</button>
+      <Button type="button" disabled={offset === 0} onClick={() => { void browse(text, browseState?.provider, Math.max(0, offset - PAGE_SIZE)) }}>{t('manage.previous')}</Button>
       <span>{total === 0 ? t('manage.paginationEmpty') : t('manage.pagination', { start: offset + 1, end: offset + items.length, total })}</span>
-      <button type="button" disabled={offset + items.length >= total} onClick={() => { void browse(text, browseState?.provider, offset + PAGE_SIZE) }}>{t('manage.next')}</button>
+      <Button type="button" disabled={offset + items.length >= total} onClick={() => { void browse(text, browseState?.provider, offset + PAGE_SIZE) }}>{t('manage.next')}</Button>
     </div>
   </div>
 }
@@ -690,7 +763,7 @@ function CheckRow({ label, detail, ready, neutral = false, actionLabel, secondar
   actionBusy?: boolean; actionDisabled?: boolean; onAction?: () => void; onSecondary?: () => void; control?: ReactNode
 }) {
   const stateClass = ready ? 'is_ready' : neutral ? 'is_neutral' : 'is_error'
-  return <div className="dsh_ref_check"><span className={stateClass}>{ready ? '✓' : neutral ? '•' : '×'}</span><div className="dsh_ref_check_body"><strong>{label}</strong><small className={!ready && !neutral ? 'is_warning' : undefined}>{detail}</small>{!ready && !neutral && (control || onAction || onSecondary) && <div className="dsh_ref_check_actions">{control}{onAction && actionLabel && <button type="button" aria-busy={actionBusy} disabled={actionDisabled} onClick={onAction}>{actionBusy ? `${actionLabel}…` : actionLabel}</button>}{onSecondary && secondaryLabel && <button type="button" disabled={actionDisabled} onClick={onSecondary}>{secondaryLabel}</button>}</div>}</div></div>
+  return <div className="dsh_ref_check"><span className={stateClass}>{ready ? '✓' : neutral ? '•' : '×'}</span><div className="dsh_ref_check_body"><strong>{label}</strong><small className={!ready && !neutral ? 'is_warning' : undefined}>{detail}</small>{!ready && !neutral && (control || onAction || onSecondary) && <div className="dsh_ref_check_actions">{control}{onAction && actionLabel && <Button type="button" aria-busy={actionBusy} disabled={actionDisabled} onClick={onAction}>{actionBusy ? `${actionLabel}…` : actionLabel}</Button>}{onSecondary && secondaryLabel && <Button type="button" disabled={actionDisabled} onClick={onSecondary}>{secondaryLabel}</Button>}</div>}</div></div>
 }
 
 function updateTitle(update: PackageUpdateStatus | undefined, t: T): string {
@@ -753,15 +826,24 @@ function extensionStateDetail(health: Health | undefined, t: T): string {
   }
 }
 
-function ProviderCard({ provider, stats, busy, autoSync, enabled, onEnabled, onSync, onClear, index, t }: { provider: ChatProvider; stats?: ProviderStats; busy: boolean; autoSync: boolean; enabled: boolean; onEnabled(value: boolean): void; onSync(mode: 'incremental' | 'full'): void; onClear(): void; index: number; t: T }) {
+export function ProviderCard({ provider, progress, stats, busy, autoSync, enabled, onEnabled, onSync, onClear, index, t }: { provider: ChatProvider; progress?: SyncStatus['providerProgress'][number]; stats?: ProviderStats; busy: boolean; autoSync: boolean; enabled: boolean; onEnabled(value: boolean): void; onSync(mode: 'incremental' | 'full'): void; onClear(): void; index: number; t: T }) {
   const label = PROVIDER_LABEL[provider]
   const date = stats?.lastSyncedAt ? new Date(stats.lastSyncedAt).toLocaleString() : t('provider.neverSynced')
-  return <article className={`dsh_ref_provider dsh_ref_provider_${provider}`} style={{ '--dsh-ref-index': index } as CSSProperties}><span className="dsh_ref_provider_mark"><ProviderLogo provider={provider} /></span><div className="dsh_ref_provider_content"><div className="dsh_ref_provider_summary"><h4>{label}</h4><strong>{stats?.conversations ?? 0}<span>{t('provider.localConversations')}</span></strong><small>{t('provider.lastUpdated', { date })}</small></div><div className="dsh_ref_provider_controls"><label className="dsh_ref_toggle"><input type="checkbox" checked={enabled} onChange={event => { onEnabled(event.target.checked) }} /><span/><b>{t('provider.enabled')}</b></label><div className="dsh_ref_provider_actions"><button type="button" disabled={busy} onClick={() => { onSync('incremental') }}>{t('provider.syncNow')}</button><button type="button" disabled={busy} onClick={() => { if (window.confirm(t('provider.fullConfirm', { provider: label }))) onSync('full') }}>{t('provider.fullResync')}</button><button className="is_danger" type="button" disabled={busy || !stats?.conversations} onClick={onClear}>{t('storage.clearProvider')}</button></div></div>{stats?.error && <em className="dsh_ref_provider_error">{stats.error}</em>}</div></article>
+  const phase = progress && !busy && (progress.phase === 'listing' || progress.phase === 'syncing') ? 'cancelled' : progress?.phase
+  const percent = phase === 'complete' ? 100 : progress && progress.total > 0 ? Math.min(100, Math.max(0, progress.completed / progress.total * 100)) : 0
+  const progressText = !progress ? '' : phase === 'listing' ? t('sync.progressSourceListing') : `${t(syncStatusKey(phase === 'syncing' ? 'running' : phase as SyncStatus['status']))} · ${progress.completed}/${progress.total}`
+  return <article className={`dsh_ref_provider dsh_ref_provider_${provider}`} style={{ '--dsh-ref-index': index } as CSSProperties}>
+    {progress && <>
+      <div className={`dsh_ref_card_progress${phase === 'listing' ? ' is_listing' : ''}`} style={{ width: phase === 'listing' ? '30%' : `${percent}%` }} aria-hidden="true" />
+      <span className="dsh_ref_card_progress_status" role="progressbar" aria-label={label} aria-valuemin={0} aria-valuemax={100} aria-valuenow={phase === 'listing' ? undefined : Math.round(percent)} aria-valuetext={progressText}>{progressText}</span>
+    </>}
+    <div className="dsh_ref_provider_main"><span className="dsh_ref_provider_mark"><ProviderLogo provider={provider} /></span><div className="dsh_ref_provider_content"><div className="dsh_ref_provider_summary"><h4>{label}</h4><strong>{stats?.conversations ?? 0}<span>{t('provider.localConversations')}</span></strong><small>{t('provider.lastUpdated', { date })}</small></div>{progress?.error && <em className="dsh_ref_provider_error">{progress.error}</em>}</div></div>
+    <div className="dsh_ref_provider_foot"><div className="dsh_ref_provider_controls"><label className="dsh_ref_toggle"><DshSwitch checked={enabled} label={t('provider.enabled')} onChange={onEnabled} /><b>{t('provider.enabled')}</b></label><div className="dsh_ref_provider_actions"><Button type="button" disabled={busy} onClick={() => { onSync('incremental') }}>{t('provider.syncNow')}</Button><Button type="button" disabled={busy} onClick={() => { if (window.confirm(t('provider.fullConfirm', { provider: label }))) onSync('full') }}>{t('provider.fullResync')}</Button><Button className="is_danger" type="button" disabled={busy || !stats?.conversations} onClick={onClear}>{t('storage.clearProvider')}</Button></div></div></div>
+  </article>
 }
 
 export function AgentSelectionCards({ enabledAgents, stats, directories, onEnabled, onPickDirectory, t }: { enabledAgents: ReadonlySet<LocalAgent>; stats?: readonly AgentStats[]; directories?: Partial<Record<LocalAgent, string>>; onEnabled(agent: LocalAgent, value: boolean): void; onPickDirectory?(agent: LocalAgent): Promise<void>; t: T }) {
   return <div className="dsh_ref_reference_choices dsh_ref_agent_choices">
-    <div className="dsh_ref_section_head dsh_ref_agent_heading"><div><h3>{t('settings.localAgents')}</h3><p>{t('settings.localAgentsDetail')}</p></div></div>
     <div className="dsh_ref_provider_grid dsh_ref_agent_grid dsh_ref_selection_grid">{ALL_LOCAL_AGENTS.map((agent, index) => <AgentCard key={agent} agent={agent} index={index} enabled={enabledAgents.has(agent)} conversations={stats?.find(row => row.agent === agent)?.conversations} directory={directories?.[agent]} onEnabled={value => { onEnabled(agent, value) }} onPickDirectory={onPickDirectory} t={t} />)}</div>
   </div>
 }
@@ -770,15 +852,22 @@ export function DriveSelectionCards({ state, save, t }: { state: SettingsSnapsho
   const mounts = state.openListMounts ?? []
   const selectedMounts = state.settings.enabledDriveMounts ?? mounts.filter(mount => mount.enabled).map(mount => mount.name)
   return <div className="dsh_ref_reference_choices dsh_ref_drive_choices">
-    <div className="dsh_ref_section_head dsh_ref_mount_selection_head"><div><h3>{t('cloud.selectionTitle')}</h3><p>{t('cloud.selectionDetail')}</p></div></div>
     {mounts.length === 0 ? <div className="dsh_ref_empty">{t('cloud.selectionEmpty')}</div> : <div className="dsh_ref_provider_grid dsh_ref_selection_grid">{mounts.map((mount, index) => <article className="dsh_ref_provider dsh_ref_selection_card" style={{ '--dsh-ref-index': index } as CSSProperties} key={mount.id}>
-      <span className="dsh_ref_provider_mark dsh_ref_text_mark">☁</span><div className="dsh_ref_provider_content"><div className="dsh_ref_provider_summary"><h4>{mount.name}</h4><small>{mount.driver} · {mount.status === 'ready' ? t('cloud.ready') : mount.enabled ? t('cloud.error') : t('cloud.disabled')}</small></div><div className="dsh_ref_provider_controls"><label className="dsh_ref_toggle"><input type="checkbox" checked={selectedMounts.includes(mount.name)} disabled={!mount.enabled} onChange={event => { const enabledDriveMounts = event.target.checked ? [...new Set([...selectedMounts, mount.name])] : selectedMounts.filter(value => value !== mount.name); void save({ ...state.settings, enabledDriveMounts }) }} /><span/><b>{t('provider.enabled')}</b></label></div></div>
+      <div className="dsh_ref_provider_main"><span className="dsh_ref_provider_mark dsh_ref_text_mark">☁</span><div className="dsh_ref_provider_content"><div className="dsh_ref_provider_summary"><h4>{mount.name}</h4><small>{mount.driver} · {mount.status === 'ready' ? t('cloud.ready') : mount.enabled ? t('cloud.error') : t('cloud.disabled')}</small></div></div></div><div className="dsh_ref_provider_foot"><div className="dsh_ref_provider_controls"><label className="dsh_ref_toggle"><DshSwitch checked={selectedMounts.includes(mount.name)} disabled={!mount.enabled} label={t('provider.enabled')} onChange={value => { const enabledDriveMounts = value ? [...new Set([...selectedMounts, mount.name])] : selectedMounts.filter(item => item !== mount.name); void save({ ...state.settings, enabledDriveMounts }) }} /><b>{t('provider.enabled')}</b></label></div></div>
     </article>)}</div>}
   </div>
 }
 
+const DEFAULT_AGENT_PATHS: Readonly<Record<LocalAgent, string>> = {
+  'claude-code': '~/.claude/projects', codex: '~/.codex/sessions', cursor: '~/.cursor/projects', qoder: '~/.qoder/projects',
+  reasonix: '~/.reasonix/sessions', openclaw: '~/.openclaw/agents', kimi: '~/.kimi/sessions · ~/.kimi-code/sessions',
+  grokbuild: '~/.grok/sessions · ~/.grok/archived_sessions', hermes: '~/.hermes/sessions', 'gemini-cli': '~/.gemini/history',
+  pi: '~/.pi/agent/sessions', opencode: '~/.local/share/opencode', mimocode: '~/.local/share/mimocode', zcode: '~/.zcode/cli/db',
+}
+
 function AgentCard({ agent, enabled, conversations, directory, onEnabled, onPickDirectory, index, t }: { agent: LocalAgent; enabled: boolean; conversations?: number; directory?: string; onEnabled(value: boolean): void; onPickDirectory?(agent: LocalAgent): Promise<void>; index: number; t: T }) {
-  return <article className="dsh_ref_provider dsh_ref_agent_provider" data-local-agent={agent} style={{ '--dsh-ref-index': index } as CSSProperties}><span className="dsh_ref_provider_mark"><AgentLogo agent={agent} /></span><div className="dsh_ref_provider_content"><div className="dsh_ref_provider_summary"><h4>{LOCAL_AGENT_LABEL[agent]}</h4>{conversations === undefined ? <small>{t('settings.agentScanning')}</small> : <strong>{conversations}<span>{t('provider.localConversations')}</span></strong>}<small title={directory}>{directory ?? t('settings.localAgentOnDisk')}</small></div><div className="dsh_ref_provider_controls"><label className="dsh_ref_toggle"><input type="checkbox" checked={enabled} onChange={event => { onEnabled(event.target.checked) }} /><span/><b>{t('provider.enabled')}</b></label><button type="button" onClick={() => { void onPickDirectory?.(agent) }}>{t('settings.agentCustomDirectory')}</button></div></div></article>
+  const location = directory ?? DEFAULT_AGENT_PATHS[agent]
+  return <article className="dsh_ref_provider dsh_ref_agent_provider" data-local-agent={agent} style={{ '--dsh-ref-index': index } as CSSProperties}><div className="dsh_ref_provider_main"><span className="dsh_ref_provider_mark"><AgentLogo agent={agent} /></span><div className="dsh_ref_provider_content"><div className="dsh_ref_provider_summary"><h4>{LOCAL_AGENT_LABEL[agent]}</h4>{conversations === undefined ? <small>{t('settings.agentScanning')}</small> : <strong>{conversations}<span>{t('provider.localConversations')}</span></strong>}<small title={location}>{location}</small></div></div></div><div className="dsh_ref_provider_foot"><div className="dsh_ref_provider_controls"><label className="dsh_ref_toggle"><DshSwitch checked={enabled} label={t('provider.enabled')} onChange={onEnabled} /><b>{t('provider.enabled')}</b></label><Button type="button" onClick={() => { void onPickDirectory?.(agent) }}>{t('settings.agentCustomDirectory')}</Button></div></div></article>
 }
 
 function formatBytes(bytes: number): string {

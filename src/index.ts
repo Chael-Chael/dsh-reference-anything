@@ -128,7 +128,6 @@ export default class ReferenceRuntime extends Service {
 
   private static contentMentions(blocks: readonly ContentBlock[], key: string): boolean {
     return blocks.some(block => {
-      if (block.type === 'tool-result') return ReferenceRuntime.contentMentions(block.content, key)
       if (block.type !== 'text' || !mayContainReference(block.text)) return false
       try {
         return parseReferenceText(block.text).references.some(input => ReferenceRuntime.grantKey(input.ref) === key)
