@@ -241,11 +241,10 @@ export function ConversationSettings({ useScope, save, sync, cancel, refresh, re
     }
     setPickerMaxCandidates(current => ({ ...current, [id]: String(picker[id].maxCandidates) }))
   }
-  const reorderPicker = (from: PickerSource, to: PickerSource) => {
-    const ids = [...PICKER_SOURCES].sort((a, b) => picker[a.id].order - picker[b.id].order).map(row => row.id)
-    const fromIndex = ids.indexOf(from); const toIndex = ids.indexOf(to)
-    if (fromIndex < 0 || toIndex < 0 || fromIndex === toIndex) return
-    ids.splice(fromIndex, 1); ids.splice(toIndex, 0, from)
+  const reorderPicker = (ordered: readonly PickerSource[]) => {
+    const current = [...PICKER_SOURCES].sort((a, b) => picker[a.id].order - picker[b.id].order).map(row => row.id)
+    const ids = [...ordered, ...current.filter(id => !ordered.includes(id))]
+    if (ids.length !== current.length || ids.every((id, index) => id === current[index])) return
     const next = { ...picker }
     ids.forEach((id, index) => { next[id] = { ...next[id], order: index } })
     savePicker(next)
@@ -261,9 +260,10 @@ export function ConversationSettings({ useScope, save, sync, cancel, refresh, re
       ghostClass: 'dsh_ref_picker_row_is_ghost',
       onStart: event => { setDraggingPicker(event.item.dataset.pickerId as PickerSource | undefined) },
       onEnd: event => {
-        const from = event.item.dataset.pickerId as PickerSource | undefined
-        const to = event.newIndex === undefined ? null : event.to.children[event.newIndex]?.getAttribute('data-picker-id') as PickerSource | null
-        if (from && to) reorderPicker(from, to)
+        const ordered = Array.from(event.to.children)
+          .map(item => item.getAttribute('data-picker-id'))
+          .filter((id): id is PickerSource => PICKER_SOURCES.some(source => source.id === id))
+        reorderPicker(ordered)
         setDraggingPicker(undefined)
       },
     })
