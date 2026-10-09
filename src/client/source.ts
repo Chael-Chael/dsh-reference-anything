@@ -664,7 +664,8 @@ export function createPluginSource(
 ): RefreshablePickerSource {
   const source: InputTriggerSource = {
     trigger: '@', name: PLUGIN_SOURCE, order: options.order,
-    async candidates(_session, { query, signal }) {
+    async candidates(_session, { query, quoted, signal }) {
+      if (quoted) return []
       const scoped = scopedQuery(query, 'plugins')
       if (scoped === undefined) return []
       const rows = await load(signal)
@@ -672,7 +673,7 @@ export function createPluginSource(
       return rows
         .filter(row => row.name.toLocaleLowerCase().includes(needle) || row.label.toLocaleLowerCase().includes(needle) || row.id.toLocaleLowerCase().includes(needle))
         .map(row => {
-          const statusText = row.status === 'live' ? '运行中' : row.status === 'disabled' ? '已停用' : '未加载'
+          const statusText = t(`plugin.status.${row.status}`)
           const descParts = [row.version ? row.version : undefined, statusText].filter(Boolean)
           return {
             name: row.label || row.name,
@@ -686,8 +687,10 @@ export function createPluginSource(
       const value = decodeCandidate(candidate.value)
       if (value?.kind === 'plugin') {
         if (value.directory) {
-          const normalized = value.directory.replace(/[/\\]+$/, '') + '\\'
-          return { text: `@${value.name} @"${normalized}" ` }
+          const path = value.directory.replace(/\\/gu, '/').replace(/\/+$/u, '')
+          const mention = formatFileMention({ path, kind: 'directory' }, true)
+          // Close the native directory-completion token: a plugin pick is a complete reference.
+          if (mention) return { text: `@${value.name} ${mention}" ` }
         }
         return { text: `@${value.name} ` }
       }
@@ -908,6 +911,7 @@ function formatDate(value: string, t: T): string {
 
 const fallback: T = (key, params) => {
   const dictionary: Record<string, string> = {
+    'plugin.status.live': 'Running', 'plugin.status.disabled': 'Disabled', 'plugin.status.inert': 'Not running',
     'source.conversations': 'External conversations', 'source.files': 'Files and folders', 'source.sessions': 'DSH sessions', 'source.agents': 'Local agent conversations', 'source.drives': 'Cloud drive files', 'source.commands': 'Commands', 'source.skills': 'Skills', 'source.plugins': 'All local plugins',
     'conversation.description': '{provider} · {date}', 'drive.description': '{provider} · {path}', 'drive.searchIncomplete': 'Results may be incomplete', 'drive.searchAction': 'Search cloud drive files…', 'drive.searchActionDetail': 'Select, then type a filename, for example @drive:notes', 'drive.parentFolder': 'Parent folder', 'conversation.unknownDate': 'unknown date', 'skill.userOnly': 'user-only · ',
     'menu.syncAll': 'Sync all now', 'menu.syncAllDetail': 'Refresh the local external-conversation index',

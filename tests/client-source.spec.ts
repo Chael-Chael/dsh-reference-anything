@@ -493,18 +493,37 @@ describe('cloud drive files', () => {
     expect(candidates).toHaveLength(2)
     expect(candidates[0]).toMatchObject({
       name: 'dsh-cost-meter',
-      description: '^1.8.15 · 运行中',
+      description: '^1.8.15 · Running',
     })
     expect(candidates[1]).toMatchObject({
       name: '@dsh-external/dsh-automation',
-      description: 'github:titanwings/dsh-automation · 已停用',
+      description: 'github:titanwings/dsh-automation · Disabled',
     })
-    expect(source.onPick(pick(candidates[0]!))).toEqual({ text: '@dsh-cost-meter @"C:\\dsh-ecosystem\\external-repos\\dsh-cost-meter\\" ' })
+    expect(source.onPick(pick(candidates[0]!))).toEqual({ text: '@dsh-cost-meter @"C:/dsh-ecosystem/external-repos/dsh-cost-meter/" ' })
     expect(source.onPick(pick(candidates[1]!))).toEqual({ text: '@@dsh-external/dsh-automation ' })
 
     const filtered = await source.candidates(session, request('cost'))
     expect(filtered).toHaveLength(1)
     expect(filtered[0]?.name).toBe('dsh-cost-meter')
+  })
+
+  it.each([
+    ['/home/user/my plugin', '@local @"/home/user/my plugin/" '],
+    ['C:\\Users\\my plugin\\', '@local @"C:/Users/my plugin/" '],
+    ['/', '@local @"/" '],
+  ])('inserts a closed, portable directory reference for %s', async (directory, expected) => {
+    const source = createPluginSource(async () => [{ id: 'local', name: 'local', label: 'local', status: 'inert', directory }], undefined, options())
+    const [candidate] = await source.candidates(session, request())
+    expect(source.onPick(pick(candidate!))).toEqual({ text: expected })
+  })
+
+  it('does not search plugins during quoted file completion or insert unrepresentable paths', async () => {
+    const load = vi.fn(async () => [{ id: 'local', name: 'local', label: 'local', status: 'inert' as const, directory: '/path/with"quote' }])
+    const source = createPluginSource(load, undefined, options())
+    expect(await source.candidates(session, request('path with', true))).toEqual([])
+    expect(load).not.toHaveBeenCalled()
+    const [candidate] = await source.candidates(session, request('plugins:local'))
+    expect(source.onPick(pick(candidate!))).toEqual({ text: '@local ' })
   })
 })
 

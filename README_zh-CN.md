@@ -154,12 +154,12 @@ opencli daemon restart
 
 ## 🚀 使用
 
-Reference Anything 直接向 DSH 原生 `@` 菜单注册七个来源，不会引入一套割裂的搜索界面。设置中可以决定显示哪些分组、调整顺序、分别配置折叠条目数和候选硬上限，并选择插件的展开/折叠模式或 DSH 原生滚动列表。设置页还提供一键切换：可以只把可见 Picker 恢复为 DSH 官方文件/会话列表，而插件、同步服务、本地数据和模型侧工具继续运行；需要时可从同一位置重新启用 Reference Anything `@`。
+Reference Anything 直接向 DSH 原生 `@` 菜单注册八个来源，不会引入一套割裂的搜索界面。设置中可以决定显示哪些分组、调整顺序、分别配置折叠条目数和候选硬上限，并选择插件的展开/折叠模式或 DSH 原生滚动列表。设置页还提供一键切换：可以只把可见 Picker 恢复为 DSH 官方文件/会话列表，而插件、同步服务、本地数据和模型侧工具继续运行；需要时可从同一位置重新启用 Reference Anything `@`。
 
 1. 打开 DSH Web 的 `Settings → Reference Anything`。
 2. 在“可用性检查”中确认 OpenCLI、Browser Bridge、浏览器扩展和对话适配器均已就绪。
 3. 在“@ 网页端 AI 对话同步设置”中选择浏览器 Profile、正文保存方式、同步方式和聊天记录范围，然后开始同步。
-4. 在输入框键入 `@`，从 `Commands`、`Skills`、`Files and folders`、`DSH sessions`、`Local agent conversations`、`External conversations` 或 `Cloud drive files` 分组选择来源。
+4. 在输入框键入 `@`，从 `Commands`、`Skills`、`Files and folders`、`DSH sessions`、`Local agent conversations`、`External conversations`、`Cloud drive files` 或 `All local plugins` 分组选择来源。
 5. 键入关键词过滤候选，例如 `@缓存设计`。
 
 默认使用“按需读取正文”模式：本地只保存标题索引，Agent 需要对话内容时才通过浏览器读取正文。若需要离线读取和正文检索，请选择“在本地保存完整正文”。插件会在加载时检查新版本；可在设置页查看更新日志，安装更新后重启 DSH 即可生效。
@@ -169,7 +169,7 @@ Reference Anything 直接向 DSH 原生 `@` 菜单注册七个来源，不会引
 
 ### 🧩 一个 `@` 菜单，多种来源
 
-`@` 菜单包含七个分组：`Commands`、`Skills`、`Files and folders`、`DSH sessions`、`Local agent conversations`、`External conversations`、`Cloud drive files`。网盘分组可逐层浏览通过 OpenList 连接的文件夹和受支持文件；当前仅提供只读访问，连接在设置页中管理。每组默认先显示 6 条，并可分别设置 1–50 的候选硬上限。在展开/折叠模式下，每次展开追加 5 条且菜单保持当前滚动位置，折叠则恢复到配置的紧凑条目数；外部对话的同步入口固定在分组最前面，同步开始、进行和完成时都会原位更新菜单与可见结果。可在 `Settings → Reference Anything → 通用设置` 中启用或关闭分组、调整顺序，并选择“展开/折叠”或“DSH 原生滚动”。
+`@` 菜单包含八个分组：`Commands`、`Skills`、`Files and folders`、`DSH sessions`、`Local agent conversations`、`External conversations`、`Cloud drive files`、`All local plugins`。网盘分组可逐层浏览通过 OpenList 连接的文件夹和受支持文件；当前仅提供只读访问，连接在设置页中管理。每组默认先显示 6 条，并可分别设置 1–50 的候选硬上限。在展开/折叠模式下，每次展开追加 5 条且菜单保持当前滚动位置，折叠则恢复到配置的紧凑条目数；外部对话的同步入口固定在分组最前面，同步开始、进行和完成时都会原位更新菜单与可见结果。可在 `Settings → Reference Anything → 通用设置` 中启用或关闭分组、调整顺序，并选择“展开/折叠”或“DSH 原生滚动”。
 
 #### ⌨️ @Commands — DSH 原生命令
 
@@ -217,6 +217,12 @@ Reference Anything 直接向 DSH 原生 `@` 菜单注册七个来源，不会引
 - 默认搜索全部已识别对话，也可限制为当前工作区
 - 按需读取对话正文；默认精简展示工具名称，需要时可读取完整细节
 - 支持 `@codex:`、`@claude-code:`、`@gemini-cli:` 等 Agent 专属前缀
+
+#### 🧩 @Local plugins — 本地已安装和已配置的插件
+
+输入 `@plugin:`、`@plugins:`、`@插件:` 或 `@本地插件:` 搜索插件。在 **设置 → Reference Anything → 通用设置** 中，可用 **本地所有的插件** 开关立即显示或隐藏该分组，选择会自动保存。默认开启，折叠显示 6 条，候选上限为 50。
+
+列表读取当前 DSH 加载器合成后的插件条目和生命周期状态，并补充 Profile 声明的插件包及带有 DSH bundle/client 元数据的已安装包，排除普通依赖。运行中、已停用和未运行表示宿主插件条目的状态；没有宿主条目的包显示为未运行。选中插件后会插入名称，以及可解析时的真实本地目录引用。文件访问仍使用 DSH 现有的工具和权限。
 
 #### 🌐 @External conversations — 外部对话平台
 

@@ -11,6 +11,7 @@ export const zh = {
   'source.commands': '命令',
   'source.skills': '技能',
   'source.plugins': '本地所有的插件',
+  'plugin.status.live': '运行中', 'plugin.status.disabled': '已停用', 'plugin.status.inert': '未运行',
   'conversation.description': '{provider} · {date}',
   'drive.description': '{provider} · {path}', 'drive.searchIncomplete': '结果可能不完整', 'drive.searchAction': '搜索网盘文件…', 'drive.searchActionDetail': '选择后输入文件名，例如 @drive:笔记', 'drive.parentFolder': '返回上一级',
   'conversation.unknownDate': '未知日期',
@@ -252,6 +253,7 @@ export const zh = {
 } as const
 
 export const en: Record<keyof typeof zh, string> = {
+  'plugin.status.live': 'Running', 'plugin.status.disabled': 'Disabled', 'plugin.status.inert': 'Not running',
   'cloud.openDirectory': 'Open directory',
   'settings.updateTitle': 'Plugin updates', 'settings.updateCheckingAutomatically': 'The plugin checks npm automatically when it loads.', 'settings.updateAvailable': 'Version v{version} is available', 'settings.updateAvailableDetail': 'Installed v{current}; latest v{latest}. Restart DSH after updating.', 'settings.updateCheckFailed': 'Update check failed', 'settings.upToDate': 'Up to date · v{version}', 'settings.upToDateDetail': 'The plugin checks when it loads, and you can check again at any time.', 'settings.checkUpdate': 'Check for updates', 'settings.checkingUpdate': 'Checking…', 'settings.updateNow': 'Update to v{version}', 'settings.updating': 'Updating…', 'settings.updateConfirm': 'Update Reference Anything to v{version}? Restart DSH after the update completes.', 'settings.github': 'GitHub', 'settings.updateContents': "What's new", 'settings.showReleaseNotes': 'View release notes', 'settings.hideReleaseNotes': 'Hide release notes', 'settings.fullReleaseNotes': 'View full release notes on GitHub',
   'settings.adapterIncomplete': 'The adapter package is incomplete and did not register all six conversation sources.', 'settings.adapterLoadFailed': 'The adapter is registered but failed to load: {error}',

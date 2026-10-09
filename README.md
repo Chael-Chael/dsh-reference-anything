@@ -155,12 +155,12 @@ Replace `C:/path/to/dsh-reference-anything` with the repository location. Browse
 
 ## 🚀 Usage
 
-Reference Anything registers seven sources in the native DSH `@` menu rather than introducing a separate search interface. Settings let you choose which groups appear, their order, their collapsed row count, their hard candidate cap, and whether groups use plugin-owned collapse actions or the native scrolling list. A separate one-click control switches the visible picker back to DSH's official file/session list without stopping the plugin, synchronization service, local data, or model-facing tools; the same control restores the Reference Anything picker at any time.
+Reference Anything registers eight sources in the native DSH `@` menu rather than introducing a separate search interface. Settings let you choose which groups appear, their order, their collapsed row count, their hard candidate cap, and whether groups use plugin-owned collapse actions or the native scrolling list. A separate one-click control switches the visible picker back to DSH's official file/session list without stopping the plugin, synchronization service, local data, or model-facing tools; the same control restores the Reference Anything picker at any time.
 
 1. Open `Settings → Reference Anything` in DSH Web.
 2. Under **Availability check**, confirm that OpenCLI, Browser Bridge, the browser extension, and the conversation adapter are ready.
 3. Under **Web AI conversation sync settings**, choose a browser profile, storage mode, sync mode, and history range, then start syncing.
-4. Type `@` in the input box and choose from the `Commands`, `Skills`, `Files and folders`, `DSH sessions`, `Local agent conversations`, `External conversations`, or `Cloud drive files` groups.
+4. Type `@` in the input box and choose from the `Commands`, `Skills`, `Files and folders`, `DSH sessions`, `Local agent conversations`, `External conversations`, `Cloud drive files`, or `All local plugins` groups.
 5. Type a keyword to filter candidates, for example `@cache-design`.
 
 The default **Read bodies on demand** mode stores only the title index locally and uses the browser when an agent needs the conversation. Choose **Store full bodies locally** for offline reading and full-text search. The plugin checks for new versions when it loads; release notes are available in Settings, and installed updates take effect after restarting DSH.
@@ -170,7 +170,7 @@ The default **Read bodies on demand** mode stores only the title index locally a
 
 ### 🧩 One `@` menu, multiple sources
 
-The `@` menu contains seven groups: `Commands`, `Skills`, `Files and folders`, `DSH sessions`, `Local agent conversations`, `External conversations`, and `Cloud drive files`. The cloud-drive group browses folders and supported files from drives connected through OpenList; access is read-only, and connections are managed in Settings. Each group shows six rows before its expand action by default and accepts a separate hard candidate cap from 1 to 50. In collapse mode, each expand action reveals five more rows and updates the mounted menu without jumping back to the top; collapse restores the configured compact count. The external-conversation group keeps its sync action first and updates that row and the visible results in place while synchronization runs and completes. Under `Settings → Reference Anything → General`, you can enable or disable groups, reorder them, and choose **Collapse / expand** or **Native DSH scrolling**.
+The `@` menu contains eight groups: `Commands`, `Skills`, `Files and folders`, `DSH sessions`, `Local agent conversations`, `External conversations`, `Cloud drive files`, and `All local plugins`. The cloud-drive group browses folders and supported files from drives connected through OpenList; access is read-only, and connections are managed in Settings. Each group shows six rows before its expand action by default and accepts a separate hard candidate cap from 1 to 50. In collapse mode, each expand action reveals five more rows and updates the mounted menu without jumping back to the top; collapse restores the configured compact count. The external-conversation group keeps its sync action first and updates that row and the visible results in place while synchronization runs and completes. Under `Settings → Reference Anything → General`, you can enable or disable groups, reorder them, and choose **Collapse / expand** or **Native DSH scrolling**.
 
 #### ⌨️ @Commands — DSH native commands
 
@@ -218,6 +218,12 @@ Type `@agents:` to search and reference conversations saved by other local agent
 - Searches all detected conversations by default, with an option to limit results to the current workspace
 - Reads conversation content on demand; tool names are concise by default, with full details available when needed
 - Supports agent-specific prefixes such as `@codex:`, `@claude-code:`, and `@gemini-cli:`
+
+#### 🧩 @Local plugins — installed and configured plugins
+
+Use `@plugin:`, `@plugins:`, `@插件:`, or `@本地插件:` to find plugins. Under **Settings → Reference Anything → General**, the **All local plugins** switch enables or disables this group immediately; the choice is saved. It is enabled by default, with six collapsed rows and a candidate cap of 50.
+
+The list uses the active DSH loader's composed entries and lifecycle state, supplemented by declared profile bundles and installed packages with DSH bundle/client metadata. Ordinary dependencies are excluded. Running, disabled, and not-running states describe host entries; packages without a host entry are shown as not running. Selecting a plugin inserts its name and, when available, a native reference to its real local directory. File access still uses DSH's existing tools and permissions.
 
 #### 🌐 @External conversations — external conversation platforms
 
