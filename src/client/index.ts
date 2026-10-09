@@ -10,7 +10,7 @@ import { createSnapshotStore } from '@deepseek-ai/dsh-client-store'
 import type { InputTriggerServiceContract } from '@deepseek-ai/dsh-client-ui-input-trigger/client'
 import { ALL_LOCAL_AGENTS, ALL_PROVIDERS, defaultPickerSettings, samePickerSettings, type ChatProvider, type LocalAgent, type PickerSettings, type SettingsRecord } from '../wire.ts'
 import { REFERENCE_ANYTHING_REMOTE, type AgentCandidate, type DriveCandidate, type ReferenceAnythingRemoteFace, type SearchResult, type SyncStatus } from './remote.ts'
-import { createCloudDriveSource, createCommandSource, createConversationSource, createFileSource, createLocalAgentSource, createSearchDebounce, createSessionSource, createSkillSource, type RefreshablePickerSource } from './source.ts'
+import { createCloudDriveSource, createCommandSource, createConversationSource, createFileSource, createLocalAgentSource, createPluginSource, createSearchDebounce, createSessionSource, createSkillSource, type RefreshablePickerSource } from './source.ts'
 import { ConversationSettings, PAGE_SIZE, type SettingsSnapshot } from './components.tsx'
 import {
   adoptMenuGroupTitleProjection, adoptMenuViewportTracking, adoptReferenceIconProjection, adoptSettingsIconProjection, adoptStyles,
@@ -295,6 +295,12 @@ export function apply(ctx: ClientContext): void {
         }), t, optionsFor('drives'))
       activeDriveSource = source
       disposers.push(inputTriggers.registerSource(source))
+    }
+    if (picker.plugins.enabled) {
+      disposers.push(inputTriggers.registerSource(createPluginSource(async (signal) => {
+        if (!remote) return []
+        return unwrap(await remote.localPlugins(signal))
+      }, t, optionsFor('plugins'))))
     }
     return disposers
   }

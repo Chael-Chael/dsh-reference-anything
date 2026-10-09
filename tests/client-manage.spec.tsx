@@ -487,6 +487,21 @@ describe('manage synced conversations', () => {
 describe('general settings editing', () => {
   const noop = async () => {}
 
+  it('saves the local-plugin switch off and on without changing other sources', async () => {
+    const saved: SettingsRecord[] = []
+    const initial = { ...settings, picker: defaultPickerSettings() }
+    const actions = { save: async (value: SettingsRecord) => { saved.push(value) } }
+    const el = renderSettings({ settings: initial }, actions)
+    const toggle = () => el.querySelector<HTMLButtonElement>('[data-picker-id="plugins"] button[role="switch"]')!
+    expect(toggle().getAttribute('aria-checked')).toBe('true')
+    await act(async () => { toggle().click() })
+    expect(saved[0]?.picker).toEqual({ ...initial.picker, plugins: { ...initial.picker.plugins, enabled: false } })
+    rerenderSettings({ settings: saved[0]! }, actions)
+    expect(toggle().getAttribute('aria-checked')).toBe('false')
+    await act(async () => { toggle().click() })
+    expect(saved[1]?.picker).toEqual(initial.picker)
+  })
+
   it('defaults the chat history range to unlimited and saves days or unlimited', async () => {
     const saved: SettingsRecord[] = []
     const el = renderSettings({ settings }, { save: async value => { saved.push(value) } })

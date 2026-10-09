@@ -54,6 +54,7 @@ describe('settings source registration guard', () => {
   it.each([
     ['agents', { enabled: true, order: 25, limit: 6, maxCandidates: 50 }],
     ['drives', { enabled: true, order: 35, limit: 6, maxCandidates: 50 }],
+    ['plugins', { enabled: true, order: 40, limit: 6, maxCandidates: 50 }],
   ] as const)('fills in the %s picker key when it arrived after the record was written', (key, expected) => {
     const saved = defaultPickerSettings() as Record<string, unknown>
     delete saved[key]
@@ -69,6 +70,7 @@ describe('settings source registration guard', () => {
     const saved = defaultPickerSettings() as Record<string, unknown>
     delete saved['agents']
     delete saved['drives']
+    delete saved['plugins']
     const value = settingsRecordSchema.parse({
       opencliPath: 'opencli', profile: '', detailConcurrency: 2, autoSync: false,
       autoSyncMinutes: 60, historyMode: 'metadata-only', picker: saved,
@@ -90,6 +92,17 @@ describe('settings source registration guard', () => {
 
     expect(samePickerSettings(original, changed)).toBe(false)
     expect(samePickerSettings(original, { ...original, displayMode: 'native-scroll' })).toBe(false)
+  })
+
+  it('preserves the disabled plugin switch on reload and detects it for source registration', () => {
+    const picker = defaultPickerSettings()
+    picker.plugins.enabled = false
+    const record = settingsRecordSchema.parse({
+      opencliPath: 'opencli', profile: '', detailConcurrency: 2, autoSync: false,
+      autoSyncMinutes: 60, historyMode: 'metadata-only', picker,
+    })
+    expect(record.picker?.plugins.enabled).toBe(false)
+    expect(samePickerSettings(defaultPickerSettings(), record.picker!)).toBe(false)
   })
 })
 

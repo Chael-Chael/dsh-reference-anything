@@ -18,6 +18,15 @@ export interface AgentCandidate { id: string; kind: string; label: string; provi
 export interface AgentStats { agent: LocalAgent; conversations: number }
 /** One cloud-drive file offered by the `@` menu; `origin` is a display path, never a URL. */
 export interface DriveCandidate { id: string; label: string; provider: string; origin?: string; updatedAt?: number; searchIncomplete?: boolean; isDirectory?: boolean }
+export interface LocalPluginCandidate {
+  id: string
+  name: string
+  label: string
+  version?: string
+  status: 'live' | 'disabled' | 'inert'
+  type?: string
+  directory?: string
+}
 export type ExtensionState = 'connected' | 'disconnected' | 'profile-required' | 'profile-disconnected' | 'daemon-offline'
 export interface Health {
   version: string; daemon: string; pluginInstalled: boolean
@@ -130,4 +139,5 @@ export interface ReferenceAnythingRemoteFace {
   openListDisableMount(input: { id: string; disabled?: boolean }, signal?: AbortSignal): Promise<RemoteResult<boolean>>
   openListRemoveMount(input: { id: string }, signal?: AbortSignal): Promise<RemoteResult<boolean>>
   openListReindex(input: { id: string }, signal?: AbortSignal): Promise<RemoteResult<OpenListReindex>>
+  localPlugins(signal?: AbortSignal): Promise<RemoteResult<readonly LocalPluginCandidate[]>>
 }

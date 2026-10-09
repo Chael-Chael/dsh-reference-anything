@@ -10,6 +10,7 @@ import type {} from './openlist/index.ts'
 import { tmpdir } from 'node:os'
 import { spawn } from 'node:child_process'
 import { validateDownloadDirectory } from './download-directory.ts'
+import { resolveLocalPlugins } from './local-plugins.ts'
 
 export class ReferenceAnythingRemote extends TypertRemoteService {
   constructor(ctx: Context) { super(ctx, 'referenceAnything') }
@@ -140,4 +141,8 @@ export class ReferenceAnythingRemote extends TypertRemoteService {
   async openListDisableMount(input: { id: string, disabled?: boolean }, signal: AbortSignal): Promise<boolean> { await this.ctx.openListManager.disableMount(input.id, input.disabled ?? true, signal); return true }
   async openListRemoveMount(input: { id: string }, signal: AbortSignal): Promise<boolean> { await this.ctx.openListManager.removeMount(input.id, signal); return true }
   openListReindex(input: { id: string }, signal: AbortSignal) { return this.ctx.openListManager.reindexMount(input.id, signal) }
+  localPlugins(signal: AbortSignal) {
+    signal.throwIfAborted()
+    return resolveLocalPlugins(this.ctx)
+  }
 }
