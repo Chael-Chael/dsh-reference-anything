@@ -45,6 +45,18 @@ describe('native @ sources', () => {
     expect(scopedQuery('本地插件', 'plugins')).toBe('')
   })
 
+  it.each(['插件', '本地插件', '本地所有插件'])('routes the Chinese %s prefix only to plugins', async (prefix) => {
+    const query = `${prefix}:reference-anything`
+    expect(scopedQuery(query, 'plugins')).toBe('reference-anything')
+    expect(scopedQuery(query, 'files')).toBeUndefined()
+    expect(scopedQuery(query, 'conversations')).toBeUndefined()
+    const source = createPluginSource(async () => [
+      { id: 'dsh-reference-anything', label: 'dsh-reference-anything', name: 'dsh-reference-anything', version: '0.4.3', status: 'live' },
+      { id: 'unrelated-plugin', label: 'unrelated-plugin', name: 'unrelated-plugin', status: 'disabled' },
+    ], undefined, options())
+    expect((await source.candidates(session, request(query))).map(row => row.name)).toEqual(['dsh-reference-anything'])
+  })
+
   it('describes result provenance and disambiguates duplicate menu names', () => {
     const row = searchRow({ matchedVia: 'content', snippet: '…used pgvector for…' })
     expect(describeRow(row)).toContain('ChatGPT · ')

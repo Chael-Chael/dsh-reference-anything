@@ -140,8 +140,7 @@ const PREFIX_SCOPE: Readonly<Record<string, SourceScope>> = {
   '外部对话': 'conversations', '外部对话记录': 'conversations',
   chatgpt: 'conversations', claude: 'conversations', gemini: 'conversations', deepseek: 'conversations', grok: 'conversations', kimi: 'conversations',
   // `file`/`files` above already belong to the workspace, so a drive needs
-  // its own words. The bare CJK ones only reach the map through the
-  // no-colon branch of `scopedQuery` — its prefix pattern is ASCII.
+  // its own words. Both bare aliases and type:name prefixes use this map.
   drive: 'drives', drives: 'drives', cloud: 'drives', netdisk: 'drives', openlist: 'drives',
   '网盘': 'drives',
   plugin: 'plugins', plugins: 'plugins',
@@ -894,7 +893,7 @@ export function scopedQuery(value: string, scope: SourceScope): string | undefin
   const trimmed = value.trim()
   const bareScope = PREFIX_SCOPE[trimmed.toLocaleLowerCase()]
   if (bareScope !== undefined) return bareScope === scope ? '' : undefined
-  const match = trimmed.match(/^([a-z-]+):(.*)$/iu)
+  const match = trimmed.match(/^([\p{L}-]+):(.*)$/iu)
   if (!match) return trimmed
   const requested = PREFIX_SCOPE[match[1]!.toLocaleLowerCase()]
   if (requested === undefined) return trimmed
