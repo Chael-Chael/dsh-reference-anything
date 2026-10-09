@@ -9,7 +9,7 @@ import type { Agent } from '@deepseek-ai/dsh-agent'
 import type {} from './openlist/index.ts'
 import { tmpdir, homedir } from 'node:os'
 import { join } from 'node:path'
-import { existsSync, readFileSync } from 'node:fs'
+import { existsSync, readFileSync, realpathSync } from 'node:fs'
 import { spawn } from 'node:child_process'
 import { validateDownloadDirectory } from './download-directory.ts'
 import type { LocalPluginCandidate } from './contract.ts'
@@ -20,6 +20,18 @@ const INBOX_BUNDLES = new Set([
   '@deepseek-ai/dsh-headless',
   'electron',
 ])
+
+function resolvePluginDir(profileDir: string, name: string): string | undefined {
+  const modPath = join(profileDir, 'node_modules', name)
+  if (existsSync(modPath)) {
+    try {
+      return realpathSync(modPath)
+    } catch {
+      return modPath
+    }
+  }
+  return undefined
+}
 
 function resolveLocalPlugins(): readonly LocalPluginCandidate[] {
   const dshHome = process.env.DSH_HOME || join(homedir(), '.dsh')
@@ -67,6 +79,7 @@ function resolveLocalPlugins(): readonly LocalPluginCandidate[] {
     const shortSpec = typeof spec === 'string' && isLink
       ? `link:${spec.split(/[\\/]/).filter(Boolean).slice(-2).join('/')}`
       : spec
+    const dir = resolvePluginDir(profileDir, name)
     pluginsMap.set(name, {
       id,
       name,
@@ -74,6 +87,7 @@ function resolveLocalPlugins(): readonly LocalPluginCandidate[] {
       version: shortSpec,
       status: disabled ? 'disabled' : 'live',
       type,
+      ...(dir ? { directory: dir } : {}),
     })
   }
 
@@ -85,6 +99,7 @@ function resolveLocalPlugins(): readonly LocalPluginCandidate[] {
       const name = m[2]?.trim() ?? ''
       if (name && !pluginsMap.has(name)) {
         const disabled = disabledIds.has(id) || disabledIds.has(name)
+        const dir = resolvePluginDir(profileDir, name)
         pluginsMap.set(name, {
           id,
           name,
@@ -92,6 +107,7 @@ function resolveLocalPlugins(): readonly LocalPluginCandidate[] {
           version: 'patch',
           status: disabled ? 'disabled' : 'live',
           type: 'patch',
+          ...(dir ? { directory: dir } : {}),
         })
       }
     }

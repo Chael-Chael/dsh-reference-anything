@@ -29,6 +29,7 @@ export const localPluginCandidateSchema = z.object({
   version: z.string().optional(),
   status: z.enum(['live', 'disabled', 'inert']),
   type: z.string().optional(),
+  directory: z.string().optional(),
 }).strict().readonly()
 export type LocalPluginCandidate = z.infer<typeof localPluginCandidateSchema>
 

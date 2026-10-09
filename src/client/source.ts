@@ -184,7 +184,7 @@ type CandidateValue =
   | { kind: 'drive-folder'; path: string }
   | { kind: 'command'; name: string }
   | { kind: 'skill'; name: string }
-  | { kind: 'plugin'; name: string }
+  | { kind: 'plugin'; name: string; directory?: string }
   | { kind: 'action'; action: 'sync' | 'expand' | 'collapse'; query?: string }
 
 function encodeCandidate(value: CandidateValue): string { return JSON.stringify(value) }
@@ -678,13 +678,20 @@ export function createPluginSource(
             name: row.label || row.name,
             description: descParts.join(' · '),
             icon: candidateIcon(PICKER_ICON_MARKER.command),
-            value: encodeCandidate({ kind: 'plugin', name: row.name }),
+            value: encodeCandidate({ kind: 'plugin', name: row.name, directory: row.directory }),
           }
         })
     },
     onPick({ candidate }) {
       const value = decodeCandidate(candidate.value)
-      return value?.kind === 'plugin' ? { text: `@${value.name} ` } : undefined
+      if (value?.kind === 'plugin') {
+        if (value.directory) {
+          const normalized = value.directory.replace(/[/\\]+$/, '') + '\\'
+          return { text: `@${value.name} @"${normalized}" ` }
+        }
+        return { text: `@${value.name} ` }
+      }
+      return undefined
     },
   }
   return withDisplayPolicy(source, options, t)

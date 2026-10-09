@@ -25,6 +25,7 @@ export interface LocalPluginCandidate {
   version?: string
   status: 'live' | 'disabled' | 'inert'
   type?: string
+  directory?: string
 }
 export type ExtensionState = 'connected' | 'disconnected' | 'profile-required' | 'profile-disconnected' | 'daemon-offline'
 export interface Health {

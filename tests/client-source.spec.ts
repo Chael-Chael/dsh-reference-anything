@@ -485,7 +485,7 @@ describe('cloud drive files', () => {
 
   it('formats local plugin candidates and inserts @mention on pick', async () => {
     const plugins = [
-      { id: 'cost-meter', name: 'dsh-cost-meter', label: 'dsh-cost-meter', version: '^1.8.15', status: 'live' as const, type: 'community' },
+      { id: 'cost-meter', name: 'dsh-cost-meter', label: 'dsh-cost-meter', version: '^1.8.15', status: 'live' as const, type: 'community', directory: 'C:\\dsh-ecosystem\\external-repos\\dsh-cost-meter' },
       { id: 'automation', name: '@dsh-external/dsh-automation', label: '@dsh-external/dsh-automation', version: 'github:titanwings/dsh-automation', status: 'disabled' as const, type: 'git' },
     ]
     const source = createPluginSource(async () => plugins, undefined, options())
@@ -499,7 +499,8 @@ describe('cloud drive files', () => {
       name: '@dsh-external/dsh-automation',
       description: 'github:titanwings/dsh-automation · 已停用',
     })
-    expect(source.onPick(pick(candidates[0]!))).toEqual({ text: '@dsh-cost-meter ' })
+    expect(source.onPick(pick(candidates[0]!))).toEqual({ text: '@dsh-cost-meter @"C:\\dsh-ecosystem\\external-repos\\dsh-cost-meter\\" ' })
+    expect(source.onPick(pick(candidates[1]!))).toEqual({ text: '@@dsh-external/dsh-automation ' })
 
     const filtered = await source.candidates(session, request('cost'))
     expect(filtered).toHaveLength(1)
