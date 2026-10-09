@@ -14,7 +14,7 @@ export const LOCAL_AGENT_LABEL: Readonly<Record<LocalAgent, string>> = {
   pi: 'Pi', opencode: 'opencode', mimocode: 'mimocode', zcode: 'zcode',
 }
 
-export const pickerSourceSchema = z.enum(['commands', 'skills', 'files', 'sessions', 'agents', 'conversations', 'drives'])
+export const pickerSourceSchema = z.enum(['commands', 'skills', 'files', 'sessions', 'agents', 'conversations', 'drives', 'plugins'])
 export type PickerSource = z.infer<typeof pickerSourceSchema>
 
 const pickerSourceSettingsSchema = z.object({
@@ -40,6 +40,7 @@ export const pickerSettingsSchema = z.object({
   conversations: pickerSourceSettingsSchema,
   // Defaulted for the same reason as `agents` above: it arrived later still.
   drives: pickerSourceSettingsSchema.default({ enabled: true, order: 35, limit: 6, maxCandidates: 50 }),
+  plugins: pickerSourceSettingsSchema.default({ enabled: true, order: 40, limit: 6, maxCandidates: 50 }),
 })
 export type PickerSettings = z.infer<typeof pickerSettingsSchema>
 export type PickerDisplayMode = PickerSettings['displayMode']
@@ -57,6 +58,7 @@ export function defaultPickerSettings(): PickerSettings {
     agents: { enabled: true, order: 25, limit: 6, maxCandidates: 50 },
     conversations: { enabled: true, order: 30, limit: 6, maxCandidates: 50 },
     drives: { enabled: true, order: 35, limit: 6, maxCandidates: 50 },
+    plugins: { enabled: true, order: 40, limit: 6, maxCandidates: 50 },
   }
 }
 

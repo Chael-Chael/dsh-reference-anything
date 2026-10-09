@@ -22,6 +22,16 @@ export const driveCandidateSchema = z.object({
   searchIncomplete: z.boolean().optional(), isDirectory: z.boolean().optional(),
 }).strict().readonly()
 
+export const localPluginCandidateSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  label: z.string(),
+  version: z.string().optional(),
+  status: z.enum(['live', 'disabled', 'inert']),
+  type: z.string().optional(),
+}).strict().readonly()
+export type LocalPluginCandidate = z.infer<typeof localPluginCandidateSchema>
+
 /**
  * Binds the calling session to the invocation, so the Host can scope a search
  * to the session's cwd. Reintroduced here after 0.3.0 handed file and session
@@ -164,6 +174,7 @@ export const REFERENCE_ANYTHING_INVOCATIONS: readonly InvocationDescriptor[] = [
   descriptor('openListDisableMount', [{ name: 'input', wire: 'input', source: 'json', codec: strict('OpenListDisableMountInput', openListDisableMountSchema) }], strict('Boolean', z.boolean()), true),
   descriptor('openListRemoveMount', [{ name: 'input', wire: 'input', source: 'json', codec: strict('OpenListMountInput', openListMountInputSchema) }], strict('Boolean', z.boolean()), true),
   descriptor('openListReindex', [{ name: 'input', wire: 'input', source: 'json', codec: strict('OpenListMountInput', openListMountInputSchema) }], strict('OpenListReindex', z.object({ supported: z.boolean(), reason: z.string().optional() }).readonly()), true),
+  descriptor('localPlugins', [], strict('LocalPluginCandidate[]', z.array(localPluginCandidateSchema)), true),
 ]
 
 function strict(type: string, schema: z.ZodType): { mode: 'strict'; typeSymbol: string; schema: z.ZodType; create: () => z.ZodType } {

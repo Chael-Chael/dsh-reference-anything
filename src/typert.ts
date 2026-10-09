@@ -44,6 +44,7 @@ export const TYPERT_MANIFEST: TypertContribution = {
       { kind: 'method', name: 'openListDisableMount', signature: 'openListDisableMount(input: OpenListDisableMountInput, signal: AbortSignal): Promise<boolean>' },
       { kind: 'method', name: 'openListRemoveMount', signature: 'openListRemoveMount(input: OpenListMountInput, signal: AbortSignal): Promise<boolean>' },
       { kind: 'method', name: 'openListReindex', signature: 'openListReindex(input: OpenListMountInput, signal: AbortSignal): Promise<OpenListReindex>' },
+      { kind: 'method', name: 'localPlugins', signature: 'localPlugins(signal: AbortSignal): Promise<LocalPluginCandidate[]>' },
     ], types: [],
   }], events: [], objects: [] },
   invocations: REFERENCE_ANYTHING_INVOCATIONS,

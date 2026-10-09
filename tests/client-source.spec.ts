@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import {
-  AGENT_SOURCE, CONVERSATION_SOURCE, DRIVE_SOURCE, agentReferenceUri, conversationReferenceUri, createCloudDriveSource,
-  createCommandSource, createConversationSource, createFileSource, createLocalAgentSource, createSearchDebounce,
+  AGENT_SOURCE, CONVERSATION_SOURCE, DRIVE_SOURCE, PLUGIN_SOURCE, agentReferenceUri, conversationReferenceUri, createCloudDriveSource,
+  createCommandSource, createConversationSource, createFileSource, createLocalAgentSource, createPluginSource, createSearchDebounce,
   createSessionSource, createSkillSource, driveMenuIconKind, driveReferenceUri,
   describeRow, disambiguate, parseQuery, scopedQuery, workspaceIconKind,
   type PickerSourceOptions,
@@ -40,6 +40,9 @@ describe('native @ sources', () => {
     expect(scopedQuery('commands', 'files')).toBeUndefined()
     expect(scopedQuery('skills:creator', 'skills')).toBe('creator')
     expect(scopedQuery('外部对话', 'conversations')).toBe('')
+    expect(scopedQuery('plugins', 'plugins')).toBe('')
+    expect(scopedQuery('plugin:git', 'plugins')).toBe('git')
+    expect(scopedQuery('本地插件', 'plugins')).toBe('')
   })
 
   it('describes result provenance and disambiguates duplicate menu names', () => {
@@ -478,6 +481,29 @@ describe('cloud drive files', () => {
     // on this filesystem — so this group asks the host nothing at all.
     await expect(source.candidates(session, request('path with', true))).resolves.toEqual([])
     expect(search).not.toHaveBeenCalled()
+  })
+
+  it('formats local plugin candidates and inserts @mention on pick', async () => {
+    const plugins = [
+      { id: 'cost-meter', name: 'dsh-cost-meter', label: 'dsh-cost-meter', version: '^1.8.15', status: 'live' as const, type: 'community' },
+      { id: 'automation', name: '@dsh-external/dsh-automation', label: '@dsh-external/dsh-automation', version: 'github:titanwings/dsh-automation', status: 'disabled' as const, type: 'git' },
+    ]
+    const source = createPluginSource(async () => plugins, undefined, options())
+    const candidates = await source.candidates(session, request())
+    expect(candidates).toHaveLength(2)
+    expect(candidates[0]).toMatchObject({
+      name: 'dsh-cost-meter',
+      description: '^1.8.15 · 运行中',
+    })
+    expect(candidates[1]).toMatchObject({
+      name: '@dsh-external/dsh-automation',
+      description: 'github:titanwings/dsh-automation · 已停用',
+    })
+    expect(source.onPick(pick(candidates[0]!))).toEqual({ text: '@dsh-cost-meter ' })
+
+    const filtered = await source.candidates(session, request('cost'))
+    expect(filtered).toHaveLength(1)
+    expect(filtered[0]?.name).toBe('dsh-cost-meter')
   })
 })
 

@@ -7,9 +7,103 @@ import type {} from './sources/local-agent/index.ts'
 import type {} from './sources/cloud-drive/index.ts'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import type {} from './openlist/index.ts'
-import { tmpdir } from 'node:os'
+import { tmpdir, homedir } from 'node:os'
+import { join } from 'node:path'
+import { existsSync, readFileSync } from 'node:fs'
 import { spawn } from 'node:child_process'
 import { validateDownloadDirectory } from './download-directory.ts'
+import type { LocalPluginCandidate } from './contract.ts'
+
+const INBOX_BUNDLES = new Set([
+  '@deepseek-ai/dsh-base',
+  '@deepseek-ai/dsh-web-app',
+  '@deepseek-ai/dsh-headless',
+  'electron',
+])
+
+function resolveLocalPlugins(): readonly LocalPluginCandidate[] {
+  const dshHome = process.env.DSH_HOME || join(homedir(), '.dsh')
+  const profile = process.env.DSH_PROFILE || 'web'
+  const profileDir = join(dshHome, 'profiles', profile)
+  const pkgPath = join(profileDir, 'package.json')
+  const patchPath = join(profileDir, 'cordis.patch.yml')
+
+  let pkg: { dependencies?: Record<string, string> } = {}
+  if (existsSync(pkgPath)) {
+    try {
+      pkg = JSON.parse(readFileSync(pkgPath, 'utf8'))
+    } catch {
+      pkg = {}
+    }
+  }
+
+  let patchContent = ''
+  if (existsSync(patchPath)) {
+    try {
+      patchContent = readFileSync(patchPath, 'utf8')
+    } catch {
+      patchContent = ''
+    }
+  }
+
+  const disabledIds = new Set<string>()
+  const disableMatches = patchContent.matchAll(/-\s+id:\s*([^\s\r\n]+)[\s\S]*?disabled:\s*true/gu)
+  for (const m of disableMatches) {
+    if (m[1]) disabledIds.add(m[1].trim())
+  }
+
+  const pluginsMap = new Map<string, LocalPluginCandidate>()
+
+  for (const [name, spec] of Object.entries(pkg.dependencies ?? {})) {
+    if (INBOX_BUNDLES.has(name)) continue
+    const isLink = typeof spec === 'string' && spec.startsWith('link:')
+    const isGit = typeof spec === 'string' && (spec.startsWith('github:') || spec.startsWith('git+') || spec.startsWith('http'))
+    let type = 'community'
+    if (isLink) type = 'local'
+    else if (isGit) type = 'git'
+
+    const id = name.replace(/^@deepseek-ai\/dsh-client-/, '').replace(/^@deepseek-ai\/dsh-/, '')
+    const disabled = disabledIds.has(name) || disabledIds.has(id)
+    const shortSpec = typeof spec === 'string' && isLink
+      ? `link:${spec.split(/[\\/]/).filter(Boolean).slice(-2).join('/')}`
+      : spec
+    pluginsMap.set(name, {
+      id,
+      name,
+      label: name,
+      version: shortSpec,
+      status: disabled ? 'disabled' : 'live',
+      type,
+    })
+  }
+
+  const insertMatch = patchContent.match(/- insert:([\s\S]*?)(?=(?:\n- id:|\n- insert:|$))/u)
+  if (insertMatch && insertMatch[1]) {
+    const itemMatches = insertMatch[1].matchAll(/-\s+id:\s*([^\s\r\n]+)[\s\S]*?name:\s*['"]?([^'"\r\n]+)['"]?/gu)
+    for (const m of itemMatches) {
+      const id = m[1]?.trim() ?? ''
+      const name = m[2]?.trim() ?? ''
+      if (name && !pluginsMap.has(name)) {
+        const disabled = disabledIds.has(id) || disabledIds.has(name)
+        pluginsMap.set(name, {
+          id,
+          name,
+          label: name,
+          version: 'patch',
+          status: disabled ? 'disabled' : 'live',
+          type: 'patch',
+        })
+      }
+    }
+  }
+
+  const list = Array.from(pluginsMap.values())
+  list.sort((a, b) => {
+    if (a.status !== b.status) return a.status === 'live' ? -1 : 1
+    return a.name.localeCompare(b.name)
+  })
+  return list
+}
 
 export class ReferenceAnythingRemote extends TypertRemoteService {
   constructor(ctx: Context) { super(ctx, 'referenceAnything') }
@@ -140,4 +234,8 @@ export class ReferenceAnythingRemote extends TypertRemoteService {
   async openListDisableMount(input: { id: string, disabled?: boolean }, signal: AbortSignal): Promise<boolean> { await this.ctx.openListManager.disableMount(input.id, input.disabled ?? true, signal); return true }
   async openListRemoveMount(input: { id: string }, signal: AbortSignal): Promise<boolean> { await this.ctx.openListManager.removeMount(input.id, signal); return true }
   openListReindex(input: { id: string }, signal: AbortSignal) { return this.ctx.openListManager.reindexMount(input.id, signal) }
+  localPlugins(signal: AbortSignal) {
+    signal.throwIfAborted()
+    return resolveLocalPlugins()
+  }
 }

@@ -624,7 +624,7 @@ export function adoptMenuViewportTracking(): () => void {
  * rendered inside the native @ menu.
  */
 export function adoptMenuGroupTitleProjection(t: TranslateNS<typeof REFERENCE_ANYTHING_NS>): () => void {
-  const keys: Readonly<Record<string, 'source.conversations' | 'source.files' | 'source.sessions' | 'source.agents' | 'source.drives' | 'source.commands' | 'source.skills'>> = {
+  const keys: Readonly<Record<string, 'source.conversations' | 'source.files' | 'source.sessions' | 'source.agents' | 'source.drives' | 'source.commands' | 'source.skills' | 'source.plugins'>> = {
     'External conversations': 'source.conversations',
     'Files and folders': 'source.files',
     'DSH sessions': 'source.sessions',
@@ -632,6 +632,7 @@ export function adoptMenuGroupTitleProjection(t: TranslateNS<typeof REFERENCE_AN
     'Cloud drive files': 'source.drives',
     Commands: 'source.commands',
     Skills: 'source.skills',
+    'All local plugins': 'source.plugins',
   }
   const normalizeLabel = (value: string): string => value.replace(/\s/gu, '')
   const actionLabels = new Set([

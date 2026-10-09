@@ -9,7 +9,7 @@ import type { TranslateNS } from '@deepseek-ai/dsh-client-locale/client'
 import type { ChatProvider, PickerDisplayMode } from '../wire.ts'
 import { parseProviderQuery } from '../search.ts'
 import { encodeReferenceUri } from '../uri-codec.ts'
-import type { AgentCandidate, DriveCandidate, SearchResult, SyncStatus } from './remote.ts'
+import type { AgentCandidate, DriveCandidate, LocalPluginCandidate, SearchResult, SyncStatus } from './remote.ts'
 import {
   AGENT_ICON_MARKER, COMMAND_ICON_MARKER, DRIVE_ICON_MARKER, LOCAL_AGENT_ICON_MARKER, PICKER_ICON_MARKER, PROVIDER_ICON_MARKER, SESSION_ICON_MARKER, SKILL_ICON_MARKER,
   candidateIcon, type PickerIconKind,
@@ -31,6 +31,7 @@ export const AGENT_SOURCE = 'Local agent conversations'
 export const DRIVE_SOURCE = 'Cloud drive files'
 export const COMMAND_SOURCE = 'Commands'
 export const SKILL_SOURCE = 'Skills'
+export const PLUGIN_SOURCE = 'All local plugins'
 
 const driveMenuKinds = new Map<string, WorkspaceIconKind>()
 export const driveMenuIconKind = (description: string): WorkspaceIconKind | undefined => driveMenuKinds.get(description)
@@ -87,7 +88,7 @@ export function workspacePathIconKind(path: string, kind: FileReferenceCandidate
   return WORKSPACE_EXTENSION_KIND[extension] ?? 'file'
 }
 
-type SourceScope = 'commands' | 'skills' | 'files' | 'sessions' | 'agents' | 'conversations' | 'drives'
+type SourceScope = 'commands' | 'skills' | 'files' | 'sessions' | 'agents' | 'conversations' | 'drives' | 'plugins'
 export interface PickerSourceOptions {
   order: number
   /** Rows shown before the source-owned expand action. */
@@ -143,6 +144,8 @@ const PREFIX_SCOPE: Readonly<Record<string, SourceScope>> = {
   // no-colon branch of `scopedQuery` — its prefix pattern is ASCII.
   drive: 'drives', drives: 'drives', cloud: 'drives', netdisk: 'drives', openlist: 'drives',
   '网盘': 'drives',
+  plugin: 'plugins', plugins: 'plugins',
+  '插件': 'plugins', '本地插件': 'plugins', '本地所有插件': 'plugins',
 }
 
 export interface SearchDebounce<V> {
@@ -181,6 +184,7 @@ type CandidateValue =
   | { kind: 'drive-folder'; path: string }
   | { kind: 'command'; name: string }
   | { kind: 'skill'; name: string }
+  | { kind: 'plugin'; name: string }
   | { kind: 'action'; action: 'sync' | 'expand' | 'collapse'; query?: string }
 
 function encodeCandidate(value: CandidateValue): string { return JSON.stringify(value) }
@@ -653,6 +657,39 @@ export function createSkillSource(
   return withDisplayPolicy(source, options, t)
 }
 
+export function createPluginSource(
+  load: (signal: AbortSignal) => Promise<readonly LocalPluginCandidate[]>,
+  t: T = fallback,
+  options: PickerSourceOptions = { ...DEFAULT_SOURCE_OPTIONS, order: 40 },
+): RefreshablePickerSource {
+  const source: InputTriggerSource = {
+    trigger: '@', name: PLUGIN_SOURCE, order: options.order,
+    async candidates(_session, { query, signal }) {
+      const scoped = scopedQuery(query, 'plugins')
+      if (scoped === undefined) return []
+      const rows = await load(signal)
+      const needle = scoped.toLocaleLowerCase()
+      return rows
+        .filter(row => row.name.toLocaleLowerCase().includes(needle) || row.label.toLocaleLowerCase().includes(needle) || row.id.toLocaleLowerCase().includes(needle))
+        .map(row => {
+          const statusText = row.status === 'live' ? '运行中' : row.status === 'disabled' ? '已停用' : '未加载'
+          const descParts = [row.version ? row.version : undefined, statusText].filter(Boolean)
+          return {
+            name: row.label || row.name,
+            description: descParts.join(' · '),
+            icon: candidateIcon(PICKER_ICON_MARKER.command),
+            value: encodeCandidate({ kind: 'plugin', name: row.name }),
+          }
+        })
+    },
+    onPick({ candidate }) {
+      const value = decodeCandidate(candidate.value)
+      return value?.kind === 'plugin' ? { text: `@${value.name} ` } : undefined
+    },
+  }
+  return withDisplayPolicy(source, options, t)
+}
+
 interface CachedSourceCandidates {
   session: ClientSessionContext
   request: Pick<CandidateRequest, 'query' | 'quoted' | 'position' | 'drilled'>
@@ -864,7 +901,7 @@ function formatDate(value: string, t: T): string {
 
 const fallback: T = (key, params) => {
   const dictionary: Record<string, string> = {
-    'source.conversations': 'External conversations', 'source.files': 'Files and folders', 'source.sessions': 'DSH sessions', 'source.agents': 'Local agent conversations', 'source.drives': 'Cloud drive files', 'source.commands': 'Commands', 'source.skills': 'Skills',
+    'source.conversations': 'External conversations', 'source.files': 'Files and folders', 'source.sessions': 'DSH sessions', 'source.agents': 'Local agent conversations', 'source.drives': 'Cloud drive files', 'source.commands': 'Commands', 'source.skills': 'Skills', 'source.plugins': 'All local plugins',
     'conversation.description': '{provider} · {date}', 'drive.description': '{provider} · {path}', 'drive.searchIncomplete': 'Results may be incomplete', 'drive.searchAction': 'Search cloud drive files…', 'drive.searchActionDetail': 'Select, then type a filename, for example @drive:notes', 'drive.parentFolder': 'Parent folder', 'conversation.unknownDate': 'unknown date', 'skill.userOnly': 'user-only · ',
     'menu.syncAll': 'Sync all now', 'menu.syncAllDetail': 'Refresh the local external-conversation index',
     'menu.syncRunning': 'Syncing…', 'menu.syncRunningDetail': 'An external-conversation sync is already running',
