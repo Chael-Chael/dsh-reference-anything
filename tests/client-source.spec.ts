@@ -43,6 +43,8 @@ describe('native @ sources', () => {
     expect(scopedQuery('plugins', 'plugins')).toBe('')
     expect(scopedQuery('plugin:git', 'plugins')).toBe('git')
     expect(scopedQuery('本地插件', 'plugins')).toBe('')
+    expect(scopedQuery('folders', 'plugins')).toBe('folders')
+    expect(scopedQuery('folders:src', 'files')).toBe('src')
   })
 
   it('describes result provenance and disambiguates duplicate menu names', () => {
