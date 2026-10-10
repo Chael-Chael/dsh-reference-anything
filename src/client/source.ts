@@ -124,7 +124,7 @@ const DISPLAY_EXPANSION_STEP = 5
 const PREFIX_SCOPE: Readonly<Record<string, SourceScope>> = {
   command: 'commands', commands: 'commands', cmd: 'commands',
   skill: 'skills', skills: 'skills',
-  file: 'files', files: 'files', folder: 'files', folders: 'files', path: 'files',
+  file: 'files', files: 'files', folder: 'files', path: 'files',
   session: 'sessions', sessions: 'sessions', dsh: 'sessions',
   // Bare `claude`, `gemini`, `grok`, and `kimi` stay with External
   // conversations below, because those are the browser platforms a person
@@ -138,7 +138,6 @@ const PREFIX_SCOPE: Readonly<Record<string, SourceScope>> = {
   '本地对话': 'agents', '本地记录': 'agents',
   chat: 'conversations', conversation: 'conversations', conversations: 'conversations',
   '外部对话': 'conversations', '外部对话记录': 'conversations',
-  chatgpt: 'conversations', claude: 'conversations', gemini: 'conversations', deepseek: 'conversations', grok: 'conversations', kimi: 'conversations',
   // `file`/`files` above already belong to the workspace, so a drive needs
   // its own words. The bare CJK ones only reach the map through the
   // no-colon branch of `scopedQuery` — its prefix pattern is ASCII.
@@ -146,6 +145,11 @@ const PREFIX_SCOPE: Readonly<Record<string, SourceScope>> = {
   '网盘': 'drives',
   plugin: 'plugins', plugins: 'plugins',
   '插件': 'plugins', '本地插件': 'plugins', '本地所有插件': 'plugins',
+}
+
+const PROVIDER_SCOPE: Readonly<Record<string, SourceScope>> = {
+  chatgpt: 'conversations', claude: 'conversations', gemini: 'conversations',
+  deepseek: 'conversations', grok: 'conversations', kimi: 'conversations',
 }
 
 export interface SearchDebounce<V> {
@@ -690,7 +694,7 @@ export function createPluginSource(
           const path = value.directory.replace(/\\/gu, '/').replace(/\/+$/u, '')
           const mention = formatFileMention({ path, kind: 'directory' }, true)
           // Close the native directory-completion token: a plugin pick is a complete reference.
-          if (mention) return { text: `@${value.name} ${mention}" ` }
+          if (mention) return { text: `${mention}" ` }
         }
         return { text: `@${value.name} ` }
       }
@@ -896,7 +900,8 @@ export function scopedQuery(value: string, scope: SourceScope): string | undefin
   if (bareScope !== undefined) return bareScope === scope ? '' : undefined
   const match = trimmed.match(/^([a-z-]+):(.*)$/iu)
   if (!match) return trimmed
-  const requested = PREFIX_SCOPE[match[1]!.toLocaleLowerCase()]
+  const prefix = match[1]!.toLocaleLowerCase()
+  const requested = prefix === 'folders' ? 'files' : PREFIX_SCOPE[prefix] ?? PROVIDER_SCOPE[prefix]
   if (requested === undefined) return trimmed
   return requested === scope ? (match[2] ?? '').trim() : undefined
 }

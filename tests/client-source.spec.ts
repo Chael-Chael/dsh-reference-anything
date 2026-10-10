@@ -43,6 +43,11 @@ describe('native @ sources', () => {
     expect(scopedQuery('plugins', 'plugins')).toBe('')
     expect(scopedQuery('plugin:git', 'plugins')).toBe('git')
     expect(scopedQuery('本地插件', 'plugins')).toBe('')
+    expect(scopedQuery('folders', 'plugins')).toBe('folders')
+    expect(scopedQuery('folders:src', 'files')).toBe('src')
+    expect(scopedQuery('claude', 'plugins')).toBe('claude')
+    expect(scopedQuery('claude:probe', 'conversations')).toBe('probe')
+    expect(scopedQuery('claude:probe', 'plugins')).toBeUndefined()
   })
 
   it('describes result provenance and disambiguates duplicate menu names', () => {
@@ -499,7 +504,7 @@ describe('cloud drive files', () => {
       name: '@dsh-external/dsh-automation',
       description: 'github:titanwings/dsh-automation · Disabled',
     })
-    expect(source.onPick(pick(candidates[0]!))).toEqual({ text: '@dsh-cost-meter @"C:/dsh-ecosystem/external-repos/dsh-cost-meter/" ' })
+    expect(source.onPick(pick(candidates[0]!))).toEqual({ text: '@"C:/dsh-ecosystem/external-repos/dsh-cost-meter/" ' })
     expect(source.onPick(pick(candidates[1]!))).toEqual({ text: '@@dsh-external/dsh-automation ' })
 
     const filtered = await source.candidates(session, request('cost'))
@@ -508,9 +513,9 @@ describe('cloud drive files', () => {
   })
 
   it.each([
-    ['/home/user/my plugin', '@local @"/home/user/my plugin/" '],
-    ['C:\\Users\\my plugin\\', '@local @"C:/Users/my plugin/" '],
-    ['/', '@local @"/" '],
+    ['/home/user/my plugin', '@"/home/user/my plugin/" '],
+    ['C:\\Users\\my plugin\\', '@"C:/Users/my plugin/" '],
+    ['/', '@"/" '],
   ])('inserts a closed, portable directory reference for %s', async (directory, expected) => {
     const source = createPluginSource(async () => [{ id: 'local', name: 'local', label: 'local', status: 'inert', directory }], undefined, options())
     const [candidate] = await source.candidates(session, request())
