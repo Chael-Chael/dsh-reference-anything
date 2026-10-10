@@ -124,7 +124,7 @@ const DISPLAY_EXPANSION_STEP = 5
 const PREFIX_SCOPE: Readonly<Record<string, SourceScope>> = {
   command: 'commands', commands: 'commands', cmd: 'commands',
   skill: 'skills', skills: 'skills',
-  file: 'files', files: 'files', folder: 'files', folders: 'files', path: 'files',
+  file: 'files', files: 'files', folder: 'files', path: 'files',
   session: 'sessions', sessions: 'sessions', dsh: 'sessions',
   // Bare `claude`, `gemini`, `grok`, and `kimi` stay with External
   // conversations below, because those are the browser platforms a person
@@ -896,7 +896,8 @@ export function scopedQuery(value: string, scope: SourceScope): string | undefin
   if (bareScope !== undefined) return bareScope === scope ? '' : undefined
   const match = trimmed.match(/^([a-z-]+):(.*)$/iu)
   if (!match) return trimmed
-  const requested = PREFIX_SCOPE[match[1]!.toLocaleLowerCase()]
+  const prefix = match[1]!.toLocaleLowerCase()
+  const requested = prefix === 'folders' ? 'files' : PREFIX_SCOPE[prefix]
   if (requested === undefined) return trimmed
   return requested === scope ? (match[2] ?? '').trim() : undefined
 }
