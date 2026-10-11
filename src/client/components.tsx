@@ -106,6 +106,10 @@ const PICKER_SOURCES: ReadonlyArray<{ id: PickerSource; label: keyof typeof SOUR
   { id: 'conversations', label: 'conversations' },
   { id: 'plugins', label: 'plugins' },
 ]
+const DEFAULT_PICKER_SHORTCUTS: Readonly<Record<PickerSource, string>> = {
+  commands: 'commands', skills: 'skills', files: 'files', sessions: 'sessions',
+  agents: 'agents', conversations: 'conversations', drives: 'drives', plugins: 'plugins',
+}
 const SOURCE_KEYS = { commands: 'source.commands', skills: 'source.skills', files: 'source.files', sessions: 'source.sessions', agents: 'source.agents', conversations: 'source.conversations', drives: 'source.drives', plugins: 'source.plugins' } as const
 const REFERENCE_ANYTHING_LOGO = '__REFERENCE_ANYTHING_LOGO_DATA_URI__'
 const GITHUB_REPOSITORY_URL = 'https://github.com/Chael-Chael/dsh-reference-anything'
@@ -246,8 +250,8 @@ export function ConversationSettings({ useScope, save, sync, cancel, refresh, re
     const current = [...PICKER_SOURCES].sort((a, b) => picker[a.id].order - picker[b.id].order).map(row => row.id)
     const ids = [...ordered, ...current.filter(id => !ordered.includes(id))]
     if (ids.length !== current.length || ids.every((id, index) => id === current[index])) return
-    const next = { ...picker }
-    ids.forEach((id, index) => { next[id] = { ...next[id], order: index } })
+    const next = { ...picker } as PickerSettings
+    ids.forEach((id, index) => { (next as Record<PickerSource, PickerSettings[PickerSource]>)[id] = { ...next[id], order: index } as PickerSettings[PickerSource] })
     savePicker(next)
   }
   useEffect(() => {
@@ -292,10 +296,14 @@ export function ConversationSettings({ useScope, save, sync, cancel, refresh, re
         <label className="dsh_ref_picker_toggle"><DshSwitch checked={picker[row.id].enabled} label={t(SOURCE_KEYS[row.label])} onChange={value => { patchPicker(row.id, { enabled: value }) }} /><b>{t(SOURCE_KEYS[row.label])}</b></label>
         <label className="dsh_ref_picker_limit"><span>{t('settings.collapsedItems')}</span><Input type="number" min={1} max={50} inputMode="numeric" value={pickerLimits[row.id]} aria-invalid={pickerLimits[row.id] !== '' && !validPickerLimit(pickerLimits[row.id])} onChange={event => { setPickerLimits(current => ({ ...current, [row.id]: event.target.value })) }} onBlur={() => { commitPickerLimit(row.id) }} onKeyDown={event => { if (event.key === 'Enter') event.currentTarget.blur() }} /></label>
         <label className="dsh_ref_picker_limit"><span>{t('settings.maxCandidates')}</span><Input type="number" min={1} max={50} inputMode="numeric" value={pickerMaxCandidates[row.id]} aria-invalid={pickerMaxCandidates[row.id] !== '' && !validPickerLimit(pickerMaxCandidates[row.id])} onChange={event => { setPickerMaxCandidates(current => ({ ...current, [row.id]: event.target.value })) }} onBlur={() => { commitPickerMaxCandidates(row.id) }} onKeyDown={event => { if (event.key === 'Enter') event.currentTarget.blur() }} /></label>
+        <label className="dsh_ref_picker_limit"><span>{t('settings.shortcut')}</span><Input type="text" maxLength={32} value={picker[row.id].shortcut} placeholder={DEFAULT_PICKER_SHORTCUTS[row.id]} onChange={event => { patchPicker(row.id, { shortcut: event.target.value.replace(/[@:\s/]/gu, '') }) }} /></label>
         <div className="dsh_ref_picker_order"><button className="dsh_ref_picker_drag_handle" type="button" aria-label={t('settings.moveUp', { item: t(SOURCE_KEYS[row.label]) })}><span aria-hidden="true">⠿</span></button></div>
       </div>)}</div>
       <label className="dsh_ref_render_mode"><span><b>{t('settings.pickerDisplayMode')}</b><small>{t('settings.pickerDisplayModeDetail')}</small></span><DshMenuSelect value={picker.displayMode} options={[{ value: 'collapse', label: t('settings.pickerDisplayCollapse') }, { value: 'native-scroll', label: t('settings.pickerDisplayNative') }]} onChange={value => { savePicker({ ...picker, displayMode: value as PickerSettings['displayMode'] }) }} ariaLabel={t('settings.pickerDisplayMode')} /></label>
     </section>
+    <SettingsDisclosure className="dsh_ref_plugin_section" title={t('settings.pluginPicker')} description={t('settings.pluginPickerDetail')} open={Boolean(openSections.plugins)} onToggle={() => { setOpenSections(current => ({ ...current, plugins: !current.plugins })) }}>
+      <section className="dsh_ref_sources dsh_ref_plugin_sources"><div className="dsh_ref_provider_controls"><label className="dsh_ref_toggle"><DshSwitch checked={picker.plugins.onlyLive} label={t('settings.pluginOnlyLive')} onChange={value => { patchPicker('plugins', { onlyLive: value }) }} /><b>{t('settings.pluginOnlyLive')}</b></label><label className="dsh_ref_toggle"><DshSwitch checked={picker.plugins.showDeepSeek} label={t('settings.pluginShowDeepSeek')} onChange={value => { patchPicker('plugins', { showDeepSeek: value }) }} /><b>{t('settings.pluginShowDeepSeek')}</b></label></div></section>
+    </SettingsDisclosure>
     <SettingsDisclosure className="dsh_ref_agents_section" title={t('settings.localAgents')} description={t('settings.localAgentsDetail')} open={Boolean(openSections.agents)} onToggle={() => { setOpenSections(current => ({ ...current, agents: !current.agents })) }}>
       <section className="dsh_ref_sources dsh_ref_agent_sources">
         <AgentSelectionCards enabledAgents={enabledAgents} stats={state.agentStats} directories={settings.agentDirectories} onEnabled={setAgentEnabled} onPickDirectory={pickAgentDirectory} t={t} />

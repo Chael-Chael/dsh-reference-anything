@@ -52,9 +52,9 @@ describe('settings source registration guard', () => {
   // and takes every other setting with it. Any @ group added from now on needs
   // the same `.default()` and belongs in this list.
   it.each([
-    ['agents', { enabled: true, order: 25, limit: 6, maxCandidates: 50 }],
-    ['drives', { enabled: true, order: 35, limit: 6, maxCandidates: 50 }],
-    ['plugins', { enabled: true, order: 40, limit: 6, maxCandidates: 50 }],
+    ['agents', { enabled: true, order: 25, limit: 6, maxCandidates: 50, shortcut: '' }],
+    ['drives', { enabled: true, order: 35, limit: 6, maxCandidates: 50, shortcut: '' }],
+    ['plugins', { enabled: true, order: 40, limit: 6, maxCandidates: 50, shortcut: '' }],
   ] as const)('fills in the %s picker key when it arrived after the record was written', (key, expected) => {
     const saved = defaultPickerSettings() as Record<string, unknown>
     delete saved[key]

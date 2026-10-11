@@ -363,6 +363,12 @@ describe('cloud drive files', () => {
     expect(scopedQuery('files:notes', 'drives')).toBeUndefined()
   })
 
+  it('routes a configured shortcut to its source', () => {
+    expect(scopedQuery('f:notes', 'files', 'f')).toBe('notes')
+    expect(scopedQuery('f:notes', 'drives', undefined, { f: 'files' })).toBeUndefined()
+    expect(scopedQuery('f:notes', 'files', undefined, { f: 'files' })).toBe('notes')
+  })
+
   it('names the holding drive and its path, and numbers files that share a name', async () => {
     const source = createCloudDriveSource(async () => [
       driveRow(),
@@ -499,12 +505,15 @@ describe('cloud drive files', () => {
       name: '@dsh-external/dsh-automation',
       description: 'github:titanwings/dsh-automation · Disabled',
     })
-    expect(source.onPick(pick(candidates[0]!))).toEqual({ insert: {
-      source: 'All local plugins', ref: '@"C:/dsh-ecosystem/external-repos/dsh-cost-meter/"', label: 'dsh-cost-meter', appearance: 'session',
-      clipboardText: '@dsh-cost-meter @"C:/dsh-ecosystem/external-repos/dsh-cost-meter/" ',
-    } })
-    expect(source.onPick(pick(candidates[1]!))).toEqual({ text: '@@dsh-external/dsh-automation ' })
-
+    for (const candidate of candidates) {
+      const result = source.onPick(pick(candidate!))
+      expect(result).toMatchObject({ insert: { source: PLUGIN_SOURCE, label: candidate.name, appearance: 'session' } })
+      if (typeof result === 'object' && result && 'insert' in result) {
+        expect(result.insert.ref).toContain('dsh-ref:')
+        expect(result.insert.ref).not.toContain('C:/')
+        expect(await source.codec!.serialize(result.insert.ref, new AbortController().signal)).toBe(result.insert.ref)
+      }
+    }
     const filtered = await source.candidates(session, request('cost'))
     expect(filtered).toHaveLength(1)
     expect(filtered[0]?.name).toBe('dsh-cost-meter')
@@ -522,7 +531,7 @@ describe('cloud drive files', () => {
     expect(await source.candidates(session, request('path with', true))).toEqual([])
     expect(load).not.toHaveBeenCalled()
     const [candidate] = await source.candidates(session, request('plugins:local'))
-    expect(source.onPick(pick(candidate!))).toEqual({ text: '@local ' })
+    expect(source.onPick(pick(candidate!))).toMatchObject({ insert: { source: PLUGIN_SOURCE, label: 'local', appearance: 'session' } })
   })
 })
 

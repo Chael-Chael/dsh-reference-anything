@@ -8,7 +8,7 @@ import type { Context as ClientContext } from '@deepseek-ai/cordis'
 import type { ISessions } from '@deepseek-ai/dsh-api-session-controller/client'
 import { createSnapshotStore } from '@deepseek-ai/dsh-client-store'
 import type { InputTriggerServiceContract } from '@deepseek-ai/dsh-client-ui-input-trigger/client'
-import { ALL_LOCAL_AGENTS, ALL_PROVIDERS, defaultPickerSettings, samePickerSettings, type ChatProvider, type LocalAgent, type PickerSettings, type SettingsRecord } from '../wire.ts'
+import { ALL_LOCAL_AGENTS, ALL_PROVIDERS, defaultPickerSettings, samePickerSettings, pickerSourceSchema, type ChatProvider, type LocalAgent, type PickerSettings, type SettingsRecord } from '../wire.ts'
 import { REFERENCE_ANYTHING_REMOTE, type AgentCandidate, type DriveCandidate, type ReferenceAnythingRemoteFace, type SearchResult, type SyncStatus } from './remote.ts'
 import { createCloudDriveSource, createCommandSource, createConversationSource, createFileSource, createLocalAgentSource, createPluginSource, createSearchDebounce, createSessionSource, createSkillSource, type RefreshablePickerSource } from './source.ts'
 import { ConversationSettings, PAGE_SIZE, type SettingsSnapshot } from './components.tsx'
@@ -224,10 +224,13 @@ export function apply(ctx: ClientContext): void {
   let sourceDisposers: Array<() => void> = []
   let appliedPicker: PickerSettings | undefined
   const registerSources = (picker: PickerSettings) => {
+    const shortcuts = Object.fromEntries(pickerSourceSchema.options.flatMap(key => picker[key].shortcut ? [[picker[key].shortcut.toLocaleLowerCase(), key]] : [])) as Record<string, Exclude<keyof PickerSettings, 'displayMode'>>
     const optionsFor = (key: Exclude<keyof PickerSettings, 'displayMode'>) => ({
       order: picker[key].order,
       limit: picker[key].limit,
       maxCandidates: picker[key].maxCandidates,
+      shortcut: picker[key].shortcut,
+      shortcuts,
       displayMode: picker.displayMode,
       updateMenu,
       guardMenuActions,
@@ -299,7 +302,9 @@ export function apply(ctx: ClientContext): void {
     if (picker.plugins.enabled) {
       disposers.push(inputTriggers.registerSource(createPluginSource(async (signal) => {
         if (!remote) return []
-        return unwrap(await remote.localPlugins(signal))
+        return unwrap(await remote.localPlugins(signal)).filter(row =>
+          (!picker.plugins.onlyLive || row.status === 'live') &&
+          (picker.plugins.showDeepSeek || !row.name.toLowerCase().startsWith('@deepseek-ai/')))
       }, t, optionsFor('plugins'))))
     }
     return disposers
