@@ -498,13 +498,15 @@ body[data-ds-dark-theme] .dsh_ref_settings input,body[data-ds-dark-theme] .dsh_r
 .dsh_ref_select_menu button:hover:not(:disabled){background:var(--dsw-alias-interactive-bg-hover)!important;color:var(--dsw-alias-label-primary)!important}
 /* Picker rows use a full-width title line and a separate controls line so
    long translated group names do not get squeezed into a vertical stack. */
-.dsh_ref_settings .dsh_ref_picker_row{grid-template-columns:auto auto minmax(0,1fr) auto;grid-template-rows:auto auto;row-gap:8px}
+.dsh_ref_settings .dsh_ref_picker_row{grid-template-columns:minmax(0,1fr) minmax(0,1fr) minmax(0,1.35fr) auto;grid-template-rows:auto auto;row-gap:10px}
 .dsh_ref_settings .dsh_ref_picker_toggle{grid-column:1 / 4;grid-row:1;min-width:0;white-space:nowrap}
 .dsh_ref_settings .dsh_ref_picker_toggle>button{flex:none}
 .dsh_ref_settings .dsh_ref_picker_order{grid-column:4;grid-row:1 / 3;align-self:center}
-.dsh_ref_settings .dsh_ref_picker_row>label:nth-of-type(2){grid-column:1;grid-row:2}
-.dsh_ref_settings .dsh_ref_picker_row>label:nth-of-type(3){grid-column:2;grid-row:2}
-.dsh_ref_settings .dsh_ref_picker_row>label:nth-of-type(4){grid-column:3;grid-row:2;justify-self:start}
+.dsh_ref_settings .dsh_ref_picker_row>label:nth-of-type(2){grid-column:1;grid-row:2;width:100%}
+.dsh_ref_settings .dsh_ref_picker_row>label:nth-of-type(3){grid-column:2;grid-row:2;width:100%}
+.dsh_ref_settings .dsh_ref_picker_row>label:nth-of-type(4){grid-column:3;grid-row:2;width:100%}
+.dsh_ref_settings .dsh_ref_picker_row>label:nth-of-type(2)>span:has(>input),.dsh_ref_settings .dsh_ref_picker_row>label:nth-of-type(3)>span:has(>input),.dsh_ref_settings .dsh_ref_picker_row>label:nth-of-type(4)>span:has(>input){width:100%;}
+.dsh_ref_settings .dsh_ref_picker_row>label:nth-of-type(2)>span:has(>input)>input,.dsh_ref_settings .dsh_ref_picker_row>label:nth-of-type(3)>span:has(>input)>input,.dsh_ref_settings .dsh_ref_picker_row>label:nth-of-type(4)>span:has(>input)>input{width:100%;}
 .dsh_ref_settings .dsh_ref_picker_limit{flex-direction:column;align-items:flex-start;gap:4px}
 @media(max-width:640px){.dsh_ref_settings .dsh_ref_general_settings>.dsh_ref_render_mode{grid-template-columns:1fr}.dsh_ref_settings .dsh_ref_general_settings>.dsh_ref_render_mode>.dsh_ref_official_menu{width:max-content;max-width:100%}.dsh_ref_settings .dsh_ref_picker_row{grid-template-columns:1fr;grid-template-rows:auto}.dsh_ref_settings .dsh_ref_picker_toggle,.dsh_ref_settings .dsh_ref_picker_order,.dsh_ref_settings .dsh_ref_picker_row>label:nth-of-type(2),.dsh_ref_settings .dsh_ref_picker_row>label:nth-of-type(3),.dsh_ref_settings .dsh_ref_picker_row>label:nth-of-type(4){grid-column:auto;grid-row:auto}}
 
