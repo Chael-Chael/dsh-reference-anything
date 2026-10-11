@@ -678,7 +678,7 @@ export function createPluginSource(
           return {
             name: row.label || row.name,
             description: descParts.join(' · '),
-            icon: candidateIcon(PICKER_ICON_MARKER.command),
+            icon: candidateIcon(PICKER_ICON_MARKER.plugin),
             value: encodeCandidate({ kind: 'plugin', name: row.name, directory: row.directory }),
           }
         })
@@ -689,13 +689,25 @@ export function createPluginSource(
         if (value.directory) {
           const path = value.directory.replace(/\\/gu, '/').replace(/\/+$/u, '')
           const mention = formatFileMention({ path, kind: 'directory' }, true)
-          // Close the native directory-completion token: a plugin pick is a complete reference.
-          if (mention) return { text: `@${value.name} ${mention}" ` }
+          // Use the host's structured insertion so the directory is rendered as its native chip.
+          if (mention) {
+            const closedMention = `${mention}"`
+            return {
+              insert: {
+                source: PLUGIN_SOURCE,
+                ref: closedMention,
+                label: value.name,
+                appearance: 'session',
+                clipboardText: `@${value.name} ${closedMention} `,
+              },
+            }
+          }
         }
         return { text: `@${value.name} ` }
       }
       return undefined
     },
+    codec: { clipboardText: ref => ref, serialize: ref => Promise.resolve(ref) },
   }
   return withDisplayPolicy(source, options, t)
 }

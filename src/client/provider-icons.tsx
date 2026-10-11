@@ -36,6 +36,7 @@ export const PROVIDER_ICON_MARKER = {
 
 export type PickerIconKind =
   | 'command' | 'skill' | 'session' | 'refresh' | 'agent' | 'drive' | 'goal' | 'plan' | 'feedback' | 'compact' | 'permission' | 'export'
+  | 'plugin'
   | 'folder' | 'file' | 'image' | 'text' | 'code' | 'data'
   | 'archive' | 'spreadsheet' | 'audio' | 'video' | 'presentation' | 'font'
 
@@ -46,6 +47,7 @@ export const PICKER_ICON_MARKER = {
   spreadsheet: '\uE110', audio: '\uE111', video: '\uE112', presentation: '\uE113', font: '\uE114',
   refresh: '\uE115', agent: '\uE116', drive: '\uE117',
   goal: '\uE125', plan: '\uE126', feedback: '\uE127', compact: '\uE128', permission: '\uE129', export: '\uE12A',
+  plugin: '\uE12B',
 } as unknown as Readonly<Record<PickerIconKind, InputTriggerCandidateIcon>>
 export const SESSION_ICON_MARKER = PICKER_ICON_MARKER.session
 export const SKILL_ICON_MARKER = PICKER_ICON_MARKER.skill
@@ -187,6 +189,12 @@ export const PICKER_ICON_NODES = {
     { tag: 'path', attrs: { d: 'M14 2v5a1 1 0 0 0 1 1h5' } },
     { tag: 'path', attrs: { d: 'M3 16v-1.5a.5.5 0 0 1 .5-.5h7a.5.5 0 0 1 .5.5V16' } },
     { tag: 'path', attrs: { d: 'M6 22h2' } }, { tag: 'path', attrs: { d: 'M7 14v8' } },
+  ],
+  // ToyBrick (Lucide)
+  plugin: [
+    { tag: 'rect', attrs: { width: '18', height: '12', x: '3', y: '8', rx: '1' } },
+    { tag: 'path', attrs: { d: 'M10 8V5c0-.6-.4-1-1-1H6a1 1 0 0 0-1 1v3' } },
+    { tag: 'path', attrs: { d: 'M19 8V5c0-.6-.4-1-1-1h-3a1 1 0 0 0-1 1v3' } },
   ],
 } as const satisfies Readonly<Record<PickerIconKind, readonly PickerIconNode[]>>
 

@@ -499,7 +499,10 @@ describe('cloud drive files', () => {
       name: '@dsh-external/dsh-automation',
       description: 'github:titanwings/dsh-automation · Disabled',
     })
-    expect(source.onPick(pick(candidates[0]!))).toEqual({ text: '@dsh-cost-meter @"C:/dsh-ecosystem/external-repos/dsh-cost-meter/" ' })
+    expect(source.onPick(pick(candidates[0]!))).toEqual({ insert: {
+      source: 'All local plugins', ref: '@"C:/dsh-ecosystem/external-repos/dsh-cost-meter/"', label: 'dsh-cost-meter', appearance: 'session',
+      clipboardText: '@dsh-cost-meter @"C:/dsh-ecosystem/external-repos/dsh-cost-meter/" ',
+    } })
     expect(source.onPick(pick(candidates[1]!))).toEqual({ text: '@@dsh-external/dsh-automation ' })
 
     const filtered = await source.candidates(session, request('cost'))
@@ -507,14 +510,10 @@ describe('cloud drive files', () => {
     expect(filtered[0]?.name).toBe('dsh-cost-meter')
   })
 
-  it.each([
-    ['/home/user/my plugin', '@local @"/home/user/my plugin/" '],
-    ['C:\\Users\\my plugin\\', '@local @"C:/Users/my plugin/" '],
-    ['/', '@local @"/" '],
-  ])('inserts a closed, portable directory reference for %s', async (directory, expected) => {
+  it.each(['/home/user/my plugin', 'C:\\Users\\my plugin\\', '/'])('inserts a native chip for %s', async directory => {
     const source = createPluginSource(async () => [{ id: 'local', name: 'local', label: 'local', status: 'inert', directory }], undefined, options())
     const [candidate] = await source.candidates(session, request())
-    expect(source.onPick(pick(candidate!))).toEqual({ text: expected })
+    expect(source.onPick(pick(candidate!))).toMatchObject({ insert: { source: 'All local plugins', label: 'local', appearance: 'session' } })
   })
 
   it('does not search plugins during quoted file completion or insert unrepresentable paths', async () => {
