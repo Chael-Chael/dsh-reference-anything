@@ -2,7 +2,7 @@ import type { ChatProvider, LocalAgent } from '../wire.ts'
 import { Children, isValidElement, type ReactElement, type ReactNode } from 'react'
 import {
   LOCAL_AGENT_ICON_MARKER, PICKER_ICON_MARKER, PICKER_ICON_NODES, PICKER_ICON_STROKE_WIDTH, PROVIDER_ICON_MARKER, PROVIDER_ICON_PATH, agentLogoElement,
-  type PickerIconKind,
+  type PickerIconKind, PICKER_ICON_VIEWBOX,
 } from './provider-icons.tsx'
 import type { TranslateNS } from '@deepseek-ai/dsh-client-locale/client'
 import type { REFERENCE_ANYTHING_NS } from './locale.ts'
@@ -972,7 +972,7 @@ export function adoptReferenceIconProjection(): () => void {
     node.replaceChildren(createPickerIcon(kind), ...(secondary === undefined ? [] : [createPickerIcon(secondary)]))
     node.classList.remove('dsh_ref_projected_icon')
     node.classList.add('dsh_ref_picker_icon')
-    node.classList.toggle('dsh_ref_command_icon', ['goal', 'plan', 'feedback', 'compact', 'permission', 'export'].includes(kind))
+    node.classList.toggle('dsh_ref_command_icon', ['paperclip', 'goal', 'plan', 'feedback', 'compact', 'permission', 'model', 'export'].includes(kind))
     node.classList.toggle('dsh_ref_dual_icon', secondary !== undefined)
     node.dataset.dshRefMenuIcon = kind
   }
@@ -999,7 +999,7 @@ export function adoptReferenceIconProjection(): () => void {
     const name = option.children.item(1)?.textContent?.trim() ?? ''
     const description = option.children.item(2)?.textContent?.trim() ?? ''
     if (source === 'Commands') {
-      const commandIcons: Readonly<Record<string, PickerIconKind>> = { goal: 'goal', plan: 'plan', feedback: 'feedback', compact: 'compact', permission: 'permission', export: 'export' }
+      const commandIcons: Readonly<Record<string, PickerIconKind>> = { file: 'paperclip', goal: 'goal', plan: 'plan', feedback: 'feedback', compact: 'compact', permission: 'permission', model: 'model', export: 'export' }
       return paintPicker(icon, commandIcons[name.toLocaleLowerCase()] ?? 'command')
     }
     if (source === 'Skills') return paintPicker(icon, 'skill')
@@ -1193,7 +1193,7 @@ function createProviderIcon(path: string): SVGSVGElement {
 
 function createPickerIcon(kind: PickerIconKind): SVGSVGElement {
   const svg = document.createElementNS(SVG_NS, 'svg')
-  svg.setAttribute('viewBox', '0 0 24 24')
+  svg.setAttribute('viewBox', PICKER_ICON_VIEWBOX[kind] ?? '0 0 24 24')
   svg.setAttribute('fill', 'none')
   svg.setAttribute('stroke', 'currentColor')
   svg.setAttribute('stroke-width', String(PICKER_ICON_STROKE_WIDTH))
@@ -1220,13 +1220,13 @@ function reactIconMask(element: ReactElement): string {
 
 function pickerIconMask(kind: PickerIconKind): string {
   const nodes = PICKER_ICON_NODES[kind].map(node => {
-    const attrs = Object.entries(node.attrs).map(([name, value]) => `${name}="${value}"`).join(' ')
+    const attrs = Object.entries(node.attrs).map(([name, value]) => `${name}="${value.replaceAll('currentColor', 'black')}"`).join(' ')
     return `<${node.tag} ${attrs}/>`
   }).join('')
-  return svgMask(`<g fill="none" stroke="black" stroke-width="${String(PICKER_ICON_STROKE_WIDTH)}" stroke-linecap="round" stroke-linejoin="round">${nodes}</g>`)
+  return svgMask(`<g fill="none" stroke="black" stroke-width="${String(PICKER_ICON_STROKE_WIDTH)}" stroke-linecap="round" stroke-linejoin="round">${nodes}</g>`, PICKER_ICON_VIEWBOX[kind] ?? '0 0 24 24')
 }
 
-function svgMask(content: string): string {
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">${content}</svg>`
+function svgMask(content: string, viewBox = '0 0 24 24'): string {
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${viewBox}">${content}</svg>`
   return `url("data:image/svg+xml,${encodeURIComponent(svg)}")`
 }

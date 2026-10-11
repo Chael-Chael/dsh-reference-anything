@@ -594,7 +594,7 @@ function formatDriveMention(reference: DriveReference): string {
 
 interface CommandCandidate { name: string; description?: string; icon?: NonNullable<InputTriggerCandidate['icon']>; input?: { hint?: string } }
 const COMMAND_ICON_KIND: Readonly<Record<string, PickerIconKind>> = {
-  goal: 'goal', plan: 'plan', feedback: 'feedback', compact: 'compact', permission: 'permission', export: 'export',
+  file: 'paperclip', goal: 'goal', plan: 'plan', feedback: 'feedback', compact: 'compact', permission: 'permission', model: 'model', export: 'export',
 }
 const COMMAND_DESCRIPTION_EN: Readonly<Record<string, string>> = {
   goal: 'Set or view the goal for a long-running task', plan: 'Enter or leave plan mode', feedback: 'Record feedback about this session', compact: 'Compact older conversation history', permission: 'Switch the permission preset (sandbox mode + approval policy)', export: 'Download this Session log as a ZIP archive',
@@ -625,7 +625,7 @@ export function createCommandSource(
         .filter(row => row.name.toLocaleLowerCase().includes(needle))
         .map(row => {
           return {
-          name: (() => { const key = row.name.toLocaleLowerCase(); const zh = navigator.language.toLowerCase().startsWith('zh'); return zh ? `${COMMAND_LABEL_ZH[key] ?? row.name} ${row.name}` : (COMMAND_LABEL_EN[key] ?? row.name) })(), description: (navigator.language.toLowerCase().startsWith('zh') ? COMMAND_DESCRIPTION_ZH[row.name.toLocaleLowerCase()] : COMMAND_DESCRIPTION_EN[row.name.toLocaleLowerCase()]) ?? row.description, hint: row.input?.hint,
+          name: (() => { const key = row.name.toLocaleLowerCase(); const zh = navigator.language.toLowerCase().startsWith('zh'); return zh ? (COMMAND_LABEL_ZH[key] ?? row.name) : (COMMAND_LABEL_EN[key] ?? row.name) })(), description: (navigator.language.toLowerCase().startsWith('zh') ? COMMAND_DESCRIPTION_ZH[row.name.toLocaleLowerCase()] : COMMAND_DESCRIPTION_EN[row.name.toLocaleLowerCase()]) ?? row.description, hint: row.input?.hint,
           icon: candidateIcon(PICKER_ICON_MARKER[COMMAND_ICON_KIND[row.name.toLocaleLowerCase()] ?? 'command']), value: encodeCandidate({ kind: 'command', name: row.name }),
           }
         })
