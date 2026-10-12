@@ -11,6 +11,8 @@ import { tmpdir } from 'node:os'
 import { spawn } from 'node:child_process'
 import { validateDownloadDirectory } from './download-directory.ts'
 import { resolveLocalPlugins } from './local-plugins.ts'
+import type { LocalAgent } from './wire.ts'
+import { ReferenceAnythingError } from './errors.ts'
 
 export class ReferenceAnythingRemote extends TypertRemoteService {
   constructor(ctx: Context) { super(ctx, 'referenceAnything') }
@@ -46,8 +48,24 @@ export class ReferenceAnythingRemote extends TypertRemoteService {
     const agents = this.ctx.get('referenceLocalAgents')
     if (agents === undefined) return []
     agents.setAgentDirectories(this.ctx.referenceChatHistory.getSettings().agentDirectories ?? {})
-    return (await agents.stats(signal)).map(row => ({ agent: row.kind, conversations: row.conversations }))
+    return (await agents.stats(signal)).map(row => ({
+      agent: row.kind, conversations: row.conversations, syncedConversations: row.syncedConversations,
+      ...row.lastSyncedAt === undefined ? {} : { lastSyncedAt: row.lastSyncedAt },
+    }))
   }
+
+  agentSyncStart(input: { agents: LocalAgent[]; mode: SyncMode }): string {
+    const agents = this.ctx.get('referenceLocalAgents')
+    if (agents === undefined) throw new ReferenceAnythingError('Local agent history is unavailable.', 'SOURCE_UNAVAILABLE')
+    const settings = this.ctx.referenceChatHistory.getSettings()
+    agents.setAgentDirectories(settings.agentDirectories ?? {})
+    const selected = [...new Set(input.agents)].filter(agent => settings.enabledAgents.includes(agent))
+    if (selected.length === 0) throw new ReferenceAnythingError('Enable at least one local agent before syncing.', 'REFERENCE_INVALID_CONFIG')
+    return agents.sync.start(selected, input.mode)
+  }
+
+  agentSyncStatus(input: { jobId: string }) { return this.ctx.get('referenceLocalAgents')?.sync.status(input.jobId) }
+  agentSyncCancel(input: { jobId: string }): boolean { return this.ctx.get('referenceLocalAgents')?.sync.cancel(input.jobId) ?? false }
 
   /**
    * Discovery for the `@` menu's cloud-drive group.

@@ -8,6 +8,7 @@ describe('external conversation Remote availability', () => {
     const ctx = new Context()
     const search = vi.fn(() => [])
     ctx.provide('typert', { register: vi.fn(() => () => undefined) })
+    ctx.provide('references', { registerSource: vi.fn(() => () => undefined) })
     ctx.provide('referenceChatHistory', { search })
     ctx.provide('openListManager', {})
     const fiber = await ctx.plugin(web)
@@ -26,6 +27,7 @@ describe('external conversation Remote availability', () => {
   it('keeps cloud-drive lookup available without making it a startup dependency', async () => {
     const ctx = new Context()
     ctx.provide('typert', { register: vi.fn(() => () => undefined) })
+    ctx.provide('references', { registerSource: vi.fn(() => () => undefined) })
     ctx.provide('referenceChatHistory', { search: () => [] })
     ctx.provide('openListManager', {})
     const pickerList = vi.fn(async () => [{ ref: { source: 'cloud-drive', id: 'drive-1' }, label: 'notes.md', provider: 'OpenList' }])

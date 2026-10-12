@@ -8,7 +8,7 @@ import type { Context as ClientContext } from '@deepseek-ai/cordis'
 import type { ISessions } from '@deepseek-ai/dsh-api-session-controller/client'
 import { createSnapshotStore } from '@deepseek-ai/dsh-client-store'
 import type { InputTriggerServiceContract } from '@deepseek-ai/dsh-client-ui-input-trigger/client'
-import { ALL_LOCAL_AGENTS, ALL_PROVIDERS, defaultPickerSettings, samePickerSettings, type ChatProvider, type LocalAgent, type PickerSettings, type SettingsRecord } from '../wire.ts'
+import { ALL_LOCAL_AGENTS, ALL_PROVIDERS, defaultPickerSettings, samePickerSettings, pickerSourceSchema, type ChatProvider, type LocalAgent, type PickerSettings, type SettingsRecord } from '../wire.ts'
 import { REFERENCE_ANYTHING_REMOTE, type AgentCandidate, type DriveCandidate, type ReferenceAnythingRemoteFace, type SearchResult, type SyncStatus } from './remote.ts'
 import { createCloudDriveSource, createCommandSource, createConversationSource, createFileSource, createLocalAgentSource, createPluginSource, createSearchDebounce, createSessionSource, createSkillSource, type RefreshablePickerSource } from './source.ts'
 import { ConversationSettings, PAGE_SIZE, type SettingsSnapshot } from './components.tsx'
@@ -21,6 +21,7 @@ import { runSetupSequence, setupReady, type SetupStage } from './health.ts'
 import { createAutoDismissNotice } from './notice.ts'
 import { filterAgentCandidates, filterDriveCandidates } from './selection.ts'
 import { pickDirectoryWithError } from './directory-picker.ts'
+import { createAgentSyncController } from './agent-sync.ts'
 
 // `ctx.remote.commands` is a separately injected Remote face. Declaring only
 // `remote` lets the @ source register, but its candidate request can fail and
@@ -43,6 +44,7 @@ export function apply(ctx: ClientContext): void {
   let lastSyncFinishedAt: string | undefined
   let poll: ReturnType<typeof setInterval> | undefined
   let activeConversationSource: RefreshablePickerSource | undefined
+  let activeAgentSource: RefreshablePickerSource | undefined
   let activeDriveSource: RefreshablePickerSource | undefined
   let refreshGeneration = 0
   const t = ctx.locale.bind(REFERENCE_ANYTHING_NS)
@@ -77,6 +79,12 @@ export function apply(ctx: ClientContext): void {
     if (!remote) return
     try { scope.set({ ...scope.getSnapshot(), agentStats: unwrap(await remote.agentStats()) }) } catch { /* Optional local-agent source. */ }
   }
+  const agentSync = createAgentSyncController({
+    remote: () => remote,
+    publish: agentSync => { scope.set({ ...scope.getSnapshot(), agentSync }) },
+    refresh: async () => { await Promise.allSettled([refreshAgentStats(), activeAgentSource?.refreshCachedMenu({ refetch: true })]) },
+    missingJobError: () => t('settings.agentSyncMissing'),
+  })
   /** Refresh settings and local mirror figures without starting OpenCLI. */
   const refreshLocal = async (): Promise<void> => {
     if (!remote) return
@@ -212,9 +220,10 @@ export function apply(ctx: ClientContext): void {
     const dispose = await ctx.remote.$mount(REFERENCE_ANYTHING_REMOTE)
     remote = (ctx.reflect as unknown as { get(name: string): unknown }).get('remote.referenceAnything') as ReferenceAnythingRemoteFace | undefined
     if (!remote) throw new Error('referenceAnything Remote did not mount')
+    agentSync.resume()
     await refreshLocal()
     void refreshUpdateStatus()
-    return () => { remote = undefined; if (poll) clearInterval(poll); void dispose() }
+    return () => { agentSync.dispose(); remote = undefined; if (poll) clearInterval(poll); void dispose() }
   }, 'reference-anything.client.remote')
 
   const inputTriggers = ctx.get('inputTriggers') as InputTriggerServiceContract
@@ -224,10 +233,13 @@ export function apply(ctx: ClientContext): void {
   let sourceDisposers: Array<() => void> = []
   let appliedPicker: PickerSettings | undefined
   const registerSources = (picker: PickerSettings) => {
+    const shortcuts = Object.fromEntries(pickerSourceSchema.options.flatMap(key => picker[key].shortcut ? [[picker[key].shortcut.toLocaleLowerCase(), key]] : [])) as Record<string, Exclude<keyof PickerSettings, 'displayMode'>>
     const optionsFor = (key: Exclude<keyof PickerSettings, 'displayMode'>) => ({
       order: picker[key].order,
       limit: picker[key].limit,
       maxCandidates: picker[key].maxCandidates,
+      shortcut: picker[key].shortcut,
+      shortcuts,
       displayMode: picker.displayMode,
       updateMenu,
       guardMenuActions,
@@ -274,15 +286,19 @@ export function apply(ctx: ClientContext): void {
       const result = await ctx.remote.sessionReferenceResolver.candidates(sessionId, query, signal)
       return result.ok ? result.value : []
     }, t, optionsFor('sessions'))))
-    if (picker.agents.enabled) disposers.push(inputTriggers.registerSource(createLocalAgentSource((sessionId, query, signal, limit) =>
-      agentSearch.run(query, signal, async () => {
-        // Re-read after the debounce, as the conversation source does above.
-        if (!remote) return []
-        return filterAgentCandidates(
-          unwrap(await remote.agentSearch(sessionId, { query, limit: 100 }, signal)),
-          scope.getSnapshot().settings.enabledAgents,
-        ).slice(0, limit)
-      }), t, optionsFor('agents'))))
+    if (picker.agents.enabled) {
+      const source = createLocalAgentSource((sessionId, query, signal, limit) =>
+        agentSearch.run(query, signal, async () => {
+          // Re-read after the debounce, as the conversation source does above.
+          if (!remote) return []
+          return filterAgentCandidates(
+            unwrap(await remote.agentSearch(sessionId, { query, limit: 100 }, signal)),
+            scope.getSnapshot().settings.enabledAgents,
+          ).slice(0, limit)
+        }), t, optionsFor('agents'))
+      activeAgentSource = source
+      disposers.push(inputTriggers.registerSource(source))
+    }
     if (picker.drives.enabled) {
       const source = createCloudDriveSource((query, signal, limit) =>
         driveSearch.run(query, signal, async () => {
@@ -299,7 +315,9 @@ export function apply(ctx: ClientContext): void {
     if (picker.plugins.enabled) {
       disposers.push(inputTriggers.registerSource(createPluginSource(async (signal) => {
         if (!remote) return []
-        return unwrap(await remote.localPlugins(signal))
+        return unwrap(await remote.localPlugins(signal)).filter(row =>
+          (!picker.plugins.onlyLive || row.status === 'live') &&
+          (picker.plugins.showDeepSeek || !row.name.toLowerCase().startsWith('@deepseek-ai/')))
       }, t, optionsFor('plugins'))))
     }
     return disposers
@@ -328,6 +346,7 @@ export function apply(ctx: ClientContext): void {
     if (appliedPicker !== undefined && samePickerSettings(appliedPicker, next)) return
     for (const dispose of sourceDisposers) dispose()
     activeConversationSource = undefined
+    activeAgentSource = undefined
     activeDriveSource = undefined
     sourceDisposers = registerSources(next)
     appliedPicker = next
@@ -389,6 +408,8 @@ export function apply(ctx: ClientContext): void {
     name: 'settings.section', id: 'reference-anything', order: 56, label: () => t('settings.title'), locale: REFERENCE_ANYTHING_NS,
     inject: () => ({
       hooks: { scope }, close: () => undefined, save, sync: startSync, refresh, quickRefreshOnOpen,
+      syncAgents: (mode: 'incremental' | 'full') => agentSync.start(scope.getSnapshot().settings.enabledAgents ?? [...ALL_LOCAL_AGENTS], mode),
+      cancelAgentSync: () => agentSync.cancel(),
       browse, deleteConversation, clearProvider, clearRemoteMissing, clearOldAccounts, refreshStats,
       refreshOpenList,
       pickAgentDirectory: async (agent: LocalAgent) => {

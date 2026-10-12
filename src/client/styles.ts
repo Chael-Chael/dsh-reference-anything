@@ -2,13 +2,15 @@ import type { ChatProvider, LocalAgent } from '../wire.ts'
 import { Children, isValidElement, type ReactElement, type ReactNode } from 'react'
 import {
   LOCAL_AGENT_ICON_MARKER, PICKER_ICON_MARKER, PICKER_ICON_NODES, PICKER_ICON_STROKE_WIDTH, PROVIDER_ICON_MARKER, PROVIDER_ICON_PATH, agentLogoElement,
-  type PickerIconKind,
+  type PickerIconKind, PICKER_ICON_VIEWBOX,
 } from './provider-icons.tsx'
 import type { TranslateNS } from '@deepseek-ai/dsh-client-locale/client'
 import type { REFERENCE_ANYTHING_NS } from './locale.ts'
 import { driveMenuIconKind, workspacePathIconKind } from './source.ts'
 
 const css = `
+.dsh_ref_agent_sync{display:grid;gap:14px;margin-top:18px}
+.dsh_ref_settings .dsh_ref_agent_provider .dsh_ref_provider_main .dsh_ref_provider_summary>small{grid-row:auto}
   /* Reference Anything customizes the public @ menu and only the visual glyph
      inside matching Composer reference chips. Native text continues to own all
      caret, selection, wrapping, and message geometry. */
@@ -55,7 +57,7 @@ const css = `
    whole panel upward after a saved toggle and leaves a large blank region. */
 [role="dialog"]:has(.dsh_ref_settings){overflow:clip!important}
 .dsh_ref_toggle{position:relative}
-body[data-ds-dark-theme] .dsh_ref_settings{--dsh-ref-card-surface:#2c2c30;--dsh-ref-control-surface:var(--dsw-alias-bg-layer-2,#363640)}
+body[data-ds-dark-theme] .dsh_ref_settings{--dsh-ref-card-surface:var(--dsw-alias-settings-card-fill,var(--dsw-alias-bg-layer-1));--dsh-ref-control-surface:var(--dsw-alias-bg-layer-2,#363640)}
 .dsh_ref_header{padding:2px 2px 4px}.dsh_ref_header h2{font-size:26px;font-weight:700;letter-spacing:-.025em}.dsh_ref_header p{max-width:660px;color:var(--dsw-alias-label-dimmed,var(--dsw-alias-label-primary));line-height:1.55}.dsh_ref_settings button{border-color:var(--dsh-ref-line);border-radius:9px;background:transparent;color:var(--dsw-alias-label-primary);font-weight:600;transition:background .16s ease,border-color .16s ease,color .16s ease,transform .16s ease}.dsh_ref_settings button:hover:not(:disabled){border-color:var(--dsh-ref-blue-line);background:var(--dsh-ref-blue-soft);color:var(--dsh-ref-blue)}
 .dsh_ref_update_bar{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:18px;padding:13px 14px;border:1px solid var(--dsh-ref-line);border-radius:12px;background:var(--dsh-ref-surface)}.dsh_ref_update_bar.is_available{border-color:var(--dsh-ref-blue-line);background:var(--dsh-ref-blue-soft)}.dsh_ref_update_copy{display:grid;min-width:0;gap:3px}.dsh_ref_update_copy strong{font-size:12px}.dsh_ref_update_copy small{color:#64748b;font-size:10px;line-height:1.45;overflow-wrap:anywhere}.dsh_ref_update_actions{display:flex;align-items:center;flex:none;gap:8px}.dsh_ref_update_notes{display:grid;flex:0 0 100%;gap:8px;padding-top:12px;border-top:1px solid var(--dsh-ref-line);font-size:11px}.dsh_ref_update_markdown{max-height:260px;overflow:auto;overflow-wrap:anywhere;line-height:1.55}.dsh_ref_update_markdown>:first-child{margin-top:0}.dsh_ref_update_markdown>:last-child{margin-bottom:0}.dsh_ref_update_markdown :is(h1,h2,h3,h4,h5,h6){margin:14px 0 6px;font-size:12px}.dsh_ref_update_markdown :is(p,ul,ol,blockquote,pre){margin:6px 0}.dsh_ref_update_markdown :is(ul,ol){padding-left:22px}.dsh_ref_update_markdown blockquote{padding-left:10px;border-left:2px solid var(--dsh-ref-line);opacity:.78}.dsh_ref_update_markdown code{padding:1px 4px;border-radius:4px;background:var(--dsh-ref-surface);font-family:"Geist Mono",Consolas,monospace}.dsh_ref_update_markdown pre{overflow:auto;padding:9px;border:1px solid var(--dsh-ref-line);border-radius:7px;background:var(--dsh-ref-surface)}.dsh_ref_update_markdown pre code{padding:0;background:transparent}.dsh_ref_update_notes a{justify-self:start;color:var(--dsh-ref-blue);font-size:10px;font-weight:650}.dsh_ref_settings .dsh_ref_button{display:inline-flex;align-items:center;justify-content:center;min-height:34px;padding:0 13px;border:1px solid var(--dsh-ref-line);border-radius:9px;background:transparent;color:var(--dsw-alias-label-primary);font-size:12px;font-weight:600;text-decoration:none;transition:background .16s ease,border-color .16s ease,color .16s ease,transform .16s ease}.dsh_ref_settings .dsh_ref_button:hover{border-color:var(--dsh-ref-blue-line);background:var(--dsh-ref-blue-soft);color:var(--dsh-ref-blue)}.dsh_ref_settings .dsh_ref_button:active{transform:translateY(1px)}.dsh_ref_update_actions .is_primary{border-color:var(--dsh-ref-blue);background:var(--dsh-ref-blue);color:#fff}.dsh_ref_update_actions .is_primary:hover:not(:disabled){background:var(--dsh-ref-blue);color:#fff;filter:brightness(.94)}body[data-ds-dark-theme] .dsh_ref_update_copy small{color:var(--dsw-alias-label-tertiary,#94a3b8)}
 .dsh_ref_recheck{border-color:var(--dsh-ref-blue-line)!important;color:var(--dsh-ref-blue)!important;background:var(--dsh-ref-blue-soft)!important}.dsh_ref_recheck:hover:not(:disabled){background:var(--dsh-ref-blue)!important;color:#fff!important}
@@ -253,10 +255,11 @@ body[data-ds-dark-theme] [data-shortcut-modal="settings"] nav button[data-dsh-re
 body[data-ds-dark-theme] .dsh_ref_toggle>span{background:#3a3a3c}
 body[data-ds-dark-theme] .dsh_ref_toggle input:checked+span{background:#f5f5f5}
 body[data-ds-dark-theme] .dsh_ref_general_settings{background:transparent}
-body[data-ds-dark-theme] .dsh_ref_picker_list{background:var(--dsw-alias-settings-card-fill,var(--dsw-alias-bg-layer-2,#242428));border-color:var(--dsw-alias-border-l2,#ffffff1f)}
+body[data-ds-dark-theme] .dsh_ref_settings .dsh_ref_general_settings{background:var(--dsw-alias-bg-layer-2)}
+body[data-ds-dark-theme] .dsh_ref_picker_list{background:var(--dsw-alias-bg-layer-2);border-color:var(--dsw-alias-border-l2)}
 body[data-ds-dark-theme] .dsh_ref_picker_row{border-color:var(--dsw-alias-border-l2,#ffffff1f)}
 body[data-ds-dark-theme] .dsh_ref_collapsible{background:var(--dsw-alias-settings-card-fill,var(--dsw-alias-bg-layer-2,#242428));border-color:var(--dsw-alias-border-l2,#ffffff1f)}
-body[data-ds-dark-theme] .dsh_ref_collapsible[data-open='true']{background:var(--dsw-alias-bg-layer-2,#242428);border-color:var(--dsw-alias-label-dimmed,#737780)}
+body[data-ds-dark-theme] .dsh_ref_collapsible[data-open='true']{background:var(--dsw-alias-bg-layer-2);border-color:var(--dsw-alias-label-dimmed)}
 body[data-ds-dark-theme] .dsh_ref_collapsible_body{border-color:var(--dsw-alias-border-l2,#ffffff1f)}
 /* Official DSH settings contract: PreferenceRow / AppearanceRow / FontSizeRow. */
 .dsh_ref_workspace{gap:0}
@@ -495,7 +498,19 @@ body[data-ds-dark-theme] .dsh_ref_settings input,body[data-ds-dark-theme] .dsh_r
 /* Menus use the host portal so cards and scroll containers cannot clip them. */
 .dsh_ref_select_menu button{min-height:34px!important;padding:6px 8px!important;border:0!important;border-radius:var(--dsw-radius-md)!important;background:transparent!important;font-size:13px!important;line-height:20px!important;font-weight:400!important}
 .dsh_ref_select_menu button:hover:not(:disabled){background:var(--dsw-alias-interactive-bg-hover)!important;color:var(--dsw-alias-label-primary)!important}
-@media(max-width:640px){.dsh_ref_settings .dsh_ref_general_settings>.dsh_ref_render_mode{grid-template-columns:1fr}.dsh_ref_settings .dsh_ref_general_settings>.dsh_ref_render_mode>.dsh_ref_official_menu{width:max-content;max-width:100%}}
+/* Picker rows use a full-width title line and a separate controls line so
+   long translated group names do not get squeezed into a vertical stack. */
+.dsh_ref_settings .dsh_ref_picker_row{grid-template-columns:minmax(0,1fr) minmax(0,1fr) minmax(0,1.35fr) auto;grid-template-rows:auto auto;row-gap:10px}
+.dsh_ref_settings .dsh_ref_picker_toggle{grid-column:1 / 4;grid-row:1;min-width:0;white-space:nowrap}
+.dsh_ref_settings .dsh_ref_picker_toggle>button{flex:none}
+.dsh_ref_settings .dsh_ref_picker_order{grid-column:4;grid-row:1 / 3;align-self:center}
+.dsh_ref_settings .dsh_ref_picker_row>label:nth-of-type(2){grid-column:1;grid-row:2;width:100%}
+.dsh_ref_settings .dsh_ref_picker_row>label:nth-of-type(3){grid-column:2;grid-row:2;width:100%}
+.dsh_ref_settings .dsh_ref_picker_row>label:nth-of-type(4){grid-column:3;grid-row:2;width:100%}
+.dsh_ref_settings .dsh_ref_picker_row>label:nth-of-type(2)>span:has(>input),.dsh_ref_settings .dsh_ref_picker_row>label:nth-of-type(3)>span:has(>input),.dsh_ref_settings .dsh_ref_picker_row>label:nth-of-type(4)>span:has(>input){width:100%;}
+.dsh_ref_settings .dsh_ref_picker_row>label:nth-of-type(2)>span:has(>input)>input,.dsh_ref_settings .dsh_ref_picker_row>label:nth-of-type(3)>span:has(>input)>input,.dsh_ref_settings .dsh_ref_picker_row>label:nth-of-type(4)>span:has(>input)>input{width:100%;}
+.dsh_ref_settings .dsh_ref_picker_limit{flex-direction:column;align-items:flex-start;gap:4px}
+@media(max-width:640px){.dsh_ref_settings .dsh_ref_general_settings>.dsh_ref_render_mode{grid-template-columns:1fr}.dsh_ref_settings .dsh_ref_general_settings>.dsh_ref_render_mode>.dsh_ref_official_menu{width:max-content;max-width:100%}.dsh_ref_settings .dsh_ref_picker_row{grid-template-columns:1fr;grid-template-rows:auto}.dsh_ref_settings .dsh_ref_picker_toggle,.dsh_ref_settings .dsh_ref_picker_order,.dsh_ref_settings .dsh_ref_picker_row>label:nth-of-type(2),.dsh_ref_settings .dsh_ref_picker_row>label:nth-of-type(3),.dsh_ref_settings .dsh_ref_picker_row>label:nth-of-type(4){grid-column:auto;grid-row:auto}}
 
 .dsh_ref_settings{padding-bottom:56px}
 .dsh_ref_settings .dsh_ref_notice{border-color:#0f1115;background:#0f1115;color:#fff}
@@ -959,7 +974,7 @@ export function adoptReferenceIconProjection(): () => void {
     node.replaceChildren(createPickerIcon(kind), ...(secondary === undefined ? [] : [createPickerIcon(secondary)]))
     node.classList.remove('dsh_ref_projected_icon')
     node.classList.add('dsh_ref_picker_icon')
-    node.classList.toggle('dsh_ref_command_icon', ['goal', 'plan', 'feedback', 'compact', 'permission', 'export'].includes(kind))
+    node.classList.toggle('dsh_ref_command_icon', ['paperclip', 'goal', 'plan', 'feedback', 'compact', 'permission', 'model', 'export'].includes(kind))
     node.classList.toggle('dsh_ref_dual_icon', secondary !== undefined)
     node.dataset.dshRefMenuIcon = kind
   }
@@ -986,12 +1001,13 @@ export function adoptReferenceIconProjection(): () => void {
     const name = option.children.item(1)?.textContent?.trim() ?? ''
     const description = option.children.item(2)?.textContent?.trim() ?? ''
     if (source === 'Commands') {
-      const commandIcons: Readonly<Record<string, PickerIconKind>> = { goal: 'goal', plan: 'plan', feedback: 'feedback', compact: 'compact', permission: 'permission', export: 'export' }
+      const commandIcons: Readonly<Record<string, PickerIconKind>> = { file: 'paperclip', goal: 'goal', plan: 'plan', feedback: 'feedback', compact: 'compact', permission: 'permission', model: 'model', export: 'export' }
       return paintPicker(icon, commandIcons[name.toLocaleLowerCase()] ?? 'command')
     }
     if (source === 'Skills') return paintPicker(icon, 'skill')
     if (source === 'Files and folders') return paintPicker(icon, workspacePathIconKind(name, name.endsWith('/') ? 'directory' : 'file'))
     if (source === 'DSH sessions') return paintPicker(icon, 'session')
+    if (source === 'All local plugins') return paintPicker(icon, 'plugin')
     if (source === 'Local agent conversations') {
       const agent = (Object.keys(LOCAL_AGENT_CHIP_LABEL) as LocalAgent[]).find(item => description.startsWith(`${LOCAL_AGENT_CHIP_LABEL[item]} ·`))
       return agent === undefined ? paintPicker(icon, 'agent') : paintAgent(icon, agent)
@@ -1107,6 +1123,10 @@ function projectComposerChips(
     const referenceSource = chip.dataset.referenceSource ?? chip.dataset.composerChip
     const appearance = chip.dataset.referenceAppearance ?? (referenceSource === 'Cloud drive files' || referenceSource === 'Files and folders' ? 'file' : 'session')
     if (appearance === 'session') {
+      if (referenceSource === 'All local plugins') {
+        applyChipIcon(chip, 'plugin', pickerMasks.plugin)
+        continue
+      }
       const agent = (Object.keys(LOCAL_AGENT_CHIP_LABEL) as LocalAgent[]).find(item => label.startsWith(`${LOCAL_AGENT_CHIP_LABEL[item]}·`))
       if (agent !== undefined) {
         applyChipIcon(chip, agent, agentMasks[agent] ?? pickerMasks.agent)
@@ -1175,7 +1195,7 @@ function createProviderIcon(path: string): SVGSVGElement {
 
 function createPickerIcon(kind: PickerIconKind): SVGSVGElement {
   const svg = document.createElementNS(SVG_NS, 'svg')
-  svg.setAttribute('viewBox', '0 0 24 24')
+  svg.setAttribute('viewBox', PICKER_ICON_VIEWBOX[kind] ?? '0 0 24 24')
   svg.setAttribute('fill', 'none')
   svg.setAttribute('stroke', 'currentColor')
   svg.setAttribute('stroke-width', String(PICKER_ICON_STROKE_WIDTH))
@@ -1202,13 +1222,13 @@ function reactIconMask(element: ReactElement): string {
 
 function pickerIconMask(kind: PickerIconKind): string {
   const nodes = PICKER_ICON_NODES[kind].map(node => {
-    const attrs = Object.entries(node.attrs).map(([name, value]) => `${name}="${value}"`).join(' ')
+    const attrs = Object.entries(node.attrs).map(([name, value]) => `${name}="${value.replaceAll('currentColor', 'black')}"`).join(' ')
     return `<${node.tag} ${attrs}/>`
   }).join('')
-  return svgMask(`<g fill="none" stroke="black" stroke-width="${String(PICKER_ICON_STROKE_WIDTH)}" stroke-linecap="round" stroke-linejoin="round">${nodes}</g>`)
+  return svgMask(`<g fill="none" stroke="black" stroke-width="${String(PICKER_ICON_STROKE_WIDTH)}" stroke-linecap="round" stroke-linejoin="round">${nodes}</g>`, PICKER_ICON_VIEWBOX[kind] ?? '0 0 24 24')
 }
 
-function svgMask(content: string): string {
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">${content}</svg>`
+function svgMask(content: string, viewBox = '0 0 24 24'): string {
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${viewBox}">${content}</svg>`
   return `url("data:image/svg+xml,${encodeURIComponent(svg)}")`
 }

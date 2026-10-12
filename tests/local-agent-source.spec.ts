@@ -168,8 +168,8 @@ describe('discovery', () => {
   it('counts recognized conversations by Agent', async () => {
     const { ctx, dispose } = await mount()
     await expect(ctx.get('referenceLocalAgents')!.stats()).resolves.toEqual(expect.arrayContaining([
-      { kind: 'claude-code', conversations: 1 },
-      { kind: 'codex', conversations: 1 },
+      { kind: 'claude-code', conversations: 1, syncedConversations: 0 },
+      { kind: 'codex', conversations: 1, syncedConversations: 0 },
     ]))
     await dispose()
   })

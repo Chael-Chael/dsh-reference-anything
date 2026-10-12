@@ -66,9 +66,9 @@ Beyond extending what `@` can reference, Reference Anything also enhances the `@
   </tr>
 </table>
 
-Type `@`, search across enabled sources, and insert the selected reference into the current task. Each source keeps its own access and loading behavior: files use DSH's permission-constrained tools, DSH sessions use the native session-reference protocol, local agent transcripts are streamed straight off disk, cloud-drive files are fetched a window at a time over the drive's own API, and external conversation bodies are read on demand.
+Type `@`, search across enabled sources, and insert the selected reference into the current task. Each source keeps its own access and loading behavior: files use DSH's permission-constrained tools, DSH sessions use the native session-reference protocol, local agent transcripts can be read from disk or a synced local copy, cloud-drive files are fetched a window at a time over the drive's own API, and external conversation bodies are read on demand.
 
-**The External conversations group** — and only that group — uses OpenCLI to reach AI chat sessions you are already logged into. By default it stores conversation titles locally and the agent fetches remote content on demand; an optional offline-mirror mode stores the latest complete bodies locally instead. **Local agent conversations need none of that**: those transcripts are already files on your own disk, so that group reads them directly, with no browser, no OpenCLI, and nothing mirrored.
+**The External conversations group** uses OpenCLI to reach AI chat sessions you are already logged into. By default it stores conversation titles locally and the agent fetches remote content on demand; an optional offline-mirror mode stores the latest complete bodies locally instead. **Local agent conversations** read transcripts from your disk without a browser or OpenCLI. You can also sync their history into the plugin to search message text and keep references available after the source files are removed.
 
 > [!NOTE]
 > DSH is currently in Beta, so its underlying capabilities and interfaces may change as it evolves. This plugin will adapt alongside those changes. Because of some current DSH limitations, parts of the implementation may not yet be ideal; we will continue to follow DSH updates and improve the plugin over time. See the relevant sections below for specific limitations and usage notes.
@@ -170,7 +170,7 @@ The default **Read bodies on demand** mode stores only the title index locally a
 
 ### 🧩 One `@` menu, multiple sources
 
-The `@` menu contains eight groups: `Commands`, `Skills`, `Files and folders`, `DSH sessions`, `Local agent conversations`, `External conversations`, `Cloud drive files`, and `All local plugins`. The cloud-drive group browses folders and supported files from drives connected through OpenList; access is read-only, and connections are managed in Settings. Each group shows six rows before its expand action by default and accepts a separate hard candidate cap from 1 to 50. In collapse mode, each expand action reveals five more rows and updates the mounted menu without jumping back to the top; collapse restores the configured compact count. The external-conversation group keeps its sync action first and updates that row and the visible results in place while synchronization runs and completes. Under `Settings → Reference Anything → General`, you can enable or disable groups, reorder them, and choose **Collapse / expand** or **Native DSH scrolling**.
+The `@` menu contains eight groups: `Commands`, `Skills`, `Files and folders`, `DSH sessions`, `Local agent conversations`, `External conversations`, `Cloud drive files`, and `All local plugins`. The cloud-drive group browses folders and supported files from drives connected through OpenList; access is read-only, and connections are managed in Settings. Each group shows six rows before its expand action by default and accepts a separate hard candidate cap from 1 to 50. In collapse mode, each expand action reveals five more rows and updates the mounted menu without jumping back to the top; collapse restores the configured compact count. The external-conversation group keeps its sync action first and updates that row and the visible results in place while synchronization runs and completes. Under `Settings → Reference Anything → General`, you can enable or disable groups, reorder them, assign an optional custom shortcut (for example `f` for Files, then use `@f:notes`), and choose **Collapse / expand** or **Native DSH scrolling**.
 
 #### ⌨️ @Commands — DSH native commands
 
@@ -215,9 +215,15 @@ Type `@agents:` to search and reference conversations saved by other local agent
 
 - Automatically detects conversation history and shows the number found for each agent
 - Lets you enable agents independently or choose a custom history folder
+- Syncs enabled agents' history into the plugin, with incremental updates, full reimport, progress, and cancellation
+- Searches synced message text as well as titles; imported conversations remain referenceable after their source files are removed
 - Searches all detected conversations by default, with an option to limit results to the current workspace
 - Reads conversation content on demand; tool names are concise by default, with full details available when needed
 - Supports agent-specific prefixes such as `@codex:`, `@claude-code:`, and `@gemini-cli:`
+
+In **Settings → @ Agent**, enable the agents you want, optionally choose their history folders, then start a sync. Incremental sync skips unchanged transcripts; full reimport refreshes the selected histories. Both keep previously imported conversations whose source files are no longer present. The agent cards show available and imported counts. Use `@agents:keyword` or an agent-specific prefix to find and reference the imported history. Title matches come first; body search requires at least two characters and checks up to 300 recent conversations and 200,000 characters per conversation.
+
+Local-agent sync is manual and independent of the Web AI sync settings, browser setup, history range, and automatic schedule. It stores conversation text in the plugin rather than creating DSH sessions. Sync uses a separate history scan from the bounded picker; unreadable or oversized transcripts report failures, and compacted or capped history is marked partial. References still require the current task's authorization, and bodies are read in windows.
 
 #### 🧩 @Local plugins — installed and configured plugins
 
@@ -342,7 +348,7 @@ In `metadata-only` mode, the current browser account is checked inside the same 
 
 - File candidates and mention formatting use the official `@deepseek-ai/dsh-file-reference` package and DSH Remote.
 - Cross-session candidates and canonical `dsh-session:` mentions use the official `@deepseek-ai/dsh-session-reference` package and DSH Remote.
-- The transcript formats read by the `Local agent conversations` group were determined from [`Nwflower/dsh-chat-import`](https://github.com/Nwflower/dsh-chat-import) (MIT), whose converters are the documentation of record for the twelve formats that could not be validated against a local corpus. No code is copied — that project imports transcripts into DSH, this one only reads them in place — but the format knowledge is genuinely borrowed.
+- The transcript formats read by the `Local agent conversations` group were determined from [`Nwflower/dsh-chat-import`](https://github.com/Nwflower/dsh-chat-import) (MIT), whose converters are the documentation of record for the twelve formats that could not be validated against a local corpus. No code is copied. This plugin reads transcripts and optionally mirrors them in its own store; the format knowledge is borrowed from that project.
 
 ## 📄 Sources and License
 

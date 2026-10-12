@@ -95,6 +95,10 @@ export interface PickerSourceOptions {
   limit: number
   /** Hard cap applied before presentation controls are appended. */
   maxCandidates: number
+  /** Optional user-defined token accepted before `:` for this source. */
+  shortcut?: string
+  /** All configured shortcuts, so one source cannot treat another's token as a free query. */
+  shortcuts?: Readonly<Record<string, SourceScope>>
   displayMode: PickerDisplayMode
   /** Replaces one cached source group without re-tracking the Composer input. */
   updateMenu?: PickerMenuUpdater
@@ -126,10 +130,8 @@ const PREFIX_SCOPE: Readonly<Record<string, SourceScope>> = {
   skill: 'skills', skills: 'skills',
   file: 'files', files: 'files', folder: 'files', path: 'files',
   session: 'sessions', sessions: 'sessions', dsh: 'sessions',
-  // Bare `claude`, `gemini`, `grok`, and `kimi` stay with External
-  // conversations below, because those are the browser platforms a person
-  // means by the bare word; only the qualified CLI names route to the on-disk
-  // transcripts of the same brand.
+  // Qualified CLI names select on-disk transcripts; bare browser provider
+  // names remain available to every group as search words.
   agent: 'agents', agents: 'agents', transcript: 'agents', transcripts: 'agents',
   cc: 'agents', 'claude-code': 'agents', codex: 'agents', cursor: 'agents', 'gemini-cli': 'agents',
   qoder: 'agents', reasonix: 'agents', openclaw: 'agents', hermes: 'agents', pi: 'agents',
@@ -147,9 +149,15 @@ const PREFIX_SCOPE: Readonly<Record<string, SourceScope>> = {
   '插件': 'plugins', '本地插件': 'plugins', '本地所有插件': 'plugins',
 }
 
-const PROVIDER_SCOPE: Readonly<Record<string, SourceScope>> = {
+// These words only select a group with `:` so they can also match plugin names.
+const COLON_PREFIX_SCOPE: Readonly<Record<string, SourceScope>> = {
+  folders: 'files',
   chatgpt: 'conversations', claude: 'conversations', gemini: 'conversations',
   deepseek: 'conversations', grok: 'conversations', kimi: 'conversations',
+}
+
+function scopedPrefixes(scope: SourceScope, shortcut?: string, shortcuts?: Readonly<Record<string, SourceScope>>): Readonly<Record<string, SourceScope>> {
+  return { ...PREFIX_SCOPE, ...shortcuts, ...(shortcut ? { [shortcut.toLocaleLowerCase()]: scope } : {}) }
 }
 
 export interface SearchDebounce<V> {
@@ -219,7 +227,7 @@ export function createConversationSource(
     trigger: '@', name: CONVERSATION_SOURCE, order: options.order,
     async candidates(_session, { query, quoted, signal }) {
       if (quoted === true) return []
-      const scoped = scopedQuery(query, 'conversations')
+      const scoped = scopedQuery(query, 'conversations', options.shortcut, options.shortcuts)
       if (scoped === undefined) return []
       const parsed = parseQuery(query)
       if (parsed.provider === undefined && scoped !== query.trim()) parsed.query = scoped
@@ -309,7 +317,7 @@ export function createFileSource(
   const source: InputTriggerSource = {
     trigger: '@', name: FILE_SOURCE, order: options.order,
     async candidates(session, { query, quoted, signal }) {
-      const scoped = scopedQuery(query, 'files')
+      const scoped = scopedQuery(query, 'files', options.shortcut, options.shortcuts)
       if (scoped === undefined) return []
       const rows = await load(session.sessionId, scoped, signal)
       return rows.flatMap((row): InputTriggerCandidate[] => {
@@ -353,7 +361,7 @@ export function createSessionSource(
     trigger: '@', name: SESSION_SOURCE, order: options.order,
     async candidates(session, { query, quoted, signal }) {
       if (quoted === true) return []
-      const scoped = scopedQuery(query, 'sessions')
+      const scoped = scopedQuery(query, 'sessions', options.shortcut, options.shortcuts)
       if (scoped === undefined) return []
       return (await search(session.sessionId, scoped, signal)).map(row => ({
         name: row.label,
@@ -383,9 +391,8 @@ export function createSessionSource(
 /**
  * The `@` group for transcripts other coding agents left on this machine.
  *
- * Rows carry the transcript's id, never a body excerpt: the Host ranks on title
- * and opening prompt alone, so nothing the user has not named can reach the
- * model through a menu row. Picking one inserts a pointer; the turns are read
+ * Rows carry the transcript's id, never a body excerpt: the Host searches live
+ * transcript metadata and imported text. Picking one inserts a pointer; turns are read
  * later, and only for the task that asked.
  * @param search - Host-side discovery, scoped to the session's own workspace.
  * @param t - translator for the row's dimmed second line.
@@ -403,7 +410,7 @@ export function createLocalAgentSource(
       // A quoted query is a path completion in progress; a transcript pointer
       // is not a path, so this group stays out of the way.
       if (quoted === true) return []
-      const scoped = scopedQuery(query, 'agents')
+      const scoped = scopedQuery(query, 'agents', options.shortcut, options.shortcuts)
       if (scoped === undefined) return []
       const rows = await search(session.sessionId, scoped, signal, options.maxCandidates)
       // Agent sessions go untitled far more often than browser chats do, and
@@ -450,8 +457,8 @@ export function createLocalAgentSource(
 /** The dimmed second line: which agent wrote it, and when it last moved. */
 function describeAgentRow(row: AgentCandidate, t: T): string {
   const provider = row.provider || t('source.agents')
-  if (row.updatedAt === undefined) return provider
-  return t('conversation.description', { provider, date: formatDate(new Date(row.updatedAt).toISOString(), t) })
+  const description = row.updatedAt === undefined ? provider : t('conversation.description', { provider, date: formatDate(new Date(row.updatedAt).toISOString(), t) })
+  return row.searchIncomplete === true ? `${description} · ${t('drive.searchIncomplete')}` : description
 }
 
 function encodeAgentReference(reference: AgentReference): string { return JSON.stringify(reference) }
@@ -482,7 +489,7 @@ export function createCloudDriveSource(
     trigger: '@', name: DRIVE_SOURCE, order: options.order,
     async candidates(_session, { query, quoted, signal }) {
       driveMenuKinds.clear()
-      const scoped = scopedQuery(query, 'drives')
+      const scoped = scopedQuery(query, 'drives', options.shortcut, options.shortcuts)
       if (scoped === undefined) return []
       // A bare quoted token belongs to workspace files. A drive-qualified one
       // is our folder navigation syntax, needed when its path contains spaces.
@@ -590,7 +597,7 @@ function formatDriveMention(reference: DriveReference): string {
 
 interface CommandCandidate { name: string; description?: string; icon?: NonNullable<InputTriggerCandidate['icon']>; input?: { hint?: string } }
 const COMMAND_ICON_KIND: Readonly<Record<string, PickerIconKind>> = {
-  goal: 'goal', plan: 'plan', feedback: 'feedback', compact: 'compact', permission: 'permission', export: 'export',
+  file: 'paperclip', goal: 'goal', plan: 'plan', feedback: 'feedback', compact: 'compact', permission: 'permission', model: 'model', export: 'export',
 }
 const COMMAND_DESCRIPTION_EN: Readonly<Record<string, string>> = {
   goal: 'Set or view the goal for a long-running task', plan: 'Enter or leave plan mode', feedback: 'Record feedback about this session', compact: 'Compact older conversation history', permission: 'Switch the permission preset (sandbox mode + approval policy)', export: 'Download this Session log as a ZIP archive',
@@ -614,14 +621,14 @@ export function createCommandSource(
   const source: InputTriggerSource = {
     trigger: '@', name: COMMAND_SOURCE, order: options.order,
     async candidates(session, { query, signal }) {
-      const scoped = scopedQuery(query, 'commands')
+      const scoped = scopedQuery(query, 'commands', options.shortcut, options.shortcuts)
       if (scoped === undefined) return []
       const needle = scoped.toLocaleLowerCase()
       return (await load(session.sessionId, signal))
         .filter(row => row.name.toLocaleLowerCase().includes(needle))
         .map(row => {
           return {
-          name: (() => { const key = row.name.toLocaleLowerCase(); const zh = navigator.language.toLowerCase().startsWith('zh'); return zh ? `${COMMAND_LABEL_ZH[key] ?? row.name} ${row.name}` : (COMMAND_LABEL_EN[key] ?? row.name) })(), description: (navigator.language.toLowerCase().startsWith('zh') ? COMMAND_DESCRIPTION_ZH[row.name.toLocaleLowerCase()] : COMMAND_DESCRIPTION_EN[row.name.toLocaleLowerCase()]) ?? row.description, hint: row.input?.hint,
+          name: (() => { const key = row.name.toLocaleLowerCase(); const zh = navigator.language.toLowerCase().startsWith('zh'); return zh ? (COMMAND_LABEL_ZH[key] ?? row.name) : (COMMAND_LABEL_EN[key] ?? row.name) })(), description: (navigator.language.toLowerCase().startsWith('zh') ? COMMAND_DESCRIPTION_ZH[row.name.toLocaleLowerCase()] : COMMAND_DESCRIPTION_EN[row.name.toLocaleLowerCase()]) ?? row.description, hint: row.input?.hint,
           icon: candidateIcon(PICKER_ICON_MARKER[COMMAND_ICON_KIND[row.name.toLocaleLowerCase()] ?? 'command']), value: encodeCandidate({ kind: 'command', name: row.name }),
           }
         })
@@ -642,7 +649,7 @@ export function createSkillSource(
   const source: InputTriggerSource = {
     trigger: '@', name: SKILL_SOURCE, order: options.order,
     async candidates(session, { query, signal }) {
-      const scoped = scopedQuery(query, 'skills')
+      const scoped = scopedQuery(query, 'skills', options.shortcut, options.shortcuts)
       if (scoped === undefined) return []
       const rows = await load(session.sessionId, signal)
       const needle = scoped.toLocaleLowerCase()
@@ -670,7 +677,7 @@ export function createPluginSource(
     trigger: '@', name: PLUGIN_SOURCE, order: options.order,
     async candidates(_session, { query, quoted, signal }) {
       if (quoted) return []
-      const scoped = scopedQuery(query, 'plugins')
+      const scoped = scopedQuery(query, 'plugins', options.shortcut, options.shortcuts)
       if (scoped === undefined) return []
       const rows = await load(signal)
       const needle = scoped.toLocaleLowerCase()
@@ -682,24 +689,18 @@ export function createPluginSource(
           return {
             name: row.label || row.name,
             description: descParts.join(' · '),
-            icon: candidateIcon(PICKER_ICON_MARKER.command),
+            icon: candidateIcon(PICKER_ICON_MARKER.plugin),
             value: encodeCandidate({ kind: 'plugin', name: row.name, directory: row.directory }),
           }
         })
     },
     onPick({ candidate }) {
       const value = decodeCandidate(candidate.value)
-      if (value?.kind === 'plugin') {
-        if (value.directory) {
-          const path = value.directory.replace(/\\/gu, '/').replace(/\/+$/u, '')
-          const mention = formatFileMention({ path, kind: 'directory' }, true)
-          // Close the native directory-completion token: a plugin pick is a complete reference.
-          if (mention) return { text: `${mention}" ` }
-        }
-        return { text: `@${value.name} ` }
-      }
-      return undefined
+      if (value?.kind !== 'plugin') return undefined
+      const mention = `@[${escapeLabel(value.name)}](${encodeReferenceUri({ source: 'local-plugin', id: value.name })})`
+      return { insert: { source: PLUGIN_SOURCE, ref: mention, label: value.name, appearance: 'session', clipboardText: mention } }
     },
+    codec: { clipboardText: ref => ref, serialize: ref => Promise.resolve(ref) },
   }
   return withDisplayPolicy(source, options, t)
 }
@@ -894,14 +895,15 @@ export function disambiguate(rows: readonly InputTriggerCandidate[]): InputTrigg
 }
 
 /** Route `type:name` autocomplete syntax to one @ source and strip its prefix. */
-export function scopedQuery(value: string, scope: SourceScope): string | undefined {
+export function scopedQuery(value: string, scope: SourceScope, shortcut?: string, shortcuts?: Readonly<Record<string, SourceScope>>): string | undefined {
+  const prefixes = scopedPrefixes(scope, shortcut, shortcuts)
   const trimmed = value.trim()
-  const bareScope = PREFIX_SCOPE[trimmed.toLocaleLowerCase()]
+  const bareScope = prefixes[trimmed.toLocaleLowerCase()]
   if (bareScope !== undefined) return bareScope === scope ? '' : undefined
-  const match = trimmed.match(/^([a-z-]+):(.*)$/iu)
+  const match = trimmed.match(/^([^@:\s/]+):(.*)$/u)
   if (!match) return trimmed
   const prefix = match[1]!.toLocaleLowerCase()
-  const requested = prefix === 'folders' ? 'files' : PREFIX_SCOPE[prefix] ?? PROVIDER_SCOPE[prefix]
+  const requested = prefixes[prefix] ?? COLON_PREFIX_SCOPE[prefix]
   if (requested === undefined) return trimmed
   return requested === scope ? (match[2] ?? '').trim() : undefined
 }

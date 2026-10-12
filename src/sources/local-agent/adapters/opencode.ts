@@ -144,7 +144,7 @@ function variantAdapter(variant: Variant): QueryAdapter {
     },
 
     turns(db, sessionId, options, maxRecords): SessionTurns {
-      const { messages, truncated } = readSessionMessages(db, sessionId, maxRecords)
+      const { messages, truncated, malformed } = readSessionMessages(db, sessionId, maxRecords)
       const { kept, summary, compacted } = applyCompaction(messages)
       const state = createSharedState()
       const items: ParsedTurn[] = []
@@ -153,7 +153,7 @@ function variantAdapter(variant: Variant): QueryAdapter {
       if (summary !== undefined) items.push({ role: 'assistant', text: `${COMPACTION_MARKER}\n\n${summary}` })
       for (const message of kept) items.push(...stepSessionMessage(state, message, options))
       items.push(...flushAssistant(state))
-      return { items, truncated, compacted }
+      return { items, truncated, compacted, ...(malformed ? { malformed } : {}) }
     },
   }
 }

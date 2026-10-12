@@ -79,7 +79,7 @@ export const zcodeAdapter: QueryAdapter = {
   },
 
   turns(db, sessionId, options, maxRecords): SessionTurns {
-    const { messages, truncated } = readSessionMessages(db, sessionId, maxRecords)
+    const { messages, truncated, malformed } = readSessionMessages(db, sessionId, maxRecords)
     const state = createSharedState()
     const items: ParsedTurn[] = []
     let summary: string | undefined
@@ -103,7 +103,7 @@ export const zcodeAdapter: QueryAdapter = {
     if (summary !== undefined) items.push({ role: 'assistant', text: `${COMPACTION_MARKER}\n\n${summary}` })
     for (const message of conversation) items.push(...stepSessionMessage(state, message, options))
     items.push(...flushAssistant(state))
-    return { items, truncated, compacted: summary !== undefined }
+    return { items, truncated, compacted: summary !== undefined, ...(malformed ? { malformed } : {}) }
   },
 }
 

@@ -7,9 +7,8 @@
  * This registers them as referenceable items instead: the `@` menu lists them,
  * and the body is read only when the model asks for it by reference.
  *
- * Reference-only by design. Nothing here writes into DSH's session store —
- * importing a transcript is a different feature with different failure modes,
- * and conflating the two would make every listed transcript a pending mutation.
+ * Explicit history sync stores a durable copy inside this plugin. Discovery
+ * alone does not import content, and neither path writes to DSH's session store.
  *
  * @module dsh-reference-anything/local-agent
  */
@@ -46,6 +45,10 @@ import { SESSION_SEPARATOR, listTranscripts, probeEnds, readSessionInfo, readSes
 import type { ScanRoot, TranscriptDescriptor, TurnPage } from './scan.ts'
 import { AgentBookmarkStore, localAgentDomainSpec } from './store.ts'
 import type { AgentBookmark } from './store.ts'
+import { AgentMirrorStore, isMirrorCursor, localAgentHistoryDomainSpec } from './mirror.ts'
+import type { AgentMirror } from './mirror.ts'
+import { readForImport, sourceVersion } from './import.ts'
+import { AgentHistorySyncManager } from './sync.ts'
 import type {
   AgentAdapter,
   AgentKind,
@@ -68,6 +71,10 @@ export const inject = ['references', 'storageDomain']
 
 /** Registry id, and the `source` half of every reference this source owns. */
 export const LOCAL_AGENT_SOURCE_ID = 'local-agent'
+export type { AgentSyncStatus } from './sync.ts'
+
+/** History scans are independent from the newest-200 interactive picker cap. */
+const MAX_HISTORY_TRANSCRIPTS = 100_000
 
 /** Transcripts probed per `list()` call, so a cold cache costs a bounded read. */
 const BACKFILL_PER_LIST = 24
@@ -180,6 +187,8 @@ export class LocalAgentService extends Service implements ReferenceSource {
   private readonly convert: ConvertOptions
   private cache: DirectoryCache | undefined
   private store: AgentBookmarkStore | undefined
+  private mirror: AgentMirrorStore | undefined
+  private syncValue: AgentHistorySyncManager | undefined
 
   constructor(ctx: Context, config: Config = {}) {
     super(ctx, 'referenceLocalAgents')
@@ -198,15 +207,35 @@ export class LocalAgentService extends Service implements ReferenceSource {
 
   protected async [Service.init](): Promise<void> {
     const domain = await this.ctx.storageDomain.open(localAgentDomainSpec)
-    this.ctx.effect(() => () => domain.close(), 'reference-local-agent.domainClose')
+    const historyDomain = await this.ctx.storageDomain.open(localAgentHistoryDomainSpec).catch(async (error: unknown) => {
+      await domain.close()
+      throw error
+    })
     this.store = new AgentBookmarkStore(domain)
+    this.mirror = new AgentMirrorStore(historyDomain)
+    this.syncValue = new AgentHistorySyncManager({
+      enabled: () => this.enabledAgentKinds(),
+      scan: (agents, signal) => this.scanHistory(agents, signal),
+      import: (entry, full, signal) => this.importHistory(entry, full, signal),
+    })
+    this.ctx.effect(() => async () => {
+      await this.syncValue?.dispose()
+      await historyDomain.close()
+      await domain.close()
+    }, 'reference-local-agent.domainClose')
     this.ctx.effect(() => this.ctx.references.registerSource(this), 'reference-local-agent.registerSource()')
+  }
+
+  get sync(): AgentHistorySyncManager {
+    if (this.syncValue === undefined) throw new Error('local agent history service is not initialized')
+    return this.syncValue
   }
 
   /**
    * @returns whether any configured root is a readable directory.
    */
   async available(): Promise<boolean> {
+    if (this.mirror !== undefined && this.mirror.conversations.size > 0) return true
     const checks = await Promise.all(this.roots.map(async (root) => {
       try {
         return (await stat(root.path)).isDirectory()
@@ -231,19 +260,22 @@ export class LocalAgentService extends Service implements ReferenceSource {
   }
 
   /** Count transcripts recognized by the current roots, grouped by format. */
-  async stats(signal?: AbortSignal): Promise<Array<{ kind: AgentKind; conversations: number }>> {
-    const counts = new Map<AgentKind, number>(AGENT_KINDS.map(kind => [kind, 0]))
-    for (const row of await this.scan(signal)) counts.set(row.kind, (counts.get(row.kind) ?? 0) + 1)
-    return AGENT_KINDS.map(kind => ({ kind, conversations: counts.get(kind) ?? 0 }))
+  async stats(signal?: AbortSignal): Promise<Array<{ kind: AgentKind; conversations: number; syncedConversations: number; lastSyncedAt?: number }>> {
+    const live = await this.scan(signal)
+    const mirrored = [...this.mirror?.conversations.entries() ?? []].map(([, row]) => row)
+    return AGENT_KINDS.map(kind => {
+      const copies = mirrored.filter(row => row.kind === kind)
+      const ids = new Set([...live.filter(row => row.kind === kind).map(row => referenceId(row.kind, row.relPath)), ...copies.map(row => row.id)])
+      const lastSyncedAt = copies.reduce((latest, row) => Math.max(latest, row.syncedAt), 0)
+      return { kind, conversations: ids.size, syncedConversations: copies.length, ...(lastSyncedAt > 0 ? { lastSyncedAt } : {}) }
+    })
   }
 
   /**
    * List transcripts whose title or opening prompt matches `query`.
    *
-   * Matching never touches a transcript's body. Ranking on body text would
-   * require reading every candidate on a keystroke, and an excerpt of one would
-   * put a conversation the user has not named in front of the model — the same
-   * invariant the web-chat source holds.
+   * Live discovery reads metadata only. Explicitly synchronized histories also
+   * match their stored text, while returning titles rather than body excerpts.
    * @param query - case-insensitive substring; empty means the most recent.
    * @param limit - maximum items to return.
    * @param signal - cancellation from the caller.
@@ -278,9 +310,19 @@ export class LocalAgentService extends Service implements ReferenceSource {
     const known = await this.describe(entries, signal)
     const workspace = this.settings.scope === 'workspace' ? cwd : undefined
     const needle = query.trim()
-
+    const seen = new Set<string>()
     const ranked: { summary: ReferenceSummary; match?: TitleMatch; mtimeMs: number }[] = []
+    const unmatched: AgentMirror[] = []
     for (const { descriptor, bookmark } of known) {
+      const id = referenceId(descriptor.kind, descriptor.relPath)
+      if (seen.has(id)) continue
+      seen.add(id)
+      const mirror = this.mirror?.conversations.get(id)
+      if (mirror !== undefined) {
+        const title = descriptor.title?.trim()
+        this.rankMirror(title ? { ...mirror, title } : mirror, workspace, needle, ranked, unmatched)
+        continue
+      }
       // A transcript known to hold no conversation is not offered: picking it
       // could only ever produce an error. Un-probed rows have no bookmark and
       // are still listed — absence of evidence is not emptiness.
@@ -296,14 +338,128 @@ export class LocalAgentService extends Service implements ReferenceSource {
       })
     }
 
+    for (const [id, mirror] of this.mirror?.conversations.entries() ?? []) {
+      if (seen.has(id) || !enabled.has(mirror.kind as AgentKind)) continue
+      signal?.throwIfAborted()
+      this.rankMirror(mirror, workspace, needle, ranked, unmatched)
+    }
+
     ranked.sort((left, right) => {
+      if (left.match !== undefined && right.match === undefined) return -1
+      if (left.match === undefined && right.match !== undefined) return 1
       if (left.match !== undefined && right.match !== undefined) {
         const byMatch = compareMatches(left.match, right.match)
         if (byMatch !== 0) return byMatch
       }
       return right.mtimeMs - left.mtimeMs
     })
-    return ranked.slice(0, limit).map(entry => entry.summary)
+    const results = ranked.slice(0, limit).map(entry => entry.summary)
+    if (results.length >= limit || needle.length < 2) return results
+    // Like web histories, body search only fills remaining slots and has a
+    // per-query/per-conversation budget so an @ keystroke cannot walk a corpus.
+    const pattern = new RegExp(needle.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&'), 'iu')
+    unmatched.sort((a, b) => b.updatedAt - a.updatedAt)
+    let incomplete = unmatched.length > 300
+    for (const row of unmatched.slice(0, 300)) {
+      signal?.throwIfAborted()
+      let remaining = 200_000
+      let matched = false
+      for (const turn of row.turns) {
+        if (pattern.test(turn.text.slice(0, remaining))) { matched = true; break }
+        remaining -= turn.text.length
+        if (remaining <= 0) { incomplete = true; break }
+      }
+      if (matched) results.push(this.mirrorSummary(row))
+      if (results.length >= limit) break
+    }
+    return incomplete ? results.map(row => ({ ...row, searchIncomplete: true })) : results
+  }
+
+  private rankMirror(
+    row: AgentMirror, workspace: string | undefined, needle: string,
+    ranked: { summary: ReferenceSummary; match?: TitleMatch; mtimeMs: number }[],
+    unmatched: AgentMirror[],
+  ): void {
+    if (workspace !== undefined && !inWorkspace(row.cwd, workspace)) return
+    const match = needle === '' ? undefined : bestMatch(row.title, row.firstPrompt, needle)
+    if (needle !== '' && match === undefined) { unmatched.push(row); return }
+    ranked.push({
+      summary: this.mirrorSummary(row),
+      ...(match === undefined ? {} : { match }), mtimeMs: row.updatedAt,
+    })
+  }
+
+  private mirrorSummary(row: AgentMirror): ReferenceSummary {
+    return {
+      ref: { source: this.id, id: row.id }, label: row.title, origin: row.origin,
+      updatedAt: row.updatedAt, provider: this.adapters.get(row.kind as AgentKind)?.displayName ?? row.kind,
+      syncedAt: row.syncedAt, messageCount: row.turns.length, partial: row.partial,
+    }
+  }
+
+  /** Preserve root priority and report collisions instead of replacing an unrelated history. */
+  private async scanHistory(agents: readonly AgentKind[], signal: AbortSignal): Promise<{ entries: TranscriptDescriptor[]; partial: boolean; error?: string }> {
+    const selected = new Set(agents)
+    const found = new Map<string, TranscriptDescriptor>()
+    let partial = false
+    let collision = false
+    const diagnostics: string[] = []
+    for (const root of this.roots) {
+      if (!selected.has(root.kind)) continue
+      const entries = await listTranscripts([root], this.adapters, MAX_HISTORY_TRANSCRIPTS, signal, message => {
+        partial = true
+        if (diagnostics.length < 3) diagnostics.push(message)
+      })
+      if (entries.length >= MAX_HISTORY_TRANSCRIPTS) partial = true
+      for (const entry of entries) {
+        const id = referenceId(entry.kind, entry.relPath)
+        const previous = found.get(id)
+        if (previous !== undefined) {
+          if (resolve(previous.path) !== resolve(entry.path)) { partial = true; collision = true }
+          continue
+        }
+        if (found.size >= MAX_HISTORY_TRANSCRIPTS) { partial = true; continue }
+        found.set(id, entry)
+      }
+    }
+    if (collision) diagnostics.unshift('Multiple configured roots contain the same local agent reference id; only the first root was imported.')
+    return { entries: [...found.values()], partial, ...(diagnostics.length > 0 ? { error: diagnostics.join('; ') } : {}) }
+  }
+
+  private async importHistory(entry: TranscriptDescriptor, full: boolean, signal: AbortSignal): Promise<{ imported: boolean; partial: boolean }> {
+    const mirror = this.mirror
+    if (mirror === undefined) throw new Error('local agent history service is not initialized')
+    const id = referenceId(entry.kind, entry.relPath)
+    const { adapter, descriptor, sessionId } = await this.locate(id)
+    const transcriptVersion = await sourceVersion(descriptor.path, isQueryAdapter(adapter), this.convert)
+    // Codex can be renamed by updating only session_index.jsonl. The scanned
+    // title participates in incremental freshness even when the rollout did not move.
+    const title = entry.title?.trim() || ''
+    const version = JSON.stringify([transcriptVersion, title])
+    const previous = mirror.conversations.get(id)
+    if (previous !== undefined && relative(previous.origin, descriptor.path) !== '') {
+      throw new ReferenceAnythingError('this reference id belongs to a different configured root; the previous history was retained', 'REFERENCE_READ_FAILED')
+    }
+    if (!full && previous?.sourceVersion === version) return { imported: false, partial: previous.partial }
+    const imported = await readForImport(descriptor.path, descriptor.size, adapter, this.convert, sessionId, signal)
+    if (imported.turns.length === 0) {
+      if (previous !== undefined) throw new ReferenceAnythingError('transcript no longer contains readable turns; the previous history was retained', 'REFERENCE_READ_FAILED')
+      return { imported: false, partial: imported.partial }
+    }
+    const bookmark = descriptor.session === undefined ? await this.probe(descriptor, signal) : sessionBookmark(descriptor, descriptor.session)
+    const firstPrompt = bookmark?.firstPrompt || imported.turns.find(turn => turn.role === 'user')?.text.slice(0, 512) || ''
+    signal.throwIfAborted()
+    if (transcriptVersion !== await sourceVersion(descriptor.path, isQueryAdapter(adapter), this.convert)) {
+      throw new ReferenceAnythingError('transcript changed during import; the previous history was retained, retry when the agent is idle', 'REFERENCE_READ_FAILED')
+    }
+    signal.throwIfAborted()
+    await mirror.commit({
+      id, kind: descriptor.kind, title: title || bookmark?.title.trim() || firstPrompt.replace(/\s+/gu, ' ').slice(0, 200) || basename(descriptor.relPath),
+      cwd: bookmark?.cwd ?? '', origin: descriptor.path, firstPrompt,
+      updatedAt: descriptor.session?.updatedAt || descriptor.mtimeMs,
+      sourceVersion: version, ...imported,
+    })
+    return { imported: true, partial: imported.partial }
   }
 
   /** Durable discovery policy. Reads stay independent so granted old refs work. */
@@ -322,6 +478,12 @@ export class LocalAgentService extends Service implements ReferenceSource {
    */
   async read(ref: ReferenceRef, window: ReferenceWindow, signal?: AbortSignal): Promise<ReferenceSnapshot> {
     signal?.throwIfAborted()
+    if (this.mirror?.conversations.get(ref.id) !== undefined && (window.cursor === undefined || isMirrorCursor(window.cursor))) {
+      const kind = parseReferenceId(ref.id)?.kind
+      return this.mirror.read(ref.id, kind === undefined ? '' : this.adapters.get(kind)?.displayName ?? kind, {
+        ...window, limit: Math.max(1, Math.min(window.limit, this.settings.maxReadTurns)),
+      })
+    }
     const { adapter, descriptor, sessionId } = await this.locate(ref.id)
     const cursor = window.cursor === undefined ? undefined : decodeAgentCursor(window.cursor, ref.id)
     if (cursor !== undefined && !cursorStillValid(cursor, descriptor.size)) throw cursorExpired()
@@ -633,7 +795,7 @@ export class LocalAgentService extends Service implements ReferenceSource {
  * @param ctx - the mounting context.
  * @param config - validated deployment settings.
  */
-export function apply(ctx: Context, config: Config = {}): void {
+export async function apply(ctx: Context, config: Config = {}): Promise<void> {
   const agents = config.agents ?? defaults().agents
   const extraRoots = config.extraRoots ?? []
   if (agents.length === 0 && extraRoots.length === 0) {
@@ -642,7 +804,7 @@ export function apply(ctx: Context, config: Config = {}): void {
       'REFERENCE_INVALID_CONFIG',
     )
   }
-  ctx.plugin(LocalAgentService, config)
+  await ctx.plugin(LocalAgentService, config)
 }
 
 /** Compose the reference id from the two parts that identify a transcript. */

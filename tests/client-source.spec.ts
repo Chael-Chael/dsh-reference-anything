@@ -43,11 +43,45 @@ describe('native @ sources', () => {
     expect(scopedQuery('plugins', 'plugins')).toBe('')
     expect(scopedQuery('plugin:git', 'plugins')).toBe('git')
     expect(scopedQuery('本地插件', 'plugins')).toBe('')
-    expect(scopedQuery('folders', 'plugins')).toBe('folders')
-    expect(scopedQuery('folders:src', 'files')).toBe('src')
-    expect(scopedQuery('claude', 'plugins')).toBe('claude')
-    expect(scopedQuery('claude:probe', 'conversations')).toBe('probe')
-    expect(scopedQuery('claude:probe', 'plugins')).toBeUndefined()
+  })
+
+  const scopes = ['commands', 'skills', 'files', 'sessions', 'agents', 'conversations', 'drives', 'plugins'] as const
+  const providers = ['chatgpt', 'claude', 'gemini', 'deepseek', 'grok', 'kimi'] as const
+
+  it.each([
+    ['folders', 'files'],
+    ...providers.map(provider => [provider, 'conversations'] as const),
+  ] as const)('keeps bare %s searchable in every group and scopes its colon form', (word, target) => {
+    for (const scope of scopes) {
+      expect(scopedQuery(word, scope)).toBe(word)
+      expect(scopedQuery(`${word}:probe`, scope)).toBe(scope === target ? 'probe' : undefined)
+    }
+  })
+
+  it('keeps the canonical file aliases scoped without a colon', () => {
+    for (const word of ['file', 'files', 'folder']) {
+      expect(scopedQuery(word, 'files')).toBe('')
+      expect(scopedQuery(word, 'plugins')).toBeUndefined()
+    }
+  })
+
+  it.each(['folders', 'claude', '插件2', '2'])('honors a configured %s shortcut before built-in routing', word => {
+    expect(scopedQuery(word, 'plugins', word)).toBe('')
+    expect(scopedQuery(`${word}:probe`, 'plugins', word)).toBe('probe')
+    for (const scope of scopes) {
+      const shortcuts = { [word]: 'plugins' as const }
+      expect(scopedQuery(word, scope, undefined, shortcuts)).toBe(scope === 'plugins' ? '' : undefined)
+      expect(scopedQuery(`${word}:probe`, scope, undefined, shortcuts)).toBe(scope === 'plugins' ? 'probe' : undefined)
+    }
+  })
+
+  it.each(providers)('keeps %s conversation searches provider-specific', async provider => {
+    const search = vi.fn(async () => [searchRow({ provider })])
+    const source = createConversationSource(search, undefined, options())
+    await source.candidates(session, request(provider))
+    expect(search).toHaveBeenLastCalledWith('', provider, expect.any(AbortSignal), 50)
+    await source.candidates(session, request(`${provider}:probe`))
+    expect(search).toHaveBeenLastCalledWith('probe', provider, expect.any(AbortSignal), 50)
   })
 
   it('describes result provenance and disambiguates duplicate menu names', () => {
@@ -181,11 +215,12 @@ describe('native @ sources', () => {
   })
 
   it('keeps Commands and Skills in @ while returning native slash text', async () => {
-    const commands = createCommandSource(async () => [{ name: 'plan', description: 'Plan mode' }])
+    const commands = createCommandSource(async () => [{ name: 'plan', description: 'Plan mode' }, { name: 'doctor', description: 'Check health' }])
     const command = (await commands.candidates(session, request('pla')))[0]!
-    expect(command?.name).toContain('plan')
+    expect(command?.name).toBe('计划')
     expect(command?.icon).toBe(PICKER_ICON_MARKER.plan)
     expect(commands.onPick(pick(command))).toEqual({ text: '/plan' })
+    expect((await commands.candidates(session, request('doc')))[0]?.name).toBe('doctor')
 
     const skills = createSkillSource(async () => [{ name: 'review', description: 'Review code', modelInvocable: false }])
     const skill = (await skills.candidates(session, request('rev')))[0]!
@@ -258,13 +293,13 @@ describe('local agent conversations', () => {
     expect(uri).not.toContain('project-a')
   })
 
-  it('routes hyphenated agent spellings here while bare provider names keep meaning the browser chat', () => {
+  it('keeps CLI prefixes separate from browser-provider colon prefixes', () => {
     expect(scopedQuery('agents', 'agents')).toBe('')
     expect(scopedQuery('codex:probe', 'agents')).toBe('probe')
     expect(scopedQuery('claude-code:probe', 'agents')).toBe('probe')
     expect(scopedQuery('codex:probe', 'conversations')).toBeUndefined()
-    // The near-collision that makes this group risky: `claude` and `gemini`
-    // were already taken by External conversations and must stay taken.
+    // `claude:` and `gemini:` target External conversations; only the
+    // qualified CLI prefixes target local transcripts.
     expect(scopedQuery('claude:probe', 'conversations')).toBe('probe')
     expect(scopedQuery('claude:probe', 'agents')).toBeUndefined()
     expect(scopedQuery('gemini:probe', 'agents')).toBeUndefined()
@@ -299,6 +334,21 @@ describe('local agent conversations', () => {
     // A transcript whose mtime the host could not report still gets a row; the
     // date is the only part that goes missing.
     expect(candidates[2]?.description).toBe('Claude Code')
+  })
+
+  it('marks budget-limited local searches without adding the warning to the inserted reference', async () => {
+    const rows = [agentRow({ searchIncomplete: true }), agentRow({ id: 'codex:no-date', updatedAt: undefined, searchIncomplete: true })]
+    const source = createLocalAgentSource(async () => rows, undefined, options({ order: 25 }))
+    const candidates = await source.candidates(session, request('agents:probe'))
+    expect(candidates).toHaveLength(2)
+    for (const [index, candidate] of candidates.entries()) {
+      expect(candidate.description).toContain('Codex')
+      expect(candidate.description).toContain('Results may be incomplete')
+      const outcome = source.onPick(pick(candidate))
+      if (outcome === undefined || outcome === 'handled' || !('insert' in outcome)) throw new Error('expected insert')
+      expect(JSON.parse(outcome.insert.ref)).toMatchObject({ id: rows[index]!.id })
+      expect(outcome.insert.label).not.toContain('Results may be incomplete')
+    }
   })
 
   it('inserts a native session chip while serializing the canonical mention on send', async () => {
@@ -366,6 +416,12 @@ describe('cloud drive files', () => {
     // `file`/`files` stayed with the workspace, which is why a drive needed
     // words of its own.
     expect(scopedQuery('files:notes', 'drives')).toBeUndefined()
+  })
+
+  it('routes a configured shortcut to its source', () => {
+    expect(scopedQuery('f:notes', 'files', 'f')).toBe('notes')
+    expect(scopedQuery('f:notes', 'drives', undefined, { f: 'files' })).toBeUndefined()
+    expect(scopedQuery('f:notes', 'files', undefined, { f: 'files' })).toBe('notes')
   })
 
   it('names the holding drive and its path, and numbers files that share a name', async () => {
@@ -504,22 +560,37 @@ describe('cloud drive files', () => {
       name: '@dsh-external/dsh-automation',
       description: 'github:titanwings/dsh-automation · Disabled',
     })
-    expect(source.onPick(pick(candidates[0]!))).toEqual({ text: '@"C:/dsh-ecosystem/external-repos/dsh-cost-meter/" ' })
-    expect(source.onPick(pick(candidates[1]!))).toEqual({ text: '@@dsh-external/dsh-automation ' })
-
+    for (const candidate of candidates) {
+      const result = source.onPick(pick(candidate!))
+      expect(result).toMatchObject({ insert: { source: PLUGIN_SOURCE, label: candidate.name, appearance: 'session' } })
+      if (typeof result === 'object' && result && 'insert' in result) {
+        expect(result.insert.ref).toContain('dsh-ref:')
+        expect(result.insert.ref).not.toContain('C:/')
+        expect(await source.codec!.serialize(result.insert.ref, new AbortController().signal)).toBe(result.insert.ref)
+      }
+    }
     const filtered = await source.candidates(session, request('cost'))
     expect(filtered).toHaveLength(1)
     expect(filtered[0]?.name).toBe('dsh-cost-meter')
   })
 
   it.each([
-    ['/home/user/my plugin', '@"/home/user/my plugin/" '],
-    ['C:\\Users\\my plugin\\', '@"C:/Users/my plugin/" '],
-    ['/', '@"/" '],
-  ])('inserts a closed, portable directory reference for %s', async (directory, expected) => {
+    ['folders', 'dsh-session-folders-custom'],
+    ['claude', 'dsh-claude-style'],
+  ])('finds a plugin containing the bare %s keyword', async (query, name) => {
+    const source = createPluginSource(async () => [
+      { id: 'folders', name: 'dsh-session-folders-custom', label: 'dsh-session-folders-custom', status: 'live' },
+      { id: 'claude', name: 'dsh-claude-style', label: 'dsh-claude-style', status: 'live' },
+      { id: 'other', name: 'dsh-cost-meter', label: 'dsh-cost-meter', status: 'live' },
+    ], undefined, options())
+    const candidates = await source.candidates(session, request(query))
+    expect(candidates.map(candidate => candidate.name)).toEqual([name])
+  })
+
+  it.each(['/home/user/my plugin', 'C:\\Users\\my plugin\\', '/'])('inserts a native chip for %s', async directory => {
     const source = createPluginSource(async () => [{ id: 'local', name: 'local', label: 'local', status: 'inert', directory }], undefined, options())
     const [candidate] = await source.candidates(session, request())
-    expect(source.onPick(pick(candidate!))).toEqual({ text: expected })
+    expect(source.onPick(pick(candidate!))).toMatchObject({ insert: { source: 'All local plugins', label: 'local', appearance: 'session' } })
   })
 
   it('does not search plugins during quoted file completion or insert unrepresentable paths', async () => {
@@ -528,7 +599,7 @@ describe('cloud drive files', () => {
     expect(await source.candidates(session, request('path with', true))).toEqual([])
     expect(load).not.toHaveBeenCalled()
     const [candidate] = await source.candidates(session, request('plugins:local'))
-    expect(source.onPick(pick(candidate!))).toEqual({ text: '@local ' })
+    expect(source.onPick(pick(candidate!))).toMatchObject({ insert: { source: PLUGIN_SOURCE, label: 'local', appearance: 'session' } })
   })
 })
 

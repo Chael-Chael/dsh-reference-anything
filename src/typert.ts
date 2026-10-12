@@ -8,6 +8,9 @@ export const TYPERT_MANIFEST: TypertContribution = {
     description: 'Local conversation mirror, synchronization, and settings for @Conversation.', tags: [],
     members: [
       { kind: 'method', name: 'agentSearch', signature: 'agentSearch(agent: Agent, input: AgentSearchInput, signal: AbortSignal): Promise<AgentCandidate[]>' },
+      { kind: 'method', name: 'agentSyncStart', signature: 'agentSyncStart(input: AgentSyncStart): string' },
+      { kind: 'method', name: 'agentSyncStatus', signature: 'agentSyncStatus(input: JobInput): AgentSyncStatus | undefined' },
+      { kind: 'method', name: 'agentSyncCancel', signature: 'agentSyncCancel(input: JobInput): boolean' },
       { kind: 'method', name: 'driveSearch', signature: 'driveSearch(input: DriveSearchInput, signal: AbortSignal): Promise<DriveCandidate[]>' },
       { kind: 'method', name: 'search', signature: 'search(input: SearchInput): Promise<SearchResult[]>' },
       { kind: 'method', name: 'health', signature: 'health(signal: AbortSignal): Promise<Health>' },

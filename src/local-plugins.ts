@@ -6,6 +6,29 @@ import { dirname, isAbsolute, join } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { z } from 'zod'
 import type { LocalPluginCandidate } from './contract.ts'
+import type { ReferenceSource } from './types.ts'
+import { sliceTurns } from './window.ts'
+
+export function createPluginReferenceSource(ctx: Context): ReferenceSource {
+  return {
+    id: 'local-plugin', requiresGrant: true,
+    available: async () => Boolean(ctx.get('loader')),
+    async list(query, limit, signal) {
+      signal?.throwIfAborted()
+      return (await resolveLocalPlugins(ctx)).filter(row => row.name.toLowerCase().includes(query.toLowerCase())).slice(0, limit)
+        .map(row => ({ ref: { source: 'local-plugin', id: row.name }, label: row.name }))
+    },
+    async read(ref, window, signal) {
+      signal?.throwIfAborted()
+      const plugin = (await resolveLocalPlugins(ctx)).find(row => row.name === ref.id)
+      if (!plugin?.directory) throw new Error(`Plugin directory unavailable: ${ref.id}`)
+      return {
+        ref, label: plugin.name, partial: false, capturedAt: Date.now(),
+        body: sliceTurns([{ role: 'document', text: JSON.stringify({ name: plugin.name, version: plugin.version, directory: plugin.directory, note: 'Use file tools to inspect this plugin directory. Source contents have not been read.' }) }], window),
+      }
+    },
+  }
+}
 
 const manifestSchema = z.object({
   name: z.string().optional(), version: z.string().optional(),

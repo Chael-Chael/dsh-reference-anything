@@ -22,6 +22,8 @@ const pickerSourceSettingsSchema = z.object({
   order: z.number().int().min(0).max(100),
   limit: z.number().int().min(1).max(50),
   maxCandidates: z.number().int().min(1).max(50).default(50),
+  /** Optional extra token for `@token:` scoped searches. */
+  shortcut: z.string().regex(/^[^@:\s/]*$/u).max(32).default(''),
 })
 export type PickerSourceSettings = z.infer<typeof pickerSourceSettingsSchema>
 
@@ -36,11 +38,14 @@ export const pickerSettingsSchema = z.object({
   // a saved record that has `picker` but predates this key would fail the whole
   // parse without it, and the medium — every setting in it — would be rejected.
   // Any key added here from now on needs the same treatment.
-  agents: pickerSourceSettingsSchema.default({ enabled: true, order: 25, limit: 6, maxCandidates: 50 }),
+  agents: pickerSourceSettingsSchema.default({ enabled: true, order: 25, limit: 6, maxCandidates: 50, shortcut: '' }),
   conversations: pickerSourceSettingsSchema,
   // Defaulted for the same reason as `agents` above: it arrived later still.
-  drives: pickerSourceSettingsSchema.default({ enabled: true, order: 35, limit: 6, maxCandidates: 50 }),
-  plugins: pickerSourceSettingsSchema.default({ enabled: true, order: 40, limit: 6, maxCandidates: 50 }),
+  drives: pickerSourceSettingsSchema.default({ enabled: true, order: 35, limit: 6, maxCandidates: 50, shortcut: '' }),
+  plugins: pickerSourceSettingsSchema.extend({
+    onlyLive: z.boolean().default(false),
+    showDeepSeek: z.boolean().default(true),
+  }).default({ enabled: true, order: 40, limit: 6, maxCandidates: 50, shortcut: '', onlyLive: false, showDeepSeek: true }),
 })
 export type PickerSettings = z.infer<typeof pickerSettingsSchema>
 export type PickerDisplayMode = PickerSettings['displayMode']
@@ -51,14 +56,14 @@ export type InputRenderMode = z.infer<typeof inputRenderModeSchema>
 export function defaultPickerSettings(): PickerSettings {
   return {
     displayMode: 'collapse',
-    commands: { enabled: true, order: 0, limit: 6, maxCandidates: 50 },
-    skills: { enabled: true, order: 5, limit: 6, maxCandidates: 50 },
-    files: { enabled: true, order: 10, limit: 6, maxCandidates: 50 },
-    sessions: { enabled: true, order: 20, limit: 6, maxCandidates: 50 },
-    agents: { enabled: true, order: 25, limit: 6, maxCandidates: 50 },
-    conversations: { enabled: true, order: 30, limit: 6, maxCandidates: 50 },
-    drives: { enabled: true, order: 35, limit: 6, maxCandidates: 50 },
-    plugins: { enabled: true, order: 40, limit: 6, maxCandidates: 50 },
+    commands: { enabled: true, order: 0, limit: 6, maxCandidates: 50, shortcut: '' },
+    skills: { enabled: true, order: 5, limit: 6, maxCandidates: 50, shortcut: '' },
+    files: { enabled: true, order: 10, limit: 6, maxCandidates: 50, shortcut: '' },
+    sessions: { enabled: true, order: 20, limit: 6, maxCandidates: 50, shortcut: '' },
+    agents: { enabled: true, order: 25, limit: 6, maxCandidates: 50, shortcut: '' },
+    conversations: { enabled: true, order: 30, limit: 6, maxCandidates: 50, shortcut: '' },
+    drives: { enabled: true, order: 35, limit: 6, maxCandidates: 50, shortcut: '' },
+    plugins: { enabled: true, order: 40, limit: 6, maxCandidates: 50, shortcut: '', onlyLive: false, showDeepSeek: true },
   }
 }
 
@@ -69,7 +74,9 @@ export function samePickerSettings(left: PickerSettings, right: PickerSettings):
     left[key].enabled === right[key].enabled &&
     left[key].order === right[key].order &&
     left[key].limit === right[key].limit &&
-    left[key].maxCandidates === right[key].maxCandidates)
+    left[key].maxCandidates === right[key].maxCandidates &&
+    left[key].shortcut === right[key].shortcut &&
+    (key !== 'plugins' || (left.plugins.onlyLive === right.plugins.onlyLive && left.plugins.showDeepSeek === right.plugins.showDeepSeek)))
 }
 
 export const settingsRecordSchema = z.object({
