@@ -6,7 +6,7 @@
 
 <h1>dsh-reference-anything</h1>
 
-一个 `@`，引用全部。
+一个 `@`，引用万物。
 
 [English](./README.md) · **简体中文**
 
@@ -109,40 +109,14 @@
 - 已安装并启动 `dsh`；自动安装 OpenCLI 时需要本机 Node.js 附带的 `npm`。
 - 要同步的平台已在所选 Chrome Profile 中登录。
 
-为当前 DSH 稳定版 SDK 安装稳定的 `0.3.x` 系列：
+为当前 DSH 稳定版 SDK 安装稳定系列：
 
 ```powershell
-dsh plugin --profile web add dsh-reference-anything@latest
-```
-
-在 DSH `>=0.2.0-rc.2` 上安装 `v0.4.4`：
-
-```powershell
-dsh plugin --profile web add dsh-reference-anything@alpha
-```
-
-待 DSH alpha API 稳定且迁移验证完成后，`alpha` 系列将提升为 `latest`，并成为默认安装版本。
-
-配合 DSH `v0.1.0-rc.8 ~ v0.1.1-rc.2` 在本地安装稳定版源码：
-
-```powershell
-git switch main
-pnpm install
-npm run check
-dsh plugin --profile web add .
-```
-
-配合 DSH `v0.2.0-rc.2` 或更高版本在本地安装 alpha 版源码：
-
-```powershell
-git switch alpha
-pnpm install
-npm run check
-dsh plugin --profile web add .
+dsh plugin --profile web add dsh-reference-anything
 ```
 
 > [!NOTE]
-> 如需恢复 DSH 原有的 `@` 菜单样式，卸载本插件即可。
+> 如需恢复 DSH 原有的 `@` 菜单样式，停用本插件即可。
 
 安装 DSH 插件后，打开 DSH Web 的 `Settings → Reference Anything → 可用性检查`（如果尚未出现该设置项，请先重启 DSH），点击**「一键安装」**：它会自动查找 OpenCLI；若未找到 OpenCLI 或版本低于 `1.8.6`，则通过 npm 全局安装或升级；随后安装插件包内附带的六个平台适配器，启动或刷新 Browser Bridge，并打开 OpenCLI Browser Bridge 扩展的 [Chrome Web Store 安装页](https://chromewebstore.google.com/detail/opencli/ildkmabpimmkaediidaifkhjpohdnifk)。在商店页确认安装后，回到设置页点击「重新检查」；每个仍未通过的检查项旁都会显示对应的恢复操作。
 

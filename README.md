@@ -110,40 +110,14 @@ Prerequisites:
 - `dsh` is installed and running; automatic OpenCLI installation requires the `npm` bundled with Node.js.
 - The target platforms are already logged in under the selected Chrome Profile.
 
-Install the stable `0.3.x` line for the current stable DSH SDK:
+Install the stable line for the current stable DSH SDK:
 
 ```powershell
-dsh plugin --profile web add dsh-reference-anything@latest
-```
-
-Install `v0.4.4` on DSH `>=0.2.0-rc.2`:
-
-```powershell
-dsh plugin --profile web add dsh-reference-anything@alpha
-```
-
-After the DSH alpha API stabilizes and the migration is verified, the `alpha` line will be promoted to `latest` and become the default installation.
-
-To install the stable source locally with DSH `v0.1.0-rc.8 ~ v0.1.1-rc.2`:
-
-```powershell
-git switch main
-pnpm install
-npm run check
-dsh plugin --profile web add .
-```
-
-To install the alpha source locally with DSH `v0.2.0-rc.2` or newer:
-
-```powershell
-git switch alpha
-pnpm install
-npm run check
-dsh plugin --profile web add .
+dsh plugin --profile web add dsh-reference-anything
 ```
 
 > [!NOTE]
-> To restore DSH's original `@` menu appearance, simply uninstall this plugin.
+> To restore DSH's original `@` menu appearance, simply disable this plugin.
 
 After installing the DSH plugin, open `Settings → Reference Anything → Availability check` in DSH Web (restart DSH first if this settings entry is not yet visible), then click **One-click setup**. It discovers OpenCLI; installs or upgrades it globally through npm when it is missing or older than `1.8.6`; installs the bundled adapters for all six platforms; starts or refreshes Browser Bridge; and opens the OpenCLI Browser Bridge page in the [Chrome Web Store](https://chromewebstore.google.com/detail/opencli/ildkmabpimmkaediidaifkhjpohdnifk). Confirm the extension installation, then return and click **Recheck setup**. Any remaining failed check displays its own recovery action.
 
