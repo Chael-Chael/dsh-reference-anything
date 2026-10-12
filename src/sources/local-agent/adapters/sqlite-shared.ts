@@ -38,6 +38,7 @@ export interface SessionMessage {
 /** A session's messages, and whether older ones were left behind. */
 export interface SessionMessages {
   readonly messages: readonly SessionMessage[]
+  readonly malformed: boolean
   /** The record cap was reached, so the oldest messages were not read. */
   readonly truncated: boolean
 }
@@ -67,22 +68,24 @@ export function readSessionMessages(
   )
   const ordered = [...rows].reverse()
   const ids = ordered.map(row => String(row['id']))
-  const parts = readParts(db, ids)
+  const { parts, malformed: malformedParts } = readParts(db, ids)
+  let malformed = malformedParts
   const messages: SessionMessage[] = []
   for (const row of ordered) {
     const data = parseBlob(row['data'])
     // A message whose payload is not JSON is dirty data, not a reason to fail
     // the whole read; the conversation around it is still worth returning.
-    if (data === undefined) continue
+    if (data === undefined) { malformed = true; continue }
     const id = String(row['id'])
     messages.push({ id, data, parts: parts.get(id) ?? [] })
   }
-  return { messages, truncated: rows.length >= cap }
+  return { messages, truncated: rows.length >= cap, malformed }
 }
 
 /** Fetch the parts of exactly the messages that were kept. */
-function readParts(db: SqliteReader, ids: readonly string[]): Map<string, Record<string, unknown>[]> {
+function readParts(db: SqliteReader, ids: readonly string[]): { parts: Map<string, Record<string, unknown>[]>; malformed: boolean } {
   const byMessage = new Map<string, Record<string, unknown>[]>()
+  let malformed = false
   for (let at = 0; at < ids.length; at += ID_CHUNK) {
     const chunk = ids.slice(at, at + ID_CHUNK)
     if (chunk.length === 0) continue
@@ -93,14 +96,14 @@ function readParts(db: SqliteReader, ids: readonly string[]): Map<string, Record
     )
     for (const row of rows) {
       const data = parseBlob(row['data'])
-      if (data === undefined) continue
+      if (data === undefined) { malformed = true; continue }
       const key = String(row['message_id'])
       const bucket = byMessage.get(key)
       if (bucket === undefined) byMessage.set(key, [data])
       else bucket.push(data)
     }
   }
-  return byMessage
+  return { parts: byMessage, malformed }
 }
 
 /**

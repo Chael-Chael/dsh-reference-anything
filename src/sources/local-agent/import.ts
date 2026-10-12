@@ -42,6 +42,9 @@ export async function readForImport(
   if (isQueryAdapter(adapter)) {
     const full = await readSessionTurns(path, adapter, sessionId ?? '', options, limits.maxSessionRecords, signal)
     const summary = await readSessionTurns(path, adapter, sessionId ?? '', summaryOptions, limits.maxSessionRecords, signal)
+    if (full.malformed || summary.malformed) {
+      throw new ReferenceAnythingError('database contains a malformed message or part payload; the previous history was retained', 'REFERENCE_READ_FAILED')
+    }
     const turns = [...full.items]
     const summaryTurns = [...summary.items]
     assertTextBudget(turns, summaryTurns, limits)

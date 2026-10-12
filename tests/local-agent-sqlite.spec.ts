@@ -215,6 +215,37 @@ function turns(snapshot: ReferenceSnapshot): { role: string; text: string }[] {
 }
 
 describe('history synchronization', () => {
+  it.each([
+    ['opencode', 'opencode.db', 'message'], ['opencode', 'opencode.db', 'part'],
+    ['mimocode', 'mimocode.db', 'message'], ['mimocode', 'mimocode.db', 'part'],
+    ['zcode', 'db.sqlite', 'message'], ['zcode', 'db.sqlite', 'part'],
+  ] as const)('retains the synchronized %s history when a %s %s payload becomes malformed', async (kind, file, table) => {
+    const path = join(root, file)
+    writeDatabase(path, {
+      sessions: [{ id: 'history', title: 'Preserved history' }],
+      messages: [user('m1', 'history', 'question'), assistant('m2', 'history', [{ type: 'text', text: 'saved answer' }])],
+    })
+    const { ctx, dispose } = await mount(kind)
+    try {
+      const firstJob = ctx.referenceLocalAgents.sync.start([kind], 'full')
+      await vi.waitFor(() => expect(ctx.referenceLocalAgents.sync.status(firstJob)?.status).not.toBe('running'))
+      expect(ctx.referenceLocalAgents.sync.status(firstJob)).toMatchObject({ status: 'complete', imported: 1 })
+      const before = await ctx.references.read(ref(kind, file, 'history'), WINDOW)
+      expect(turns(before).map(turn => turn.text)).toEqual(['question', 'saved answer'])
+
+      const db = new DatabaseSync(path)
+      try { db.prepare(`UPDATE ${table} SET data = ? WHERE id = ?`).run('{broken', table === 'message' ? 'm2' : 'p2') }
+      finally { db.close() }
+
+      const jobId = ctx.referenceLocalAgents.sync.start([kind], 'incremental')
+      await vi.waitFor(() => expect(ctx.referenceLocalAgents.sync.status(jobId)?.status).not.toBe('running'))
+      expect(ctx.referenceLocalAgents.sync.status(jobId)).toMatchObject({
+        status: 'failed', imported: 0, failed: 1, error: expect.stringContaining('malformed message or part payload'),
+      })
+      expect(await ctx.references.read(ref(kind, file, 'history'), WINDOW)).toEqual(before)
+    } finally { await dispose() }
+  })
+
   it('reports an unreadable database as partial instead of a completed empty import', async () => {
     await writeFile(join(root, 'opencode.db'), 'not a SQLite database')
     const { ctx, dispose } = await mount('opencode')

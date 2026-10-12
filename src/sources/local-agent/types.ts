@@ -270,6 +270,8 @@ export interface TranscriptSession {
 /** One conversation folded out of a database. */
 export interface SessionTurns {
   readonly items: readonly ParsedTurn[]
+  /** Invalid message/part payloads were skipped; durable imports must not replace a good copy. */
+  readonly malformed?: boolean
   /** Older messages were left unread because the record cap was reached. */
   readonly truncated: boolean
   /** The agent compacted this session, so what came before is gone from the database too. */
