@@ -35,9 +35,9 @@ One `@` for them all.
 
 </div>
 
-**Reference Anything is an enhancement for the DeepSeek Harness (DSH) `@` menu.** It brings multiple reference sources into one searchable menu, so you can mention the context you need without switching tools or copying content manually.
+**Reference Anything is an enhancement for the DeepSeek Harness (DSH) `@` menu.** It brings files, sessions, local agents, web chats, cloud drives, and local plugins into one searchable menu, so you can mention the context you need without switching tools or copying content manually.
 
-After typing `@`, you can browse and click items in the menu with your mouse, or use the keyboard to enter text, search, and narrow down the results.
+After typing `@`, you can browse and click items in the menu with your mouse, or use the keyboard to enter text, search, and narrow down the results. When a folder is selected, press `Tab` to enter it and continue browsing, or `Enter` to insert the folder reference.
 
 Use one `@` menu to reference:
 
@@ -47,13 +47,15 @@ Use one `@` menu to reference:
 - 🖥️ **NEW: Transcripts left on disk by other local agent CLIs (Claude Code, Codex, Cursor, and eleven more)**
 - ✨ **NEW: Historical conversations from online chatbots like ChatGPT, Claude, Gemini, DeepSeek, Grok, and Kimi**
 - ☁️ **NEW: Files from cloud drives connected through OpenList**
+- 🧩 **NEW: Installed and configured local DSH plugins, with lifecycle status and directory references**
 
 Beyond extending what `@` can reference, Reference Anything also enhances the `@` menu itself:
 
-- Customize visible groups: enable or hide `Commands`, `Skills`, files, DSH sessions, local agent conversations, external conversations, and cloud-drive files, then arrange them in any order
+- Customize visible groups: enable or hide `Commands`, `Skills`, files, DSH sessions, local agent conversations, external conversations, cloud-drive files, and local plugins, then arrange them in any order
+- Customize shortcuts: assign your own shortcuts to source groups, web providers, local agents, and cloud-drive mounts
 - Customize result counts: set each group's collapsed row count and hard candidate cap independently
 - Choose how to browse: expand or collapse individual groups, or use DSH's native scrolling list
-- Enhanced visual icons: distinguish reference sources with type icons and platform logos, making menu items easier to identify
+- Enhanced visual icons and commands: distinguish reference sources with type icons and platform logos
 
 <table>
   <tr>
