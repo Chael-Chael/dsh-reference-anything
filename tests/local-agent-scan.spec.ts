@@ -42,6 +42,12 @@ function userRecord(text: string): unknown {
 }
 
 describe('listTranscripts', () => {
+  it('passes forward-slash relative paths to document adapters on every host', async () => {
+    await write('history/slot/chats/session-one.json', [JSON.stringify({ messages: [] })])
+    const found = await listTranscripts([{ kind: 'gemini-cli', path: join(dir, 'history') }],
+      new Map([['gemini-cli', geminiCliAdapter]]), 10)
+    expect(found.map(row => row.relPath)).toEqual([join('slot', 'chats', 'session-one.json')])
+  })
   it('finds transcripts nested below a root', async () => {
     await write('projects/a/one.jsonl', [userRecord('one')])
     await write('projects/a/deep/two.jsonl', [userRecord('two')])

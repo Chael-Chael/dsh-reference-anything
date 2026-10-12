@@ -11,8 +11,20 @@ import { localAgentSchema, providerSchema, settingsRecordSchema } from './wire.t
  * absolute path adds nothing a menu row can use and everything a screen-share
  * leaks.
  */
-export const agentCandidateSchema = z.object({ id: z.string(), kind: z.string(), label: z.string(), provider: z.string(), updatedAt: z.number().optional() }).readonly()
-export const agentStatsSchema = z.object({ agent: localAgentSchema, conversations: z.number().int().nonnegative() }).readonly()
+export const agentCandidateSchema = z.object({ id: z.string(), kind: z.string(), label: z.string(), provider: z.string(), updatedAt: z.number().optional(), searchIncomplete: z.boolean().optional() }).readonly()
+export const agentStatsSchema = z.object({
+  agent: localAgentSchema, conversations: z.number().int().nonnegative(),
+  syncedConversations: z.number().int().nonnegative().default(0), lastSyncedAt: z.number().optional(),
+}).readonly()
+export const agentSyncStartSchema = z.object({
+  agents: z.array(localAgentSchema).min(1).max(localAgentSchema.options.length), mode: z.enum(['incremental', 'full']),
+}).readonly()
+export const agentSyncStatusSchema = z.object({
+  jobId: z.string(), status: z.enum(['running', 'complete', 'partial', 'cancelled', 'failed']),
+  agents: z.array(localAgentSchema), completed: z.number().int().nonnegative(), total: z.number().int().nonnegative(),
+  imported: z.number().int().nonnegative(), skipped: z.number().int().nonnegative(), failed: z.number().int().nonnegative(),
+  error: z.string().optional(),
+}).readonly()
 // `origin` is the drive's own display path, shown under the candidate. It is
 // never a download URL: those are signed with the account's credential and
 // must not cross this wire.
@@ -136,6 +148,9 @@ export const openListUpgradeInputSchema = z.object({ rollback: z.boolean().optio
 export const REFERENCE_ANYTHING_INVOCATIONS: readonly InvocationDescriptor[] = [
   descriptor('agentSearch', [agentLookup, { name: 'input', wire: 'input', source: 'json', codec: strict('AgentSearchInput', z.object({ query: z.string(), limit: z.number().int().min(1).max(100) }).readonly()) }], strict('AgentCandidate[]', z.array(agentCandidateSchema)), true),
   descriptor('agentStats', [], strict('AgentStats[]', z.array(agentStatsSchema)), true),
+  descriptor('agentSyncStart', [{ name: 'input', wire: 'input', source: 'json', codec: strict('AgentSyncStart', agentSyncStartSchema) }], strict('JobId', z.string())),
+  descriptor('agentSyncStatus', [{ name: 'input', wire: 'input', source: 'json', codec: strict('JobInput', jobInputSchema) }], strict('AgentSyncStatus?', agentSyncStatusSchema.optional())),
+  descriptor('agentSyncCancel', [{ name: 'input', wire: 'input', source: 'json', codec: strict('JobInput', jobInputSchema) }], strict('Boolean', z.boolean())),
   // No session lookup, unlike `agentSearch`: a drive is the same drive from
   // every workspace, so there is nothing to scope the query to.
   descriptor('driveSearch', [{ name: 'input', wire: 'input', source: 'json', codec: strict('DriveSearchInput', z.object({ query: z.string(), limit: z.number().int().min(1).max(100) }).readonly()) }], strict('DriveCandidate[]', z.array(driveCandidateSchema)), true),

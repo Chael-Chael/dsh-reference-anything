@@ -20,10 +20,11 @@ import { join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 import { Context } from '@deepseek-ai/cordis'
 import type { Domain, DomainSpec, KvTable } from '@deepseek-ai/dsh-storage-domain'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import ReferenceRuntime from '../src/index.ts'
-import { COMPACTION_MARKER } from '../src/sources/local-agent/adapters/shared.ts'
-import { isBackgroundSession } from '../src/sources/local-agent/adapters/opencode.ts'
+import { COMPACTION_MARKER, DEFAULT_CONVERT_OPTIONS } from '../src/sources/local-agent/adapters/shared.ts'
+import { isBackgroundSession, opencodeAdapter } from '../src/sources/local-agent/adapters/opencode.ts'
+import { IMPORT_LIMITS, readForImport } from '../src/sources/local-agent/import.ts'
 import * as localAgent from '../src/sources/local-agent/index.ts'
 import { LOCAL_AGENT_SOURCE_ID, splitSession } from '../src/sources/local-agent/index.ts'
 import type { Config } from '../src/sources/local-agent/index.ts'
@@ -212,6 +213,46 @@ function ref(kind: string, file: string, session: string): { source: string; id:
 function turns(snapshot: ReferenceSnapshot): { role: string; text: string }[] {
   return snapshot.body.items.map(item => ({ role: item.role, text: item.text }))
 }
+
+describe('history synchronization', () => {
+  it('reports an unreadable database as partial instead of a completed empty import', async () => {
+    await writeFile(join(root, 'opencode.db'), 'not a SQLite database')
+    const { ctx, dispose } = await mount('opencode')
+    const jobId = ctx.referenceLocalAgents.sync.start(['opencode'], 'full')
+    await vi.waitFor(() => expect(ctx.referenceLocalAgents.sync.status(jobId)?.status).not.toBe('running'))
+    expect(ctx.referenceLocalAgents.sync.status(jobId)).toMatchObject({ status: 'partial', imported: 0, error: expect.stringContaining('could not read opencode database') })
+    await dispose()
+  })
+  it('imports all available database messages independently from interactive record limits', async () => {
+    const path = join(root, 'opencode.db')
+    writeDatabase(path, {
+      sessions: [{ id: 'history', title: 'Database history' }],
+      messages: [user('m1', 'history', 'first'), user('m2', 'history', 'middle'), user('m3', 'history', 'last')],
+    })
+    const { ctx, dispose } = await mount('opencode', { maxSessionRecords: 1 })
+    const jobId = ctx.referenceLocalAgents.sync.start(['opencode'], 'full')
+    await vi.waitFor(() => expect(ctx.referenceLocalAgents.sync.status(jobId)?.status).not.toBe('running'))
+    expect(ctx.referenceLocalAgents.sync.status(jobId)).toMatchObject({ status: 'complete', imported: 1 })
+    await rm(path)
+    const snapshot = await ctx.references.read(ref('opencode', 'opencode.db', 'history'), WINDOW)
+    expect(snapshot.body.totalTurns).toBe(3)
+    expect(turns(snapshot).map(turn => turn.text)).toEqual(['first', 'middle', 'last'])
+    expect(snapshot.partial).toBe(false)
+    await dispose()
+  })
+
+  it('marks a database import partial when its independent message budget is exhausted', async () => {
+    const path = join(root, 'opencode.db')
+    writeDatabase(path, {
+      sessions: [{ id: 'history', title: 'Database history' }],
+      messages: [user('m1', 'history', 'first'), user('m2', 'history', 'middle'), user('m3', 'history', 'last')],
+    })
+    const snapshot = await readForImport(path, 0, opencodeAdapter, DEFAULT_CONVERT_OPTIONS, 'history', undefined,
+      { ...IMPORT_LIMITS, maxSessionRecords: 2 })
+    expect(snapshot.partial).toBe(true)
+    expect(snapshot.turns.map(turn => turn.text)).toEqual(['middle', 'last'])
+  })
+})
 
 describe('discovery', () => {
   it('offers one candidate per conversation, newest first', async () => {

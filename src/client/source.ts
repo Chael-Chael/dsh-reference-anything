@@ -387,9 +387,8 @@ export function createSessionSource(
 /**
  * The `@` group for transcripts other coding agents left on this machine.
  *
- * Rows carry the transcript's id, never a body excerpt: the Host ranks on title
- * and opening prompt alone, so nothing the user has not named can reach the
- * model through a menu row. Picking one inserts a pointer; the turns are read
+ * Rows carry the transcript's id, never a body excerpt: the Host searches live
+ * transcript metadata and imported text. Picking one inserts a pointer; turns are read
  * later, and only for the task that asked.
  * @param search - Host-side discovery, scoped to the session's own workspace.
  * @param t - translator for the row's dimmed second line.
@@ -454,8 +453,8 @@ export function createLocalAgentSource(
 /** The dimmed second line: which agent wrote it, and when it last moved. */
 function describeAgentRow(row: AgentCandidate, t: T): string {
   const provider = row.provider || t('source.agents')
-  if (row.updatedAt === undefined) return provider
-  return t('conversation.description', { provider, date: formatDate(new Date(row.updatedAt).toISOString(), t) })
+  const description = row.updatedAt === undefined ? provider : t('conversation.description', { provider, date: formatDate(new Date(row.updatedAt).toISOString(), t) })
+  return row.searchIncomplete === true ? `${description} · ${t('drive.searchIncomplete')}` : description
 }
 
 function encodeAgentReference(reference: AgentReference): string { return JSON.stringify(reference) }
