@@ -297,6 +297,21 @@ describe('local agent conversations', () => {
     expect(candidates[2]?.description).toBe('Claude Code')
   })
 
+  it('marks budget-limited local searches without adding the warning to the inserted reference', async () => {
+    const rows = [agentRow({ searchIncomplete: true }), agentRow({ id: 'codex:no-date', updatedAt: undefined, searchIncomplete: true })]
+    const source = createLocalAgentSource(async () => rows, undefined, options({ order: 25 }))
+    const candidates = await source.candidates(session, request('agents:probe'))
+    expect(candidates).toHaveLength(2)
+    for (const [index, candidate] of candidates.entries()) {
+      expect(candidate.description).toContain('Codex')
+      expect(candidate.description).toContain('Results may be incomplete')
+      const outcome = source.onPick(pick(candidate))
+      if (outcome === undefined || outcome === 'handled' || !('insert' in outcome)) throw new Error('expected insert')
+      expect(JSON.parse(outcome.insert.ref)).toMatchObject({ id: rows[index]!.id })
+      expect(outcome.insert.label).not.toContain('Results may be incomplete')
+    }
+  })
+
   it('inserts a native session chip while serializing the canonical mention on send', async () => {
     const row = agentRow()
     const source = createLocalAgentSource(async () => [row], undefined, options({ order: 25 }))

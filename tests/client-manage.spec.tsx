@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { ConversationSettings, ManageConversations, PAGE_SIZE, type BrowseState, type SettingsSnapshot } from '../src/client/components.tsx'
-import type { Health, ManagedConversation } from '../src/client/remote.ts'
+import type { AgentSyncStatus, Health, ManagedConversation } from '../src/client/remote.ts'
 import { en } from '../src/client/locale.ts'
 import { pickDirectoryWithError } from '../src/client/directory-picker.ts'
 import { ALL_LOCAL_AGENTS, defaultPickerSettings, type LocalAgent, type SettingsRecord } from '../src/wire.ts'
@@ -62,6 +62,8 @@ type SettingsActions = {
   quickRefreshOnOpen?: () => Promise<void>
   pickCloudDriveDownloadDirectory?: () => Promise<string | null>
   pickAgentDirectory?: (agent: LocalAgent) => Promise<void>
+  syncAgents?: (mode: 'incremental' | 'full') => Promise<void>
+  cancelAgentSync?: () => Promise<void>
   openCloudDriveDownloadDirectory?: () => Promise<void>
 }
 function settingsElement(current: SettingsSnapshot, actions: SettingsActions = {}) {
@@ -69,6 +71,7 @@ function settingsElement(current: SettingsSnapshot, actions: SettingsActions = {
   const useScope = ((selector: (value: SettingsSnapshot) => unknown) => selector(current)) as never
   return <ConversationSettings close={() => {}} useWorkspaces={(() => []) as never}
     useScope={useScope} save={actions.save ?? noop} sync={noop} cancel={noop} refresh={actions.refresh ?? noop} quickRefreshOnOpen={actions.quickRefreshOnOpen ?? noop}
+    syncAgents={actions.syncAgents} cancelAgentSync={actions.cancelAgentSync}
     setupAll={actions.setupAll ?? noop} discoverOpenCli={actions.discoverOpenCli ?? noop} installOpenCli={actions.installOpenCli ?? noop}
     useProfile={actions.useProfile ?? noop} install={actions.install ?? noop} restartDaemon={noop} checkUpdate={actions.checkUpdate ?? noop} installUpdate={actions.installUpdate ?? noop} browse={noop} deleteConversation={noop}
     clearProvider={noop} refreshStats={noop} pickCloudDriveDownloadDirectory={actions.pickCloudDriveDownloadDirectory}
@@ -319,6 +322,59 @@ describe('settings update bar', () => {
 })
 
 describe('local agent source selection', () => {
+  it('syncs local history without browser setup and exposes incremental and full import', async () => {
+    const syncAgents = vi.fn(async (_mode: 'incremental' | 'full') => {})
+    const el = renderSettings({ settings: { ...settings, enabledAgents: ['codex'] } }, { syncAgents })
+    const section = el.querySelector('.dsh_ref_agents_section')!
+    const details = section.querySelector<HTMLElement>('.dsh_ref_collapsible_body')!
+    expect(details.hidden).toBe(true)
+    await act(async () => { section.querySelector<HTMLButtonElement>('.dsh_ref_collapsible_head')!.click() })
+    expect(details.hidden).toBe(false)
+    const buttons = Array.from(el.querySelectorAll<HTMLButtonElement>('.dsh_ref_agent_sync button'))
+    expect(buttons.map(button => button.disabled)).toEqual([false, false])
+    await act(async () => { buttons[0]!.click() })
+    await act(async () => { buttons[1]!.click() })
+    expect(syncAgents.mock.calls).toEqual([['incremental'], ['full']])
+  })
+
+  it('disables imports when no agents are selected', () => {
+    const el = renderSettings({ settings: { ...settings, enabledAgents: [] } })
+    const buttons = Array.from(el.querySelectorAll<HTMLButtonElement>('.dsh_ref_agent_sync button'))
+    expect(buttons).toHaveLength(2)
+    expect(buttons.every(button => button.disabled)).toBe(true)
+  })
+
+  it('waits until persisted settings are restored before enabling local imports', () => {
+    const el = renderSettings({ settings, loading: true })
+    const buttons = Array.from(el.querySelectorAll<HTMLButtonElement>('.dsh_ref_agent_sync button'))
+    expect(buttons).toHaveLength(2)
+    expect(buttons.every(button => button.disabled)).toBe(true)
+  })
+
+  it('shows imported counts, job progress and a separate local cancellation action', async () => {
+    const cancelAgentSync = vi.fn(async () => {})
+    const agentSync: AgentSyncStatus = { jobId: 'local-job', status: 'running', agents: ['codex'], completed: 3, total: 6, imported: 2, skipped: 1, failed: 0 }
+    const el = renderSettings({ settings, agentSync, agentStats: [{ agent: 'codex', conversations: 6, syncedConversations: 2, lastSyncedAt: 1_700_000_000_000 }] }, { cancelAgentSync })
+    const local = el.querySelector('.dsh_ref_agent_sync')!
+    expect(el.querySelector('[data-local-agent="codex"]')?.textContent).toContain('2 conversations imported')
+    expect(local.querySelector('[role="progressbar"]')?.getAttribute('aria-valuenow')).toBe('50')
+    expect(local.textContent).toContain('2 imported · 1 skipped · 0 failed')
+    const buttons = Array.from(local.querySelectorAll<HTMLButtonElement>('button'))
+    expect(buttons.map(button => button.disabled)).toEqual([true, true, false])
+    await act(async () => { buttons[2]!.click() })
+    expect(cancelAgentSync).toHaveBeenCalledOnce()
+  })
+
+  it('shows partial errors beside local results and makes import available again', () => {
+    const agentSync: AgentSyncStatus = { jobId: 'local-job', status: 'partial', agents: ['codex'], completed: 3, total: 3, imported: 2, skipped: 0, failed: 1, error: 'Transcript unreadable' }
+    const el = renderSettings({ settings, agentSync })
+    const local = el.querySelector('.dsh_ref_agent_sync')!
+    expect(local.querySelector('[role="alert"]')?.textContent).toBe('Transcript unreadable')
+    expect(local.textContent).toContain('2 imported · 0 skipped · 1 failed')
+    expect(Array.from(local.querySelectorAll<HTMLButtonElement>('button')).every(button => !button.disabled)).toBe(true)
+    expect(local.querySelectorAll('button')).toHaveLength(2)
+  })
+
   it('shows recognized conversation counts and lets each Agent choose a directory', async () => {
     const pick = vi.fn(async (_agent: LocalAgent) => {})
     const el = renderSettings({ settings, agentStats: [{ agent: 'claude-code', conversations: 7 }] }, { pickAgentDirectory: pick })

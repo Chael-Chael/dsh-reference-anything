@@ -54,7 +54,7 @@ describe('settings source registration guard', () => {
   it.each([
     ['agents', { enabled: true, order: 25, limit: 6, maxCandidates: 50, shortcut: '' }],
     ['drives', { enabled: true, order: 35, limit: 6, maxCandidates: 50, shortcut: '' }],
-    ['plugins', { enabled: true, order: 40, limit: 6, maxCandidates: 50, shortcut: '' }],
+    ['plugins', { enabled: true, order: 40, limit: 6, maxCandidates: 50, shortcut: '', onlyLive: false, showDeepSeek: true }],
   ] as const)('fills in the %s picker key when it arrived after the record was written', (key, expected) => {
     const saved = defaultPickerSettings() as Record<string, unknown>
     delete saved[key]

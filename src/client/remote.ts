@@ -14,8 +14,12 @@ export interface SearchResult extends ConversationRow {
   snippet?: string
 }
 /** One local-agent transcript offered by the `@` menu; `id` is source-scoped, not a URI. */
-export interface AgentCandidate { id: string; kind: string; label: string; provider: string; updatedAt?: number }
-export interface AgentStats { agent: LocalAgent; conversations: number }
+export interface AgentCandidate { id: string; kind: string; label: string; provider: string; updatedAt?: number; searchIncomplete?: boolean }
+export interface AgentStats { agent: LocalAgent; conversations: number; syncedConversations?: number; lastSyncedAt?: number }
+export interface AgentSyncStatus {
+  jobId: string; status: 'running' | 'complete' | 'partial' | 'cancelled' | 'failed'; agents: LocalAgent[]
+  completed: number; total: number; imported: number; skipped: number; failed: number; error?: string
+}
 /** One cloud-drive file offered by the `@` menu; `origin` is a display path, never a URL. */
 export interface DriveCandidate { id: string; label: string; provider: string; origin?: string; updatedAt?: number; searchIncomplete?: boolean; isDirectory?: boolean }
 export interface LocalPluginCandidate {
@@ -102,6 +106,9 @@ export const REFERENCE_ANYTHING_REMOTE: TypertRemoteContribution = {
 export interface ReferenceAnythingRemoteFace {
   agentSearch(agentId: string, input: { query: string; limit: number }, signal?: AbortSignal): Promise<RemoteResult<readonly AgentCandidate[]>>
   agentStats(signal?: AbortSignal): Promise<RemoteResult<readonly AgentStats[]>>
+  agentSyncStart(input: { agents: LocalAgent[]; mode: 'incremental' | 'full' }): Promise<RemoteResult<string>>
+  agentSyncStatus(input: { jobId: string }): Promise<RemoteResult<AgentSyncStatus | undefined>>
+  agentSyncCancel(input: { jobId: string }): Promise<RemoteResult<boolean>>
   driveSearch(input: { query: string; limit: number }, signal?: AbortSignal): Promise<RemoteResult<readonly DriveCandidate[]>>
   search(input: { query: string; provider?: ChatProvider; limit: number }, signal?: AbortSignal): Promise<RemoteResult<readonly SearchResult[]>>
   health(signal?: AbortSignal): Promise<RemoteResult<Health>>

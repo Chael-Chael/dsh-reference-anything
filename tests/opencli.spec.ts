@@ -1,7 +1,7 @@
 import { chmod, mkdtemp, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
-import { describe, expect, it } from 'vitest'
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import { DEFAULT_OPENCLI_MAX_STDOUT_BYTES, OpenCliError, OpenCliRunner, parseDaemonStatus, versionAtLeast } from '../src/opencli.ts'
 
 async function fake(source: string): Promise<string> {
@@ -12,6 +12,12 @@ async function fake(source: string): Promise<string> {
 }
 
 describe('OpenCLI execFile boundary', () => {
+  beforeAll(async () => {
+    // Health checks also query npm; keep these subprocess tests independent of the registry.
+    vi.stubEnv('npm_execpath', await fake("if(process.argv.slice(2).join(' ')!=='view @jackwener/opencli version') process.exit(78);process.stdout.write('1.8.6')"))
+  })
+  afterAll(() => { vi.unstubAllEnvs() })
+
   it('reserves enough stdout for a base64-encoded 25 MiB attachment', () => {
     expect(new OpenCliRunner().maxStdoutBytes).toBe(DEFAULT_OPENCLI_MAX_STDOUT_BYTES)
     expect(DEFAULT_OPENCLI_MAX_STDOUT_BYTES).toBeGreaterThan(Math.ceil(25 * 1024 * 1024 * 4 / 3))

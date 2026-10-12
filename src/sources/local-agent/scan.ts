@@ -19,7 +19,7 @@
 
 import { createReadStream } from 'node:fs'
 import { open, readdir, readFile, stat } from 'node:fs/promises'
-import { basename, join, relative, resolve } from 'node:path'
+import { basename, join, relative, resolve, sep } from 'node:path'
 import { ReferenceAnythingError } from '../../errors.ts'
 import { withDatabase } from './sqlite.ts'
 import type {
@@ -163,6 +163,7 @@ export async function listTranscripts(
   adapters: ReadonlyMap<AgentKind, AgentAdapter>,
   maxTranscripts: number,
   signal?: AbortSignal,
+  onIncomplete?: (message: string) => void,
 ): Promise<TranscriptDescriptor[]> {
   const found: TranscriptDescriptor[] = []
   for (const root of roots) {
@@ -171,7 +172,7 @@ export async function listTranscripts(
     const titles = root.kind === 'codex' && !isQueryAdapter(adapter)
       ? await readCodexTitleIndex(root.path)
       : undefined
-    await walk(root, root.path, 0, adapter, found, signal, maxTranscripts, titles)
+    await walk(root, root.path, 0, adapter, found, signal, maxTranscripts, titles, onIncomplete)
   }
   found.sort((left, right) => right.mtimeMs - left.mtimeMs)
   return found.slice(0, maxTranscripts)
@@ -186,25 +187,32 @@ async function walk(
   signal?: AbortSignal,
   maxSessions = 200,
   titles?: CodexTitleIndex,
+  onIncomplete?: (message: string) => void,
 ): Promise<void> {
   signal?.throwIfAborted()
-  if (depth > MAX_DEPTH) return
+  if (depth > MAX_DEPTH) { onIncomplete?.(`discovery depth limit reached under ${dir}`); return }
   // An unreadable directory is one nothing could be referenced from anyway;
   // the remaining roots still list.
-  const entries = await readdir(dir, { withFileTypes: true }).catch(() => [])
+  const entries = await readdir(dir, { withFileTypes: true }).catch((error: unknown) => {
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') onIncomplete?.(`could not scan ${dir}: ${String(error)}`)
+    return []
+  })
   for (const entry of entries) {
     const path = join(dir, entry.name)
     if (entry.isDirectory()) {
-      await walk(root, path, depth + 1, adapter, found, signal, maxSessions, titles)
+      await walk(root, path, depth + 1, adapter, found, signal, maxSessions, titles, onIncomplete)
       continue
     }
     if (!entry.isFile()) continue
     const relPath = relative(root.path, path)
-    if (!adapter.matches(relPath)) continue
-    const stats = await stat(path).catch(() => undefined)
+    if (!adapter.matches(relPath.split(sep).join('/'))) continue
+    const stats = await stat(path).catch((error: unknown) => {
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') onIncomplete?.(`could not inspect ${path}: ${String(error)}`)
+      return undefined
+    })
     if (stats === undefined) continue
     if (isQueryAdapter(adapter)) {
-      found.push(...await expandSessions(root.kind, path, relPath, stats.mtimeMs, stats.size, adapter, maxSessions))
+      found.push(...await expandSessions(root.kind, path, relPath, stats.mtimeMs, stats.size, adapter, maxSessions, onIncomplete))
       continue
     }
     found.push({
@@ -297,9 +305,15 @@ async function expandSessions(
   size: number,
   adapter: QueryAdapter,
   limit: number,
+  onIncomplete?: (message: string) => void,
 ): Promise<TranscriptDescriptor[]> {
-  const sessions = await withDatabase(path, db => adapter.sessions(db, limit))
-  if (sessions === undefined) return []
+  const sessions = await withDatabase(path, db => {
+    // Interactive adapters treat missing/unreadable schemas as an empty list.
+    // History imports must distinguish that from a successfully enumerated DB.
+    if (onIncomplete !== undefined && db.columns('session').size === 0) throw new Error('session table is unreadable')
+    return adapter.sessions(db, limit)
+  })
+  if (sessions === undefined) { onIncomplete?.(`could not read ${adapter.displayName} database ${path}`); return [] }
   return sessions.map(session => ({
     kind,
     path,

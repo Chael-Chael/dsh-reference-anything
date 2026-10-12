@@ -9,6 +9,8 @@ import type { REFERENCE_ANYTHING_NS } from './locale.ts'
 import { driveMenuIconKind, workspacePathIconKind } from './source.ts'
 
 const css = `
+.dsh_ref_agent_sync{display:grid;gap:14px;margin-top:18px}
+.dsh_ref_settings .dsh_ref_agent_provider .dsh_ref_provider_main .dsh_ref_provider_summary>small{grid-row:auto}
   /* Reference Anything customizes the public @ menu and only the visual glyph
      inside matching Composer reference chips. Native text continues to own all
      caret, selection, wrapping, and message geometry. */
