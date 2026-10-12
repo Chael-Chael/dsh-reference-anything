@@ -224,13 +224,37 @@ export function apply(ctx: ClientContext): void {
   let sourceDisposers: Array<() => void> = []
   let appliedPicker: PickerSettings | undefined
   const registerSources = (picker: PickerSettings) => {
-    const shortcuts = Object.fromEntries(pickerSourceSchema.options.flatMap(key => picker[key].shortcut ? [[picker[key].shortcut.toLocaleLowerCase(), key]] : [])) as Record<string, Exclude<keyof PickerSettings, 'displayMode'>>
+    const shortcuts: Record<string, Array<Exclude<keyof PickerSettings, 'displayMode'>>> = {}
+    for (const key of pickerSourceSchema.options) {
+      const sourceAliases = picker[key].sourceAliases ?? {}
+      const defaultSourceAliases = key === 'conversations'
+        ? Object.fromEntries(ALL_PROVIDERS.map(provider => [provider, [provider]]))
+        : key === 'agents'
+          ? Object.fromEntries(ALL_LOCAL_AGENTS.map(agent => [agent, [agent]]))
+          : key === 'drives'
+            ? Object.fromEntries((scope.getSnapshot().openListMounts ?? []).map(mount => [mount.name, [mount.name]]))
+            : {}
+      const aliases = [
+        ...(picker[key].shortcut
+          ? picker[key].shortcut.split(',')
+          : (picker[key].aliases ?? defaultPickerSettings()[key].aliases ?? [])),
+        ...Object.values({ ...defaultSourceAliases, ...sourceAliases }).flat(),
+      ]
+      for (const alias of aliases) {
+        const normalized = alias.trim().toLocaleLowerCase()
+        if (!normalized) continue
+        const scopes = shortcuts[normalized] ?? (shortcuts[normalized] = [])
+        if (!scopes.includes(key)) scopes.push(key)
+      }
+    }
     const optionsFor = (key: Exclude<keyof PickerSettings, 'displayMode'>) => ({
       order: picker[key].order,
+      sort: picker[key].sort,
       limit: picker[key].limit,
       maxCandidates: picker[key].maxCandidates,
-      shortcut: picker[key].shortcut,
+      shortcut: undefined,
       shortcuts,
+      ...(key === 'agents' || key === 'conversations' ? { sourceAliasTargets: Object.fromEntries(Object.entries(picker[key].sourceAliases ?? {}).flatMap(([target, aliases]) => aliases.map(alias => [alias.toLocaleLowerCase(), target]))) } : {}),
       displayMode: picker.displayMode,
       updateMenu,
       guardMenuActions,
@@ -522,3 +546,6 @@ export function apply(ctx: ClientContext): void {
 }
 
 function message(error: unknown): string { return error instanceof Error ? error.message : String(error) }
+
+
+

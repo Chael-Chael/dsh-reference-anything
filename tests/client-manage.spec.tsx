@@ -83,6 +83,17 @@ function rerenderSettings(current: SettingsSnapshot, actions: SettingsActions = 
 }
 
 describe('cloud-drive download directory', () => {
+  it('expands aliases independently and places the drag handle before the switch', () => {
+    const el = renderSettings({ settings })
+    const row = el.querySelector<HTMLElement>('[data-picker-id="agents"]')!
+    const other = el.querySelector<HTMLElement>('[data-picker-id="files"]')!
+    expect(row.firstElementChild?.className).toBe('dsh_ref_picker_order')
+    expect(row.querySelector<HTMLElement>('.dsh_ref_picker_aliases')!.hidden).toBe(true)
+    act(() => { row.querySelector<HTMLButtonElement>('.dsh_ref_picker_expand')!.click() })
+    expect(row.querySelector<HTMLElement>('.dsh_ref_picker_aliases')!.hidden).toBe(false)
+    expect(other.querySelector<HTMLElement>('.dsh_ref_picker_aliases')!.hidden).toBe(true)
+    expect(el.querySelector('.dsh_ref_alias_section')).toBeNull()
+  })
   const directoryInput = (el: HTMLElement) => el.querySelector<HTMLInputElement>('input[aria-label="Cloud-drive download directory"]')!
 
   it('opens the active download directory', async () => {

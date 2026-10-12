@@ -128,6 +128,20 @@ describe('reference DOM customization', () => {
     dispose()
   })
 
+  it('repaints a reused alpha row when its provider changes', async () => {
+    document.body.innerHTML = `<div data-composer-card><div role="listbox">
+      <div role="presentation" data-source="External conversations">External conversations</div>
+      <button role="option"><span></span><span>Chat</span><span>Claude · today</span></button>
+    </div></div>`
+    const dispose = adoptReferenceIconProjection()
+    const option = document.querySelector('[role="option"]')!
+    const description = option.children.item(2)!
+    description.textContent = 'ChatGPT · today'
+    await new Promise(resolve => setTimeout(resolve, 0))
+    expect(option.querySelector('[data-dsh-ref-menu-icon="chatgpt"]')).not.toBeNull()
+    dispose()
+  })
+
   it('reuses Provider and file-type menu glyphs without changing chip geometry nodes', () => {
     document.body.innerHTML = `
       <div data-composer-card>

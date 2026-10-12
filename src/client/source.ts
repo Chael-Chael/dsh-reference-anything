@@ -6,7 +6,7 @@ import type {
 } from '@deepseek-ai/dsh-client-ui-input-trigger/client'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import type { TranslateNS } from '@deepseek-ai/dsh-client-locale/client'
-import type { ChatProvider, PickerDisplayMode } from '../wire.ts'
+import { defaultPickerSettings, type ChatProvider, type PickerDisplayMode } from '../wire.ts'
 import { parseProviderQuery } from '../search.ts'
 import { encodeReferenceUri } from '../uri-codec.ts'
 import type { AgentCandidate, DriveCandidate, LocalPluginCandidate, SearchResult, SyncStatus } from './remote.ts'
@@ -91,6 +91,7 @@ export function workspacePathIconKind(path: string, kind: FileReferenceCandidate
 type SourceScope = 'commands' | 'skills' | 'files' | 'sessions' | 'agents' | 'conversations' | 'drives' | 'plugins'
 export interface PickerSourceOptions {
   order: number
+  sort?: 'name' | 'updated'
   /** Rows shown before the source-owned expand action. */
   limit: number
   /** Hard cap applied before presentation controls are appended. */
@@ -98,7 +99,9 @@ export interface PickerSourceOptions {
   /** Optional user-defined token accepted before `:` for this source. */
   shortcut?: string
   /** All configured shortcuts, so one source cannot treat another's token as a free query. */
-  shortcuts?: Readonly<Record<string, SourceScope>>
+  shortcuts?: Readonly<Record<string, SourceScope | readonly SourceScope[]>>
+  /** Source-specific aliases mapped back to the concrete provider/kind. */
+  sourceAliasTargets?: Readonly<Record<string, string>>
   displayMode: PickerDisplayMode
   /** Replaces one cached source group without re-tracking the Composer input. */
   updateMenu?: PickerMenuUpdater
@@ -125,35 +128,20 @@ const DEFAULT_SOURCE_OPTIONS: PickerSourceOptions = {
 /** Wait briefly for a pause in typing before issuing a live search. */
 const SEARCH_DEBOUNCE_MS = 100
 const DISPLAY_EXPANSION_STEP = 5
-const PREFIX_SCOPE: Readonly<Record<string, SourceScope>> = {
-  command: 'commands', commands: 'commands', cmd: 'commands',
-  skill: 'skills', skills: 'skills',
-  file: 'files', files: 'files', folder: 'files', folders: 'files', path: 'files',
-  session: 'sessions', sessions: 'sessions', dsh: 'sessions',
-  // Bare `claude`, `gemini`, `grok`, and `kimi` stay with External
-  // conversations below, because those are the browser platforms a person
-  // means by the bare word; only the qualified CLI names route to the on-disk
-  // transcripts of the same brand.
-  agent: 'agents', agents: 'agents', transcript: 'agents', transcripts: 'agents',
-  cc: 'agents', 'claude-code': 'agents', codex: 'agents', cursor: 'agents', 'gemini-cli': 'agents',
-  qoder: 'agents', reasonix: 'agents', openclaw: 'agents', hermes: 'agents', pi: 'agents',
-  grokbuild: 'agents', 'grok-build': 'agents', 'kimi-cli': 'agents', 'kimi-code': 'agents',
-  opencode: 'agents', mimocode: 'agents', mimo: 'agents', zcode: 'agents',
-  '本地对话': 'agents', '本地记录': 'agents',
-  chat: 'conversations', conversation: 'conversations', conversations: 'conversations',
-  '外部对话': 'conversations', '外部对话记录': 'conversations',
-  chatgpt: 'conversations', claude: 'conversations', gemini: 'conversations', deepseek: 'conversations', grok: 'conversations', kimi: 'conversations',
-  // `file`/`files` above already belong to the workspace, so a drive needs
-  // its own words. The bare CJK ones only reach the map through the
-  // no-colon branch of `scopedQuery` — its prefix pattern is ASCII.
-  drive: 'drives', drives: 'drives', cloud: 'drives', netdisk: 'drives', openlist: 'drives',
-  '网盘': 'drives',
-  plugin: 'plugins', plugins: 'plugins',
-  '插件': 'plugins', '本地插件': 'plugins', '本地所有插件': 'plugins',
+const PREFIX_SCOPE: Readonly<Record<string, SourceScope>> = Object.fromEntries(
+  Object.entries(defaultPickerSettings()).flatMap(([scope, value]) => typeof value === 'object' ? (value.aliases ?? []).map(alias => [alias, scope as SourceScope]) : []),
+)
+const COLON_PREFIX_SCOPE: Readonly<Record<string, SourceScope>> = {
+  folders: 'files', path: 'files',
 }
 
-function scopedPrefixes(scope: SourceScope, shortcut?: string, shortcuts?: Readonly<Record<string, SourceScope>>): Readonly<Record<string, SourceScope>> {
-  return { ...PREFIX_SCOPE, ...shortcuts, ...(shortcut ? { [shortcut.toLocaleLowerCase()]: scope } : {}) }
+function scopedPrefixes(scope: SourceScope, shortcut?: string, shortcuts?: Readonly<Record<string, SourceScope | readonly SourceScope[]>>): Readonly<Record<string, SourceScope | readonly SourceScope[]>> {
+  if (shortcut === undefined) return shortcuts ?? PREFIX_SCOPE
+  const key = shortcut.toLocaleLowerCase()
+  const current = shortcuts?.[key] ?? PREFIX_SCOPE[key]
+  const scopes = Array.isArray(current) ? [...current] : current === undefined ? [] : [current]
+  if (!scopes.includes(scope)) scopes.push(scope)
+  return { ...(shortcuts ?? PREFIX_SCOPE), [key]: scopes }
 }
 
 export interface SearchDebounce<V> {
@@ -226,8 +214,13 @@ export function createConversationSource(
       const scoped = scopedQuery(query, 'conversations', options.shortcut, options.shortcuts)
       if (scoped === undefined) return []
       const parsed = parseQuery(query)
-      if (parsed.provider === undefined && scoped !== query.trim()) parsed.query = scoped
-      const rows = await search(parsed.query, parsed.provider, signal, options.maxCandidates)
+      // A shared shortcut may also be a provider alias (for example
+      // `@chatgpt:`). Keep the provider parsed from the original token, but
+      // always search with the prefix removed.
+      parsed.query = scoped === query.trim() ? parsed.query : scoped
+      const match = query.trim().match(/^([^@:\s/]+):(.*)$/u)
+      const target = match ? options.sourceAliasTargets?.[match[1]!.toLocaleLowerCase()] as ChatProvider | undefined : undefined
+      const rows = await search(parsed.query, parsed.provider ?? target, signal, options.maxCandidates)
       const candidates = disambiguate(rows.map((row): InputTriggerCandidate => {
         const title = row.title.trim() || 'Untitled'
         const label = `${LABEL[row.provider]}·${title}`.replace(/[\[\]]/gu, '')
@@ -325,20 +318,21 @@ export function createFileSource(
           name,
           description: row.path,
           icon: candidateIcon(PICKER_ICON_MARKER[workspaceIconKind(row)]),
+          ...(row.kind === 'directory' ? { drill: true } : {}),
           value: encodeCandidate({ kind: 'file', fileKind: row.kind, label: basename, mention }),
         }]
       })
     },
-    onPick({ candidate }) {
+    onPick({ candidate, action }) {
       const value = decodeCandidate(candidate.value)
       if (value?.kind !== 'file') return undefined
-      if (value.fileKind === 'directory') return { text: value.mention, continue: true }
+      if (value.fileKind === 'directory' && action === 'drill') return { text: value.mention, continue: true }
       return {
         insert: {
           source: FILE_SOURCE,
           ref: value.mention,
-          label: value.label,
-          appearance: 'file',
+          label: value.fileKind === 'directory' ? `${value.label}/` : value.label,
+          appearance: value.fileKind === 'directory' ? 'folder' : 'file',
           clipboardText: value.mention,
         },
       }
@@ -409,7 +403,10 @@ export function createLocalAgentSource(
       if (quoted === true) return []
       const scoped = scopedQuery(query, 'agents', options.shortcut, options.shortcuts)
       if (scoped === undefined) return []
-      const rows = await search(session.sessionId, scoped, signal, options.maxCandidates)
+      const match = query.trim().match(/^([^@:\s/]+):(.*)$/u)
+      const target = match ? options.sourceAliasTargets?.[match[1]!.toLocaleLowerCase()] : undefined
+      const rows = (await search(session.sessionId, scoped, signal, options.maxCandidates))
+        .filter(row => target === undefined || row.kind === target)
       // Agent sessions go untitled far more often than browser chats do, and
       // several in a row can share an opening prompt, so numbering matters.
       return disambiguate(rows.map((row): InputTriggerCandidate => {
@@ -597,10 +594,10 @@ const COMMAND_ICON_KIND: Readonly<Record<string, PickerIconKind>> = {
   file: 'paperclip', goal: 'goal', plan: 'plan', feedback: 'feedback', compact: 'compact', permission: 'permission', model: 'model', export: 'export',
 }
 const COMMAND_DESCRIPTION_EN: Readonly<Record<string, string>> = {
-  goal: 'Set or view the goal for a long-running task', plan: 'Enter or leave plan mode', feedback: 'Record feedback about this session', compact: 'Compact older conversation history', permission: 'Switch the permission preset (sandbox mode + approval policy)', export: 'Download this Session log as a ZIP archive',
+  goal: 'Set or view the goal for a long-running task', plan: 'Enter or leave plan mode', feedback: 'Record feedback about this session', compact: 'Compact older conversation history', permission: 'Switch the permission preset (sandbox mode + approval policy)', model: 'Select the model for this conversation', export: 'Download this Session log as a ZIP archive',
 }
 const COMMAND_DESCRIPTION_ZH: Readonly<Record<string, string>> = {
-  goal: '设置或查看长期任务目标', plan: '进入或退出计划模式', feedback: '发送关于当前会话的反馈', compact: '压缩以上对话内容', permission: '切换权限预设（沙箱模式与审批策略）', export: '将当前会话内容导出为 ZIP',
+  goal: '设置或查看长期任务目标', plan: '进入或退出计划模式', feedback: '发送关于当前会话的反馈', compact: '压缩以上对话内容', permission: '切换权限预设（沙箱模式与审批策略）', model: '选择当前会话使用的模型', export: '将当前会话内容导出为 ZIP',
 }
 const COMMAND_LABEL_EN: Readonly<Record<string, string>> = {
   goal: 'Goal', plan: 'Plan', feedback: 'Feedback', compact: 'Compact', permission: 'Permission', export: 'Export', model: 'Model',
@@ -621,11 +618,15 @@ export function createCommandSource(
       const scoped = scopedQuery(query, 'commands', options.shortcut, options.shortcuts)
       if (scoped === undefined) return []
       const needle = scoped.toLocaleLowerCase()
-      return (await load(session.sessionId, signal))
+      const loaded = await load(session.sessionId, signal)
+      const rows = loaded.some(row => row.name.toLocaleLowerCase() === 'model') ? loaded : [...loaded, { name: 'model', description: COMMAND_DESCRIPTION_EN.model }]
+      return rows
         .filter(row => row.name.toLocaleLowerCase().includes(needle))
         .map(row => {
+          const key = row.name.toLocaleLowerCase()
+          const english = t('source.commands') === 'Commands'
           return {
-          name: (() => { const key = row.name.toLocaleLowerCase(); const zh = navigator.language.toLowerCase().startsWith('zh'); return zh ? (COMMAND_LABEL_ZH[key] ?? row.name) : (COMMAND_LABEL_EN[key] ?? row.name) })(), description: (navigator.language.toLowerCase().startsWith('zh') ? COMMAND_DESCRIPTION_ZH[row.name.toLocaleLowerCase()] : COMMAND_DESCRIPTION_EN[row.name.toLocaleLowerCase()]) ?? row.description, hint: row.input?.hint,
+          name: (english ? COMMAND_LABEL_EN[key] : COMMAND_LABEL_ZH[key]) ?? row.name, description: ((english ? COMMAND_DESCRIPTION_EN[key] : COMMAND_DESCRIPTION_ZH[key]) ?? row.description), hint: row.input?.hint,
           icon: candidateIcon(PICKER_ICON_MARKER[COMMAND_ICON_KIND[row.name.toLocaleLowerCase()] ?? 'command']), value: encodeCandidate({ kind: 'command', name: row.name }),
           }
         })
@@ -892,16 +893,16 @@ export function disambiguate(rows: readonly InputTriggerCandidate[]): InputTrigg
 }
 
 /** Route `type:name` autocomplete syntax to one @ source and strip its prefix. */
-export function scopedQuery(value: string, scope: SourceScope, shortcut?: string, shortcuts?: Readonly<Record<string, SourceScope>>): string | undefined {
+export function scopedQuery(value: string, scope: SourceScope, shortcut?: string, shortcuts?: Readonly<Record<string, SourceScope | readonly SourceScope[]>>): string | undefined {
   const prefixes = scopedPrefixes(scope, shortcut, shortcuts)
-  const trimmed = value.trim()
-  const bareScope = prefixes[trimmed.toLocaleLowerCase()]
-  if (bareScope !== undefined) return bareScope === scope ? '' : undefined
+  const matchesScope = (requested: SourceScope | readonly SourceScope[] | undefined): boolean => requested === scope || (Array.isArray(requested) && requested.includes(scope))
+  const trimmed = value.replaceAll('：', ':').trim()
   const match = trimmed.match(/^([^@:\s/]+):(.*)$/u)
   if (!match) return trimmed
-  const requested = prefixes[match[1]!.toLocaleLowerCase()]
+  const prefix = match[1]!.toLocaleLowerCase()
+  const requested = prefixes[prefix] ?? COLON_PREFIX_SCOPE[prefix]
   if (requested === undefined) return trimmed
-  return requested === scope ? (match[2] ?? '').trim() : undefined
+  return matchesScope(requested) ? (match[2] ?? '').trim() : undefined
 }
 
 function formatDate(value: string, t: T): string {
@@ -926,3 +927,5 @@ const fallback: T = (key, params) => {
   }
   return (dictionary[key] ?? key).replace(/\{(\w+)\}/gu, (match, name: string) => name in (params ?? {}) ? String(params![name]) : match)
 }
+
+

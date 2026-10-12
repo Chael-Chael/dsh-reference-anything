@@ -100,12 +100,12 @@ export function createPickerMenuActionGuard(
 
     const ownedSources = new Set([source])
     const originalPick = controller.pick.bind(controller)
-    controller.pick = (pickedSource, index) => {
+    controller.pick = (pickedSource, index, action) => {
       const state = controller.menu.getSnapshot()
       const group = state.groups.find(candidate => candidate.source === pickedSource)
       const candidate = group?.status === 'ready' ? group.items[index] : undefined
       if (!ownedSources.has(pickedSource) || !isPickerMenuAction(candidate)) {
-        originalPick(pickedSource, index)
+        originalPick(pickedSource, index, action)
         return
       }
 
@@ -115,7 +115,7 @@ export function createPickerMenuActionGuard(
         if (!isClosedSnapshot(next)) originalSet.call(menu, next)
       }
       try {
-        originalPick(pickedSource, index)
+        originalPick(pickedSource, index, action)
       } finally {
         menu.set = originalSet
       }

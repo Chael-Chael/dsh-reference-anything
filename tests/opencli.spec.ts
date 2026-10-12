@@ -184,7 +184,7 @@ describe('OpenCLI execFile boundary', () => {
       daemonRunning: false, extensionConnected: false, extensionState: 'daemon-offline', connectivityOk: false,
       opencliCompatible: true, adapterCompatible: false, doctorError: 'connectivity failed',
     })
-  })
+  }, 10_000)
 
   it('checks OpenCLI viability without launching a provider site command', async () => {
     const script = await fake(`

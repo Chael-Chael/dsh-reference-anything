@@ -1,7 +1,7 @@
 import type { ChatProvider, LocalAgent } from '../wire.ts'
 import { Children, isValidElement, type ReactElement, type ReactNode } from 'react'
 import {
-  LOCAL_AGENT_ICON_MARKER, PICKER_ICON_MARKER, PICKER_ICON_NODES, PICKER_ICON_STROKE_WIDTH, PROVIDER_ICON_MARKER, PROVIDER_ICON_PATH, agentLogoElement,
+  LOCAL_AGENT_ICON_MARKER, PICKER_ICON_MARKER, PICKER_ICON_NODES, PICKER_ICON_STROKE_WIDTH, PICKER_OFFICIAL_COMMAND_KINDS, PICKER_OFFICIAL_COMMAND_STROKE_WIDTH, PROVIDER_ICON_MARKER, PROVIDER_ICON_PATH, agentLogoElement,
   type PickerIconKind, PICKER_ICON_VIEWBOX,
 } from './provider-icons.tsx'
 import type { TranslateNS } from '@deepseek-ai/dsh-client-locale/client'
@@ -270,7 +270,7 @@ body[data-ds-dark-theme] .dsh_ref_collapsible_body{border-color:var(--dsw-alias-
 .dsh_ref_settings button{border:0;border-radius:var(--dsw-radius-md,8px);background:var(--dsw-alias-bg-module-platform);color:var(--dsw-alias-label-primary)}
 .dsh_ref_settings button:hover:not(:disabled){background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-primary)}
 .dsh_ref_picker_row,.dsh_ref_manage_row{border-color:var(--dsw-alias-border-l2)}
-.dsh_ref_picker_list,.dsh_ref_provider_grid,.dsh_ref_manage_list{border-color:var(--dsw-alias-border-l2);border-radius:var(--dsw-radius-xl,12px);background:var(--dsw-alias-settings-card-fill)}
+.dsh_ref_picker_list,.dsh_ref_provider_grid,.dsh_ref_manage_list{border-color:var(--dsw-alias-border-l2);border-radius:var(--dsw-radius-xl,12px);background:var(--dsw-alias-settings-card-fill)}.dsh_ref_alias_list{display:grid;gap:0}.dsh_ref_alias_row{display:grid;grid-template-columns:minmax(150px,.7fr) minmax(220px,1.3fr);align-items:center;gap:18px;padding:13px 18px;border-bottom:1px solid var(--dsh-ref-line)}.dsh_ref_alias_row:last-child{border-bottom:0}.dsh_ref_alias_copy{display:grid;gap:3px}.dsh_ref_alias_copy b{font-size:13px}.dsh_ref_alias_copy small{font-size:11px;opacity:.65}.dsh_ref_alias_row input{min-width:0;width:100%;border:1px solid var(--dsh-ref-line);border-radius:9px;padding:9px 11px;background:transparent}@media(max-width:640px){.dsh_ref_alias_row{grid-template-columns:1fr;gap:7px}}
 body[data-ds-dark-theme] .dsh_ref_settings input,body[data-ds-dark-theme] .dsh_ref_settings select,body[data-ds-dark-theme] .dsh_ref_settings button{background:var(--dsw-alias-bg-module-platform);color:var(--dsw-alias-label-primary)}
 /* Official primitives own control geometry. */
 .dsh_ref_menu_trigger{justify-content:space-between}
@@ -498,20 +498,65 @@ body[data-ds-dark-theme] .dsh_ref_settings input,body[data-ds-dark-theme] .dsh_r
 .dsh_ref_select_menu button:hover:not(:disabled){background:var(--dsw-alias-interactive-bg-hover)!important;color:var(--dsw-alias-label-primary)!important}
 /* Picker rows use a full-width title line and a separate controls line so
    long translated group names do not get squeezed into a vertical stack. */
-.dsh_ref_settings .dsh_ref_picker_row{grid-template-columns:minmax(0,1fr) minmax(0,1fr) minmax(0,1.35fr) auto;grid-template-rows:auto auto;row-gap:10px}
-.dsh_ref_settings .dsh_ref_picker_toggle{grid-column:1 / 4;grid-row:1;min-width:0;white-space:nowrap}
+.dsh_ref_settings .dsh_ref_picker_row{grid-template-columns:minmax(0,1fr) repeat(4,max-content) auto;grid-template-rows:auto;row-gap:0}
+.dsh_ref_settings .dsh_ref_picker_toggle{grid-column:1;grid-row:1;min-width:0;white-space:nowrap}
 .dsh_ref_settings .dsh_ref_picker_toggle>button{flex:none}
-.dsh_ref_settings .dsh_ref_picker_order{grid-column:4;grid-row:1 / 3;align-self:center}
-.dsh_ref_settings .dsh_ref_picker_row>label:nth-of-type(2){grid-column:1;grid-row:2;width:100%}
-.dsh_ref_settings .dsh_ref_picker_row>label:nth-of-type(3){grid-column:2;grid-row:2;width:100%}
-.dsh_ref_settings .dsh_ref_picker_row>label:nth-of-type(4){grid-column:3;grid-row:2;width:100%}
-.dsh_ref_settings .dsh_ref_picker_row>label:nth-of-type(2)>span:has(>input),.dsh_ref_settings .dsh_ref_picker_row>label:nth-of-type(3)>span:has(>input),.dsh_ref_settings .dsh_ref_picker_row>label:nth-of-type(4)>span:has(>input){width:100%;}
-.dsh_ref_settings .dsh_ref_picker_row>label:nth-of-type(2)>span:has(>input)>input,.dsh_ref_settings .dsh_ref_picker_row>label:nth-of-type(3)>span:has(>input)>input,.dsh_ref_settings .dsh_ref_picker_row>label:nth-of-type(4)>span:has(>input)>input{width:100%;}
+.dsh_ref_settings .dsh_ref_picker_order{grid-column:6;grid-row:1;align-self:center}
 .dsh_ref_settings .dsh_ref_picker_limit{flex-direction:column;align-items:flex-start;gap:4px}
 @media(max-width:640px){.dsh_ref_settings .dsh_ref_general_settings>.dsh_ref_render_mode{grid-template-columns:1fr}.dsh_ref_settings .dsh_ref_general_settings>.dsh_ref_render_mode>.dsh_ref_official_menu{width:max-content;max-width:100%}.dsh_ref_settings .dsh_ref_picker_row{grid-template-columns:1fr;grid-template-rows:auto}.dsh_ref_settings .dsh_ref_picker_toggle,.dsh_ref_settings .dsh_ref_picker_order,.dsh_ref_settings .dsh_ref_picker_row>label:nth-of-type(2),.dsh_ref_settings .dsh_ref_picker_row>label:nth-of-type(3),.dsh_ref_settings .dsh_ref_picker_row>label:nth-of-type(4){grid-column:auto;grid-row:auto}}
+@media(max-width:720px){.dsh_ref_settings .dsh_ref_picker_row{grid-template-columns:minmax(90px,1fr) repeat(4,max-content) auto!important;grid-template-rows:auto!important;overflow-x:auto}.dsh_ref_settings .dsh_ref_picker_toggle{grid-column:1!important;grid-row:1!important}.dsh_ref_settings .dsh_ref_picker_order{grid-column:6!important;grid-row:1!important}}
+.dsh_ref_settings .dsh_ref_picker_row{grid-template-columns:repeat(3,minmax(100px,1fr)) auto;grid-template-rows:auto auto!important;align-items:center;column-gap:6px;row-gap:14px}
+.dsh_ref_settings .dsh_ref_picker_toggle{grid-column:1 / 4;grid-row:1;}
+.dsh_ref_settings .dsh_ref_picker_order{grid-column:4;grid-row:1 / 3;align-self:center;}
+.dsh_ref_settings .dsh_ref_picker_limit input{width:110px!important;box-sizing:border-box}
+.dsh_ref_settings .dsh_ref_picker_limit>span:has(>input){width:110px!important;box-sizing:border-box}
+.dsh_ref_settings .dsh_ref_picker_limit>.dsh_ref_official_menu,.dsh_ref_settings .dsh_ref_picker_limit .dsh_ref_menu_trigger{width:110px!important;box-sizing:border-box}
+.dsh_ref_settings .dsh_ref_picker_limit input,.dsh_ref_settings .dsh_ref_picker_limit .dsh_ref_menu_trigger{text-align:left!important}
+.dsh_ref_settings .dsh_ref_picker_row>.dsh_ref_picker_limit{grid-row:2;}
+.dsh_ref_settings .dsh_ref_picker_row>.dsh_ref_picker_limit:nth-of-type(2){grid-column:1;}
+.dsh_ref_settings .dsh_ref_picker_row>.dsh_ref_picker_limit:nth-of-type(3){grid-column:2;}
+.dsh_ref_settings .dsh_ref_picker_row>.dsh_ref_picker_limit:nth-of-type(4){grid-column:3;}
+
+.dsh_ref_settings .dsh_ref_picker_row{grid-template-columns:28px repeat(3,minmax(0,1fr)) 28px!important;grid-template-rows:auto auto auto!important;overflow-x:visible}
+.dsh_ref_settings .dsh_ref_picker_order{grid-column:1!important;grid-row:1!important;align-self:center}
+.dsh_ref_settings .dsh_ref_picker_toggle{grid-column:2 / -1!important;grid-row:1!important}
+.dsh_ref_settings .dsh_ref_picker_expand{grid-column:5;grid-row:1;min-width:28px;padding:0;background:transparent;border:0}
+.dsh_ref_picker_expand .dsh_ref_collapsible_chevron{display:inline-block;width:7px;height:7px;margin:0 3px 4px 0;transform:rotate(45deg)}.dsh_ref_picker_expand[aria-expanded="true"] .dsh_ref_collapsible_chevron{transform:rotate(225deg)}
+.dsh_ref_settings .dsh_ref_picker_row>.dsh_ref_picker_limit:nth-of-type(2){grid-column:2}
+.dsh_ref_settings .dsh_ref_picker_row>.dsh_ref_picker_limit:nth-of-type(3){grid-column:3}
+.dsh_ref_settings .dsh_ref_picker_row>.dsh_ref_picker_limit:nth-of-type(4){grid-column:4}
+.dsh_ref_picker_aliases{grid-column:2 / 5;grid-row:3;border-top:1px solid var(--dsh-ref-line);padding-top:14px;min-width:0}.dsh_ref_picker_aliases[hidden]{display:none}
+.dsh_ref_picker_aliases>label{display:grid;gap:6px}.dsh_ref_picker_aliases small{color:var(--dsw-alias-label-tertiary);font-size:12px}.dsh_ref_picker_aliases input{width:100%;box-sizing:border-box;min-width:0}
+
 
 .dsh_ref_settings{padding-bottom:56px}
 .dsh_ref_settings .dsh_ref_notice{border-color:#0f1115;background:#0f1115;color:#fff}
+
+/* Picker groups use the same compact disclosure card as the other settings sections. */
+.dsh_ref_settings .dsh_ref_picker_list{display:block;overflow:hidden;border:1px solid var(--dsh-ref-line);border-radius:16px;background:var(--dsh-ref-card-surface)}
+.dsh_ref_settings .dsh_ref_picker_row:first-child{border-top-left-radius:15px;border-top-right-radius:15px}.dsh_ref_settings .dsh_ref_picker_row:last-child{border-bottom:0;border-bottom-left-radius:15px;border-bottom-right-radius:15px}\n.dsh_ref_settings .dsh_ref_picker_row{display:grid;grid-template-columns:28px minmax(0,1fr);grid-template-rows:auto auto;gap:0 4px;padding:12px 10px;border:0;border-bottom:1px solid var(--dsh-ref-line);border-radius:0;background:var(--dsh-ref-card-surface)}
+.dsh_ref_settings .dsh_ref_picker_toggle{grid-column:2;display:flex;align-items:center;gap:8px;min-width:0}
+.dsh_ref_settings .dsh_ref_picker_toggle>span:not([class]){display:grid;gap:2px;min-width:0;flex:1}
+.dsh_ref_settings .dsh_ref_picker_toggle b{font-size:14px;font-weight:600}
+.dsh_ref_settings .dsh_ref_picker_toggle small{color:var(--dsw-alias-label-tertiary,#737780);font-size:12px;line-height:1.35}
+.dsh_ref_settings .dsh_ref_picker_toggle>button[role=switch]{order:3}.dsh_ref_settings .dsh_ref_picker_toggle>button[role=switch]{margin-left:auto}
+.dsh_ref_settings .dsh_ref_picker_expand{order:4;flex:none;min-width:36px!important;width:36px!important;padding:0!important;border:0!important;background:transparent!important;align-self:center}
+.dsh_ref_settings .dsh_ref_picker_aliases{grid-column:2 / 4;grid-row:2;border-top:1px solid var(--dsh-ref-line);margin-top:14px;padding-top:14px}
+.dsh_ref_picker_fields{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-bottom:14px}
+.dsh_ref_picker_fields .dsh_ref_picker_limit{display:grid;gap:5px}.dsh_ref_picker_fields .dsh_ref_picker_limit>span{width:100%!important;box-sizing:border-box}.dsh_ref_settings .dsh_ref_picker_fields .dsh_ref_picker_limit>span:has(>input){width:100%!important;max-width:100%!important}.dsh_ref_picker_fields .dsh_ref_picker_limit input{width:100%!important;box-sizing:border-box}.dsh_ref_picker_aliases>label{display:grid;gap:6px;width:100%;min-width:0}.dsh_ref_picker_aliases>label>span{display:flex;width:100%!important;min-width:0}.dsh_ref_picker_aliases>label>span{padding:0!important}.dsh_ref_picker_aliases>label>span>input{background:transparent!important}.dsh_ref_picker_aliases>label>span>input{width:100%!important;min-width:0;box-sizing:border-box}.dsh_ref_source_aliases{display:grid;grid-template-columns:1fr;gap:8px 12px;margin-top:14px;padding-top:12px;border-top:1px solid var(--dsh-ref-line)}max-height:220px;overflow-y:auto;overscroll-behavior:contain;padding:10px 8px;margin-top:10px;border:1px solid var(--dsh-ref-line);border-radius:10px;background:var(--dsh-ref-card-surface);scrollbar-gutter:stable.dsh_ref_source_aliases>b,.dsh_ref_source_aliases>small{grid-column:1/-1}.dsh_ref_source_aliases>small{color:var(--dsw-alias-label-tertiary);font-size:12px}.dsh_ref_source_aliases>label{display:grid;gap:4px;min-width:0}.dsh_ref_source_aliases>label>span{display:flex;width:100%!important;min-width:0;padding:0!important;border:0!important;background:transparent!important}.dsh_ref_source_aliases>label>span>input{width:100%!important;min-width:0;box-sizing:border-box;background:transparent!important}.dsh_ref_source_aliases>label>span{font-size:12px}.dsh_ref_source_alias_row{display:grid!important;grid-template-columns:minmax(130px,.75fr) minmax(0,1.25fr);align-items:center;gap:10px}.dsh_ref_source_alias_name{display:flex;align-items:center;gap:8px}.dsh_ref_source_alias_name svg{width:18px;height:18px;flex:none}.dsh_ref_source_aliases input{width:100%!important;box-sizing:border-box}@media(max-width:640px){.dsh_ref_source_aliases{grid-template-columns:1fr}}
+@media(max-width:640px){.dsh_ref_picker_fields{grid-template-columns:1fr}.dsh_ref_settings .dsh_ref_picker_row{grid-template-columns:24px minmax(0,1fr)}}
+
+/* Keep the divider aligned with the content and make long source lists compact and scrollable. */
+.dsh_ref_settings .dsh_ref_picker_aliases{grid-column:2 / 5!important;grid-row:2;margin-right:0}
+.dsh_ref_settings .dsh_ref_source_aliases{gap:4px 12px;margin-top:14px;padding-top:12px}
+.dsh_ref_settings .dsh_ref_source_aliases>b{font-weight:400}
+.dsh_ref_settings .dsh_ref_source_alias_list{max-height:220px;overflow-y:auto;overscroll-behavior:contain;display:grid;gap:4px 12px;margin-top:8px;padding:8px 16px;border:1px solid var(--dsh-ref-line);border-radius:10px;scrollbar-gutter:stable}
+.dsh_ref_settings .dsh_ref_source_aliases>label{padding:2px 0}
+.dsh_ref_settings .dsh_ref_source_aliases>label>span:has(>input){box-sizing:border-box;min-height:32px;padding:0 10px!important;border:1px solid var(--dsw-alias-border-l4)!important;border-radius:9px;background:var(--dsw-alias-bg-layer-1)!important}
+.dsh_ref_settings .dsh_ref_source_alias_list>label{padding:2px 0}
+.dsh_ref_settings .dsh_ref_source_alias_list>label>span:has(>input){display:flex;align-items:center;box-sizing:border-box;min-width:0;width:100%;height:32px;padding:0 10px!important;border:1px solid var(--dsw-alias-border-l4)!important;border-radius:9px;background:var(--dsw-alias-bg-layer-1)!important}
+.dsh_ref_settings .dsh_ref_source_alias_list>label>span>input{min-width:0;height:100%!important;min-height:0!important;margin:0!important;padding:0!important;border:0!important;border-radius:0!important;background:transparent!important;box-shadow:none!important}
+
 `
 
 export function adoptStyles(): void {
@@ -975,6 +1020,8 @@ export function adoptReferenceIconProjection(): () => void {
     node.classList.toggle('dsh_ref_command_icon', ['paperclip', 'goal', 'plan', 'feedback', 'compact', 'permission', 'model', 'export'].includes(kind))
     node.classList.toggle('dsh_ref_dual_icon', secondary !== undefined)
     node.dataset.dshRefMenuIcon = kind
+    if (secondary === undefined) delete node.dataset.dshRefMenuSecondary
+    else node.dataset.dshRefMenuSecondary = secondary
   }
   const paintProvider = (node: HTMLElement, provider: ChatProvider): void => {
     node.replaceChildren(createProviderIcon(PROVIDER_ICON_PATH[provider]))
@@ -992,29 +1039,40 @@ export function adoptReferenceIconProjection(): () => void {
   }
   const projectAlphaOption = (option: Element): void => {
     const icon = option.firstElementChild
-    if (!(icon instanceof HTMLElement) || icon.childElementCount > 0 || (icon.textContent ?? '') !== '') return
+    if (!(icon instanceof HTMLElement) || ((icon.childElementCount > 0 && !icon.hasAttribute('data-dsh-ref-menu-icon')) || (icon.textContent ?? '') !== '')) return
     let heading = option.previousElementSibling
     while (heading !== null && !(heading.getAttribute('role') === 'presentation' && heading.hasAttribute('data-source'))) heading = heading.previousElementSibling
     const source = heading?.getAttribute('data-source')
     const name = option.children.item(1)?.textContent?.trim() ?? ''
     const description = option.children.item(2)?.textContent?.trim() ?? ''
     if (source === 'Commands') {
-      const commandIcons: Readonly<Record<string, PickerIconKind>> = { file: 'paperclip', goal: 'goal', plan: 'plan', feedback: 'feedback', compact: 'compact', permission: 'permission', model: 'model', export: 'export' }
-      return paintPicker(icon, commandIcons[name.toLocaleLowerCase()] ?? 'command')
+      const commandIcons: Readonly<Record<string, PickerIconKind>> = { file: 'paperclip', '文件': 'paperclip', goal: 'goal', '目标': 'goal', plan: 'plan', '计划': 'plan', feedback: 'feedback', '反馈': 'feedback', compact: 'compact', '压缩': 'compact', permission: 'permission', '权限': 'permission', model: 'model', '模型': 'model', export: 'export', '下载日志': 'export' }
+      const kind = commandIcons[name.toLocaleLowerCase()] ?? 'command'
+      return icon.dataset.dshRefMenuIcon === kind ? undefined : paintPicker(icon, kind)
     }
-    if (source === 'Skills') return paintPicker(icon, 'skill')
-    if (source === 'Files and folders') return paintPicker(icon, workspacePathIconKind(name, name.endsWith('/') ? 'directory' : 'file'))
-    if (source === 'DSH sessions') return paintPicker(icon, 'session')
-    if (source === 'All local plugins') return paintPicker(icon, 'plugin')
+    if (source === 'Skills') return icon.dataset.dshRefMenuIcon === 'skill' ? undefined : paintPicker(icon, 'skill')
+    if (source === 'Files and folders') {
+      const kind = workspacePathIconKind(name, name.endsWith('/') ? 'directory' : 'file')
+      return icon.dataset.dshRefMenuIcon === kind ? undefined : paintPicker(icon, kind)
+    }
+    if (source === 'DSH sessions') return icon.dataset.dshRefMenuIcon === 'session' ? undefined : paintPicker(icon, 'session')
+    if (source === 'All local plugins') return icon.dataset.dshRefMenuIcon === 'plugin' ? undefined : paintPicker(icon, 'plugin')
     if (source === 'Local agent conversations') {
       const agent = (Object.keys(LOCAL_AGENT_CHIP_LABEL) as LocalAgent[]).find(item => description.startsWith(`${LOCAL_AGENT_CHIP_LABEL[item]} ·`))
-      return agent === undefined ? paintPicker(icon, 'agent') : paintAgent(icon, agent)
+      if (agent === undefined) return icon.dataset.dshRefMenuIcon === 'agent' ? undefined : paintPicker(icon, 'agent')
+      return icon.dataset.dshRefMenuIcon === agent ? undefined : paintAgent(icon, agent)
     }
     if (source === 'External conversations') {
       const provider = providers.find(item => description.startsWith(`${CHIP_PROVIDER_LABEL[item]} ·`))
-      return provider === undefined ? paintPicker(icon, 'refresh') : paintProvider(icon, provider)
+      if (provider === undefined) return icon.dataset.dshRefMenuIcon === 'refresh' ? undefined : paintPicker(icon, 'refresh')
+      return icon.dataset.dshRefMenuIcon === provider ? undefined : paintProvider(icon, provider)
     }
-    if (source === 'Cloud drive files') paintPicker(icon, 'drive', driveMenuIconKind(description) ?? workspacePathIconKind(name, name.endsWith('/') ? 'directory' : 'file'))
+    if (source === 'Cloud drive files') {
+      const secondary = driveMenuIconKind(description) ?? workspacePathIconKind(name, name.endsWith('/') ? 'directory' : 'file')
+      return icon.dataset.dshRefMenuIcon === 'drive' && icon.dataset.dshRefMenuSecondary === secondary
+        ? undefined
+        : paintPicker(icon, 'drive', secondary)
+    }
   }
   const project = (root: ParentNode): void => {
     const selector = '[data-composer-card] [role="listbox"]'
@@ -1119,7 +1177,7 @@ function projectComposerChips(
   for (const chip of chips) {
     const label = (chip.textContent ?? '').trim().replace(/^@/u, '')
     const referenceSource = chip.dataset.referenceSource ?? chip.dataset.composerChip
-    const appearance = chip.dataset.referenceAppearance ?? (referenceSource === 'Cloud drive files' || referenceSource === 'Files and folders' ? 'file' : 'session')
+    const appearance = chip.dataset.referenceAppearance ?? (referenceSource === 'Cloud drive files' || referenceSource === 'Files and folders' ? (label.endsWith('/') ? 'folder' : 'file') : 'session')
     if (appearance === 'session') {
       if (referenceSource === 'All local plugins') {
         applyChipIcon(chip, 'plugin', pickerMasks.plugin)
@@ -1138,12 +1196,12 @@ function projectComposerChips(
         .find(item => label.startsWith(`${CHIP_PROVIDER_LABEL[item]}·`))
       if (provider !== undefined) applyChipIcon(chip, provider, providerMasks[provider])
       else applyChipIcon(chip, 'session', pickerMasks.session)
-    } else if (appearance === 'file') {
+    } else if (appearance === 'file' || appearance === 'folder') {
       if (chip.dataset.referenceSource === 'Cloud drive files' || chip.dataset.referenceSource === 'cloud-drive') {
         applyChipIcon(chip, 'drive', pickerMasks.drive)
         continue
       }
-      const kind = workspacePathIconKind(label, 'file')
+      const kind = appearance === 'folder' ? 'folder' : workspacePathIconKind(label, 'file')
       applyChipIcon(chip, kind, pickerMasks[kind])
     } else {
       clearChipIcon(chip)
@@ -1192,11 +1250,12 @@ function createProviderIcon(path: string): SVGSVGElement {
 }
 
 function createPickerIcon(kind: PickerIconKind): SVGSVGElement {
+  const strokeWidth = PICKER_OFFICIAL_COMMAND_KINDS.has(kind) ? PICKER_OFFICIAL_COMMAND_STROKE_WIDTH : PICKER_ICON_STROKE_WIDTH
   const svg = document.createElementNS(SVG_NS, 'svg')
   svg.setAttribute('viewBox', PICKER_ICON_VIEWBOX[kind] ?? '0 0 24 24')
   svg.setAttribute('fill', 'none')
   svg.setAttribute('stroke', 'currentColor')
-  svg.setAttribute('stroke-width', String(PICKER_ICON_STROKE_WIDTH))
+  svg.setAttribute('stroke-width', String(strokeWidth))
   svg.setAttribute('stroke-linecap', 'round')
   svg.setAttribute('stroke-linejoin', 'round')
   svg.setAttribute('aria-hidden', 'true')
@@ -1219,14 +1278,30 @@ function reactIconMask(element: ReactElement): string {
 }
 
 function pickerIconMask(kind: PickerIconKind): string {
+  const strokeWidth = PICKER_OFFICIAL_COMMAND_KINDS.has(kind) ? PICKER_OFFICIAL_COMMAND_STROKE_WIDTH : PICKER_ICON_STROKE_WIDTH
   const nodes = PICKER_ICON_NODES[kind].map(node => {
     const attrs = Object.entries(node.attrs).map(([name, value]) => `${name}="${value.replaceAll('currentColor', 'black')}"`).join(' ')
     return `<${node.tag} ${attrs}/>`
   }).join('')
-  return svgMask(`<g fill="none" stroke="black" stroke-width="${String(PICKER_ICON_STROKE_WIDTH)}" stroke-linecap="round" stroke-linejoin="round">${nodes}</g>`, PICKER_ICON_VIEWBOX[kind] ?? '0 0 24 24')
+  return svgMask(`<g fill="none" stroke="black" stroke-width="${String(strokeWidth)}" stroke-linecap="round" stroke-linejoin="round">${nodes}</g>`, PICKER_ICON_VIEWBOX[kind] ?? '0 0 24 24')
 }
 
 function svgMask(content: string, viewBox = '0 0 24 24'): string {
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${viewBox}">${content}</svg>`
   return `url("data:image/svg+xml,${encodeURIComponent(svg)}")`
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

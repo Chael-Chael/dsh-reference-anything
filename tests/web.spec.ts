@@ -10,6 +10,7 @@ describe('external conversation Remote availability', () => {
     ctx.provide('typert', { register: vi.fn(() => () => undefined) })
     ctx.provide('referenceChatHistory', { search })
     ctx.provide('openListManager', {})
+    ctx.provide('references', { registerSource: vi.fn(() => () => undefined) })
     const fiber = await ctx.plugin(web)
     try {
       const remote = ctx.get('referenceAnything') as ReferenceAnythingRemote | undefined
@@ -28,6 +29,7 @@ describe('external conversation Remote availability', () => {
     ctx.provide('typert', { register: vi.fn(() => () => undefined) })
     ctx.provide('referenceChatHistory', { search: () => [] })
     ctx.provide('openListManager', {})
+    ctx.provide('references', { registerSource: vi.fn(() => () => undefined) })
     const pickerList = vi.fn(async () => [{ ref: { source: 'cloud-drive', id: 'drive-1' }, label: 'notes.md', provider: 'OpenList' }])
     const disposeDrive = ctx.provide('referenceCloudDrive', { pickerList })
     const fiber = await ctx.plugin(web)

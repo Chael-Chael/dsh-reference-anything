@@ -113,8 +113,8 @@ export const PICKER_ICON_NODES = {
   ],
   plan: [
     { tag: 'path', attrs: { d: 'M4.9375 5.90295H11.0625' } }, { tag: 'path', attrs: { d: 'M4.9375 9.02991H8.27841' } },
-    { tag: 'path', attrs: { d: 'M12.5 1.32617C13.3039 1.32617 14 1.95171 14 2.77637V7.61328L13 8.68164V2.77637C13 2.55186 12.8007 2.32617 12.5 2.32617H3.5C3.1993 2.32617 3 2.55186 3 2.77637V13.2246C3.00044 13.4489 3.19963 13.6738 3.5 13.6738H8.32812L7.39258 14.6738H3.5C2.69637 14.6738 2.00042 14.0489 2 13.2246V2.77637C2 1.95171 2.69613 1.32617 3.5 1.32617H12.5Z', fill: 'currentColor' } },
-    { tag: 'path', attrs: { d: 'M8.97212 14.3693C9.17511 14.5723 9.37811 14.7753 9.5811 14.9783C9.67012 14.8953 9.75914 14.8123 9.84815 14.7293C11.4505 13.2352 13.0528 11.7411 14.6551 10.247C14.7441 10.164 14.8331 10.081 14.9221 9.99803C14.5989 9.6748 14.2756 9.35157 13.9524 9.02834C13.8694 9.11736 13.7864 9.20637 13.7034 9.29539C12.2093 10.8977 10.7152 12.5 9.22113 14.1023C9.13813 14.1913 9.05513 14.2803 8.97212 14.3693Z', fill: 'currentColor' } }
+    { tag: 'path', attrs: { d: 'M12.5 1.32617C13.3039 1.32617 14 1.95171 14 2.77637V7.61328L13 8.68164V2.77637C13 2.55186 12.8007 2.32617 12.5 2.32617H3.5C3.1993 2.32617 3 2.55186 3 2.77637V13.2246C3.00044 13.4489 3.19963 13.6738 3.5 13.6738H8.32812L7.39258 14.6738H3.5C2.69637 14.6738 2.00042 14.0489 2 13.2246V2.77637C2 1.95171 2.69613 1.32617 3.5 1.32617H12.5Z', fill: 'none' } },
+    { tag: 'path', attrs: { d: 'M8.97212 14.3693C9.17511 14.5723 9.37811 14.7753 9.5811 14.9783C9.67012 14.8953 9.75914 14.8123 9.84815 14.7293C11.4505 13.2352 13.0528 11.7411 14.6551 10.247C14.7441 10.164 14.8331 10.081 14.9221 9.99803C14.5989 9.6748 14.2756 9.35157 13.9524 9.02834C13.8694 9.11736 13.7864 9.20637 13.7034 9.29539C12.2093 10.8977 10.7152 12.5 9.22113 14.1023C9.13813 14.1913 9.05513 14.2803 8.97212 14.3693Z', fill: 'none' } }
   ],
   permission: [
     { tag: 'path', attrs: { d: 'M6.59624 2.14853C7.50155 1.80917 8.49914 1.80919 9.40444 2.14859L13.9245 3.84317V7.11961C13.9245 11.6089 10.5565 13.5975 8.00035 14.5779C5.44423 13.5975 2.07544 11.6089 2.07544 7.11961V3.84317L6.59624 2.14853Z' } },
@@ -213,8 +213,11 @@ export const PICKER_ICON_NODES = {
   ],
 } as const satisfies Readonly<Record<PickerIconKind, readonly PickerIconNode[]>>
 
-/** Lucide's default outline weight; every projected Lucide icon uses it. */
+/** Regular weight used by the existing picker icons. */
 export const PICKER_ICON_STROKE_WIDTH = 2
+/** The newly imported Harness command artwork keeps its official 1px weight. */
+export const PICKER_OFFICIAL_COMMAND_STROKE_WIDTH = 1
+export const PICKER_OFFICIAL_COMMAND_KINDS: ReadonlySet<PickerIconKind> = new Set(['paperclip', 'goal', 'plan', 'feedback', 'compact', 'permission', 'model', 'export'])
 
 /** The Harness command artwork is authored on a 16px canvas. */
 export const PICKER_ICON_VIEWBOX: Readonly<Partial<Record<PickerIconKind, string>>> = {
@@ -224,6 +227,11 @@ export const PICKER_ICON_VIEWBOX: Readonly<Partial<Record<PickerIconKind, string
 
 export function ProviderLogo({ provider, size = 22 }: { provider: ChatProvider; size?: number }) {
   return <svg fill="currentColor" fillRule="evenodd" width={size} height={size} viewBox="0 0 24 24" aria-hidden><path d={PROVIDER_ICON_PATH[provider]} /></svg>
+}
+
+export function PickerSourceLogo({ kind, size = 18 }: { kind: PickerIconKind; size?: number }) {
+  const nodes = PICKER_ICON_NODES[kind] ?? PICKER_ICON_NODES.agent
+  return <svg width={size} height={size} viewBox={PICKER_ICON_VIEWBOX[kind] ?? '0 0 24 24'} fill="none" stroke="currentColor" strokeWidth={PICKER_ICON_STROKE_WIDTH} strokeLinecap="round" strokeLinejoin="round" aria-hidden>{nodes.map((node, index) => { const Tag = node.tag; return <Tag key={index} {...node.attrs} /> })}</svg>
 }
 
 const AGENT_LOGO = {

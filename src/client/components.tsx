@@ -4,9 +4,9 @@ import { Button, Checkbox, Input, Menu, Switch } from '@deepseek-ai/dsh-client-u
 import { useEffect, useId, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import ReactMarkdown from 'react-markdown'
 import Sortable from 'sortablejs'
-import { ALL_LOCAL_AGENTS, LOCAL_AGENT_LABEL, defaultPickerSettings, type ChatProvider, type LocalAgent, type PickerSettings, type PickerSource, type SettingsRecord } from '../wire.ts'
+import { ALL_PROVIDERS, ALL_LOCAL_AGENTS, LOCAL_AGENT_LABEL, defaultPickerSettings, type ChatProvider, type LocalAgent, type PickerSettings, type PickerSource, type SettingsRecord } from '../wire.ts'
 import { syncProgressFraction, type AgentStats, type BrowsePage, type BrowserProfile, type Health, type OpenListDriver, type OpenListMount, type OpenListStatus, type PackageUpdateStatus, type ProviderStats, type StorageStats, type SyncStatus } from './remote.ts'
-import { AgentLogo, ProviderLogo } from './provider-icons.tsx'
+import { AgentLogo, PickerSourceLogo, ProviderLogo } from './provider-icons.tsx'
 import { type REFERENCE_ANYTHING_NS } from './locale.ts'
 import type { TranslateNS } from '@deepseek-ai/dsh-client-locale/client'
 import { OPENCLI_EXTENSION_STORE_URL, openExtensionStore, setupReady, type SetupStage } from './health.ts'
@@ -107,10 +107,16 @@ const PICKER_SOURCES: ReadonlyArray<{ id: PickerSource; label: keyof typeof SOUR
   { id: 'plugins', label: 'plugins' },
 ]
 const DEFAULT_PICKER_SHORTCUTS: Readonly<Record<PickerSource, string>> = {
-  commands: 'commands', skills: 'skills', files: 'files', sessions: 'sessions',
-  agents: 'agents', conversations: 'conversations', drives: 'drives', plugins: 'plugins',
+  commands: 'command', skills: 'skill', files: 'file', sessions: 'session',
+  agents: 'agent', conversations: 'chat', drives: 'drive', plugins: 'plugin',
 }
 const SOURCE_KEYS = { commands: 'source.commands', skills: 'source.skills', files: 'source.files', sessions: 'source.sessions', agents: 'source.agents', conversations: 'source.conversations', drives: 'source.drives', plugins: 'source.plugins' } as const
+const SOURCE_ALIAS_GROUPS: Partial<Record<PickerSource, readonly string[]>> = { conversations: ['chatgpt', 'claude', 'gemini', 'deepseek', 'grok', 'kimi'], agents: ALL_LOCAL_AGENTS, drives: [] }
+function SourceAliasIcon({ source, keyName }: { source: PickerSource; keyName: string }) {
+  if (source === 'conversations' && ALL_PROVIDERS.includes(keyName as ChatProvider)) return <ProviderLogo provider={keyName as ChatProvider} />
+  if (source === 'agents' && ALL_LOCAL_AGENTS.includes(keyName as LocalAgent)) return <AgentLogo agent={keyName as LocalAgent} />
+  return <PickerSourceLogo kind="drive" />
+}
 const REFERENCE_ANYTHING_LOGO = '__REFERENCE_ANYTHING_LOGO_DATA_URI__'
 const GITHUB_REPOSITORY_URL = 'https://github.com/Chael-Chael/dsh-reference-anything'
 export function ConversationSettings({ useScope, save, sync, cancel, refresh, refreshOpenList = async () => undefined, quickRefreshOnOpen, setupAll, discoverOpenCli, installOpenCli, useProfile, install, restartDaemon, checkUpdate, installUpdate, browse, deleteConversation, clearProvider, clearRemoteMissing, clearOldAccounts, refreshStats, openListInstall = async () => undefined, openListUpgrade = async () => undefined, openListConnectExternal = async () => undefined, openListDisconnect = async () => undefined, openListCreateMount = async () => undefined, openListDisableMount = async () => undefined, openListRemoveMount = async () => undefined, openListReindex = async () => ({ supported: false }), pickCloudDriveDownloadDirectory, pickAgentDirectory, openCloudDriveDownloadDirectory, t }: SettingsProps) {
@@ -127,7 +133,7 @@ export function ConversationSettings({ useScope, save, sync, cancel, refresh, re
   const [autoSyncMinutes, setAutoSyncMinutes] = useState(String(settings.autoSyncMinutes))
   const [syncHistoryDays, setSyncHistoryDays] = useState(settings.syncHistoryDays === null ? '' : String(settings.syncHistoryDays))
   const [maxReadTurns, setMaxReadTurns] = useState(String(settings.maxReadTurns))
-  const [openSections, setOpenSections] = useState<Record<string, boolean>>({ sync: true, storage: true })
+  const [openSections, setOpenSections] = useState<Record<string, boolean>>({ sync: true, storage: true, aliases: false })
   const [repairProfile, setRepairProfile] = useState('')
   const [pickerLimits, setPickerLimits] = useState<Record<PickerSource, string>>(() => pickerLimitDrafts(picker))
   const [pickerMaxCandidates, setPickerMaxCandidates] = useState<Record<PickerSource, string>>(() => pickerMaxCandidateDrafts(picker))
@@ -293,13 +299,14 @@ export function ConversationSettings({ useScope, save, sync, cancel, refresh, re
     {state.error && <div className="dsh_ref_error" role="alert"><strong>{t('settings.actionFailed')}</strong><span>{state.error}</span></div>}
     <section className="dsh_ref_panel dsh_ref_settings_card dsh_ref_general_settings"><div className="dsh_ref_section_head"><div><h3>{t('settings.general')}</h3><p>{t('settings.generalDetail')}</p></div></div>
       <div className="dsh_ref_picker_list" ref={pickerListRef}>{[...PICKER_SOURCES].sort((a, b) => picker[a.id].order - picker[b.id].order).map(row => <div className={`dsh_ref_picker_row${draggingPicker === row.id ? ' is_dragging' : ''}`} data-picker-id={row.id} key={row.id}>
-        <label className="dsh_ref_picker_toggle"><DshSwitch checked={picker[row.id].enabled} label={t(SOURCE_KEYS[row.label])} onChange={value => { patchPicker(row.id, { enabled: value }) }} /><b>{t(SOURCE_KEYS[row.label])}</b></label>
-        <label className="dsh_ref_picker_limit"><span>{t('settings.collapsedItems')}</span><Input type="number" min={1} max={50} inputMode="numeric" value={pickerLimits[row.id]} aria-invalid={pickerLimits[row.id] !== '' && !validPickerLimit(pickerLimits[row.id])} onChange={event => { setPickerLimits(current => ({ ...current, [row.id]: event.target.value })) }} onBlur={() => { commitPickerLimit(row.id) }} onKeyDown={event => { if (event.key === 'Enter') event.currentTarget.blur() }} /></label>
-        <label className="dsh_ref_picker_limit"><span>{t('settings.maxCandidates')}</span><Input type="number" min={1} max={50} inputMode="numeric" value={pickerMaxCandidates[row.id]} aria-invalid={pickerMaxCandidates[row.id] !== '' && !validPickerLimit(pickerMaxCandidates[row.id])} onChange={event => { setPickerMaxCandidates(current => ({ ...current, [row.id]: event.target.value })) }} onBlur={() => { commitPickerMaxCandidates(row.id) }} onKeyDown={event => { if (event.key === 'Enter') event.currentTarget.blur() }} /></label>
-        <label className="dsh_ref_picker_limit"><span>{t('settings.shortcut')}</span><Input type="text" maxLength={32} value={picker[row.id].shortcut} placeholder={DEFAULT_PICKER_SHORTCUTS[row.id]} onChange={event => { patchPicker(row.id, { shortcut: event.target.value.replace(/[@:\s/]/gu, '') }) }} /></label>
         <div className="dsh_ref_picker_order"><button className="dsh_ref_picker_drag_handle" type="button" aria-label={t('settings.moveUp', { item: t(SOURCE_KEYS[row.label]) })}><span aria-hidden="true">⠿</span></button></div>
+        <label className="dsh_ref_picker_toggle"><PickerSourceLogo kind={row.id === 'commands' ? 'command' : row.id === 'skills' ? 'skill' : row.id === 'files' ? 'file' : row.id === 'sessions' ? 'session' : row.id === 'drives' ? 'drive' : row.id === 'plugins' ? 'plugin' : 'agent'} /><span><b>{t(SOURCE_KEYS[row.label])}</b><small>{t(`source.${row.label}Detail` as never)}</small></span><DshSwitch checked={picker[row.id].enabled} label={t(SOURCE_KEYS[row.label])} onChange={value => { patchPicker(row.id, { enabled: value }) }} /><Button className="dsh_ref_picker_expand" type="button" aria-label={t(SOURCE_KEYS[row.label]) + ' · ' + t('settings.aliases')} aria-expanded={Boolean(openSections['aliases-' + row.id])} aria-controls={'dsh-ref-aliases-' + row.id} onClick={() => { setOpenSections(current => ({ ...current, ['aliases-' + row.id]: !current['aliases-' + row.id] })) }}><span className="dsh_ref_collapsible_chevron" aria-hidden="true"/></Button></label>
+        <div className="dsh_ref_picker_aliases" id={'dsh-ref-aliases-' + row.id} hidden={!openSections['aliases-' + row.id]}><div className="dsh_ref_picker_fields">        <label className="dsh_ref_picker_limit"><span>{t('settings.collapsedItems')}</span><Input type="number" min={1} max={50} inputMode="numeric" value={pickerLimits[row.id]} aria-invalid={pickerLimits[row.id] !== '' && !validPickerLimit(pickerLimits[row.id])} onChange={event => { setPickerLimits(current => ({ ...current, [row.id]: event.target.value })) }} onBlur={() => { commitPickerLimit(row.id) }} onKeyDown={event => { if (event.key === 'Enter') event.currentTarget.blur() }} /></label>
+        <label className="dsh_ref_picker_limit"><span>{t('settings.maxCandidates')}</span><Input type="number" min={1} max={50} inputMode="numeric" value={pickerMaxCandidates[row.id]} aria-invalid={pickerMaxCandidates[row.id] !== '' && !validPickerLimit(pickerMaxCandidates[row.id])} onChange={event => { setPickerMaxCandidates(current => ({ ...current, [row.id]: event.target.value })) }} onBlur={() => { commitPickerMaxCandidates(row.id) }} onKeyDown={event => { if (event.key === 'Enter') event.currentTarget.blur() }} /></label>
+<label className="dsh_ref_picker_limit"><span>{t('settings.shortcut')}</span><Input type="text" maxLength={32} value={picker[row.id].shortcut} placeholder={DEFAULT_PICKER_SHORTCUTS[row.id]} onChange={event => { patchPicker(row.id, { shortcut: event.target.value.replace(/[@:\s/]/gu, '') }) }} /></label></div>{(SOURCE_ALIAS_GROUPS[row.id]?.length || (row.id === 'drives' && (state.openListMounts?.length ?? 0) > 0)) ? <div className="dsh_ref_source_aliases"><b>{t('settings.sourceAliases')}</b><small>{t('settings.sourceAliasesHint')}</small><div className="dsh_ref_source_alias_list">{(row.id === 'drives' ? (state.openListMounts ?? []).map(mount => mount.name) : SOURCE_ALIAS_GROUPS[row.id] ?? []).map(key => <label className="dsh_ref_source_alias_row" key={key}><span className="dsh_ref_source_alias_name"><SourceAliasIcon source={row.id} keyName={key} /><b>{row.id === 'agents' ? (LOCAL_AGENT_LABEL[key as LocalAgent] ?? key) : key}</b></span><Input defaultValue={picker[row.id].sourceAliases?.[key]?.join(', ') ?? ''} placeholder={key} onBlur={event => { const aliases = event.target.value.split(',').map(value => value.trim().replace(/[@:\s/]/gu, '')).filter(Boolean); patchPicker(row.id, { sourceAliases: { ...(picker[row.id].sourceAliases ?? {}), [key]: aliases } }) }} /></label>)}</div></div> : null}</div>
       </div>)}</div>
       <label className="dsh_ref_render_mode"><span><b>{t('settings.pickerDisplayMode')}</b><small>{t('settings.pickerDisplayModeDetail')}</small></span><DshMenuSelect value={picker.displayMode} options={[{ value: 'collapse', label: t('settings.pickerDisplayCollapse') }, { value: 'native-scroll', label: t('settings.pickerDisplayNative') }]} onChange={value => { savePicker({ ...picker, displayMode: value as PickerSettings['displayMode'] }) }} ariaLabel={t('settings.pickerDisplayMode')} /></label>
+
     </section>
     <SettingsDisclosure className="dsh_ref_plugin_section" title={t('settings.pluginPicker')} description={t('settings.pluginPickerDetail')} open={Boolean(openSections.plugins)} onToggle={() => { setOpenSections(current => ({ ...current, plugins: !current.plugins })) }}>
       <section className="dsh_ref_sources dsh_ref_plugin_sources"><div className="dsh_ref_provider_controls"><label className="dsh_ref_toggle"><DshSwitch checked={picker.plugins.onlyLive} label={t('settings.pluginOnlyLive')} onChange={value => { patchPicker('plugins', { onlyLive: value }) }} /><b>{t('settings.pluginOnlyLive')}</b></label><label className="dsh_ref_toggle"><DshSwitch checked={picker.plugins.showDeepSeek} label={t('settings.pluginShowDeepSeek')} onChange={value => { patchPicker('plugins', { showDeepSeek: value }) }} /><b>{t('settings.pluginShowDeepSeek')}</b></label></div></section>
@@ -315,7 +322,7 @@ export function ConversationSettings({ useScope, save, sync, cancel, refresh, re
       </section>
     </SettingsDisclosure>
     <SettingsDisclosure className="dsh_ref_chat_section" title={t('settings.sources')} description={t('settings.sourcesDetail')} open={Boolean(openSections.chat)} onToggle={() => { setOpenSections(current => ({ ...current, chat: !current.chat })) }}>
-      <section className="dsh_ref_sources dsh_ref_chat">{state.sync?.status === 'running' && <div className="dsh_ref_syncing">{t('settings.syncing', { source: t('settings.sources'), completed: state.sync.completed, total: state.sync.total })}</div>}
+      <section className="dsh_ref_sources dsh_ref_chat">
       <section className="dsh_ref_viability dsh_ref_settings_card"><div className="dsh_ref_section_head"><div><h3>{t('settings.viability')}</h3><p>{t('settings.viabilityDetail')}</p></div><div className="dsh_ref_viability_actions"><Button className="dsh_ref_recheck" type="button" disabled={state.loading || Boolean(busyAction)} onClick={() => { runAction('refresh', refresh) }}>{busyAction === 'refresh' ? t('settings.checking') : t('settings.recheck')}</Button></div></div>
         {state.loading ? <div className="dsh_ref_skeleton"><i/><i/><i/></div> : <div className="dsh_ref_checklist">
           <CheckRow label="OpenCLI" detail={openCliStateDetail(state.health, t)} ready={opencliReady}
@@ -885,3 +892,7 @@ function formatBytes(bytes: number): string {
   if (bytes < 1024 ** 3) return `≈ ${(bytes / 1024 ** 2).toFixed(1)} MiB`
   return `≈ ${(bytes / 1024 ** 3).toFixed(1)} GiB`
 }
+
+
+
+

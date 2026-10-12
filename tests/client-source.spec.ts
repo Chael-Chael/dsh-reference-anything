@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import {
-  AGENT_SOURCE, CONVERSATION_SOURCE, DRIVE_SOURCE, PLUGIN_SOURCE, agentReferenceUri, conversationReferenceUri, createCloudDriveSource,
+  AGENT_SOURCE, CONVERSATION_SOURCE, DRIVE_SOURCE, FILE_SOURCE, PLUGIN_SOURCE, agentReferenceUri, conversationReferenceUri, createCloudDriveSource,
   createCommandSource, createConversationSource, createFileSource, createLocalAgentSource, createPluginSource, createSearchDebounce,
   createSessionSource, createSkillSource, driveMenuIconKind, driveReferenceUri,
   describeRow, disambiguate, parseQuery, scopedQuery, workspaceIconKind,
@@ -36,13 +36,19 @@ describe('native @ sources', () => {
     expect(parseQuery('gpt:cache')).toEqual({ provider: 'chatgpt', query: 'cache' })
     expect(parseQuery('ds/cache')).toEqual({ provider: 'deepseek', query: 'cache' })
     expect(parseQuery('cache design')).toEqual({ query: 'cache design' })
-    expect(scopedQuery('commands', 'commands')).toBe('')
-    expect(scopedQuery('commands', 'files')).toBeUndefined()
-    expect(scopedQuery('skills:creator', 'skills')).toBe('creator')
-    expect(scopedQuery('外部对话', 'conversations')).toBe('')
-    expect(scopedQuery('plugins', 'plugins')).toBe('')
+    expect(scopedQuery('command', 'commands')).toBe('command')
+    expect(scopedQuery('commands', 'commands')).toBe('commands')
+    expect(scopedQuery('skill:creator', 'skills')).toBe('creator')
+    expect(scopedQuery('opencode：probe', 'agents')).toBe('probe')
+    expect(scopedQuery('session:today', 'sessions')).toBe('today')
+    expect(scopedQuery('chat', 'conversations')).toBe('chat')
+    expect(scopedQuery('plugin', 'plugins')).toBe('plugin')
+    expect(scopedQuery('plugins', 'plugins')).toBe('plugins')
     expect(scopedQuery('plugin:git', 'plugins')).toBe('git')
-    expect(scopedQuery('本地插件', 'plugins')).toBe('')
+    expect(scopedQuery('folders', 'plugins')).toBe('folders')
+    expect(scopedQuery('folders:src', 'files')).toBe('src')
+    expect(scopedQuery('folder:src', 'files')).toBe('folder:src')
+    expect(scopedQuery('本地插件', 'plugins')).toBe('本地插件')
   })
 
   it('describes result provenance and disambiguates duplicate menu names', () => {
@@ -71,6 +77,20 @@ describe('native @ sources', () => {
     expect(filtered.map(row => row.name)).toEqual(['Cache design notes'])
     const providerScoped = await source.candidates(session, request('chatgpt'))
     expect(providerScoped.map(row => row.name)).toEqual(['Cache design notes'])
+  })
+
+  it('routes a concrete chat alias to its provider', async () => {
+    const search = vi.fn(async (_query: string, _provider: string | undefined) => [searchRow()])
+    const source = createConversationSource(search, undefined, options({ sourceAliasTargets: { work: 'chatgpt' }, shortcuts: { work: 'conversations' } }))
+    await source.candidates(session, request('work:cache'))
+    expect(search).toHaveBeenCalledWith('cache', 'chatgpt', expect.anything(), 50)
+  })
+
+  it('strips a shared shortcut even when it is also a provider name', async () => {
+    const search = vi.fn(async (_query: string, _provider: string | undefined) => [searchRow()])
+    const source = createConversationSource(search, undefined, options({ shortcuts: { chatgpt: ['agents', 'conversations'] } }))
+    await source.candidates(session, request('chatgpt:cache'))
+    expect(search).toHaveBeenCalledWith('cache', 'chatgpt', expect.anything(), 50)
   })
 
   it('shows live sync progress and the previous result in the pinned action', async () => {
@@ -149,7 +169,16 @@ describe('native @ sources', () => {
   it('keeps official quoted-directory completion editable', async () => {
     const source = createFileSource(async () => [{ path: 'docs with space', kind: 'directory' }])
     const candidate = (await source.candidates(session, request('docs with', true)))[0]!
-    expect(source.onPick(pick(candidate))).toEqual({ text: '@"docs with space/', continue: true })
+    expect(candidate.drill).toBe(true)
+    expect(source.onPick({ ...pick(candidate), action: 'drill' })).toEqual({ text: '@"docs with space/', continue: true })
+  })
+
+  it('inserts a local directory when its settling pick is used', async () => {
+    const source = createFileSource(async () => [{ path: 'docs', kind: 'directory' }])
+    const candidate = (await source.candidates(session, request('docs')))[0]!
+    expect(source.onPick(pick(candidate))).toMatchObject({
+      insert: { source: FILE_SOURCE, ref: '@docs/', label: 'docs/', appearance: 'folder', clipboardText: '@docs/' },
+    })
   })
 
   it('classifies official file candidates for menu logo projection', () => {
@@ -178,10 +207,12 @@ describe('native @ sources', () => {
   it('keeps Commands and Skills in @ while returning native slash text', async () => {
     const commands = createCommandSource(async () => [{ name: 'plan', description: 'Plan mode' }, { name: 'doctor', description: 'Check health' }])
     const command = (await commands.candidates(session, request('pla')))[0]!
-    expect(command?.name).toBe('计划')
+    expect(command?.name).toBe('Plan')
     expect(command?.icon).toBe(PICKER_ICON_MARKER.plan)
     expect(commands.onPick(pick(command))).toEqual({ text: '/plan' })
     expect((await commands.candidates(session, request('doc')))[0]?.name).toBe('doctor')
+    const model = (await commands.candidates(session, request('model')))[0]!
+    expect(model).toMatchObject({ name: 'Model', description: 'Select the model for this conversation', icon: PICKER_ICON_MARKER.model })
 
     const skills = createSkillSource(async () => [{ name: 'review', description: 'Review code', modelInvocable: false }])
     const skill = (await skills.candidates(session, request('rev')))[0]!
@@ -255,23 +286,34 @@ describe('local agent conversations', () => {
   })
 
   it('routes hyphenated agent spellings here while bare provider names keep meaning the browser chat', () => {
-    expect(scopedQuery('agents', 'agents')).toBe('')
+    expect(scopedQuery('agent', 'agents')).toBe('agent')
+    expect(scopedQuery('agents', 'agents')).toBe('agents')
     expect(scopedQuery('codex:probe', 'agents')).toBe('probe')
+    expect(scopedQuery('codex:probe', 'agents', undefined, { codex: 'agents' })).toBe('probe')
     expect(scopedQuery('claude-code:probe', 'agents')).toBe('probe')
     expect(scopedQuery('codex:probe', 'conversations')).toBeUndefined()
     // The near-collision that makes this group risky: `claude` and `gemini`
     // were already taken by External conversations and must stay taken.
-    expect(scopedQuery('claude:probe', 'conversations')).toBe('probe')
-    expect(scopedQuery('claude:probe', 'agents')).toBeUndefined()
-    expect(scopedQuery('gemini:probe', 'agents')).toBeUndefined()
+    expect(scopedQuery('claude:probe', 'conversations')).toBe('claude:probe')
+    expect(scopedQuery('claude:probe', 'agents')).toBe('claude:probe')
+    expect(scopedQuery('gemini:probe', 'agents')).toBe('gemini:probe')
     expect(scopedQuery('gemini-cli:probe', 'agents')).toBe('probe')
-    expect(scopedQuery('grok:probe', 'conversations')).toBe('probe')
-    expect(scopedQuery('grok:probe', 'agents')).toBeUndefined()
+    expect(scopedQuery('grok:probe', 'conversations')).toBe('grok:probe')
+    expect(scopedQuery('grok:probe', 'agents')).toBe('grok:probe')
     expect(scopedQuery('grokbuild:probe', 'agents')).toBe('probe')
-    expect(scopedQuery('kimi:probe', 'conversations')).toBe('probe')
-    expect(scopedQuery('kimi:probe', 'agents')).toBeUndefined()
+    expect(scopedQuery('kimi:probe', 'conversations')).toBe('kimi:probe')
+    expect(scopedQuery('kimi:probe', 'agents')).toBe('kimi:probe')
     expect(scopedQuery('kimi-cli:probe', 'agents')).toBe('probe')
-    expect(scopedQuery('本地对话', 'agents')).toBe('')
+    expect(scopedQuery('本地对话', 'agents')).toBe('本地对话')
+  })
+
+  it('filters a concrete agent alias to its configured kind', async () => {
+    const source = createLocalAgentSource(async () => [
+      agentRow({ id: 'claude-code:a', kind: 'claude-code', label: 'A' }),
+      agentRow({ id: 'codex:b', kind: 'codex', label: 'B' }),
+    ], undefined, options({ sourceAliasTargets: { work: 'codex' } }))
+    const rows = await source.candidates(session, request('work:query'))
+    expect(rows.map(row => row.name)).toEqual(['B'])
   })
 
   it('gives every format whose name is not already taken a prefix of its own', () => {
@@ -326,7 +368,7 @@ describe('local agent conversations', () => {
 
   it('stays out of a query scoped to another group and out of an open quoted file token', async () => {
     const source = createLocalAgentSource(async () => [agentRow()], undefined, options({ order: 25 }))
-    await expect(source.candidates(session, request('files:index'))).resolves.toEqual([])
+    await expect(source.candidates(session, request('command:index'))).resolves.toEqual([])
     await expect(source.candidates(session, request('path with', true))).resolves.toEqual([])
   })
 })
@@ -343,31 +385,24 @@ describe('cloud drive files', () => {
     expect(decodeReferenceUri(uri)).toEqual({ source: 'cloud-drive', id: 'openlist:eyJ2IjoxLCJwYXRoIjoiL25vdGVzL3F1YXJ0ZXJseS1ub3Rlcy5tZCJ9' })
   })
 
-  it('answers to drive words in both scripts without taking a prefix another group already owns', () => {
-    for (const prefix of ['drive', 'drives', 'cloud', 'netdisk', 'openlist']) {
+  it('answers only to the drive shortcut', () => {
+    for (const prefix of ['drive']) {
       expect(scopedQuery(`${prefix}:notes`, 'drives')).toBe('notes')
       expect(scopedQuery(`${prefix}:notes`, 'files')).toBeUndefined()
     }
-    // `scopedQuery`'s prefix pattern is ASCII, so the CJK spellings only ever
-    // reach the map through its bare-word branch — which is why they carry no
-    // colon here.
-    for (const word of ['网盘']) {
-      expect(scopedQuery(word, 'drives')).toBe('')
-      expect(scopedQuery(word, 'files')).toBeUndefined()
-    }
-    for (const prefix of ['baidu', 'bdpan', 'pds', 'aliyun']) {
-      // Removed aliases are an ordinary search string, not a drive scope.
-      expect(scopedQuery(`${prefix}:notes`, 'drives')).toBe(`${prefix}:notes`)
-    }
-    // `file`/`files` stayed with the workspace, which is why a drive needed
-    // words of its own.
-    expect(scopedQuery('files:notes', 'drives')).toBeUndefined()
+    expect(scopedQuery('drives:notes', 'drives')).toBe('drives:notes')
+    expect(scopedQuery('网盘', 'drives')).toBe('网盘')
   })
 
   it('routes a configured shortcut to its source', () => {
     expect(scopedQuery('f:notes', 'files', 'f')).toBe('notes')
     expect(scopedQuery('f:notes', 'drives', undefined, { f: 'files' })).toBeUndefined()
     expect(scopedQuery('f:notes', 'files', undefined, { f: 'files' })).toBe('notes')
+    expect(scopedQuery('shared:notes', 'files', undefined, { shared: ['files', 'drives'] })).toBe('notes')
+    expect(scopedQuery('shared:notes', 'drives', undefined, { shared: ['files', 'drives'] })).toBe('notes')
+    expect(scopedQuery('shared:notes', 'agents', undefined, { shared: ['files', 'drives'] })).toBeUndefined()
+    expect(scopedQuery('shared:notes', 'files', 'shared', { shared: ['files', 'drives'] })).toBe('notes')
+    expect(scopedQuery('shared:notes', 'drives', 'shared', { shared: ['files', 'drives'] })).toBe('notes')
   })
 
   it('names the holding drive and its path, and numbers files that share a name', async () => {
@@ -483,7 +518,7 @@ describe('cloud drive files', () => {
   it('stays out of a query scoped to another group and out of an open quoted file token', async () => {
     const search = vi.fn(async () => [driveRow()])
     const source = createCloudDriveSource(search, undefined, options({ order: 35 }))
-    await expect(source.candidates(session, request('agents:probe'))).resolves.toEqual([])
+    await expect(source.candidates(session, request('agent:probe'))).resolves.toEqual([])
     // A quoted token is a workspace path completion, and a remote file is not
     // on this filesystem — so this group asks the host nothing at all.
     await expect(source.candidates(session, request('path with', true))).resolves.toEqual([])
@@ -531,7 +566,7 @@ describe('cloud drive files', () => {
     const source = createPluginSource(load, undefined, options())
     expect(await source.candidates(session, request('path with', true))).toEqual([])
     expect(load).not.toHaveBeenCalled()
-    const [candidate] = await source.candidates(session, request('plugins:local'))
+    const [candidate] = await source.candidates(session, request('plugin:local'))
     expect(source.onPick(pick(candidate!))).toMatchObject({ insert: { source: PLUGIN_SOURCE, label: 'local', appearance: 'session' } })
   })
 })
@@ -562,3 +597,4 @@ function searchRow(overrides: Partial<SearchResult> = {}): SearchResult {
     syncedAt: '2026-08-17T00:00:00.000Z', matchedVia: 'title', ...overrides,
   }
 }
+

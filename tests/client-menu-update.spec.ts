@@ -4,6 +4,7 @@ import type {
   InputTriggerServiceContract, MenuState,
 } from '@deepseek-ai/dsh-client-ui-input-trigger/client'
 import { createPickerMenuActionGuard, createPickerMenuUpdater } from '../src/client/menu-update.ts'
+import { createFileSource, FILE_SOURCE } from '../src/client/source.ts'
 
 const hit = {
   trigger: '@' as const,
@@ -12,6 +13,33 @@ const hit = {
   position: 'inline' as const,
   span: { start: 0, end: 1, draftRev: 1 },
 }
+
+it('preserves directory drill and reference picks through the menu guard', async () => {
+  const session = { sessionId: 'session-1' as never }
+  const source = createFileSource(async (_id, query) => query === 'docs/'
+    ? [{ path: 'docs/readme.md', kind: 'file' }]
+    : [{ path: 'docs', kind: 'directory' }])
+  const request = { query: '', position: 'inline' as const, drilled: false, signal: new AbortController().signal }
+  const items = await source.candidates(session, request)
+  const menu = { getSnapshot: (): MenuState => ({ open: true, hit, generation: 1,
+    groups: [{ source: FILE_SOURCE, status: 'ready', items }], highlight: { source: FILE_SOURCE, index: 0 } }) }
+  const outcomes: unknown[] = []
+  const controller = { menu, pick: (_name: string, index: number, action: 'pick' | 'drill' = 'pick') => {
+    outcomes.push(source.onPick({ candidate: items[index]!, session, position: 'inline', via: 'menu', action, span: hit.span }))
+  } }
+  const guard = createPickerMenuActionGuard(
+    { sessionOf: () => controller } as unknown as InputTriggerServiceContract,
+    { scope: () => ({}) } as unknown as ISessions,
+  )
+  guard(session.sessionId, FILE_SOURCE)
+  expect(items[0]?.drill).toBe(true)
+  controller.pick(FILE_SOURCE, 0, 'drill')
+  expect(outcomes[0]).toEqual({ text: '@docs/', continue: true })
+  const children = await source.candidates(session, { ...request, query: 'docs/', drilled: true })
+  expect(children.map(row => row.name)).toEqual(['readme.md'])
+  controller.pick(FILE_SOURCE, 0)
+  expect(outcomes[1]).toMatchObject({ insert: { ref: '@docs/', appearance: 'folder' } })
+})
 
 function bench() {
   let state: MenuState = {

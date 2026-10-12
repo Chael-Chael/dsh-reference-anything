@@ -52,9 +52,9 @@ describe('settings source registration guard', () => {
   // and takes every other setting with it. Any @ group added from now on needs
   // the same `.default()` and belongs in this list.
   it.each([
-    ['agents', { enabled: true, order: 25, limit: 6, maxCandidates: 50, shortcut: '' }],
-    ['drives', { enabled: true, order: 35, limit: 6, maxCandidates: 50, shortcut: '' }],
-    ['plugins', { enabled: true, order: 40, limit: 6, maxCandidates: 50, shortcut: '' }],
+    ['agents', { enabled: true, order: 25, limit: 6, maxCandidates: 50, sort: 'updated', shortcut: '', aliases: ['agent', 'cc', 'claude-code', 'codex', 'cursor', 'gemini-cli', 'qoder', 'reasonix', 'openclaw', 'hermes', 'pi', 'grokbuild', 'grok-build', 'kimi-cli', 'kimi-code', 'opencode', 'mimocode', 'mimo', 'zcode'] }],
+    ['drives', { enabled: true, order: 35, limit: 6, maxCandidates: 50, sort: 'updated', shortcut: '', aliases: ['drive'] }],
+    ['plugins', { enabled: true, order: 40, limit: 6, maxCandidates: 50, sort: 'updated', shortcut: '', aliases: ['plugin'], onlyLive: false, showDeepSeek: true }],
   ] as const)('fills in the %s picker key when it arrived after the record was written', (key, expected) => {
     const saved = defaultPickerSettings() as Record<string, unknown>
     delete saved[key]
@@ -173,3 +173,4 @@ describe('browser extension install', () => {
     expect(called).toEqual(['stage:checking', 'stage:adapter', 'repair', 'refresh', 'stage:checking', 'refresh'])
   })
 })
+
