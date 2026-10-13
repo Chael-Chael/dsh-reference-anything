@@ -234,11 +234,13 @@ export function apply(ctx: ClientContext): void {
           : key === 'drives'
             ? Object.fromEntries((scope.getSnapshot().openListMounts ?? []).map(mount => [mount.name, [mount.name]]))
             : {}
+      const effectiveSourceAliases = Object.fromEntries(Object.entries({ ...defaultSourceAliases, ...sourceAliases })
+        .map(([target, aliases]) => [target, aliases.length > 0 ? aliases : defaultSourceAliases[target as keyof typeof defaultSourceAliases] ?? []]))
       const aliases = [
         ...(picker[key].shortcut
           ? picker[key].shortcut.split(',')
           : (picker[key].aliases ?? defaultPickerSettings()[key].aliases ?? [])),
-        ...Object.values({ ...defaultSourceAliases, ...sourceAliases }).flat(),
+        ...Object.values(effectiveSourceAliases).flat(),
       ]
       for (const alias of aliases) {
         const normalized = alias.trim().toLocaleLowerCase()
