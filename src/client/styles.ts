@@ -711,6 +711,17 @@ export function adoptMenuGroupTitleProjection(t: TranslateNS<typeof REFERENCE_AN
     projecting = true
     for (const menu of menus) {
       for (const heading of Array.from(menu.querySelectorAll<HTMLElement>('[role="presentation"][data-source]'))) {
+        if (heading.dataset.source === 'Local agent conversations') {
+          let node = heading.nextElementSibling
+          while (node !== null && !(node instanceof HTMLElement && node.dataset.source !== undefined)) {
+            for (const button of Array.from(node.querySelectorAll<HTMLElement>('[role="button"][aria-label="进入目录"], [role="button"][aria-label="Browse folder"]'))) {
+              button.setAttribute('aria-label', t('agent.actions'))
+              const label = button.parentElement?.querySelector<HTMLElement>('[class*="drillHintText"]')
+              if (label !== undefined && label !== null) label.textContent = t('agent.actions')
+            }
+            node = node.nextElementSibling
+          }
+        }
         const key = keys[heading.dataset.source ?? '']
         if (key !== undefined && heading.textContent !== t(key)) heading.textContent = t(key)
       }

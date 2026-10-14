@@ -11,9 +11,60 @@ import { tmpdir } from 'node:os'
 import { spawn } from 'node:child_process'
 import { validateDownloadDirectory } from './download-directory.ts'
 import { resolveLocalPlugins } from './local-plugins.ts'
+import { z } from 'zod'
+
+const importedItemSchema = z.object({
+  status: z.string(), sessionId: z.string().min(1).optional(),
+  error: z.string().optional(), reason: z.string().optional(), skipReason: z.string().optional(),
+})
+const chatImportResultSchema = z.discriminatedUnion('mode', [
+  importedItemSchema.extend({ mode: z.literal('single') }),
+  z.object({ mode: z.literal('batch'), results: z.array(importedItemSchema) }),
+])
+
+declare module '@deepseek-ai/cordis' {
+  interface Context {
+    chatImport: {
+      importPath(input: { format: string; path: string; sessionIds?: string[] }, signal?: AbortSignal): Promise<unknown>
+      resumeSummary(input: { format: 'claude' | 'codex'; path: string }, signal?: AbortSignal): Promise<unknown>
+    }
+  }
+}
 
 export class ReferenceAnythingRemote extends TypertRemoteService {
   constructor(ctx: Context) { super(ctx, 'referenceAnything') }
+
+  async agentResume(_agent: Agent, input: { id: string }, signal: AbortSignal): Promise<string> {
+    signal.throwIfAborted()
+    const importer = this.ctx.get('chatImport')
+    if (typeof importer?.resumeSummary !== 'function') throw new Error('Install and enable dsh-chat-import >= 0.26.0 on this DSH host, then restart it.')
+    const agents = this.ctx.get('referenceLocalAgents')
+    if (!agents) throw new Error('Local agent conversations are unavailable.')
+    const { format, path } = await agents.importTarget(input.id)
+    if (format !== 'claude' && format !== 'codex') throw new Error('Chat Import Resume supports Claude Code and Codex only.')
+    signal.throwIfAborted()
+    const result = await importer.resumeSummary({ format, path }, signal)
+    return z.object({ summary: z.string().min(1) }).parse(result).summary
+  }
+
+  async agentImport(_agent: Agent, input: { id: string }, signal: AbortSignal): Promise<string> {
+    signal.throwIfAborted()
+    const importer = this.ctx.get('chatImport')
+    if (typeof importer?.importPath !== 'function') throw new Error('Install and enable dsh-chat-import >= 0.26.0 on this DSH host, then restart it.')
+    const agents = this.ctx.get('referenceLocalAgents')
+    if (!agents) throw new Error('Local agent conversations are unavailable.')
+    const target = await agents.importTarget(input.id)
+    signal.throwIfAborted()
+    const result = await importer.importPath(target, signal)
+    const parsed = chatImportResultSchema.parse(result)
+    const items = parsed.mode === 'single' ? [parsed] : parsed.results
+    if (items.length !== 1) throw new Error('Expected exactly one imported conversation; no conversation was opened.')
+    const item = items[0]!
+    if (!['imported', 'replaced', 'already-imported', 'appended'].includes(item.status) || !item.sessionId) {
+      throw new Error(`Conversation was not imported (${item.status}): ${item.error ?? item.reason ?? item.skipReason ?? ''}`)
+    }
+    return item.sessionId
+  }
 
   /**
    * Discovery for the `@` menu's local-agent group.

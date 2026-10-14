@@ -100,6 +100,8 @@ export const REFERENCE_ANYTHING_REMOTE: TypertRemoteContribution = {
 }
 
 export interface ReferenceAnythingRemoteFace {
+  agentResume(agentId: string, input: { id: string }, signal?: AbortSignal): Promise<RemoteResult<string>>
+  agentImport(agentId: string, input: { id: string }, signal?: AbortSignal): Promise<RemoteResult<string>>
   agentSearch(agentId: string, input: { query: string; limit: number }, signal?: AbortSignal): Promise<RemoteResult<readonly AgentCandidate[]>>
   agentStats(signal?: AbortSignal): Promise<RemoteResult<readonly AgentStats[]>>
   driveSearch(input: { query: string; limit: number }, signal?: AbortSignal): Promise<RemoteResult<readonly DriveCandidate[]>>

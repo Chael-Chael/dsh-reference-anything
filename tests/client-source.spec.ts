@@ -356,6 +356,20 @@ describe('local agent conversations', () => {
     expect(source.codec?.clipboardText(outcome.insert.ref)).toBe(`@[Codex·Refactor the scan probe](${agentReferenceUri(row.id)})`)
   })
 
+  it('offers import-and-continue beside the read-only reference', async () => {
+    const imported = vi.fn(async () => undefined)
+    const source = createLocalAgentSource(async () => [agentRow()], undefined, options({ order: 25 }), imported)
+    const candidate = (await source.candidates(session, request()))[0]!
+    expect(candidate.drill).toBe(true)
+    const drilled = source.onPick({ ...pick(candidate), action: 'drill' })
+    expect(drilled).toEqual({ text: '@agents:', continue: true })
+    const actions = await source.candidates(session, { ...request('agents:'), drilled: true })
+    expect(actions.map(row => row.name)).toEqual(['agent.import', 'agent.back'])
+    const outcome = source.onPick(pick(actions[0]!))
+    expect(outcome).toBe('handled')
+    await vi.waitFor(() => expect(imported).toHaveBeenCalledWith(session.sessionId, agentRow().id))
+  })
+
   it('escapes a title that would otherwise break out of the mention it is written into', async () => {
     const row = agentRow({ label: 'why does ](evil) fail', provider: '' })
     const source = createLocalAgentSource(async () => [row], undefined, options({ order: 25 }))
@@ -597,4 +611,7 @@ function searchRow(overrides: Partial<SearchResult> = {}): SearchResult {
     syncedAt: '2026-08-17T00:00:00.000Z', matchedVia: 'title', ...overrides,
   }
 }
+
+
+
 

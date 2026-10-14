@@ -271,6 +271,16 @@ export class LocalAgentService extends Service implements ReferenceSource {
     return this.listIn(query, limit, cwd, signal)
   }
 
+  /** Resolve only a configured transcript, retaining the source session for database imports. */
+  async importTarget(id: string): Promise<{ format: string; path: string; sessionIds?: string[] }> {
+    const { descriptor, sessionId } = await this.locate(id)
+    return {
+      format: descriptor.kind === 'claude-code' ? 'claude' : descriptor.kind === 'gemini-cli' ? 'gemini' : descriptor.kind,
+      path: descriptor.path,
+      ...(sessionId === undefined ? {} : { sessionIds: [sessionId] }),
+    }
+  }
+
   private async listIn(query: string, limit: number, cwd: string, signal?: AbortSignal): Promise<ReferenceSummary[]> {
     signal?.throwIfAborted()
     const enabled = this.enabledAgentKinds()

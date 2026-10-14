@@ -2,7 +2,7 @@ import { formatFileMention } from '@deepseek-ai/dsh-file-reference/grammar'
 import type { FileReferenceCandidate } from '@deepseek-ai/dsh-file-reference/types'
 import type { SessionReferenceMentionCandidate } from '@deepseek-ai/dsh-session-reference/types'
 import type {
-  CandidateRequest, ClientSessionContext, InputTriggerCandidate, InputTriggerSource,
+  CandidateRequest, ClientSessionContext, InputTriggerCandidate, InputTriggerSource, TokenSpan,
 } from '@deepseek-ai/dsh-client-ui-input-trigger/client'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import type { TranslateNS } from '@deepseek-ai/dsh-client-locale/client'
@@ -175,6 +175,9 @@ type CandidateValue =
   | { kind: 'file'; fileKind: FileReferenceCandidate['kind']; label: string; mention: string }
   | { kind: 'session'; label: string; mention: string }
   | { kind: 'agent'; reference: AgentReference }
+  | { kind: 'agent-import'; reference: AgentReference }
+  | { kind: 'agent-resume'; reference: AgentReference }
+  | { kind: 'agent-back' }
   | { kind: 'drive'; reference: DriveReference }
   | { kind: 'drive-search' }
   | { kind: 'drive-folder'; path: string }
@@ -394,10 +397,28 @@ export function createLocalAgentSource(
   search: (sessionId: SessionId, query: string, signal: AbortSignal, limit: number) => Promise<readonly AgentCandidate[]>,
   t: T = fallback,
   options: PickerSourceOptions = { ...DEFAULT_SOURCE_OPTIONS, order: 25 },
+  importAndOpen?: (sessionId: SessionId, id: string) => Promise<void>,
+  resume?: (sessionId: SessionId, id: string, span: TokenSpan) => Promise<void>,
 ): RefreshablePickerSource {
+  const selections = new Map<SessionId, { reference: AgentReference; query: string; previousQuery: string; busy?: 'agent-import' | 'agent-resume'; error?: string }>()
+  const queries = new Map<SessionId, string>()
+  const pending = new Set<string>()
+  const actionRows = (selected: NonNullable<ReturnType<typeof selections.get>>): InputTriggerCandidate[] => [
+    { name: t(selected.busy === 'agent-import' ? 'agent.importing' : 'agent.import'), description: selected.error ?? `${selected.reference.label} · ${t('agent.importDetail')}`, value: encodeCandidate({ kind: 'agent-import', reference: selected.reference }) },
+    ...(resume && /^(claude-code|codex):/u.test(selected.reference.id) ? [{ name: t(selected.busy === 'agent-resume' ? 'agent.resuming' : 'agent.resume'), description: selected.error ?? t('agent.resumeDetail'), value: encodeCandidate({ kind: 'agent-resume', reference: selected.reference }) }] : []),
+    { name: t('agent.back'), value: encodeCandidate({ kind: 'agent-back' }) },
+  ]
+  const publish = (sessionId: SessionId, reopen: boolean): void => {
+    const selected = selections.get(sessionId)
+    if (selected) options.updateMenu?.({ sessionId, source: AGENT_SOURCE, query: selected.query, candidates: actionRows(selected), reopen })
+  }
   const source: InputTriggerSource = {
     trigger: '@', name: AGENT_SOURCE, order: options.order,
-    async candidates(session, { query, quoted, signal }) {
+    async candidates(session, { query, quoted, signal, drilled }) {
+      queries.set(session.sessionId, query)
+      const selected = selections.get(session.sessionId)
+      if (drilled && selected?.query === query) return actionRows(selected)
+      selections.delete(session.sessionId)
       // A quoted query is a path completion in progress; a transcript pointer
       // is not a path, so this group stays out of the way.
       if (quoted === true) return []
@@ -422,14 +443,42 @@ export function createLocalAgentSource(
           name: title,
           description: describeAgentRow(row, t),
           icon: candidateIcon(LOCAL_AGENT_ICON_MARKER[row.kind as keyof typeof LOCAL_AGENT_ICON_MARKER] ?? AGENT_ICON_MARKER),
+          ...(importAndOpen === undefined ? {} : { drill: true, hint: t('agent.actions') }),
           value: encodeCandidate({ kind: 'agent', reference: { id: row.id, label } }),
         }
       }))
     },
-    onPick({ candidate }) {
+    onPick({ candidate, session, action, span }) {
       const value = decodeCandidate(candidate.value)
+      if (value?.kind === 'agent-back') {
+        const selected = selections.get(session.sessionId)
+        selections.delete(session.sessionId)
+        return { text: `@${selected?.previousQuery ?? 'agents:'}`, continue: true }
+      }
+      if (value?.kind === 'agent-import' || value?.kind === 'agent-resume') {
+        const selected = selections.get(session.sessionId)
+        const run = value.kind === 'agent-import' ? importAndOpen : resume
+        if (!selected || selected.reference.id !== value.reference.id || !run || pending.has(value.reference.id)) return 'handled'
+        selected.busy = value.kind
+        selected.error = undefined
+        pending.add(value.reference.id)
+        publish(session.sessionId, true)
+        void Promise.resolve().then(() => value.kind === 'agent-import' ? importAndOpen!(session.sessionId, value.reference.id) : resume!(session.sessionId, value.reference.id, span)).catch(error => {
+          selected.error = error instanceof Error ? error.message : String(error)
+        }).finally(() => {
+          pending.delete(value.reference.id)
+          selected.busy = undefined
+          if (selections.get(session.sessionId) === selected) publish(session.sessionId, false)
+        })
+        return 'handled'
+      }
       if (value?.kind !== 'agent') return undefined
       const reference = value.reference
+      if (action === 'drill' && importAndOpen) {
+        const query = `${options.shortcut ?? 'agents'}:`
+        selections.set(session.sessionId, { reference, query, previousQuery: queries.get(session.sessionId) ?? '' })
+        return { text: `@${query}`, continue: true }
+      }
       return {
         insert: {
           source: AGENT_SOURCE,
@@ -774,6 +823,7 @@ function withDisplayPolicy(
     async candidates(session, request) {
       const previous = caches.get(session.sessionId)
       if (staleWhileRevalidate && previous !== undefined
+        && !request.drilled && previous.request.drilled === request.drilled
         && previous.request.query === request.query && previous.request.quoted === request.quoted
         && previous.request.position === request.position) {
         if (!refreshing.has(session.sessionId)) {
@@ -927,5 +977,6 @@ const fallback: T = (key, params) => {
   }
   return (dictionary[key] ?? key).replace(/\{(\w+)\}/gu, (match, name: string) => name in (params ?? {}) ? String(params![name]) : match)
 }
+
 
 

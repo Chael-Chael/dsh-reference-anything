@@ -6,6 +6,7 @@ import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
 import type {} from '@deepseek-ai/dsh-client-ui-workspace/client'
 import type { Context as ClientContext } from '@deepseek-ai/cordis'
 import type { ISessions } from '@deepseek-ai/dsh-api-session-controller/client'
+import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import { createSnapshotStore } from '@deepseek-ai/dsh-client-store'
 import type { InputTriggerServiceContract } from '@deepseek-ai/dsh-client-ui-input-trigger/client'
 import { ALL_LOCAL_AGENTS, ALL_PROVIDERS, defaultPickerSettings, samePickerSettings, pickerSourceSchema, type ChatProvider, type LocalAgent, type PickerSettings, type SettingsRecord } from '../wire.ts'
@@ -311,7 +312,19 @@ export function apply(ctx: ClientContext): void {
           unwrap(await remote.agentSearch(sessionId, { query, limit: 100 }, signal)),
           scope.getSnapshot().settings.enabledAgents,
         ).slice(0, limit)
-      }), t, optionsFor('agents'))))
+      }), t, optionsFor('agents'), async (sessionId, id) => {
+        if (!remote?.agentImport) throw new Error(t('agent.importUnavailable'))
+        const importedId = unwrap(await remote.agentImport(sessionId, { id }))
+        ctx.uiWorkspace.openSession(importedId as SessionId)
+      }, async (sessionId, id, span) => {
+        if (!remote?.agentResume) throw new Error(t('agent.importUnavailable'))
+        const summary = unwrap(await remote.agentResume(sessionId, { id }))
+        const sessions = ctx.sessions as unknown as ISessions
+        const actx = sessions.scope(sessionId)
+        if (!actx || actx.bail(actx, 'slash/input-insert-text', { text: summary, span }) !== true) {
+          throw new Error(t('agent.draftChanged'))
+        }
+      })))
     if (picker.drives.enabled) {
       const source = createCloudDriveSource((query, signal, limit) =>
         driveSearch.run(query, signal, async () => {
@@ -548,6 +561,11 @@ export function apply(ctx: ClientContext): void {
 }
 
 function message(error: unknown): string { return error instanceof Error ? error.message : String(error) }
+
+
+
+
+
 
 
 

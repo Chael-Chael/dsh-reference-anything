@@ -4,6 +4,16 @@ import { ReferenceAnythingRemote } from '../src/host.ts'
 import * as web from '../src/web.ts'
 
 describe('external conversation Remote availability', () => {
+  it('imports a local transcript through chatImport and returns its DSH session', async () => {
+    const ctx = new Context()
+    const importPath = vi.fn(async (input: unknown) => ({ mode: 'single', status: 'imported', sessionId: 'imported-session', ...(input as object) }))
+    ctx.provide('chatImport', { importPath })
+    ctx.provide('referenceLocalAgents', { importTarget: vi.fn(async () => ({ format: 'codex', path: 'C:/rollout.jsonl' })) })
+    const remote = new ReferenceAnythingRemote(ctx)
+    await expect(remote.agentImport({} as never, { id: 'codex:rollout.jsonl' }, new AbortController().signal)).resolves.toBe('imported-session')
+    expect(importPath).toHaveBeenCalledWith({ format: 'codex', path: 'C:/rollout.jsonl' }, expect.any(AbortSignal))
+  })
+
   it('starts and searches conversations when the optional cloud-drive source is absent', async () => {
     const ctx = new Context()
     const search = vi.fn(() => [])

@@ -143,8 +143,8 @@ function isPickerMenuAction(candidate: InputTriggerCandidate | undefined): boole
   if (candidate?.value === undefined) return false
   try {
     const value = JSON.parse(candidate.value) as { kind?: unknown; action?: unknown }
-    return value.kind === 'action'
-      && (value.action === 'expand' || value.action === 'collapse' || value.action === 'sync')
+    return value.kind === 'agent-import' || value.kind === 'agent-resume'
+      || value.kind === 'action' && (value.action === 'expand' || value.action === 'collapse' || value.action === 'sync')
   } catch {
     return false
   }
