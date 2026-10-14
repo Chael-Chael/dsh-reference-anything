@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { defaultPickerSettings, samePickerSettings, settingsRecordSchema } from '../src/wire.ts'
+import { defaultPickerSettings, pickerSettingsSchema, samePickerSettings, settingsRecordSchema } from '../src/wire.ts'
 import { OPENCLI_EXTENSION_STORE_URL, runSetupSequence, setupReady } from '../src/client/health.ts'
 import type { Health } from '../src/client/remote.ts'
 import { AGENT_KINDS } from '../src/sources/local-agent/registry.ts'
@@ -12,6 +12,15 @@ const healthy: Health = {
 }
 
 describe('settings source registration guard', () => {
+  it('fills missing agent action flags in existing settings and detects their changes', () => {
+    const picker = defaultPickerSettings()
+    const { showImport, showSummary, skipConfirmation, ...legacy } = picker.agents
+    expect([showImport, showSummary, skipConfirmation]).toEqual([true, false, false])
+    expect(pickerSettingsSchema.parse({ ...picker, agents: legacy })).toEqual(picker)
+    for (const key of ['showImport', 'showSummary', 'skipConfirmation'] as const) {
+      expect(samePickerSettings(picker, { ...picker, agents: { ...picker.agents, [key]: !picker.agents[key] } })).toBe(false)
+    }
+  })
   it('keeps the durable local-agent enum identical to the runtime registry', () => {
     expect(ALL_LOCAL_AGENTS).toEqual(AGENT_KINDS)
   })
@@ -52,7 +61,7 @@ describe('settings source registration guard', () => {
   // and takes every other setting with it. Any @ group added from now on needs
   // the same `.default()` and belongs in this list.
   it.each([
-    ['agents', { enabled: true, order: 25, limit: 6, maxCandidates: 50, sort: 'updated', shortcut: '', aliases: ['agent', 'cc', 'claude-code', 'codex', 'cursor', 'gemini-cli', 'qoder', 'reasonix', 'openclaw', 'hermes', 'pi', 'grokbuild', 'grok-build', 'kimi-cli', 'kimi-code', 'opencode', 'mimocode', 'mimo', 'zcode'] }],
+    ['agents', { showImport: true, showSummary: false, skipConfirmation: false, enabled: true, order: 25, limit: 6, maxCandidates: 50, sort: 'updated', shortcut: '', aliases: ['agent', 'cc', 'claude-code', 'codex', 'cursor', 'gemini-cli', 'qoder', 'reasonix', 'openclaw', 'hermes', 'pi', 'grokbuild', 'grok-build', 'kimi-cli', 'kimi-code', 'opencode', 'mimocode', 'mimo', 'zcode'] }],
     ['drives', { enabled: true, order: 35, limit: 6, maxCandidates: 50, sort: 'updated', shortcut: '', aliases: ['drive'] }],
     ['plugins', { enabled: true, order: 40, limit: 6, maxCandidates: 50, sort: 'updated', shortcut: '', aliases: ['plugin'], onlyLive: false, showDeepSeek: true }],
   ] as const)('fills in the %s picker key when it arrived after the record was written', (key, expected) => {

@@ -36,7 +36,7 @@ export const PROVIDER_ICON_MARKER = {
 
 export type PickerIconKind =
   | 'command' | 'skill' | 'session' | 'refresh' | 'agent' | 'drive' | 'goal' | 'plan' | 'feedback' | 'compact' | 'permission' | 'export' | 'paperclip' | 'model'
-  | 'plugin'
+  | 'plugin' | 'import' | 'summary' | 'undo-2'
   | 'folder' | 'file' | 'image' | 'text' | 'code' | 'data'
   | 'archive' | 'spreadsheet' | 'audio' | 'video' | 'presentation' | 'font'
 
@@ -48,6 +48,7 @@ export const PICKER_ICON_MARKER = {
   refresh: '\uE115', agent: '\uE116', drive: '\uE117',
   goal: '\uE125', plan: '\uE126', feedback: '\uE127', compact: '\uE128', permission: '\uE129', export: '\uE12A', paperclip: '\uE12C', model: '\uE12D',
   plugin: '\uE12B',
+  import: '\uE12E', summary: '\uE12F', 'undo-2': '\uE130',
 } as unknown as Readonly<Record<PickerIconKind, InputTriggerCandidateIcon>>
 export const SESSION_ICON_MARKER = PICKER_ICON_MARKER.session
 export const SKILL_ICON_MARKER = PICKER_ICON_MARKER.skill
@@ -72,6 +73,23 @@ type PickerIconNode = Readonly<{
  * (MIT-licensed): packages/client/ui-primitives/src/icons/index.tsx.
  */
 export const PICKER_ICON_NODES = {
+  // Lucide Import, Summary, Undo2 (ISC); see NOTICE.md.
+  import: [
+    { tag: 'path', attrs: { d: 'M12 3v12' } },
+    { tag: 'path', attrs: { d: 'm8 11 4 4 4-4' } },
+    { tag: 'path', attrs: { d: 'M8 5H4a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-4' } },
+  ],
+  summary: [
+    { tag: 'path', attrs: { d: 'M15 4H7' } },
+    { tag: 'path', attrs: { d: 'm18 16 3 3-3 3' } },
+    { tag: 'path', attrs: { d: 'M3 4v13a2 2 0 0 0 2 2h16' } },
+    { tag: 'path', attrs: { d: 'M7 14h7' } },
+    { tag: 'path', attrs: { d: 'M7 9h12' } },
+  ],
+  'undo-2': [
+    { tag: 'path', attrs: { d: 'M9 14 4 9l5-5' } },
+    { tag: 'path', attrs: { d: 'M4 9h10.5a5.5 5.5 0 0 1 5.5 5.5a5.5 5.5 0 0 1-5.5 5.5H11' } },
+  ],
   // Command
   command: [{ tag: 'path', attrs: { d: 'M15 6v12a3 3 0 1 0 3-3H6a3 3 0 1 0 3 3V6a3 3 0 1 0-3 3h12a3 3 0 1 0-3-3' } }],
   // ScrollText

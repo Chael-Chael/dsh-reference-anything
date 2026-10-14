@@ -498,6 +498,25 @@ describe('manage synced conversations', () => {
 describe('general settings editing', () => {
   const noop = async () => {}
 
+  it.each([
+    ['showImport', 'Quick conversation import', true],
+    ['showSummary', 'Generate handoff summary', false],
+    ['skipConfirmation', 'Confirm conversation import', false],
+  ] as const)('saves and restores the %s local-agent action switch', async (key, label, initialValue) => {
+    const saved: SettingsRecord[] = []
+    const initial = { ...settings, picker: defaultPickerSettings() }
+    const actions = { save: async (value: SettingsRecord) => { saved.push(value) } }
+    const el = renderSettings({ settings: initial }, actions)
+    const toggle = () => el.querySelector<HTMLButtonElement>(`.dsh_ref_agents_section button[role="switch"][aria-label="${label}"]`)!
+    const checked = key === 'skipConfirmation' ? !initialValue : initialValue
+    expect(toggle().closest('.dsh_ref_agent_actions')?.textContent).toContain('dsh-chat-import')
+    expect(toggle().getAttribute('aria-checked')).toBe(String(checked))
+    await act(async () => { toggle().click() })
+    expect(saved[0]?.picker).toEqual({ ...initial.picker, agents: { ...initial.picker.agents, [key]: !initialValue } })
+    rerenderSettings({ settings: saved[0]! }, actions)
+    expect(toggle().getAttribute('aria-checked')).toBe(String(!checked))
+  })
+
   it('saves the local-plugin switch off and on without changing other sources', async () => {
     const saved: SettingsRecord[] = []
     const initial = { ...settings, picker: defaultPickerSettings() }

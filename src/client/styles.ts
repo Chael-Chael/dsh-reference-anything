@@ -1,11 +1,11 @@
-import type { ChatProvider, LocalAgent } from '../wire.ts'
+import { defaultPickerSettings, type AgentActionsSettings, type ChatProvider, type LocalAgent } from '../wire.ts'
 import { Children, isValidElement, type ReactElement, type ReactNode } from 'react'
 import {
   LOCAL_AGENT_ICON_MARKER, PICKER_ICON_MARKER, PICKER_ICON_NODES, PICKER_ICON_STROKE_WIDTH, PICKER_OFFICIAL_COMMAND_KINDS, PICKER_OFFICIAL_COMMAND_STROKE_WIDTH, PROVIDER_ICON_MARKER, PROVIDER_ICON_PATH, agentLogoElement,
   type PickerIconKind, PICKER_ICON_VIEWBOX,
 } from './provider-icons.tsx'
 import type { TranslateNS } from '@deepseek-ai/dsh-client-locale/client'
-import type { REFERENCE_ANYTHING_NS } from './locale.ts'
+import { en, zh, type REFERENCE_ANYTHING_NS } from './locale.ts'
 import { driveMenuIconKind, workspacePathIconKind } from './source.ts'
 
 const css = `
@@ -386,6 +386,10 @@ body[data-ds-dark-theme] .dsh_ref_settings input,body[data-ds-dark-theme] .dsh_r
 .dsh_ref_settings .dsh_ref_viability{margin-top:0;padding:16px 16px}
 .dsh_ref_settings .dsh_ref_sync_settings{padding:20px 16px}
 .dsh_ref_settings .dsh_ref_settings_card .dsh_ref_section_head{padding:0}
+.dsh_ref_settings .dsh_ref_agent_actions{padding:16px 20px}
+.dsh_ref_settings .dsh_ref_agent_actions>.dsh_ref_section_head{padding-bottom:16px}
+.dsh_ref_agent_action_switches{display:grid;grid-template-columns:minmax(0,1fr);gap:16px;padding-top:16px}
+.dsh_ref_agent_action_switches>.dsh_ref_toggle:last-child{border-top:1px solid var(--dsw-alias-border-l2);padding-top:16px}
 .dsh_ref_settings .dsh_ref_chat{gap:12px}
 .dsh_ref_settings .dsh_ref_chat_divider{display:none!important}
 .dsh_ref_settings .dsh_ref_provider_grid{margin:0!important}
@@ -681,7 +685,7 @@ export function adoptMenuViewportTracking(): () => void {
  * Source names double as stable codec identifiers. Translate only headings
  * rendered inside the native @ menu.
  */
-export function adoptMenuGroupTitleProjection(t: TranslateNS<typeof REFERENCE_ANYTHING_NS>): () => void {
+export function adoptMenuGroupTitleProjection(t: TranslateNS<typeof REFERENCE_ANYTHING_NS>, agentActions: () => AgentActionsSettings = () => defaultPickerSettings().agents): () => void {
   const keys: Readonly<Record<string, 'source.conversations' | 'source.files' | 'source.sessions' | 'source.agents' | 'source.drives' | 'source.commands' | 'source.skills' | 'source.plugins'>> = {
     'External conversations': 'source.conversations',
     'Files and folders': 'source.files',
@@ -714,10 +718,14 @@ export function adoptMenuGroupTitleProjection(t: TranslateNS<typeof REFERENCE_AN
         if (heading.dataset.source === 'Local agent conversations') {
           let node = heading.nextElementSibling
           while (node !== null && !(node instanceof HTMLElement && node.dataset.source !== undefined)) {
-            for (const button of Array.from(node.querySelectorAll<HTMLElement>('[role="button"][aria-label="进入目录"], [role="button"][aria-label="Browse folder"]'))) {
-              button.setAttribute('aria-label', t('agent.actions'))
+            for (const button of Array.from(node.querySelectorAll<HTMLElement>('[role="button"][aria-label="进入目录"], [role="button"][aria-label="Browse folder"], [data-dsh-ref-agent-drill]'))) {
+              const settings = agentActions()
+              const summary = settings.showSummary && Array.from(node.querySelectorAll('span')).some(span => /^(Claude Code|Codex) ·/u.test(span.textContent ?? ''))
+              const hint = t(settings.showImport && summary ? 'agent.actions' : settings.showImport ? 'agent.importHint' : 'settings.agentSummary')
+              button.dataset.dshRefAgentDrill = ''
+              if (button.getAttribute('aria-label') !== hint) button.setAttribute('aria-label', hint)
               const label = button.parentElement?.querySelector<HTMLElement>('[class*="drillHintText"]')
-              if (label !== undefined && label !== null) label.textContent = t('agent.actions')
+              if (label !== undefined && label !== null && label.textContent !== hint) label.textContent = hint
             }
             node = node.nextElementSibling
           }
@@ -735,6 +743,7 @@ export function adoptMenuGroupTitleProjection(t: TranslateNS<typeof REFERENCE_AN
   project(document)
   const observer = new MutationObserver(records => {
     for (const record of records) {
+      if (record.type === 'childList' && record.target instanceof Element) project(record.target)
       if (record.type === 'characterData' && record.target.parentElement !== null) project(record.target.parentElement)
       for (const node of Array.from(record.addedNodes)) if (node instanceof Element) project(node)
     }
@@ -1018,6 +1027,12 @@ function ensureAnchorScrollRange(viewport: HTMLElement, desiredScrollTop: number
 
 /** Replace @ menu markers and paint matching Composer chips in the same glyph set. */
 export function adoptReferenceIconProjection(): () => void {
+  const agentActions = new Map<string, PickerIconKind>([zh, en].flatMap(locale => [
+    [locale['agent.import'], 'import'], [locale['agent.importing'], 'import'],
+    [locale['agent.confirmImport'], 'import'], [locale['agent.confirmSummary'], 'summary'],
+    [locale['agent.resume'], 'summary'], [locale['agent.resuming'], 'summary'],
+    [locale['agent.back'], 'undo-2'],
+  ] as [string, PickerIconKind][]))
   const providers = Object.keys(PROVIDER_ICON_MARKER) as ChatProvider[]
   const pickerKinds = Object.keys(PICKER_ICON_MARKER) as PickerIconKind[]
   const agentKinds = Object.keys(LOCAL_AGENT_ICON_MARKER) as LocalAgent[]
@@ -1070,7 +1085,10 @@ export function adoptReferenceIconProjection(): () => void {
     if (source === 'All local plugins') return icon.dataset.dshRefMenuIcon === 'plugin' ? undefined : paintPicker(icon, 'plugin')
     if (source === 'Local agent conversations') {
       const agent = (Object.keys(LOCAL_AGENT_CHIP_LABEL) as LocalAgent[]).find(item => description.startsWith(`${LOCAL_AGENT_CHIP_LABEL[item]} ·`))
-      if (agent === undefined) return icon.dataset.dshRefMenuIcon === 'agent' ? undefined : paintPicker(icon, 'agent')
+      if (agent === undefined) {
+        const kind = agentActions.get(name) ?? 'agent'
+        return icon.dataset.dshRefMenuIcon === kind ? undefined : paintPicker(icon, kind)
+      }
       return icon.dataset.dshRefMenuIcon === agent ? undefined : paintAgent(icon, agent)
     }
     if (source === 'External conversations') {

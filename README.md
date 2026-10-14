@@ -44,10 +44,10 @@ Use one `@` menu to reference:
 - 🧩 DSH commands and Skills
 - 📁 Workspace files and folders
 - 💬 DSH session history
-- 🖥️ **NEW: Transcripts left on disk by other local agent CLIs (Claude Code, Codex, Cursor, and eleven more)**
-- ✨ **NEW: Historical conversations from online chatbots like ChatGPT, Claude, Gemini, DeepSeek, Grok, and Kimi**
-- ☁️ **NEW: Files from cloud drives connected through OpenList**
-- 🧩 **NEW: Installed and configured local DSH plugins, with lifecycle status and directory references**
+- 🖥️ **Added by this plugin — highlight: Transcripts saved locally by 14 agent CLIs, including Claude Code, Codex, and Cursor, with quick import into DSH's native session format**
+- ✨ **Added by this plugin — highlight: Historical conversations from web chatbots including ChatGPT, Claude, Gemini, DeepSeek, Grok, and Kimi**
+- ☁️ **Added by this plugin: Files from cloud drives connected through OpenList**
+- 🧩 **Added by this plugin: Installed and configured local DSH plugins, without repeatedly hunting through directories**
 
 Beyond extending what `@` can reference, Reference Anything also enhances the `@` menu itself:
 
@@ -90,7 +90,7 @@ Type `@`, search across enabled sources, and insert the selected reference into 
 ## 🧭 Roadmap
 
 - [x] Support referencing historical conversations from other local agents
-- [ ] Support continuing referenced local-agent sessions
+- [x] Support continuing referenced local-agent sessions (Continue Session)
 - [x] Reference cloud-drive files through OpenList
 - [ ] Manage cloud-drive files inside the plugin (in progress; current access is read-only)
 - [ ] Support more keyword matching rules, including blacklists and whitelists, especially for file search
@@ -105,21 +105,35 @@ Type `@`, search across enabled sources, and insert the selected reference into 
 
 ## 📦 Installation
 
-Prerequisites:
+The local version is **v0.4.4**, with a declared minimum DSH SDK version of **`0.2.0-rc.2`**.
 
-- `dsh` is installed and running; automatic OpenCLI installation requires the `npm` bundled with Node.js.
-- The target platforms are already logged in under the selected Chrome Profile.
+### Official desktop app
 
-Install the stable line for the current stable DSH SDK:
+Download the official desktop app from the [DeepSeek Harness website](https://www.deepseek.com/en/harness/), open **Plugins → Add plugin**, enter `dsh-reference-anything`, and follow the prompts to install and enable it. Restart DSH if asked, then open **Settings → Reference Anything**.
+
+Desktop uses a separate plugin profile; plugins installed in the Web profile are not automatically enabled in Desktop. See the [official desktop documentation](https://github.com/deepseek-ai/deepseek-harness/blob/master/apps/desktop/README.md).
+
+### DSH Market
+
+Open [Reference Anything on DSH Market](https://dshmarket.com/p/Chael-Chael/dsh-reference-anything/), or search for `dsh-reference-anything` in the in-app market. If the market is not installed, use **Add plugin** with `dshmarket` in Desktop; for Web, run:
+
+```powershell
+dsh plugin --profile web add dshmarket
+```
+
+### Web CLI
 
 ```powershell
 dsh plugin --profile web add dsh-reference-anything
 ```
 
-> [!NOTE]
-> To restore DSH's original `@` menu appearance, simply disable this plugin.
+The installed version depends on the selected channel; this README describes the local v0.4.4 source.
 
-After installing the DSH plugin, open `Settings → Reference Anything → Availability check` in DSH Web (restart DSH first if this settings entry is not yet visible), then click **One-click setup**. It discovers OpenCLI; installs or upgrades it globally through npm when it is missing or older than `1.8.6`; installs the bundled adapters for all six platforms; starts or refreshes Browser Bridge; and opens the OpenCLI Browser Bridge page in the [Chrome Web Store](https://chromewebstore.google.com/detail/opencli/ildkmabpimmkaediidaifkhjpohdnifk). Confirm the extension installation, then return and click **Recheck setup**. Any remaining failed check displays its own recovery action.
+### Optional: Connect web AI chats
+
+Only web chats need this step. Local sources work without it. Sign into the desired platforms in your browser; one-click OpenCLI setup needs npm.
+
+After installing the DSH plugin, open `Settings → Reference Anything → Availability check` in DSH (restart DSH first if this settings entry is not yet visible), then click **One-click setup**. It discovers OpenCLI; installs or upgrades it globally through npm when it is missing or older than `1.8.6`; installs the bundled adapters for all six platforms; starts or refreshes Browser Bridge; and opens the OpenCLI Browser Bridge page in the [Chrome Web Store](https://chromewebstore.google.com/detail/opencli/ildkmabpimmkaediidaifkhjpohdnifk). Confirm the extension installation, then return and click **Recheck setup**. Any remaining failed check displays its own recovery action.
 
 You can also install OpenCLI and the conversation adapter manually, then start Browser Bridge:
 
@@ -135,16 +149,32 @@ Replace `C:/path/to/dsh-reference-anything` with the repository location. Browse
 
 Reference Anything registers eight sources in the native DSH `@` menu rather than introducing a separate search interface. Settings let you choose which groups appear, their order, their collapsed row count, their hard candidate cap, and whether groups use plugin-owned collapse actions or the native scrolling list. A separate one-click control switches the visible picker back to DSH's official file/session list without stopping the plugin, synchronization service, local data, or model-facing tools; the same control restores the Reference Anything picker at any time.
 
-1. Open `Settings → Reference Anything` in DSH Web.
-2. Under **Availability check**, confirm that OpenCLI, Browser Bridge, the browser extension, and the conversation adapter are ready.
-3. Under **Web AI conversation sync settings**, choose a browser profile, storage mode, sync mode, and history range, then start syncing.
-4. Type `@` in the input box and choose from the `Commands`, `Skills`, `Files and folders`, `DSH sessions`, `Local agent conversations`, `External conversations`, `Cloud drive files`, or `All local plugins` groups.
-5. Type a keyword to filter candidates, for example `@cache-design`.
+1. Type `@` to browse sources, or enter a keyword such as `@cache-design`.
+2. Click a result, or select it with the arrow keys and press `Enter`. For workspace folders, `Tab` opens the folder and `Enter` inserts a reference.
+3. Add your request and send it: “Use this Codex conversation and project folder to check whether the earlier plan has been implemented.”
+
+For web chats, complete the connection steps above, then choose platforms, browser profile, storage mode, and history range under **Settings → Reference Anything → Web AI conversation sync settings** and start syncing. For cloud files, connect OpenList and add a mount in Settings.
 
 The default **Read bodies on demand** mode stores only the title index locally and uses the browser when an agent needs the conversation. Choose **Store full bodies locally** for offline reading and full-text search. The plugin checks for new versions when it loads; release notes are available in Settings, and installed updates take effect after restarting DSH.
 
-> [!WARNING]
-> To protect your account and conversation data, external conversations are imported and synchronized through OpenCLI using your existing logged-in browser session. A browser window may temporarily open during use or synchronization. In most cases, leave it open in the background: the plugin will reuse it without interrupting your work. The window may also display OpenCLI debugging information. This is expected—please do not be alarmed or close it manually; wait for the operation to finish. Due to current OpenCLI limitations, we temporarily use slower serial synchronization to reduce how often browser windows open. Once the upstream OpenCLI repository is updated, we will switch to faster parallel synchronization.
+> [!NOTE]
+> OpenCLI may open or reuse browser windows while syncing web chats or reading bodies. Keep them available until the operation finishes. Sync speed depends on the platform, history size, and browser connection.
+
+### Shortcut examples
+
+These examples use the current defaults. After changing shortcuts, use the values shown in Settings.
+
+| Input | What it finds |
+| --- | --- |
+| `@file:README` | Workspace files and folders |
+| `@session:` | DSH session history |
+| `@agent:` / `@codex:` | Local agent history / Codex only |
+| `@chat:` / `@chatgpt:cache` | Web chats / matching ChatGPT chats |
+| `@drive:` | Connected cloud drives |
+| `@plugin:` | Local DSH plugins |
+| `@command:` / `@skill:` | Commands / Skills |
+
+Under **General**, set shortcuts for groups, web providers, local agents, and cloud mounts. Separate multiple shortcuts with commas: set the file group to `file,f`, then use `@f:README`. A shortcut can target multiple sources. Full-width colons (`：`) are also supported.
 
 ### 🧩 One `@` menu, multiple sources
 
@@ -152,30 +182,30 @@ The `@` menu contains eight groups: `Commands`, `Skills`, `Files and folders`, `
 
 #### ⌨️ @Commands — DSH native commands
 
-To browse commands, use `@commands`; selecting one hands `/command` back to DSH's native slash pipeline.
+To browse commands, use `@command:`; selecting one hands `/command` back to DSH's native slash pipeline.
 
 <p align="center"><img src="./images/at-commands.png" alt="Browse DSH commands from the @ menu" width="800" /></p>
 
 #### 🛠️ @Skills — DSH skill library
 
-To browse skills, use `@skills:`; selecting one inserts `/skill` for DSH's native skill handling.
+To browse skills, use `@skill:`; selecting one inserts `/skill` for DSH's native skill handling.
 
 <p align="center"><img src="./images/at-skills.png" alt="Browse DSH skills from the @ menu" width="800" /></p>
 
 #### 📁 @Files and folders — workspace files and directories
 
-Type `@files:` in the input box to browse files and folders through DSH's official file-reference Remote.
+Type `@file:` in the input box to browse files and folders through DSH's official file-reference Remote.
 
 <p align="center"><img src="./images/at-files.png" alt="Browse workspace files and folders from the @ menu" width="800" /></p>
 
 **Features:**
+
 - Uses the official `@path` / `@"path with spaces"` grammar and canonical file candidate service
-- Files become native atomic references; selecting a directory keeps the path editable and continues completion
-- The plugin no longer creates or parses a custom `dsh-file:` scheme
+- Files and folders become native references; press `Tab` on a folder to browse inside it, or `Enter` to insert it
 
 #### 💬 @DSH sessions — DSH session history
 
-Type `@sessions:` to browse DSH sessions through the official session-reference Remote.
+Type `@session:` to browse DSH sessions through the official session-reference Remote.
 
 <p align="center"><img src="./images/at-sessions.png" alt="Browse DSH sessions from the @ menu" width="800" /></p>
 
@@ -183,7 +213,7 @@ Selected sessions use DSH's canonical `dsh-session:` mention and native session 
 
 #### 🖥️ @Local agent conversations — transcripts from local agent CLIs
 
-Type `@agents:` to search and reference conversations saved by other local agent tools.
+Type `@agent:` to search and reference conversations saved by other local agent tools.
 
 <p align="center"><img src="./images/at-local-agents.png" alt="Browse other local agents' transcripts from the @ menu" width="800" /></p>
 
@@ -197,9 +227,11 @@ Type `@agents:` to search and reference conversations saved by other local agent
 - Reads conversation content on demand; tool names are concise by default, with full details available when needed
 - Supports agent-specific prefixes such as `@codex:`, `@claude-code:`, and `@gemini-cli:`
 
+Local history is read-only: it is neither imported into a new DSH session nor resumed through Continue Session. Claude Code and Codex adapters have been checked against real transcripts; other formats are primarily fixture-tested and may vary by tool version. Database reads for opencode, mimocode, and zcode require `node:sqlite` in the DSH host runtime.
+
 #### 🧩 @Local plugins — installed and configured plugins
 
-Use `@plugin:`, `@plugins:`, `@插件:`, or `@本地插件:` to find plugins. Under **Settings → Reference Anything → General**, the **All local plugins** switch enables or disables this group immediately; the choice is saved. It is enabled by default, with six collapsed rows and a candidate cap of 50.
+Use `@plugin:` to find plugins. Settings can also show only running plugins or hide official DeepSeek plugins. Under **Settings → Reference Anything → General**, the **All local plugins** switch enables or disables this group immediately; the choice is saved. It is enabled by default, with six collapsed rows and a candidate cap of 50.
 
 The list uses the active DSH loader's composed entries and lifecycle state, supplemented by declared profile bundles and installed packages with DSH bundle/client metadata. Ordinary dependencies are excluded. Running, disabled, and not-running states describe host entries; packages without a host entry are shown as not running. Selecting a plugin inserts its name and, when available, a native reference to its real local directory. File access still uses DSH's existing tools and permissions.
 
@@ -209,15 +241,22 @@ Supports historical conversations from ChatGPT, Claude, Gemini, DeepSeek, Grok, 
 
 <p align="center"><img src="./images/at-external-conversations.png" alt="Browse external conversations from the @ menu" width="800" /></p>
 
+**Store full bodies locally** enables offline reading of synchronized text; it does not mean attachments are saved offline. Automatic and startup sync are off by default and can be enabled in Settings.
+
 **Platform filtering:**
+
 - Use `@chatgpt:cache` or `@claude:refactor` to filter a specific platform
 - Short aliases are also accepted, such as `@gpt:` and `@ds:`
 - Entering `@claude` alone lists recent conversations for that platform
 
 **Search capabilities:**
+
 - **Title match:** fuzzy search on conversation titles
+
 - **Content search:** available only in **Store full bodies locally** mode; if title matches are insufficient, synchronized bodies are searched and matching excerpts are shown in the candidate list
+
 - **Provider and account isolation:** history is maintained separately by Provider and account scope
+
 - `@` search uses the account scope cached by the latest sync and never probes the browser; after a sync observes an account switch, it exposes only that account while older rows remain available in conversation management for cleanup
 
 **Reference display:** after selection, the draft shows a native removable DSH reference with the Provider logo. Its stable serialized form is:
@@ -229,7 +268,7 @@ Opening the source URL happens only in the UI; the URL is never injected into mo
 
 #### ☁️ @Cloud drive files — files connected through OpenList
 
-Type `@drive:`, `@cloud:`, `@netdisk:`, or `@网盘` to browse folders and reference files from cloud drives connected through OpenList.
+Type `@drive:` to browse folders and reference files from cloud drives connected through OpenList.
 
 Common providers include OneDrive, Aliyun Drive, Baidu Netdisk, Quark, 115, 123, Dropbox, Google Drive/Photos, and Yandex. Other providers available in OpenList can be configured from the same settings page.
 
@@ -246,7 +285,8 @@ Common providers include OneDrive, Aliyun Drive, Baidu Netdisk, Quark, 115, 123,
 ---
 
 **General notes:**
-- Use `:` or `/` as the separator instead of a space: the `@` candidate token ends at a space, so `@chatgpt keyword` closes the menu as soon as you press the space. For multi-word searches, write `@cachedesign` or `@cache-design`.
+
+- Use `:` after a group shortcut instead of a space: the `@` candidate token ends at a space, so `@chatgpt keyword` closes the menu as soon as you press the space. For multi-word searches, write `@cachedesign` or `@cache-design`.
 - Without a type prefix, all groups are searched at once.
 - Commands and Skills are handed back to DSH's native slash-command handling after selection; the native `/` panel remains available.
 - Switching the picker back to DSH's official file/session list hides every plugin-owned group, including `Local agent conversations` and `Cloud drive files`. The host source stays registered, so an already-inserted reference still expands and `reference_read` still works; only the menu entry is gone until you switch back.
@@ -254,16 +294,14 @@ Common providers include OneDrive, Aliyun Drive, Baidu Netdisk, Quark, 115, 123,
 ## 🔄 How External Conversation References Work
 
 ```text
-DSH Web @Conversations
+DSH Web / Desktop @chat:
         ↕ Host Remote
-DSH Host + reference_anything local mirror
+DSH Host + reference_anything index / optional body mirror
         ↕ execFile(opencli, argv)
 opencli-plugin-dsh-chat-history
         ↕ OpenCLI daemon + official Browser Bridge
 ChatGPT / Claude / Gemini / DeepSeek / Grok / Kimi
 ```
-
-This does not include the legacy standalone DeepSeek CDP / `--remote-debugging-port` collector. All six platforms use the OpenCLI Provider adapter path, avoiding duplicate browser-reading implementations.
 
 ### 🤖 Model-facing Protocol
 

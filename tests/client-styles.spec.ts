@@ -5,6 +5,7 @@ import {
   mutateActiveTriggerMenu, refreshActiveTriggerMenu,
 } from '../src/client/styles.ts'
 import { LOCAL_AGENT_ICON_MARKER, PICKER_ICON_MARKER, PROVIDER_ICON_PATH } from '../src/client/provider-icons.tsx'
+import { en, zh } from '../src/client/locale.ts'
 
 afterEach(() => {
   document.body.replaceChildren()
@@ -12,6 +13,46 @@ afterEach(() => {
 })
 
 describe('reference DOM customization', () => {
+  it.each([zh, en])('updates the Desktop Tab hint from current agent action settings', async locale => {
+    document.body.innerHTML = `<div data-composer-card><div role="listbox">
+      <div role="presentation" data-source="Local agent conversations"></div>
+      <div role="option"><span>Example</span><span>Codex · 2026/10/14</span><div><span class="drillHintText">进入目录</span><span role="button" aria-label="进入目录">Tab</span></div></div>
+    </div></div>`
+    const settings = { showImport: true, showSummary: false, skipConfirmation: false }
+    const dispose = adoptMenuGroupTitleProjection(((key: keyof typeof zh) => locale[key]) as Parameters<typeof adoptMenuGroupTitleProjection>[0], () => settings)
+    try {
+      const hint = document.querySelector('.drillHintText')!
+      expect(hint.textContent).toBe(locale['agent.importHint'])
+      settings.showImport = false
+      settings.showSummary = true
+      hint.textContent = '进入目录'
+      await new Promise(resolve => setTimeout(resolve, 0))
+      expect(hint.textContent).toBe(locale['settings.agentSummary'])
+      settings.showImport = true
+      hint.textContent = '进入目录'
+      await new Promise(resolve => setTimeout(resolve, 0))
+      expect(hint.textContent).toBe(locale['agent.actions'])
+      expect(document.querySelector('[role="button"]')?.getAttribute('aria-label')).toBe(locale['agent.actions'])
+    } finally { dispose() }
+  })
+  it.each([zh, en])('keeps agent action icons through alpha row refreshes', async (locale) => {
+    document.body.innerHTML = `<div data-composer-card><div role="listbox">
+      <div role="presentation" data-source="Local agent conversations"></div>
+      <button role="option"><span></span><span>${locale['agent.import']}</span></button>
+      <button role="option"><span>${PICKER_ICON_MARKER.summary}</span><span>${locale['agent.resume']}</span></button>
+      <button role="option"><span></span><span>${locale['agent.back']}</span></button>
+    </div></div>`
+    const dispose = adoptReferenceIconProjection()
+    try {
+      const rows = Array.from(document.querySelectorAll('[role="option"]'))
+      rows[0]!.children[1]!.textContent = locale['agent.importing']
+      rows[1]!.children[1]!.textContent = locale['agent.resuming']
+      await new Promise(resolve => setTimeout(resolve, 0))
+      expect(rows.map(row => row.firstElementChild?.getAttribute('data-dsh-ref-menu-icon')))
+        .toEqual(['import', 'summary', 'undo-2'])
+      expect(rows.every(row => row.querySelector('svg path') !== null)).toBe(true)
+    } finally { dispose() }
+  })
   it('projects the logo only onto its settings entry and restores it on disposal', async () => {
     document.body.innerHTML = `<div data-shortcut-modal="settings"><nav>
       <button><svg></svg><span>Reference Anything</span></button>

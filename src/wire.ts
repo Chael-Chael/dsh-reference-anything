@@ -32,6 +32,13 @@ const pickerSourceSettingsSchema = z.object({
 })
 export type PickerSourceSettings = z.infer<typeof pickerSourceSettingsSchema>
 
+export const agentActionsSchema = z.object({
+  showImport: z.boolean().default(true),
+  showSummary: z.boolean().default(false),
+  skipConfirmation: z.boolean().default(false),
+})
+export type AgentActionsSettings = z.infer<typeof agentActionsSchema>
+
 export const pickerSettingsSchema = z.object({
   displayMode: z.enum(['collapse', 'native-scroll']).default('collapse'),
   commands: pickerSourceSettingsSchema,
@@ -43,7 +50,7 @@ export const pickerSettingsSchema = z.object({
   // a saved record that has `picker` but predates this key would fail the whole
   // parse without it, and the medium — every setting in it — would be rejected.
   // Any key added here from now on needs the same treatment.
-  agents: pickerSourceSettingsSchema.default({ enabled: true, order: 25, limit: 6, maxCandidates: 50, sort: 'updated', shortcut: '', aliases: ['agent', 'cc', 'claude-code', 'codex', 'cursor', 'gemini-cli', 'qoder', 'reasonix', 'openclaw', 'hermes', 'pi', 'grokbuild', 'grok-build', 'kimi-cli', 'kimi-code', 'opencode', 'mimocode', 'mimo', 'zcode'] }),
+  agents: pickerSourceSettingsSchema.extend(agentActionsSchema.shape).default({ showImport: true, showSummary: false, skipConfirmation: false, enabled: true, order: 25, limit: 6, maxCandidates: 50, sort: 'updated', shortcut: '', aliases: ['agent', 'cc', 'claude-code', 'codex', 'cursor', 'gemini-cli', 'qoder', 'reasonix', 'openclaw', 'hermes', 'pi', 'grokbuild', 'grok-build', 'kimi-cli', 'kimi-code', 'opencode', 'mimocode', 'mimo', 'zcode'] }),
   conversations: pickerSourceSettingsSchema,
   // Defaulted for the same reason as `agents` above: it arrived later still.
   drives: pickerSourceSettingsSchema.default({ enabled: true, order: 35, limit: 6, maxCandidates: 50, sort: 'updated', shortcut: '', aliases: ['drive'] }),
@@ -65,7 +72,7 @@ export function defaultPickerSettings(): PickerSettings {
     skills: { enabled: true, order: 5, limit: 6, maxCandidates: 50, sort: 'updated', shortcut: '', aliases: ['skill'] },
     files: { enabled: true, order: 10, limit: 6, maxCandidates: 50, sort: 'updated', shortcut: '', aliases: ['file'] },
     sessions: { enabled: true, order: 20, limit: 6, maxCandidates: 50, sort: 'updated', shortcut: '', aliases: ['session'] },
-    agents: { enabled: true, order: 25, limit: 6, maxCandidates: 50, sort: 'updated', shortcut: '', aliases: ['agent', 'cc', 'claude-code', 'codex', 'cursor', 'gemini-cli', 'qoder', 'reasonix', 'openclaw', 'hermes', 'pi', 'grokbuild', 'grok-build', 'kimi-cli', 'kimi-code', 'opencode', 'mimocode', 'mimo', 'zcode'] },
+    agents: { showImport: true, showSummary: false, skipConfirmation: false, enabled: true, order: 25, limit: 6, maxCandidates: 50, sort: 'updated', shortcut: '', aliases: ['agent', 'cc', 'claude-code', 'codex', 'cursor', 'gemini-cli', 'qoder', 'reasonix', 'openclaw', 'hermes', 'pi', 'grokbuild', 'grok-build', 'kimi-cli', 'kimi-code', 'opencode', 'mimocode', 'mimo', 'zcode'] },
     conversations: { enabled: true, order: 30, limit: 6, maxCandidates: 50, sort: 'updated', shortcut: '', aliases: ['chat'] },
     drives: { enabled: true, order: 35, limit: 6, maxCandidates: 50, sort: 'updated', shortcut: '', aliases: ['drive'] },
     plugins: { enabled: true, order: 40, limit: 6, maxCandidates: 50, sort: 'updated', shortcut: '', aliases: ['plugin'], onlyLive: false, showDeepSeek: true },
@@ -74,7 +81,7 @@ export function defaultPickerSettings(): PickerSettings {
 
 /** Picker settings have a fixed schema, so explicit comparison is cheap and stable. */
 export function samePickerSettings(left: PickerSettings, right: PickerSettings): boolean {
-  if (left.displayMode !== right.displayMode) return false
+  if (left.displayMode !== right.displayMode || left.agents.showImport !== right.agents.showImport || left.agents.showSummary !== right.agents.showSummary || left.agents.skipConfirmation !== right.agents.skipConfirmation) return false
   return pickerSourceSchema.options.every(key =>
     left[key].enabled === right[key].enabled &&
     left[key].order === right[key].order &&

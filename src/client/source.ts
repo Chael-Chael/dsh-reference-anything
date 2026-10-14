@@ -6,7 +6,7 @@ import type {
 } from '@deepseek-ai/dsh-client-ui-input-trigger/client'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import type { TranslateNS } from '@deepseek-ai/dsh-client-locale/client'
-import { defaultPickerSettings, type ChatProvider, type PickerDisplayMode } from '../wire.ts'
+import { defaultPickerSettings, type AgentActionsSettings, type ChatProvider, type PickerDisplayMode } from '../wire.ts'
 import { parseProviderQuery } from '../search.ts'
 import { encodeReferenceUri } from '../uri-codec.ts'
 import type { AgentCandidate, DriveCandidate, LocalPluginCandidate, SearchResult, SyncStatus } from './remote.ts'
@@ -175,7 +175,7 @@ type CandidateValue =
   | { kind: 'file'; fileKind: FileReferenceCandidate['kind']; label: string; mention: string }
   | { kind: 'session'; label: string; mention: string }
   | { kind: 'agent'; reference: AgentReference }
-  | { kind: 'agent-import'; reference: AgentReference }
+  | { kind: 'agent-import'; reference: AgentReference; confirmed?: boolean }
   | { kind: 'agent-resume'; reference: AgentReference }
   | { kind: 'agent-back' }
   | { kind: 'drive'; reference: DriveReference }
@@ -399,18 +399,48 @@ export function createLocalAgentSource(
   options: PickerSourceOptions = { ...DEFAULT_SOURCE_OPTIONS, order: 25 },
   importAndOpen?: (sessionId: SessionId, id: string) => Promise<void>,
   resume?: (sessionId: SessionId, id: string, span: TokenSpan) => Promise<void>,
+  actions: AgentActionsSettings = defaultPickerSettings().agents,
 ): RefreshablePickerSource {
-  const selections = new Map<SessionId, { reference: AgentReference; query: string; previousQuery: string; busy?: 'agent-import' | 'agent-resume'; error?: string }>()
+  const availableActions = (id: string): Array<'agent-import' | 'agent-resume'> => [
+    ...(actions.showImport && importAndOpen ? ['agent-import' as const] : []),
+    ...(actions.showSummary && resume && /^(claude-code|codex):/u.test(id) ? ['agent-resume' as const] : []),
+  ]
+  const selections = new Map<SessionId, { reference: AgentReference; query: string; previousQuery: string; confirmImport?: boolean; busy?: 'agent-import' | 'agent-resume'; error?: string }>()
   const queries = new Map<SessionId, string>()
   const pending = new Set<string>()
-  const actionRows = (selected: NonNullable<ReturnType<typeof selections.get>>): InputTriggerCandidate[] => [
-    { name: t(selected.busy === 'agent-import' ? 'agent.importing' : 'agent.import'), description: selected.error ?? `${selected.reference.label} · ${t('agent.importDetail')}`, value: encodeCandidate({ kind: 'agent-import', reference: selected.reference }) },
-    ...(resume && /^(claude-code|codex):/u.test(selected.reference.id) ? [{ name: t(selected.busy === 'agent-resume' ? 'agent.resuming' : 'agent.resume'), description: selected.error ?? t('agent.resumeDetail'), value: encodeCandidate({ kind: 'agent-resume', reference: selected.reference }) }] : []),
-    { name: t('agent.back'), value: encodeCandidate({ kind: 'agent-back' }) },
-  ]
+  const actionRows = (selected: NonNullable<ReturnType<typeof selections.get>>): InputTriggerCandidate[] => {
+    const available = availableActions(selected.reference.id).filter(kind => !selected.confirmImport || kind === 'agent-import')
+    const confirm = available.length === 1 && !actions.skipConfirmation
+    return [
+      ...available.map(kind => ({
+        icon: candidateIcon(PICKER_ICON_MARKER[kind === 'agent-import' ? 'import' : 'summary']),
+        name: t(kind === 'agent-import'
+          ? selected.busy === kind ? 'agent.importing' : confirm ? 'agent.confirmImport' : 'agent.import'
+          : selected.busy === kind ? 'agent.resuming' : confirm ? 'agent.confirmSummary' : 'agent.resume'),
+        description: selected.error ?? `${selected.reference.label} · ${t(kind === 'agent-import' ? 'agent.importDetail' : 'agent.resumeDetail')}`,
+        value: encodeCandidate({ kind, reference: selected.reference, ...(kind === 'agent-import' && confirm ? { confirmed: true } : {}) }),
+      })),
+      { icon: candidateIcon(PICKER_ICON_MARKER['undo-2']), name: t('agent.back'), value: encodeCandidate({ kind: 'agent-back' }) },
+    ]
+  }
   const publish = (sessionId: SessionId, reopen: boolean): void => {
     const selected = selections.get(sessionId)
     if (selected) options.updateMenu?.({ sessionId, source: AGENT_SOURCE, query: selected.query, candidates: actionRows(selected), reopen })
+  }
+  const execute = (kind: 'agent-import' | 'agent-resume', reference: AgentReference, sessionId: SessionId, span: TokenSpan): void => {
+    const selected = selections.get(sessionId)
+    if (!selected || selected.reference.id !== reference.id || !availableActions(reference.id).includes(kind) || pending.has(reference.id)) return
+    selected.busy = kind
+    selected.error = undefined
+    pending.add(reference.id)
+    publish(sessionId, true)
+    void Promise.resolve().then(() => kind === 'agent-import' ? importAndOpen!(sessionId, reference.id) : resume!(sessionId, reference.id, span)).catch(error => {
+      selected.error = error instanceof Error ? error.message : String(error)
+    }).finally(() => {
+      pending.delete(reference.id)
+      selected.busy = undefined
+      if (selections.get(sessionId) === selected) publish(sessionId, false)
+    })
   }
   const source: InputTriggerSource = {
     trigger: '@', name: AGENT_SOURCE, order: options.order,
@@ -439,11 +469,12 @@ export function createLocalAgentSource(
         // Host build that does not expose the insertion source as a data attr.
         const chipProvider = row.provider === 'Kimi' ? 'Kimi CLI' : row.provider
         const label = (chipProvider ? `${chipProvider}·${title}` : title).replace(/[\[\]]/gu, '')
+        const available = availableActions(row.id)
         return {
           name: title,
           description: describeAgentRow(row, t),
           icon: candidateIcon(LOCAL_AGENT_ICON_MARKER[row.kind as keyof typeof LOCAL_AGENT_ICON_MARKER] ?? AGENT_ICON_MARKER),
-          ...(importAndOpen === undefined ? {} : { drill: true, hint: t('agent.actions') }),
+          ...(available.length === 0 ? {} : { drill: true, hint: t(available.length > 1 ? 'agent.actions' : available[0] === 'agent-import' ? 'agent.importHint' : 'settings.agentSummary') }),
           value: encodeCandidate({ kind: 'agent', reference: { id: row.id, label } }),
         }
       }))
@@ -456,27 +487,30 @@ export function createLocalAgentSource(
         return { text: `@${selected?.previousQuery ?? 'agents:'}`, continue: true }
       }
       if (value?.kind === 'agent-import' || value?.kind === 'agent-resume') {
-        const selected = selections.get(session.sessionId)
-        const run = value.kind === 'agent-import' ? importAndOpen : resume
-        if (!selected || selected.reference.id !== value.reference.id || !run || pending.has(value.reference.id)) return 'handled'
-        selected.busy = value.kind
-        selected.error = undefined
-        pending.add(value.reference.id)
-        publish(session.sessionId, true)
-        void Promise.resolve().then(() => value.kind === 'agent-import' ? importAndOpen!(session.sessionId, value.reference.id) : resume!(session.sessionId, value.reference.id, span)).catch(error => {
-          selected.error = error instanceof Error ? error.message : String(error)
-        }).finally(() => {
-          pending.delete(value.reference.id)
-          selected.busy = undefined
-          if (selections.get(session.sessionId) === selected) publish(session.sessionId, false)
-        })
+        if (value.kind === 'agent-import' && !actions.skipConfirmation && !value.confirmed) {
+          const selected = selections.get(session.sessionId)
+          if (selected?.reference.id === value.reference.id && !selected.busy) {
+            selected.confirmImport = true
+            publish(session.sessionId, true)
+          }
+          return 'handled'
+        }
+        execute(value.kind, value.reference, session.sessionId, span)
         return 'handled'
       }
       if (value?.kind !== 'agent') return undefined
       const reference = value.reference
-      if (action === 'drill' && importAndOpen) {
+      if (action === 'drill') {
+        const available = availableActions(reference.id)
+        if (available.length === 0) return undefined
+        const previousQuery = queries.get(session.sessionId) ?? ''
+        if (available.length === 1 && actions.skipConfirmation) {
+          selections.set(session.sessionId, { reference, query: previousQuery, previousQuery })
+          execute(available[0]!, reference, session.sessionId, span)
+          return 'handled'
+        }
         const query = `${options.shortcut ?? 'agents'}:`
-        selections.set(session.sessionId, { reference, query, previousQuery: queries.get(session.sessionId) ?? '' })
+        selections.set(session.sessionId, { reference, query, previousQuery })
         return { text: `@${query}`, continue: true }
       }
       return {
@@ -772,7 +806,7 @@ function withDisplayPolicy(
   const refreshing = new Set<SessionId>()
   const present = (cache: CachedSourceCandidates): InputTriggerCandidate[] => {
     const { normal, pinned } = cache
-    if (options.displayMode === 'native-scroll' || normal.length <= options.limit) return [...pinned, ...normal]
+    if ((source.name === AGENT_SOURCE && cache.request.drilled) || options.displayMode === 'native-scroll' || normal.length <= options.limit) return [...pinned, ...normal]
     const expandedState = expandedStates.get(cache.session.sessionId)
     const visibleCount = expandedState?.query === cache.request.query
       ? Math.min(normal.length, Math.max(options.limit, expandedState.visibleCount))

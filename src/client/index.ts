@@ -50,7 +50,7 @@ export function apply(ctx: ClientContext): void {
   const notices = createAutoDismissNotice(() => scope.getSnapshot(), value => { scope.set(value) })
   let applySources: ((picker: PickerSettings | undefined) => void) | undefined
   ctx.effect(() => ctx.locale.register(REFERENCE_ANYTHING_NS, { zh, en }), 'reference-anything.client.dictionaries')
-  ctx.effect(() => adoptMenuGroupTitleProjection(t), 'reference-anything.client.menu-group-localization')
+  ctx.effect(() => adoptMenuGroupTitleProjection(t, () => (scope.getSnapshot().settings.picker ?? defaultPickerSettings()).agents), 'reference-anything.client.menu-group-localization')
 
   const unwrap = <T>(result: { ok: true; value: T } | { ok: false; error: { code: string; message: string } }): T => {
     if (!result.ok) throw new Error(`${result.error.code}: ${result.error.message}`)
@@ -324,7 +324,7 @@ export function apply(ctx: ClientContext): void {
         if (!actx || actx.bail(actx, 'slash/input-insert-text', { text: summary, span }) !== true) {
           throw new Error(t('agent.draftChanged'))
         }
-      })))
+      }, picker.agents)))
     if (picker.drives.enabled) {
       const source = createCloudDriveSource((query, signal, limit) =>
         driveSearch.run(query, signal, async () => {

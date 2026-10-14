@@ -44,10 +44,10 @@
 - 🧩 DSH 命令与 Skills
 - 📁 工作区文件和文件夹
 - 💬 DSH 历史会话
-- 🖥️ **新增：本地其他 Agent CLI 留在磁盘上的历史对话（Claude Code、Codex、Cursor 等共 14 种）**
-- ✨ **新增：来自 ChatGPT、Claude、Gemini、DeepSeek、Grok 和 Kimi 这些网页端 Chatbot 的历史对话**
-- ☁️ **新增：通过 OpenList 连接的云盘文件**
-- 🧩 **新增：本机已安装和已配置的 DSH 插件，并显示运行状态和目录引用**
+- 🖥️ **本插件新增：本地其他 Agent CLI 留在磁盘上的历史对话（Claude Code、Codex、Cursor 等共 14 种），并可以快速导入这些会话到 DSH 的原生格式（重点）**
+- ✨ **本插件新增：来自 ChatGPT、Claude、Gemini、DeepSeek、Grok 和 Kimi 这些网页端 Chatbot 的历史对话（重点）**
+- ☁️ **本插进新增：通过 OpenList 连接的云盘文件**
+- 🧩 **本插件新增：本机已安装和已配置的 DSH 插件，无需再频繁翻找目录**
 
 在扩展 `@` 的能力之外，我们还支持一些对于 `@` 菜单界面的增强：
 
@@ -89,7 +89,7 @@
 ## 🧭 Roadmap
 
 - [x] 支持引用本地其他 Agent 的历史对话
-- [ ] 支持继续引用的本地 Agent 会话（Continue Session）
+- [x] 支持继续引用的本地 Agent 会话（Continue Session）
 - [x] 支持通过 OpenList 引用网盘文件
 - [ ] 在插件内管理网盘文件（开发中；当前不会修改云端文件）
 - [ ] 更多的关键词搜索匹配规则，黑名单、白名单等（特别对于file search）
@@ -104,21 +104,35 @@
 
 ## 📦 安装
 
-前置条件：
+当前本地版本为 **v0.4.4**，包声明的 DSH SDK 最低版本为 **`0.2.0-rc.2`**。
 
-- 已安装并启动 `dsh`；自动安装 OpenCLI 时需要本机 Node.js 附带的 `npm`。
-- 要同步的平台已在所选 Chrome Profile 中登录。
+### 官方桌面端
 
-为当前 DSH 稳定版 SDK 安装稳定系列：
+从 [DeepSeek Harness 官网](https://www.deepseek.com/en/harness/) 下载官方桌面端，打开 **插件（Plugins）→ 添加插件（Add plugin）**，输入 `dsh-reference-anything` 并按提示安装、启用。完成后重启 DSH（如有提示），再打开 **设置 → Reference Anything**。
+
+桌面端使用独立的插件 Profile；Web Profile 中安装的插件不会自动启用到桌面端。详见[官方桌面端说明](https://github.com/deepseek-ai/deepseek-harness/blob/master/apps/desktop/README.md)。
+
+### DSH Market
+
+打开 [Reference Anything 的 DSH Market 页面](https://dshmarket.com/zh/p/Chael-Chael/dsh-reference-anything/)，或在已安装的 DSH Market 中搜索 `dsh-reference-anything` 并安装。尚未安装市场时，桌面端使用 **添加插件** 安装 `dshmarket`；Web 用户执行：
+
+```powershell
+dsh plugin --profile web add dshmarket
+```
+
+### Web 命令行
 
 ```powershell
 dsh plugin --profile web add dsh-reference-anything
 ```
 
-> [!NOTE]
-> 如需恢复 DSH 原有的 `@` 菜单样式，停用本插件即可。
+安装入口提供的版本以对应渠道为准；本文按本地 v0.4.4 源码描述功能。
 
-安装 DSH 插件后，打开 DSH Web 的 `Settings → Reference Anything → 可用性检查`（如果尚未出现该设置项，请先重启 DSH），点击**「一键安装」**：它会自动查找 OpenCLI；若未找到 OpenCLI 或版本低于 `1.8.6`，则通过 npm 全局安装或升级；随后安装插件包内附带的六个平台适配器，启动或刷新 Browser Bridge，并打开 OpenCLI Browser Bridge 扩展的 [Chrome Web Store 安装页](https://chromewebstore.google.com/detail/opencli/ildkmabpimmkaediidaifkhjpohdnifk)。在商店页确认安装后，回到设置页点击「重新检查」；每个仍未通过的检查项旁都会显示对应的恢复操作。
+### 可选：连接网页 AI 对话
+
+仅网页对话需要此步骤。本地来源可直接使用；请先在浏览器登录所需平台，一键安装 OpenCLI 需要可用的 npm。
+
+安装 DSH 插件后，打开 DSH 的 `Settings → Reference Anything → 可用性检查`（如果尚未出现该设置项，请先重启 DSH），点击**「一键安装」**：它会自动查找 OpenCLI；若未找到 OpenCLI 或版本低于 `1.8.6`，则通过 npm 全局安装或升级；随后安装插件包内附带的六个平台适配器，启动或刷新 Browser Bridge，并打开 OpenCLI Browser Bridge 扩展的 [Chrome Web Store 安装页](https://chromewebstore.google.com/detail/opencli/ildkmabpimmkaediidaifkhjpohdnifk)。在商店页确认安装后，回到设置页点击「重新检查」；每个仍未通过的检查项旁都会显示对应的恢复操作。
 
 也可以手动安装 OpenCLI 和对话适配器，并启动 Browser Bridge：
 
@@ -134,16 +148,32 @@ opencli daemon restart
 
 Reference Anything 直接向 DSH 原生 `@` 菜单注册八个来源，不会引入一套割裂的搜索界面。设置中可以决定显示哪些分组、调整顺序、分别配置折叠条目数和候选硬上限，并选择插件的展开/折叠模式或 DSH 原生滚动列表。设置页还提供一键切换：可以只把可见 Picker 恢复为 DSH 官方文件/会话列表，而插件、同步服务、本地数据和模型侧工具继续运行；需要时可从同一位置重新启用 Reference Anything `@`。
 
-1. 打开 DSH Web 的 `Settings → Reference Anything`。
-2. 在“可用性检查”中确认 OpenCLI、Browser Bridge、浏览器扩展和对话适配器均已就绪。
-3. 在“@ 网页端 AI 对话同步设置”中选择浏览器 Profile、正文保存方式、同步方式和聊天记录范围，然后开始同步。
-4. 在输入框键入 `@`，从 `Commands`、`Skills`、`Files and folders`、`DSH sessions`、`Local agent conversations`、`External conversations`、`Cloud drive files` 或 `All local plugins` 分组选择来源。
-5. 键入关键词过滤候选，例如 `@缓存设计`。
+1. 在输入框键入 `@` 浏览来源，或输入关键词，例如 `@缓存设计`。
+2. 用鼠标选中条目，或用方向键选择后按 `Enter` 插入引用。工作区文件夹按 `Tab` 进入，按 `Enter` 引用。
+3. 写下任务并发送，例如：「参考这段 Codex 对话和这个项目目录，检查之前的方案是否已经实现。」
+
+需要网页对话时，先完成上方连接步骤，再到 **设置 → Reference Anything → 网页端 AI 对话同步设置** 选择平台、浏览器 Profile、保存方式和历史范围，开始同步。需要网盘时，在设置中连接 OpenList 并添加挂载。
 
 默认使用“按需读取正文”模式：本地只保存标题索引，Agent 需要对话内容时才通过浏览器读取正文。若需要离线读取和正文检索，请选择“在本地保存完整正文”。插件会在加载时检查新版本；可在设置页查看更新日志，安装更新后重启 DSH 即可生效。
 
-> [!WARNING]
-> 为保障账号和对话数据安全，外部对话的导入与同步通过 OpenCLI 复用已登录的浏览器会话完成。在使用或同步过程中，系统可能会临时弹出浏览器窗口（大部分情况下，保持弹出窗口在后台不要关闭就行，插件会复用这个窗口，不会打扰你），浏览器窗口上也可能显示 OpenCLI 的调试信息；这是正常现象，无须惊讶或手动关闭，请等待操作完成。受限于当前 OpenCLI，为了减少浏览器窗口的弹出次数，我们暂时采用速度较慢的串行同步方式；待 OpenCLI 上游仓库更新后，我们将改用速度更快的并行同步。
+> [!NOTE]
+> 网页对话同步或读取正文时，OpenCLI 可能打开或复用浏览器窗口。请保持窗口可用，直到操作完成；同步速度取决于平台、记录数量和浏览器连接。
+
+### 常用快捷词
+
+以下为当前默认配置；修改快捷词后，以设置页为准。
+
+| 输入 | 用途 |
+| --- | --- |
+| `@file:README` | 搜索工作区文件和文件夹 |
+| `@session:` | 浏览 DSH 历史会话 |
+| `@agent:` / `@codex:` | 浏览本地 Agent 历史 / 只看 Codex |
+| `@chat:` / `@chatgpt:缓存` | 浏览网页对话 / 搜索 ChatGPT 对话 |
+| `@drive:` | 浏览已连接的网盘 |
+| `@plugin:` | 查找本地 DSH 插件 |
+| `@command:` / `@skill:` | 选择命令 / Skill |
+
+在 **通用设置** 中可为分组、网页平台、本地 Agent 和网盘挂载设置快捷词。多个词用逗号分隔：文件分组设置为 `file,f` 后，可用 `@f:README`。同一个快捷词可分配给多个来源，也支持中文全角冒号 `：`。
 
 ### 🧩 一个 `@` 菜单，多种来源
 
@@ -151,30 +181,30 @@ Reference Anything 直接向 DSH 原生 `@` 菜单注册八个来源，不会引
 
 #### ⌨️ @Commands — DSH 原生命令
 
-输入 `@commands` 可浏览命令；选择后会把 `/command` 交回 DSH 原生斜杠命令流程。
+输入 `@command:` 可浏览命令；选择后会把 `/command` 交回 DSH 原生斜杠命令流程。
 
 <p align="center"><img src="./images/at-commands.png" alt="通过 @ 菜单浏览 DSH 命令" width="800" /></p>
 
 #### 🛠️ @Skills — DSH 技能库
 
-输入 `@skills:` 可浏览 Skills；选择后会插入 `/skill` 并交给 DSH 原生 Skill 处理。
+输入 `@skill:` 可浏览 Skills；选择后会插入 `/skill` 并交给 DSH 原生 Skill 处理。
 
 <p align="center"><img src="./images/at-skills.png" alt="通过 @ 菜单浏览 DSH 技能" width="800" /></p>
 
 #### 📁 @Files and folders — 工作区文件与目录
 
-在输入框键入 `@files:`，通过 DSH 官方 file-reference Remote 浏览文件和文件夹。
+在输入框键入 `@file:`，通过 DSH 官方 file-reference Remote 浏览文件和文件夹。
 
 <p align="center"><img src="./images/at-files.png" alt="通过 @ 菜单浏览工作区文件和文件夹" width="800" /></p>
 
 **功能**：
+
 - 使用官方 `@path` / `@"含空格的路径"` 语法和规范候选服务
-- 文件成为原子引用；选择目录后路径保持可编辑并继续补全
-- 插件不再生成或解析自定义 `dsh-file:` 协议
+- 文件与文件夹均可插入为原生引用；选中文件夹时，按 `Tab` 进入，按 `Enter` 插入引用
 
 #### 💬 @DSH sessions — DSH 会话历史
 
-在输入框键入 `@sessions:`，通过 DSH 官方 session-reference Remote 浏览 DSH 会话。
+在输入框键入 `@session:`，通过 DSH 官方 session-reference Remote 浏览 DSH 会话。
 
 <p align="center"><img src="./images/at-sessions.png" alt="通过 @ 菜单浏览 DSH 会话" width="800" /></p>
 
@@ -182,7 +212,7 @@ Reference Anything 直接向 DSH 原生 `@` 菜单注册八个来源，不会引
 
 #### 🖥️ @Local agent conversations — 本地 Agent 历史对话
 
-键入 `@agents:`，即可搜索并引用其他本地 Agent 工具保存的历史对话。
+键入 `@agent:`，即可搜索并引用其他本地 Agent 工具保存的历史对话。
 
 <p align="center"><img src="./images/at-local-agents.png" alt="从 @ 菜单浏览本地其他 Agent 的历史会话" width="800" /></p>
 
@@ -196,9 +226,11 @@ Reference Anything 直接向 DSH 原生 `@` 菜单注册八个来源，不会引
 - 按需读取对话正文；默认精简展示工具名称，需要时可读取完整细节
 - 支持 `@codex:`、`@claude-code:`、`@gemini-cli:` 等 Agent 专属前缀
 
+本地记录只读，不会导入为新的 DSH 会话，也不支持 Continue Session。Claude Code 和 Codex 适配器曾用真实记录验证；其余格式主要通过测试样例验证，实际兼容性可能因工具版本而异。opencode、mimocode 和 zcode 的数据库读取需要 DSH 宿主运行时提供 `node:sqlite`。
+
 #### 🧩 @Local plugins — 本地已安装和已配置的插件
 
-输入 `@plugin:`、`@plugins:`、`@插件:` 或 `@本地插件:` 搜索插件。在 **设置 → Reference Anything → 通用设置** 中，可用 **本地所有的插件** 开关立即显示或隐藏该分组，选择会自动保存。默认开启，折叠显示 6 条，候选上限为 50。
+输入 `@plugin:` 搜索插件。设置中还可只显示运行中的插件，或隐藏 DeepSeek 官方插件。在 **设置 → Reference Anything → 通用设置** 中，可用 **本地所有的插件** 开关立即显示或隐藏该分组，选择会自动保存。默认开启，折叠显示 6 条，候选上限为 50。
 
 列表读取当前 DSH 加载器合成后的插件条目和生命周期状态，并补充 Profile 声明的插件包及带有 DSH bundle/client 元数据的已安装包，排除普通依赖。运行中、已停用和未运行表示宿主插件条目的状态；没有宿主条目的包显示为未运行。选中插件后会插入名称，以及可解析时的真实本地目录引用。文件访问仍使用 DSH 现有的工具和权限。
 
@@ -208,15 +240,22 @@ Reference Anything 直接向 DSH 原生 `@` 菜单注册八个来源，不会引
 
 <p align="center"><img src="./images/at-external-conversations.png" alt="通过 @ 菜单浏览外部对话" width="800" /></p>
 
+“在本地保存完整正文”可离线读取已同步文本，不代表附件也已离线保存。自动同步和启动时同步默认关闭，可在设置中开启。
+
 **按平台过滤**：
+
 - 使用 `@chatgpt:缓存`、`@claude:重构` 的格式过滤特定平台
 - 也接受简写：`@gpt:`、`@ds:` 等
 - 单独输入 `@claude` 则列出该平台最近的会话
 
 **搜索能力**：
+
 - **标题匹配**：支持模糊搜索对话标题
+
 - **正文检索**：仅在“在本地保存完整正文”模式下可用；标题匹配不足时搜索已同步正文，并在候选行显示匹配片段
+
 - **平台和账号隔离**：按 Provider 和账号作用域分别维护会话历史
+
 - `@` 检索只使用最近一次同步缓存的账号范围，不会为搜索连接浏览器；同步识别到账号切换后，只展示新账号记录，旧账号记录仍可在对话管理中查看和清理
 
 **引用展示**：选中后，草稿中显示带 Provider Logo、可整段删除的 DSH 原生引用；其稳定序列化形式为：
@@ -228,7 +267,7 @@ Reference Anything 直接向 DSH 原生 `@` 菜单注册八个来源，不会引
 
 #### ☁️ @Cloud drive files — 通过 OpenList 引用网盘文件
 
-键入 `@drive:`、`@cloud:`、`@netdisk:` 或 `@网盘`，即可逐层浏览文件夹，并引用通过 OpenList 连接的网盘文件。
+键入 `@drive:`，即可逐层浏览文件夹，并引用通过 OpenList 连接的网盘文件。
 
 常用网盘包括 OneDrive、阿里云盘、百度网盘、夸克、115、123、Dropbox、Google Drive/相册和 Yandex；OpenList 提供的其他网盘也可在同一设置页中配置。
 
@@ -245,7 +284,8 @@ Reference Anything 直接向 DSH 原生 `@` 菜单注册八个来源，不会引
 ---
 
 **通用提示**：
-- 分隔符用 `:` 或 `/` 而不是空格：`@` 的候选 token 遇到空格即终止，所以 `@chatgpt 关键词` 会在按下空格时关闭菜单。多词搜索请写成 `@cachedesign` 或 `@cache-design`。
+
+- 分组快捷词用 `:` 分隔，不要用空格：`@` 的候选 token 遇到空格即终止，所以 `@chatgpt 关键词` 会在按下空格时关闭菜单。多词搜索请写成 `@cachedesign` 或 `@cache-design`。
 - 没有类型前缀时，仍同时搜索所有分组
 - 命令和 Skills 选择后由 DSH 原生斜杠命令流程处理，原生 `/` 面板仍可继续使用
 - 把 Picker 切回 DSH 官方文件/会话列表后，所有插件分组都会隐藏，`Local agent conversations` 和 `Cloud drive files` 也不例外。宿主侧来源仍然注册着，已经插入的引用照常展开、`reference_read` 照常可用，只是菜单入口在切回来之前不再出现
@@ -253,17 +293,14 @@ Reference Anything 直接向 DSH 原生 `@` 菜单注册八个来源，不会引
 ## 🔄 @外部对话的实现方式
 
 ```text
-DSH Web @Conversations
+DSH Web / Desktop @chat:
         ↕ Host Remote
-DSH Host + reference_anything 本地镜像
+DSH Host + reference_anything 本地索引 / 可选正文镜像
         ↕ execFile(opencli, argv)
 opencli-plugin-dsh-chat-history
         ↕ OpenCLI daemon + 官方 Browser Bridge
 ChatGPT / Claude / Gemini / DeepSeek / Grok / Kimi
 ```
-
-这里不包含旧版的独立 DeepSeek CDP/`--remote-debugging-port` 采集器。六个平台统一走 OpenCLI Provider 适配器，避免维护两套重复的浏览器读取实现。
-
 
 ### 🤖 模型侧协议
 
@@ -294,7 +331,7 @@ ChatGPT / Claude / Gemini / DeepSeek / Grok / Kimi
 - agent 需要正文时才调用 `reference_read({ uri, limit, cursor })`；同一页内部按时间正序展示，翻页方向从最新向更旧。
 - 初始条目的 `deferred=true` 时，首次调用只传 `uri`，不要传空的 `nextCursor`。
 - offline-mirror 下 `reference_read` 沿当前 revision 的 cursor 翻页；metadata-only 下每次读取都会重新向 Provider 请求正文，并在同一次浏览器操作内校验缓存的账号范围。遇到对话缺失、账号不一致或拉取失败时，Agent 会提示用户先同步对应 Provider 再重试。
-- `before` 只作为一个版本的 deprecated 兼容参数；不能与 `cursor` 同时提供。
+- `before` 是已弃用的兼容参数；不能与 `cursor` 同时提供。
 - mention 或 `reference_list` 会授予当前 task 对 URI 的读取权限；未授权 URI 会被拒绝。
 - 每条 conversation 只保留最新 revision；正文更新后，指向旧 revision 的 cursor 会过期。
 - `reference_attachment_read` 会校验当前任务授权；对于 Web 对话，还会确认当前 Provider 登录账号与同步时保存的账号范围一致。若不一致，会拒绝下载并提示先同步该 Provider、再重新选择对话。

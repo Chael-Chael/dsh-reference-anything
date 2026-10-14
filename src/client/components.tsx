@@ -313,6 +313,14 @@ export function ConversationSettings({ useScope, save, sync, cancel, refresh, re
     </SettingsDisclosure>
     <SettingsDisclosure className="dsh_ref_agents_section" title={t('settings.localAgents')} description={t('settings.localAgentsDetail')} open={Boolean(openSections.agents)} onToggle={() => { setOpenSections(current => ({ ...current, agents: !current.agents })) }}>
       <section className="dsh_ref_sources dsh_ref_agent_sources">
+        <section className="dsh_ref_panel dsh_ref_settings_card dsh_ref_agent_actions">
+          <div className="dsh_ref_section_head"><div><h3>{t('settings.agentActions')}</h3><p>{t('settings.agentActionsDetail')}</p></div></div>
+          <div className="dsh_ref_agent_action_switches">
+          <label className="dsh_ref_toggle"><DshSwitch checked={picker.agents.showImport} label={t('settings.agentImport')} onChange={showImport => { savePicker({ ...picker, agents: { ...picker.agents, showImport } }) }} /><b>{t('settings.agentImport')}</b></label>
+          <label className="dsh_ref_toggle"><DshSwitch checked={picker.agents.showSummary} label={t('settings.agentSummary')} onChange={showSummary => { savePicker({ ...picker, agents: { ...picker.agents, showSummary } }) }} /><b>{t('settings.agentSummary')}</b></label>
+          <label className="dsh_ref_toggle"><DshSwitch checked={!picker.agents.skipConfirmation} label={t('settings.agentConfirmation')} onChange={confirmation => { savePicker({ ...picker, agents: { ...picker.agents, skipConfirmation: !confirmation } }) }} /><b>{t('settings.agentConfirmation')}</b></label>
+          </div>
+        </section>
         <AgentSelectionCards enabledAgents={enabledAgents} stats={state.agentStats} directories={settings.agentDirectories} onEnabled={setAgentEnabled} onPickDirectory={pickAgentDirectory} t={t} />
       </section>
     </SettingsDisclosure>

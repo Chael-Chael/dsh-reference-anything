@@ -3,6 +3,14 @@ import type { LocaleNamespaceMap } from '@deepseek-ai/dsh-client-ui-slots'
 export const REFERENCE_ANYTHING_NS = 'reference-anything'
 
 export const zh = {
+  'settings.agentActions': '会话导入与交接',
+  'settings.agentImport': '快捷导入会话',
+  'settings.agentSummary': '生成交接摘要',
+  'settings.agentConfirmation': '导入会话二次确认',
+  'settings.agentActionsDetail': '与 dsh-chat-import 插件协作使用，需安装并启用该插件。在 @ 菜单中选中本地 Agent 对话后，Enter 直接引用，Tab 进入导入或摘要操作。导入功能可以把其他来源的本地 Agent 会话转换成 DSH 的原生session 形式以继续工作；生成交接摘要仅支持 Claude 和 Codex，可以生成上一轮对话的简答摘要（实验性，建议还是使用一般的原生引用功能）。',
+  'agent.confirmImport': '确认导入并继续',
+  'agent.importHint': '导入会话',
+  'agent.confirmSummary': '确认生成交接摘要',
   'settings.aliases': '快捷短语', 'settings.sourceAliases': '具体来源快捷短语', 'settings.sourceAliasesHint': '按具体网页端 AI、Agent 或网盘挂载设置快捷短语，多个快捷短语用逗号分隔。', 'settings.aliasesDetail': '管理所有分类的快捷短语，多个快捷短语用逗号分隔；编辑后离开输入框即可保存。', 'settings.aliasesHint': '多个快捷短语用逗号分隔',
   'source.conversations': '网页端 AI 对话',
   'source.files': '文件和文件夹',
@@ -255,6 +263,14 @@ export const zh = {
 } as const
 
 export const en: Record<keyof typeof zh, string> = {
+  'settings.agentActions': 'Conversation import and handoff',
+  'settings.agentImport': 'Quick conversation import',
+  'settings.agentSummary': 'Generate handoff summary',
+  'settings.agentConfirmation': 'Confirm conversation import',
+  'settings.agentActionsDetail': 'Works with the dsh-chat-import plugin, which must be installed and enabled. Select a local Agent conversation in the @ menu: Enter inserts a reference; Tab opens import or summary actions. Import converts local Agent conversations from other sources into native DSH sessions so you can continue working. Handoff summaries support Claude and Codex only and provide a brief summary of the previous conversation (experimental; using the standard native reference feature is recommended).',
+  'agent.confirmImport': 'Confirm import and continue',
+  'agent.importHint': 'Import conversation',
+  'agent.confirmSummary': 'Confirm handoff summary',
   'settings.aliases': 'Shortcuts', 'settings.sourceAliases': 'Source-specific shortcuts', 'settings.sourceAliasesHint': 'Set shortcuts for a specific web AI, Agent, or drive mount; separate multiple shortcuts with commas.', 'settings.aliasesDetail': 'Manage shortcuts for every category. Separate shortcuts with commas; changes save when you leave the field.', 'settings.aliasesHint': 'Separate shortcuts with commas',
   'plugin.status.live': 'Running', 'plugin.status.disabled': 'Disabled', 'plugin.status.inert': 'Not running',
   'cloud.openDirectory': 'Open directory',

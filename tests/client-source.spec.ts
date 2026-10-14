@@ -364,10 +364,79 @@ describe('local agent conversations', () => {
     const drilled = source.onPick({ ...pick(candidate), action: 'drill' })
     expect(drilled).toEqual({ text: '@agents:', continue: true })
     const actions = await source.candidates(session, { ...request('agents:'), drilled: true })
-    expect(actions.map(row => row.name)).toEqual(['agent.import', 'agent.back'])
+    expect(actions.map(row => row.name)).toEqual(['agent.confirmImport', 'agent.back'])
+    expect(imported).not.toHaveBeenCalled()
     const outcome = source.onPick(pick(actions[0]!))
     expect(outcome).toBe('handled')
     await vi.waitFor(() => expect(imported).toHaveBeenCalledWith(session.sessionId, agentRow().id))
+  })
+
+  it.each([
+    [false, false, []],
+    [true, false, ['agent.confirmImport', 'agent.back']],
+    [false, true, ['agent.confirmSummary', 'agent.back']],
+    [true, true, ['agent.import', 'agent.resume', 'agent.back']],
+  ] as const)('exposes only enabled actions (import=%s, summary=%s)', async (showImport, showSummary, names) => {
+    const imported = vi.fn(async () => undefined)
+    const resumed = vi.fn(async () => undefined)
+    const source = createLocalAgentSource(async () => [agentRow()], undefined, options({ limit: 1 }), imported, resumed,
+      { showImport, showSummary, skipConfirmation: false })
+    const candidate = (await source.candidates(session, request()))[0]!
+    expect(Boolean(candidate.drill)).toBe(names.length > 0)
+    expect(candidate.hint).toBe(showImport && showSummary ? 'agent.actions' : showImport ? 'agent.importHint' : showSummary ? 'settings.agentSummary' : undefined)
+    expect(source.onPick(pick(candidate))).toHaveProperty('insert')
+    const drilled = source.onPick({ ...pick(candidate), action: 'drill' })
+    if (names.length === 0) expect(drilled).toBeUndefined()
+    else {
+      const rows = await source.candidates(session, { ...request('agents:'), drilled: true })
+      expect(rows.map(row => row.name)).toEqual(names)
+    }
+    expect(imported).not.toHaveBeenCalled()
+    expect(resumed).not.toHaveBeenCalled()
+  })
+
+  it.each([true, false])('executes the sole action directly when confirmation is disabled (import=%s)', async showImport => {
+    const imported = vi.fn(async () => undefined)
+    const resumed = vi.fn(async () => undefined)
+    const source = createLocalAgentSource(async () => [agentRow()], undefined, options(), imported, resumed,
+      { showImport, showSummary: !showImport, skipConfirmation: true })
+    const candidate = (await source.candidates(session, request()))[0]!
+    const input = { ...pick(candidate), action: 'drill' as const }
+    expect(source.onPick(input)).toBe('handled')
+    source.onPick(input)
+    await vi.waitFor(() => expect(showImport ? imported : resumed).toHaveBeenCalledTimes(1))
+    if (!showImport) expect(resumed).toHaveBeenCalledWith(session.sessionId, agentRow().id, input.span)
+  })
+
+  it.each([false, true])('honors import confirmation from the two-action menu (skip=%s)', async skipConfirmation => {
+    const imported = vi.fn(async () => undefined)
+    const updateMenu = vi.fn(() => true)
+    const source = createLocalAgentSource(async () => [agentRow()], undefined, options({ updateMenu }), imported, vi.fn(),
+      { showImport: true, showSummary: true, skipConfirmation })
+    const candidate = (await source.candidates(session, request()))[0]!
+    source.onPick({ ...pick(candidate), action: 'drill' })
+    const menu = await source.candidates(session, { ...request('agents:'), drilled: true })
+    source.onPick(pick(menu[0]!))
+    if (!skipConfirmation) {
+      await Promise.resolve()
+      expect(imported).not.toHaveBeenCalled()
+      expect(updateMenu).toHaveBeenCalled()
+      const confirmation = await source.candidates(session, { ...request('agents:'), drilled: true })
+      expect(confirmation.map(row => row.name)).toEqual(['agent.confirmImport', 'agent.back'])
+      source.onPick(pick(menu[0]!))
+      await Promise.resolve()
+      expect(imported).not.toHaveBeenCalled()
+      source.onPick(pick(confirmation[0]!))
+    }
+    await vi.waitFor(() => expect(imported).toHaveBeenCalledTimes(1))
+  })
+
+  it('hides Tab for unsupported formats when only summary is enabled', async () => {
+    const source = createLocalAgentSource(async () => [agentRow({ id: 'cursor:test', kind: 'cursor' })], undefined, options(),
+      vi.fn(), vi.fn(), { showImport: false, showSummary: true, skipConfirmation: false })
+    const candidate = (await source.candidates(session, request()))[0]!
+    expect(candidate.drill).toBeUndefined()
+    expect(source.onPick(pick(candidate))).toHaveProperty('insert')
   })
 
   it('escapes a title that would otherwise break out of the mention it is written into', async () => {
