@@ -224,7 +224,7 @@ export class LocalAgentService extends Service implements ReferenceSource {
       ...this.settings,
       extraRoots: [
         ...this.settings.extraRoots,
-        ...Object.entries(directories).map(([kind, path]) => ({ kind: kind as AgentKind, path })),
+        ...Object.entries(directories).filter(([kind]) => isAgentKind(kind)).map(([kind, path]) => ({ kind: kind as AgentKind, path })),
       ],
     }, homedir())
     this.cache = undefined
@@ -269,6 +269,29 @@ export class LocalAgentService extends Service implements ReferenceSource {
    */
   listForWorkspace(query: string, limit: number, cwd: string, signal?: AbortSignal): Promise<ReferenceSummary[]> {
     return this.listIn(query, limit, cwd, signal)
+  }
+
+  /** Keep deployment roots and workspace policy when another plugin discovers sessions. */
+  discoveryPolicy() {
+    const enabled = this.enabledAgentKinds()
+    return { roots: this.roots.filter(root => enabled.has(root.kind)), scope: this.settings.scope }
+  }
+
+  /** Only offer a reference if the existing reader resolves the exact scanned file. */
+  async referenceForDiscovered(kind: string, path: string, sessionId: string): Promise<string | undefined> {
+    if (!isAgentKind(kind)) return undefined
+    for (const root of this.roots) {
+      if (root.kind !== kind || !inWorkspace(path, root.path)) continue
+      const rel = relative(root.path, path)
+      const adapter = this.adapters.get(kind)!
+      if (!isQueryAdapter(adapter) && !adapter.matches(rel.replaceAll('\\', '/'))) continue
+      const id = referenceId(kind, isQueryKind(kind) ? `${rel}${SESSION_SEPARATOR}${sessionId}` : rel)
+      try {
+        const found = await this.locate(id)
+        if (found.descriptor.path === await realpath(path)) return id
+      } catch { /* A discovered format may use storage this reader does not support. */ }
+    }
+    return undefined
   }
 
   /** Resolve only a configured transcript, retaining the source session for database imports. */
@@ -320,7 +343,7 @@ export class LocalAgentService extends Service implements ReferenceSource {
   private enabledAgentKinds(): ReadonlySet<AgentKind> {
     const history = this.ctx.get('referenceChatHistory')
     const configured = history?.store.settings.enabledAgents ?? AGENT_KINDS
-    return new Set(configured)
+    return new Set(configured.filter(isAgentKind))
   }
 
   /**

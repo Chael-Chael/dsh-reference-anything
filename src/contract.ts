@@ -5,14 +5,14 @@ import { localAgentSchema, providerSchema, settingsRecordSchema } from './wire.t
 /**
  * One local-agent transcript as the `@` menu sees it.
  *
- * `id` is the source-scoped `kind:relPath`, not a `dsh-ref:` URI — the client
+ * `id` is a source-scoped `kind:relPath` or an opaque import-only selection, not a `dsh-ref:` URI — the client
  * wraps it, the way it does for web chats, so the `'local-agent'` source string
  * stays hardcoded in exactly one place. Deliberately carries no `origin`: the
  * absolute path adds nothing a menu row can use and everything a screen-share
  * leaks.
  */
-export const agentCandidateSchema = z.object({ id: z.string(), kind: z.string(), label: z.string(), provider: z.string(), updatedAt: z.number().optional() }).readonly()
-export const agentStatsSchema = z.object({ agent: localAgentSchema, conversations: z.number().int().nonnegative() }).readonly()
+export const agentCandidateSchema = z.object({ id: z.string(), kind: z.string(), label: z.string(), provider: z.string(), updatedAt: z.number().optional(), referenceId: z.string().optional(), importOnly: z.boolean().optional(), importStatus: z.enum(['imported', 'partial', 'not-imported', 'archived']).optional(), warning: z.string().optional() }).readonly()
+export const agentStatsSchema = z.object({ agent: localAgentSchema, conversations: z.number().int().nonnegative(), error: z.string().optional(), unavailable: z.boolean().optional() }).readonly()
 // `origin` is the drive's own display path, shown under the candidate. It is
 // never a download URL: those are signed with the account's credential and
 // must not cross this wire.

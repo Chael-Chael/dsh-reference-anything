@@ -1,4 +1,4 @@
-import { defaultPickerSettings, type AgentActionsSettings, type ChatProvider, type LocalAgent } from '../wire.ts'
+import { LOCAL_AGENT_LABEL, defaultPickerSettings, type AgentActionsSettings, type ChatProvider, type LocalAgent } from '../wire.ts'
 import { Children, isValidElement, type ReactElement, type ReactNode } from 'react'
 import {
   LOCAL_AGENT_ICON_MARKER, PICKER_ICON_MARKER, PICKER_ICON_NODES, PICKER_ICON_STROKE_WIDTH, PICKER_OFFICIAL_COMMAND_KINDS, PICKER_OFFICIAL_COMMAND_STROKE_WIDTH, PROVIDER_ICON_MARKER, PROVIDER_ICON_PATH, agentLogoElement,
@@ -12,6 +12,9 @@ const css = `
   /* Reference Anything customizes the public @ menu and only the visual glyph
      inside matching Composer reference chips. Native text continues to own all
      caret, selection, wrapping, and message geometry. */
+[role="option"]:has(.dsh_ref_update_icon){position:relative;padding-right:42px!important}
+.dsh_ref_update_dismiss{display:flex;align-items:center;justify-content:center;position:absolute;right:10px;top:50%;transform:translateY(-50%);width:28px;height:28px;border:0;border-radius:6px;background:transparent;color:inherit;font-size:20px;cursor:pointer}
+.dsh_ref_update_dismiss:hover{background:var(--dsw-alias-interactive-bg-hover,rgba(38,49,72,.06))}
 [data-composer-card] [role="listbox"]:has([role="presentation"][data-source]){box-sizing:border-box!important;width:100%!important;min-width:0!important;max-width:100%!important}
 [data-trigger-menu]:has(> [role="listbox"] [role="presentation"][data-source]){border-radius:var(--dsw-radius-lg,22px)}
 [data-trigger-menu]:has(> [role="listbox"] [role="presentation"][data-source]){background:var(--dsw-menu-surface-fill,var(--dsw-alias-bg-layer-1,#fff));box-shadow:var(--dsw-elevation-prominent,0 8px 24px rgba(15,17,21,.14))}
@@ -345,6 +348,11 @@ body[data-ds-dark-theme] .dsh_ref_settings input,body[data-ds-dark-theme] .dsh_r
 @media(prefers-reduced-motion:reduce){.dsh_ref_settings .dsh_ref_card_progress{transition:none}.dsh_ref_settings .dsh_ref_card_progress.is_listing{animation:none;left:0}}
 .dsh_ref_settings .dsh_ref_provider_grid{align-items:start}
 .dsh_ref_settings .dsh_ref_provider_grid{grid-template-columns:minmax(0,1fr)}
+.dsh_ref_settings .dsh_ref_agent_grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.dsh_ref_agent_logo{filter:brightness(0)}
+body[data-ds-dark-theme] .dsh_ref_agent_logo{filter:brightness(0) invert(1);opacity:.9}
+.dsh_ref_settings .dsh_ref_agent_provider .dsh_ref_provider_controls{flex-wrap:wrap}
+@media(max-width:480px){.dsh_ref_settings .dsh_ref_agent_grid{grid-template-columns:minmax(0,1fr)}}
 .dsh_ref_settings .dsh_ref_provider_divider{display:none}
 .dsh_ref_settings .dsh_ref_workspace{gap:12px}
 .dsh_ref_settings .dsh_ref_workspace>.dsh_ref_collapsible{margin:0}
@@ -355,6 +363,7 @@ body[data-ds-dark-theme] .dsh_ref_settings input,body[data-ds-dark-theme] .dsh_r
 .dsh_ref_settings .dsh_ref_provider_main .dsh_ref_provider_summary h4{grid-column:1;grid-row:1}
 .dsh_ref_settings .dsh_ref_provider_main .dsh_ref_provider_summary>strong{grid-column:2;grid-row:1;justify-self:end}
 .dsh_ref_settings .dsh_ref_provider_main .dsh_ref_provider_summary>small{grid-column:1 / -1;grid-row:2}
+.dsh_ref_settings .dsh_ref_agent_provider .dsh_ref_provider_main .dsh_ref_provider_summary>small{grid-row:auto;white-space:normal;overflow-wrap:anywhere}
 .dsh_ref_settings .dsh_ref_provider_foot{display:flex;align-items:center;min-height:58px;padding:10px 16px;border-top:.5px solid var(--dsw-alias-border-l2);background:transparent}
 .dsh_ref_settings .dsh_ref_provider_foot .dsh_ref_provider_controls{display:flex;align-items:center;justify-content:space-between;gap:12px;width:100%;min-width:0}
 .dsh_ref_settings .dsh_ref_provider_foot .dsh_ref_provider_actions{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:6px}
@@ -1184,11 +1193,7 @@ export function adoptReferenceIconProjection(): () => void {
 const CHIP_PROVIDER_LABEL: Readonly<Record<ChatProvider, string>> = {
   chatgpt: 'ChatGPT', claude: 'Claude', gemini: 'Gemini', deepseek: 'DeepSeek', grok: 'Grok', kimi: 'Kimi',
 }
-const LOCAL_AGENT_CHIP_LABEL: Readonly<Record<LocalAgent, string>> = {
-  'claude-code': 'Claude Code', codex: 'Codex', cursor: 'Cursor', qoder: 'Qoder', reasonix: 'Reasonix',
-  openclaw: 'OpenClaw', kimi: 'Kimi CLI', grokbuild: 'Grok Build', hermes: 'Hermes', 'gemini-cli': 'Gemini CLI',
-  pi: 'Pi', opencode: 'opencode', mimocode: 'mimocode', zcode: 'zcode',
-}
+const LOCAL_AGENT_CHIP_LABEL: Readonly<Record<LocalAgent, string>> = { ...LOCAL_AGENT_LABEL, kimi: 'Kimi CLI' }
 
 function projectComposerChips(
   root: ParentNode,

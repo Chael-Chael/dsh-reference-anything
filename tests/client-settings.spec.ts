@@ -1,9 +1,10 @@
+import { AGENT_ICON_SVG, AGENT_ICON_MONO_URI } from '../src/client/agent-icons.ts'
 import { describe, expect, it } from 'vitest'
 import { defaultPickerSettings, pickerSettingsSchema, samePickerSettings, settingsRecordSchema } from '../src/wire.ts'
 import { OPENCLI_EXTENSION_STORE_URL, runSetupSequence, setupReady } from '../src/client/health.ts'
 import type { Health } from '../src/client/remote.ts'
 import { AGENT_KINDS } from '../src/sources/local-agent/registry.ts'
-import { ALL_LOCAL_AGENTS } from '../src/wire.ts'
+import { ALL_LOCAL_AGENTS, READABLE_LOCAL_AGENTS } from '../src/wire.ts'
 
 const healthy: Health = {
   version: '1.8.6', daemon: 'Daemon: running (PID 1)', pluginInstalled: true, updateAvailable: false,
@@ -22,7 +23,15 @@ describe('settings source registration guard', () => {
     }
   })
   it('keeps the durable local-agent enum identical to the runtime registry', () => {
-    expect(ALL_LOCAL_AGENTS).toEqual(AGENT_KINDS)
+    expect(READABLE_LOCAL_AGENTS).toEqual(AGENT_KINDS)
+    expect(ALL_LOCAL_AGENTS).toHaveLength(29)
+    for (const agent of ALL_LOCAL_AGENTS) {
+      expect(AGENT_ICON_SVG[agent]).toContain('<svg')
+      const mono = decodeURIComponent(AGENT_ICON_MONO_URI[agent]!)
+      expect(mono).toContain('<svg')
+      expect(mono).not.toMatch(/<rect (?:x="-4" y="-4" )?width="(32|512|280|30)" height="\1"/)
+      expect(mono).not.toContain('<g filter="url(#filter')
+    }
   })
   it('defaults every @ source to six visible items', () => {
     const picker = defaultPickerSettings()
@@ -45,7 +54,8 @@ describe('settings source registration guard', () => {
     expect(value).toMatchObject({ syncOnStartup: false, syncHistoryDays: null, maxReadTurns: 10, inputRenderMode: 'pill', cloudDriveDownloadDirectory: '' })
     expect(value).not.toHaveProperty('referenceUiMode')
     expect(value.enabledProviders).toEqual(['chatgpt', 'claude', 'gemini', 'deepseek', 'grok', 'kimi'])
-    expect(value.enabledAgents).toEqual(['claude-code', 'codex', 'cursor', 'qoder', 'reasonix', 'openclaw', 'kimi', 'grokbuild', 'hermes', 'gemini-cli', 'pi', 'opencode', 'mimocode', 'zcode'])
+    expect(value.enabledAgents).toEqual(ALL_LOCAL_AGENTS)
+    expect(settingsRecordSchema.parse({ ...value, enabledAgents: ['codex'], agentDirectories: { trae: 'D:/extra' } })).toMatchObject({ enabledAgents: ['codex'], agentDirectories: { trae: 'D:/extra' } })
   })
 
   it('bounds the persisted download directory length', () => {

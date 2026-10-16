@@ -4,7 +4,7 @@ import type { AgentCandidate, DriveCandidate } from './remote.ts'
 export function filterAgentCandidates(rows: readonly AgentCandidate[], enabled: readonly string[] | undefined): AgentCandidate[] {
   if (enabled === undefined) return [...rows]
   const selected = new Set(enabled)
-  return rows.filter(row => selected.has(row.id.slice(0, row.id.indexOf(':'))))
+  return rows.filter(row => row.warning !== undefined || selected.has(row.kind))
 }
 
 /** Undefined is the backwards-compatible "all mounts" value; [] deliberately hides all. */

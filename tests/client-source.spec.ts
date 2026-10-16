@@ -9,7 +9,7 @@ import {
 import { AGENT_ICON_MARKER, DRIVE_ICON_MARKER, LOCAL_AGENT_ICON_MARKER, PICKER_ICON_MARKER } from '../src/client/provider-icons.tsx'
 import type { PickerMenuUpdate } from '../src/client/menu-update.ts'
 import type { InputTriggerCandidate } from '@deepseek-ai/dsh-client-ui-input-trigger/client'
-import type { AgentCandidate, DriveCandidate, SearchResult } from '../src/client/remote.ts'
+import type { AgentCandidate, DriveCandidate, SearchResult, Health } from '../src/client/remote.ts'
 import { REFERENCE_ANYTHING_INVOCATIONS } from '../src/contract.ts'
 import { decodeReferenceUri } from '../src/uri.ts'
 
@@ -77,6 +77,42 @@ describe('native @ sources', () => {
     expect(filtered.map(row => row.name)).toEqual(['Cache design notes'])
     const providerScoped = await source.candidates(session, request('chatgpt'))
     expect(providerScoped.map(row => row.name)).toEqual(['Cache design notes'])
+  })
+
+  it('updates service readiness without losing the sync action', async () => {
+    let health: Health | undefined
+    let check: { pending: boolean; error?: string } = { pending: false }
+    const updateMenu = vi.fn((_update: PickerMenuUpdate) => true)
+    const source = createConversationSource(async () => [], undefined, options({ updateMenu }), {
+      sync: vi.fn(), status: () => undefined, lastSyncedAt: () => undefined,
+      lastSourceResult: () => undefined, health: () => health, healthCheck: () => check,
+    })
+    expect((await source.candidates(session, request()))[0]?.name).toContain('Service status unknown')
+    const unknown = (await source.candidates(session, request()))[0]!
+    expect(unknown.name).not.toContain('Check Settings')
+    expect(unknown.description).toContain('Check Settings')
+    check = { pending: true }
+    const checking = (await source.candidates(session, request()))[0]!
+    expect(checking.name).toContain('Checking service')
+    expect(checking.description).not.toContain('Check Settings')
+    check = { pending: false, error: 'Request timed out' }
+    const failed = (await source.candidates(session, request()))[0]!
+    expect(failed.name).toContain('Service check failed')
+    expect(failed.description).toBe('Check Settings · Request timed out')
+    check = { pending: false }
+    health = { version: '1.8.6', daemon: '', pluginInstalled: true, daemonRunning: true,
+      extensionConnected: true, extensionState: 'connected', opencliCompatible: true,
+      daemonStale: false, connectivityOk: false, connectivityChecked: false,
+      adapterCommandsReady: true, adapterCompatible: true, updateAvailable: false }
+    expect((await source.candidates(session, request()))[0]?.name).toContain('Connection unverified')
+    health = { ...health, connectivityChecked: true, connectivityOk: true }
+    expect((await source.candidates(session, request()))[0]?.name).toBe('Sync all now · ● Service ready')
+    expect((await source.candidates(session, request()))[0]?.description).not.toContain('Check Settings')
+    health = { ...health, extensionConnected: false }
+    await source.refreshCachedMenu()
+    expect(JSON.stringify(updateMenu.mock.calls.at(-1))).toContain('Service not ready')
+    health = { ...health, extensionConnected: true, connectivityOk: false }
+    expect((await source.candidates(session, request()))[0]?.name).toContain('Service not ready')
   })
 
   it('routes a concrete chat alias to its provider', async () => {
@@ -437,6 +473,28 @@ describe('local agent conversations', () => {
     const candidate = (await source.candidates(session, request()))[0]!
     expect(candidate.drill).toBeUndefined()
     expect(source.onPick(pick(candidate))).toHaveProperty('insert')
+  })
+
+  it('opens import confirmation instead of inserting a reference for import-only sources', async () => {
+    const imported = vi.fn(async () => undefined)
+    const source = createLocalAgentSource(async () => [agentRow({ id: 'scan:opaque', kind: 'trae', importOnly: true, importStatus: 'not-imported' })], undefined, options(), imported)
+    const row = (await source.candidates(session, request()))[0]!
+    expect(row.description).toContain('agent.importOnly')
+    expect(row.description).toContain('agent.status.not-imported')
+    expect(source.onPick(pick(row))).toEqual({ text: '@agents:', continue: true })
+    expect(imported).not.toHaveBeenCalled()
+    const confirmation = await source.candidates(session, { ...request('agents:'), drilled: true })
+    source.onPick(pick(confirmation[0]!))
+    await vi.waitFor(() => expect(imported).toHaveBeenCalledWith(session.sessionId, 'scan:opaque'))
+  })
+
+  it('keeps scan warnings visible without making them insertable', async () => {
+    const source = createLocalAgentSource(async () => [agentRow({ id: 'warning:0', kind: 'scan-warning', warning: 'Permission denied' }), agentRow()], undefined, options({ limit: 1 }))
+    const rows = await source.candidates(session, request())
+    expect(rows).toHaveLength(2)
+    expect(rows[0]?.name).toBe('agent.scanWarning')
+    expect(source.onPick(pick(rows[0]!))).toBe('handled')
+    expect(source.onPick(pick(rows[1]!))).toHaveProperty('insert')
   })
 
   it('escapes a title that would otherwise break out of the mention it is written into', async () => {

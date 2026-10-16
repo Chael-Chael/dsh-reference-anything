@@ -165,6 +165,19 @@ function reply(index: number): string {
 }
 
 describe('discovery', () => {
+  it('maps scanned files to existing readable references without accepting outside or unsupported files', async () => {
+    const { ctx, dispose } = await mount()
+    try {
+      const service = ctx.get('referenceLocalAgents')!
+      const id = await service.referenceForDiscovered('claude-code', join(claudeRoot, 'project-a', 'session.jsonl'), 's')
+      expect(id).toBe(CLAUDE_REF.id)
+      expect(texts(await service.read({ source: LOCAL_AGENT_SOURCE_ID, id: id! }, WINDOW))).toContain('prompt 0')
+      await expect(service.referenceForDiscovered('claude-code', join(outside, 'session.jsonl'), 's')).resolves.toBeUndefined()
+      await expect(service.referenceForDiscovered('trae', join(claudeRoot, 'project-a', 'session.jsonl'), 's')).resolves.toBeUndefined()
+      await writeFile(join(codexRoot, 'storage.db'), '{}')
+      await expect(service.referenceForDiscovered('codex', join(codexRoot, 'storage.db'), 's')).resolves.toBeUndefined()
+    } finally { await dispose() }
+  })
   it('counts recognized conversations by Agent', async () => {
     const { ctx, dispose } = await mount()
     await expect(ctx.get('referenceLocalAgents')!.stats()).resolves.toEqual(expect.arrayContaining([

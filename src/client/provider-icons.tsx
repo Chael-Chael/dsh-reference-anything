@@ -1,3 +1,4 @@
+import { AGENT_ICON_MONO_URI } from './agent-icons.ts'
 import * as ClaudeCode from '@lobehub/icons/es/ClaudeCode/components/Mono.js'
 import * as Codex from '@lobehub/icons/es/Codex/components/Mono.js'
 import * as Cursor from '@lobehub/icons/es/Cursor/components/Mono.js'
@@ -268,12 +269,7 @@ export function agentLogoElement(agent: LocalAgent): ReactElement | undefined {
 
 
 export function AgentLogo({ agent, size = 22 }: { agent: LocalAgent; size?: number }) {
-  const Logo = AGENT_LOGO[agent as keyof typeof AGENT_LOGO] as unknown as ComponentType<{ size?: string | number; 'aria-hidden'?: boolean }> | undefined
-  if (Logo) return createElement(Logo, { size, 'aria-hidden': true })
-  return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={PICKER_ICON_STROKE_WIDTH} strokeLinecap="round" strokeLinejoin="round" aria-hidden>{PICKER_ICON_NODES.agent.map((node, index) => {
-    const Tag = node.tag
-    return <Tag key={index} {...node.attrs} />
-  })}</svg>
+  return <img className="dsh_ref_agent_logo" src={AGENT_ICON_MONO_URI[agent]} width={size} height={size} alt="" aria-hidden />
 }
 
 /** RC2 accepts icon components; keep the existing projection markers in a node. */

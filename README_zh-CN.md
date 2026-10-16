@@ -214,6 +214,14 @@ Reference Anything 直接向 DSH 原生 `@` 菜单注册八个来源，不会引
 
 键入 `@agent:`，即可搜索并引用其他本地 Agent 工具保存的历史对话。
 
+启用 dsh-chat-import >= 0.26.0 后，菜单使用其公开扫描 API，并展示导入状态和扫描异常。现有来源开关、附加目录、工作区范围和正文读取器继续生效；API 不可用时回退到原本的本地扫描。设置页覆盖全部 29 种扫描来源，分别支持来源开关和附加目录；新增来源通过 API 统计数量，并明确显示扫描异常或 API 不可用状态。图标复制自 dsh-chat-import，保留 MIT 许可证（见 images/agents/LICENSE）。
+
+chat import 作为依赖随包安装；没有独立实例时，由本插件加载其 Host 入口。已独立安装、已配置或正在启动的实例优先，禁用、损坏或旧版本不会被另一份实例绕过。运行中加载独立实例时，先释放我们创建的实例，再允许独立实例启动；停用 Reference Anything 不会卸载独立实例。独立插件被移除后，重启 DSH 可重新启用随包兜底。本机制不自动安装 chat import 的独立客户端面板。
+
+目前 npm 上游仍为 0.25.2，依赖暂锁定在含 0.26.0 API 的上游 commit `c2e010198cb1249601f7a6c96144631a8b3cc53b`，安装需要访问 GitHub。待上游发布后可切换到 npm 版本。
+
+通过 chat import 扩展的来源，在兼容读取器补齐前标记为**仅支持导入**。选中后进入导入流程，不会插入无法读取的引用；关闭快捷导入时隐藏这些条目。扫描不会执行导入；上游搜索匹配标题、项目和路径。
+
 <p align="center"><img src="./images/at-local-agents.png" alt="从 @ 菜单浏览本地其他 Agent 的历史会话" width="800" /></p>
 
 **支持的 Agent：** Claude Code、Codex、Cursor、Qoder、Reasonix、OpenClaw、Kimi、Grok Build、Hermes、Gemini CLI、Pi、opencode、mimocode 和 zcode。

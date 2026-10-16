@@ -215,6 +215,14 @@ Selected sessions use DSH's canonical `dsh-session:` mention and native session 
 
 Type `@agent:` to search and reference conversations saved by other local agent tools.
 
+When dsh-chat-import >= 0.26.0 is enabled, the menu uses its public scanning API and shows import status and scan warnings. Existing source switches, additional directories, workspace scope, and transcript readers remain in use; without the API, discovery falls back to the existing local scanner. Settings cover all 29 scan formats, with per-source switches and additional directories. New formats use API counts and show scan failures or an unavailable API explicitly; their icons are vendored from dsh-chat-import under MIT (see images/agents/LICENSE).
+
+Chat import is installed as a dependency. Reference Anything loads its Host entry only when no independent instance is installed, configured, or starting. Disabled, broken, or outdated independent installations are not bypassed. If an independent instance loads later, our instance finishes cleanup before it starts; disabling Reference Anything does not unload that independent instance. Restart DSH to restore the fallback after removing the independent plugin. This does not automatically install chat import's standalone client panel.
+
+The upstream npm release is currently 0.25.2, so the dependency is pinned to upstream commit `c2e010198cb1249601f7a6c96144631a8b3cc53b`, which includes the 0.26.0 API. Installation requires GitHub access until the dependency switches to a published npm version.
+
+Additional formats discovered through chat import are marked **Import only** until a compatible reader is available. Selecting one opens the import flow instead of inserting an unreadable reference. These entries are hidden when quick import is disabled. Scanning does not import conversations; upstream search matches titles, projects, and paths.
+
 <p align="center"><img src="./images/at-local-agents.png" alt="Browse other local agents' transcripts from the @ menu" width="800" /></p>
 
 **Supported agents:** Claude Code, Codex, Cursor, Qoder, Reasonix, OpenClaw, Kimi, Grok Build, Hermes, Gemini CLI, Pi, opencode, mimocode, and zcode.

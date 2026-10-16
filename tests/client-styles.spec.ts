@@ -13,6 +13,16 @@ afterEach(() => {
 })
 
 describe('reference DOM customization', () => {
+  it('places each agent description on its own row and allows wrapping', () => {
+    adoptStyles()
+    document.body.innerHTML = '<div class="dsh_ref_settings"><article class="dsh_ref_agent_provider"><div class="dsh_ref_provider_main"><div class="dsh_ref_provider_summary"><h4>Antigravity</h4><strong>34</strong><small>Discovered by chat import</small><small>Import only</small></div></div></article></div>'
+    for (const line of Array.from(document.querySelectorAll('small'))) {
+      const style = getComputedStyle(line)
+      expect(style.gridRow).toBe('auto')
+      expect(style.whiteSpace).toBe('normal')
+    }
+  })
+
   it.each([zh, en])('updates the Desktop Tab hint from current agent action settings', async locale => {
     document.body.innerHTML = `<div data-composer-card><div role="listbox">
       <div role="presentation" data-source="Local agent conversations"></div>

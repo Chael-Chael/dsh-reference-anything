@@ -7,9 +7,10 @@ import type {
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import type { TranslateNS } from '@deepseek-ai/dsh-client-locale/client'
 import { defaultPickerSettings, type AgentActionsSettings, type ChatProvider, type PickerDisplayMode } from '../wire.ts'
+import { setupReady } from './health.ts'
 import { parseProviderQuery } from '../search.ts'
 import { encodeReferenceUri } from '../uri-codec.ts'
-import type { AgentCandidate, DriveCandidate, LocalPluginCandidate, SearchResult, SyncStatus } from './remote.ts'
+import type { AgentCandidate, DriveCandidate, LocalPluginCandidate, SearchResult, SyncStatus, Health } from './remote.ts'
 import {
   AGENT_ICON_MARKER, COMMAND_ICON_MARKER, DRIVE_ICON_MARKER, LOCAL_AGENT_ICON_MARKER, PICKER_ICON_MARKER, PROVIDER_ICON_MARKER, SESSION_ICON_MARKER, SKILL_ICON_MARKER,
   candidateIcon, type PickerIconKind,
@@ -115,6 +116,8 @@ export interface RefreshablePickerSource extends InputTriggerSource {
 }
 
 export interface ConversationSourceActions {
+  health?(): Health | undefined
+  healthCheck?(): { pending: boolean; error?: string }
   sync(): Promise<void> | void
   status(): SyncStatus | undefined
   lastSyncedAt(): string | undefined
@@ -167,7 +170,7 @@ function settle(ms: number, signal: AbortSignal): Promise<boolean> {
 }
 
 interface ConversationReference { uriId: string; label: string }
-interface AgentReference { id: string; label: string }
+interface AgentReference { id: string; label: string; importOnly?: boolean }
 interface DriveReference { id: string; label: string }
 
 type CandidateValue =
@@ -178,6 +181,7 @@ type CandidateValue =
   | { kind: 'agent-import'; reference: AgentReference; confirmed?: boolean }
   | { kind: 'agent-resume'; reference: AgentReference }
   | { kind: 'agent-back' }
+  | { kind: 'agent-warning' }
   | { kind: 'drive'; reference: DriveReference }
   | { kind: 'drive-search' }
   | { kind: 'drive-folder'; path: string }
@@ -269,12 +273,26 @@ export function createConversationSource(
 
 function syncMenuCandidate(actions: ConversationSourceActions, t: T): InputTriggerCandidate {
   const presentation = syncMenuPresentation(actions.status(), actions.lastSyncedAt(), actions.lastSourceResult(), t)
+  const health = actions.health?.()
+  const check = actions.healthCheck?.()
+  const status = check?.pending ? t('menu.serviceChecking') : check?.error ? t('menu.serviceFailed') : serviceStatus(health, t)
+  const needsCheck = actions.health && !check?.pending && (check?.error || !setupReady(health))
   return {
-    name: presentation.name,
-    description: presentation.description,
+    name: actions.health ? `${presentation.name} · ${status}` : presentation.name,
+    description: needsCheck ? `${t('menu.checkSettings')} · ${check?.error || presentation.description}` : presentation.description,
     icon: candidateIcon(PICKER_ICON_MARKER.refresh),
     value: encodeCandidate({ kind: 'action', action: 'sync' }),
   }
+}
+
+function serviceStatus(health: Health | undefined, t: T): string {
+  if (!health) return t('menu.serviceUnknown')
+  if (setupReady(health)) return t('menu.serviceReady')
+  if (health.version && health.opencliCompatible && health.daemonRunning && !health.daemonStale
+    && health.extensionConnected && health.pluginInstalled && health.adapterCompatible && !health.connectivityChecked) {
+    return t('menu.serviceUnverified')
+  }
+  return t('menu.serviceUnavailable')
 }
 
 function syncMenuPresentation(sync: SyncStatus | undefined, lastSyncedAt: string | undefined, savedResult: { success: number; total: number } | undefined, t: T): { name: string; description: string } {
@@ -456,11 +474,14 @@ export function createLocalAgentSource(
       if (scoped === undefined) return []
       const match = query.trim().match(/^([^@:\s/]+):(.*)$/u)
       const target = match ? options.sourceAliasTargets?.[match[1]!.toLocaleLowerCase()] : undefined
-      const rows = (await search(session.sessionId, scoped, signal, options.maxCandidates))
-        .filter(row => target === undefined || row.kind === target)
+      const results = await search(session.sessionId, scoped, signal, options.maxCandidates)
+      const warnings: InputTriggerCandidate[] = results.filter(row => row.warning !== undefined).map(row => ({
+        name: t('agent.scanWarning'), description: `${row.label}: ${row.warning}`, value: encodeCandidate({ kind: 'agent-warning' }),
+      }))
+      const rows = results.filter(row => row.warning === undefined && (target === undefined || row.kind === target))
       // Agent sessions go untitled far more often than browser chats do, and
       // several in a row can share an opening prompt, so numbering matters.
-      return disambiguate(rows.map((row): InputTriggerCandidate => {
+      return [...warnings, ...disambiguate(rows.map((row): InputTriggerCandidate => {
         const title = row.label.trim() || 'Untitled'
         // Same separator rule as web chats: a spaced `@Codex · Title` is
         // otherwise re-projected by the user-bubble renderer as a native pill.
@@ -472,15 +493,16 @@ export function createLocalAgentSource(
         const available = availableActions(row.id)
         return {
           name: title,
-          description: describeAgentRow(row, t),
+          description: [describeAgentRow(row, t), row.importStatus ? t(`agent.status.${row.importStatus}`) : '', row.importOnly ? t('agent.importOnly') : ''].filter(Boolean).join(' · '),
           icon: candidateIcon(LOCAL_AGENT_ICON_MARKER[row.kind as keyof typeof LOCAL_AGENT_ICON_MARKER] ?? AGENT_ICON_MARKER),
           ...(available.length === 0 ? {} : { drill: true, hint: t(available.length > 1 ? 'agent.actions' : available[0] === 'agent-import' ? 'agent.importHint' : 'settings.agentSummary') }),
-          value: encodeCandidate({ kind: 'agent', reference: { id: row.id, label } }),
+          value: encodeCandidate({ kind: 'agent', reference: { id: row.referenceId ?? row.id, label, ...(row.importOnly ? { importOnly: true } : {}) } }),
         }
-      }))
+      }))]
     },
     onPick({ candidate, session, action, span }) {
       const value = decodeCandidate(candidate.value)
+      if (value?.kind === 'agent-warning') return 'handled'
       if (value?.kind === 'agent-back') {
         const selected = selections.get(session.sessionId)
         selections.delete(session.sessionId)
@@ -500,7 +522,7 @@ export function createLocalAgentSource(
       }
       if (value?.kind !== 'agent') return undefined
       const reference = value.reference
-      if (action === 'drill') {
+      if (action === 'drill' || reference.importOnly) {
         const available = availableActions(reference.id)
         if (available.length === 0) return undefined
         const previousQuery = queries.get(session.sessionId) ?? ''
@@ -929,7 +951,7 @@ function withDisplayPolicy(
 
 function isSyncAction(candidate: InputTriggerCandidate): boolean {
   const value = decodeCandidate(candidate.value)
-  return value?.kind === 'action' && value.action === 'sync'
+  return value?.kind === 'agent-warning' || (value?.kind === 'action' && value.action === 'sync')
 }
 
 function escapeLabel(value: string): string { return value.replace(/[\\\]]/gu, match => `\\${match}`) }
@@ -1002,6 +1024,7 @@ const fallback: T = (key, params) => {
     'plugin.status.live': 'Running', 'plugin.status.disabled': 'Disabled', 'plugin.status.inert': 'Not running',
     'source.conversations': 'External conversations', 'source.files': 'Files and folders', 'source.sessions': 'DSH sessions', 'source.agents': 'Local agent conversations', 'source.drives': 'Cloud drive files', 'source.commands': 'Commands', 'source.skills': 'Skills', 'source.plugins': 'All local plugins',
     'conversation.description': '{provider} · {date}', 'drive.description': '{provider} · {path}', 'drive.searchIncomplete': 'Results may be incomplete', 'drive.searchAction': 'Search cloud drive files…', 'drive.searchActionDetail': 'Select, then type a filename, for example @drive:notes', 'drive.parentFolder': 'Parent folder', 'conversation.unknownDate': 'unknown date', 'skill.userOnly': 'user-only · ',
+    'menu.serviceChecking': '◐ Checking service', 'menu.serviceFailed': '○ Service check failed', 'menu.checkSettings': 'Check Settings', 'menu.serviceUnknown': '○ Service status unknown', 'menu.serviceReady': '● Service ready', 'menu.serviceUnverified': '◐ Connection unverified', 'menu.serviceUnavailable': '○ Service not ready',
     'menu.syncAll': 'Sync all now', 'menu.syncAllDetail': 'Refresh the local external-conversation index',
     'menu.syncRunning': 'Syncing…', 'menu.syncRunningDetail': 'An external-conversation sync is already running',
     'menu.syncAgain': 'Sync again', 'menu.syncLastResult': 'Last synced {time} · Successful sources {success}/{total}',

@@ -253,11 +253,13 @@ describe('cloud-drive download directory', () => {
 })
 
 describe('local agent settings', () => {
-  it('renders all 14 agents beside provider settings and saves an individual toggle', async () => {
+  it('renders all 29 agents beside provider settings and saves an individual toggle', async () => {
     const save = vi.fn(async (_value: SettingsRecord) => {})
     const el = renderSettings({ settings }, { save })
     const cards = el.querySelectorAll('[data-local-agent]')
-    expect(cards).toHaveLength(14)
+    expect(cards).toHaveLength(29)
+    for (const card of Array.from(cards)) expect(card.querySelector('img')?.getAttribute('src')).toMatch(/^data:image\/svg\+xml,/)
+    expect(el.querySelector('[data-local-agent=trae]')?.textContent).toContain('Import only')
     expect(Array.from(cards).map(card => card.getAttribute('data-local-agent'))).toContain('codex')
     const codex = el.querySelector('[data-local-agent="codex"] button[role="switch"]') as HTMLButtonElement
     await act(async () => { codex.click() })
@@ -342,10 +344,10 @@ describe('local agent source selection', () => {
     const saved: SettingsRecord[] = []
     const el = renderSettings({ settings }, { save: async value => { saved.push(value) } })
     const choices = el.querySelector('.dsh_ref_agent_choices .dsh_ref_selection_grid')!.querySelectorAll<HTMLButtonElement>('button[role="switch"]')
-    expect(choices).toHaveLength(14)
+    expect(choices).toHaveLength(29)
     await act(async () => { choices[0]!.click() })
     expect(saved.at(-1)?.enabledAgents).not.toContain('claude-code')
-    expect(saved.at(-1)?.enabledAgents).toHaveLength(13)
+    expect(saved.at(-1)?.enabledAgents).toHaveLength(28)
   })
 
   it('places Agent and cloud-drive details in separate cards above external conversations', async () => {
@@ -358,7 +360,7 @@ describe('local agent source selection', () => {
     const agentCard = el.querySelector('.dsh_ref_agent_sources')!
     const driveCard = el.querySelector('.dsh_ref_drive_sources')!
     const cloudSetup = el.querySelector('.dsh_ref_cloud')!
-    expect(agentCard.querySelectorAll('[data-local-agent]')).toHaveLength(14)
+    expect(agentCard.querySelectorAll('[data-local-agent]')).toHaveLength(29)
     expect(agentCard.compareDocumentPosition(driveCard) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0)
     expect(driveCard.compareDocumentPosition(providerGrid) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0)
     expect(driveCard.contains(cloudSetup)).toBe(true)

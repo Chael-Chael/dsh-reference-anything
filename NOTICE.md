@@ -69,3 +69,9 @@ File candidate formatting and cross-session candidate types use the official
 DeepSeek Harness packages `@deepseek-ai/dsh-file-reference` and
 `@deepseek-ai/dsh-session-reference`. Those packages remain external package
 dependencies and are used under the DeepSeek Harness project's MIT license.
+
+## dsh-chat-import agent icons
+
+Settings icons in images/agents are copied from Nwflower/dsh-chat-import (dbd03e1dfeaffea980458df1afc4ef899af9a2a4).
+Copyright (c) 2026 Nwflower; Copyright (c) 2026 Scarlett.
+Distributed under the MIT License; the full license is included in images/agents/LICENSE.

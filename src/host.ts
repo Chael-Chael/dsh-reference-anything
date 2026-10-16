@@ -12,6 +12,13 @@ import { spawn } from 'node:child_process'
 import { validateDownloadDirectory } from './download-directory.ts'
 import { resolveLocalPlugins } from './local-plugins.ts'
 import { z } from 'zod'
+import { randomUUID } from 'node:crypto'
+import { discoverySchema, IMPORT_ONLY_FORMATS, scanFormat, agentKind } from './chat-import-discovery.ts'
+import { ALL_LOCAL_AGENTS, LOCAL_AGENT_LABEL, type LocalAgent } from './wire.ts'
+import { expandRoot } from './sources/local-agent/registry.ts'
+import { homedir } from 'node:os'
+import { inWorkspace } from './sources/local-agent/path.ts'
+import type { AgentCandidate } from './client/remote.ts'
 
 const importedItemSchema = z.object({
   status: z.string(), sessionId: z.string().min(1).optional(),
@@ -25,6 +32,7 @@ const chatImportResultSchema = z.discriminatedUnion('mode', [
 declare module '@deepseek-ai/cordis' {
   interface Context {
     chatImport: {
+      scanDiscover(input: { format?: string; path?: string; query?: string }, signal?: AbortSignal): Promise<unknown>
       importPath(input: { format: string; path: string; sessionIds?: string[] }, signal?: AbortSignal): Promise<unknown>
       resumeSummary(input: { format: 'claude' | 'codex'; path: string }, signal?: AbortSignal): Promise<unknown>
     }
@@ -32,6 +40,7 @@ declare module '@deepseek-ai/cordis' {
 }
 
 export class ReferenceAnythingRemote extends TypertRemoteService {
+  private readonly scannedTargets = new Map<string, { owner: string; policy: string; format: string; path: string; sessionIds: string[] }>()
   constructor(ctx: Context) { super(ctx, 'referenceAnything') }
 
   async agentResume(_agent: Agent, input: { id: string }, signal: AbortSignal): Promise<string> {
@@ -53,7 +62,11 @@ export class ReferenceAnythingRemote extends TypertRemoteService {
     if (typeof importer?.importPath !== 'function') throw new Error('Install and enable dsh-chat-import >= 0.26.0 on this DSH host, then restart it.')
     const agents = this.ctx.get('referenceLocalAgents')
     if (!agents) throw new Error('Local agent conversations are unavailable.')
-    const target = await agents.importTarget(input.id)
+    const scanned = this.scannedTargets.get(input.id)
+    if (input.id.startsWith('scan:') && (!scanned || scanned.owner !== _agent.session.header.id || scanned.policy !== JSON.stringify(this.ctx.referenceChatHistory.getSettings()))) {
+      throw new Error('Conversation selection expired. Search and select it again.')
+    }
+    const target = scanned ? { format: scanned.format, path: scanned.path, sessionIds: scanned.sessionIds } : await agents.importTarget(input.id)
     signal.throwIfAborted()
     const result = await importer.importPath(target, signal)
     const parsed = chatImportResultSchema.parse(result)
@@ -78,6 +91,60 @@ export class ReferenceAnythingRemote extends TypertRemoteService {
   async agentSearch(agent: Agent, input: { query: string; limit: number }, signal: AbortSignal) {
     const agents = this.ctx.get('referenceLocalAgents')
     if (agents === undefined) return []
+    const importer = this.ctx.get('chatImport')
+    if (typeof importer?.scanDiscover === 'function') {
+      const settings = this.ctx.referenceChatHistory.getSettings()
+      agents.setAgentDirectories(settings.agentDirectories ?? {})
+      const policy = agents.discoveryPolicy()
+      const requests: Array<{ format: string; path?: string }> = policy.roots.map(root => ({ format: scanFormat(root.kind), path: root.path }))
+      if (settings.picker?.agents.showImport !== false) {
+        for (const format of IMPORT_ONLY_FORMATS) {
+          if (!(settings.enabledAgents ?? ALL_LOCAL_AGENTS).includes(format)) continue
+          requests.push({ format })
+          const custom = expandRoot(settings.agentDirectories?.[format] ?? '', homedir())
+          if (custom) requests.push({ format, path: custom })
+        }
+      }
+      const candidates: AgentCandidate[] = []
+      const discovered: z.infer<typeof discoverySchema>['sessions'] = []
+      const warnings: AgentCandidate[] = []
+      const seen = new Set<string>()
+      const owner = agent.session.header.id
+      // Scan one format at a time; the upstream cache handles repeated searches.
+      for (const request of requests) {
+        signal.throwIfAborted()
+        try {
+          const result = discoverySchema.parse(await importer.scanDiscover({ ...request, query: input.query }, signal))
+          for (const warning of result.warnings) warnings.push({ id: `warning:${warnings.length}`, kind: 'scan-warning', label: warning.format, provider: '', warning: `${warning.target}: ${warning.error}` })
+          for (const row of result.sessions) {
+            const key = JSON.stringify([row.format, row.sourcePath, row.sessionId])
+            if (seen.has(key) || (policy.scope === 'workspace' && !inWorkspace(row.cwd ?? '', agent.session.header.cwd ?? process.cwd()))) continue
+            seen.add(key)
+            discovered.push(row)
+          }
+        } catch (error) {
+          signal.throwIfAborted()
+          warnings.push({ id: `warning:${warnings.length}`, kind: 'scan-warning', label: request.format, provider: '', warning: error instanceof Error ? error.message : String(error) })
+        }
+      }
+      discovered.sort((a, b) => (b.lastActiveAt ?? 0) - (a.lastActiveAt ?? 0))
+      for (const row of discovered) {
+        signal.throwIfAborted()
+        if (candidates.length >= input.limit) break
+        const kind = agentKind(row.format)
+        const referenceId = await agents.referenceForDiscovered(kind, row.sourcePath, row.sessionId)
+        if (!referenceId && settings.picker?.agents.showImport === false) continue
+        const id = referenceId ?? `scan:${randomUUID()}`
+        if (!referenceId) {
+          this.scannedTargets.set(id, { owner, policy: JSON.stringify(settings), format: row.format, path: row.sourcePath, sessionIds: [row.sessionId] })
+          if (this.scannedTargets.size > 2000) this.scannedTargets.delete(this.scannedTargets.keys().next().value!)
+        }
+        candidates.push({ id, kind, label: row.title || row.sessionId, provider: LOCAL_AGENT_LABEL[kind as LocalAgent] ?? row.format,
+          ...(referenceId ? { referenceId } : { importOnly: true }), importStatus: row.importStatus,
+          ...(row.lastActiveAt == null ? {} : { updatedAt: row.lastActiveAt }) })
+      }
+      return [...warnings, ...candidates]
+    }
     // A session with no cwd of its own is rare and has no workspace to scope
     // to; falling back to the process's directory is the same guess the
     // `ReferenceSource.list` seam makes, rather than an empty group.
@@ -96,8 +163,32 @@ export class ReferenceAnythingRemote extends TypertRemoteService {
     signal.throwIfAborted()
     const agents = this.ctx.get('referenceLocalAgents')
     if (agents === undefined) return []
-    agents.setAgentDirectories(this.ctx.referenceChatHistory.getSettings().agentDirectories ?? {})
-    return (await agents.stats(signal)).map(row => ({ agent: row.kind, conversations: row.conversations }))
+    const settings = this.ctx.referenceChatHistory.getSettings()
+    agents.setAgentDirectories(settings.agentDirectories ?? {})
+    const rows: import('./client/remote.ts').AgentStats[] = (await agents.stats(signal)).map(row => ({ agent: row.kind, conversations: row.conversations }))
+    const importer = this.ctx.get('chatImport')
+    for (const format of IMPORT_ONLY_FORMATS) {
+      signal.throwIfAborted()
+      if (typeof importer?.scanDiscover !== 'function') {
+        rows.push({ agent: format, conversations: 0, unavailable: true })
+        continue
+      }
+      const sessions = new Set<string>()
+      const errors: string[] = []
+      const custom = expandRoot(settings.agentDirectories?.[format] ?? '', homedir())
+      for (const path of custom ? [undefined, custom] : [undefined]) {
+        try {
+          const result = discoverySchema.parse(await importer.scanDiscover({ format, ...(path ? { path } : {}) }, signal))
+          for (const row of result.sessions) sessions.add(JSON.stringify([row.sourcePath, row.sessionId]))
+          errors.push(...result.warnings.map(warning => `${warning.target}: ${warning.error}`))
+        } catch (error) {
+          signal.throwIfAborted()
+          errors.push(error instanceof Error ? error.message : String(error))
+        }
+      }
+      rows.push({ agent: format, conversations: sessions.size, ...(errors.length ? { error: errors.join('\n') } : {}) })
+    }
+    return rows
   }
 
   /**

@@ -38,7 +38,12 @@ await build({
   target: ['es2022'],
   sourcemap: false,
   jsx: 'automatic',
-  external: clientExternals,
+  loader: { '.svg': 'text' },
+  external: clientExternals.filter(name => name !== 'react-dom'),
+  // Bundle the small react-dom/client entry shim; the host seeds only react-dom.
+  plugins: [{ name: 'host-react-dom', setup(build) {
+    build.onResolve({ filter: /^react-dom$/ }, () => ({ path: 'react-dom', external: true }))
+  } }],
   banner: {
     js: "window.__ModuleLoader__.load({ id: 'dsh-reference-anything', factory: (require) => { var module = { exports: {} }; var exports = module.exports;",
   },

@@ -15,6 +15,10 @@
   "main": "lib/index.js",
   "types": "lib/index.d.ts",
   "exports": {
+    "./chat-import-runtime": {
+      "types": "./lib/chat-import-runtime.d.ts",
+      "default": "./lib/chat-import-runtime.js"
+    },
     ".": {
       "types": "./lib/index.d.ts",
       "default": "./lib/index.js"
@@ -70,6 +74,7 @@
     "opencli-plugin/package.json",
     "cordis.patch.yml",
     "locale/*.json",
+    "images/agents",
     "images/logo.png",
     "images/logo-icon.png",
     "images/logo-mono.png",
@@ -181,6 +186,7 @@
   "dependencies": {
     "@deepseek-ai/schemastery": "^3.18.1",
     "@lobehub/icons": "^5.16.0",
+    "dsh-chat-import": "https://codeload.github.com/Nwflower/dsh-chat-import/tar.gz/c2e010198cb1249601f7a6c96144631a8b3cc53b",
     "react-markdown": "^10.1.0",
     "sortablejs": "^1.15.7",
     "zod": "^4.4.3"

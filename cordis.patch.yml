@@ -10,6 +10,9 @@
   disabled: true
 
 - insert:
+    - id: reference-chat-import-runtime
+      name: 'dsh-reference-anything/chat-import-runtime'
+
     # The registry every source registers into.
     - id: references
       name: 'dsh-reference-anything'

@@ -21,6 +21,7 @@ import { en, REFERENCE_ANYTHING_NS, zh } from './locale.ts'
 import { runSetupSequence, setupReady, type SetupStage } from './health.ts'
 import { createAutoDismissNotice } from './notice.ts'
 import { filterAgentCandidates, filterDriveCandidates } from './selection.ts'
+import { createUpdateSource } from './update-menu.tsx'
 import { pickDirectoryWithError } from './directory-picker.ts'
 
 // `ctx.remote.commands` is a separately injected Remote face. Declaring only
@@ -92,6 +93,7 @@ export function apply(ctx: ClientContext): void {
       applySources?.(currentSettings.picker)
       scope.set({ ...scope.getSnapshot(), settings: currentSettings, stats, storage: unwrap(storageResult),
         error: statsUnavailable && !stats ? 'Local conversation statistics are unavailable until the DSH host is restarted.' : undefined, loading: false })
+      void activeConversationSource?.refreshCachedMenu()
       void refreshOpenList()
       void refreshAgentStats()
     } catch (error) {
@@ -115,22 +117,40 @@ export function apply(ctx: ClientContext): void {
       applySources?.(currentSettings.picker)
       scope.set({ ...scope.getSnapshot(), settings: currentSettings, health: unwrap(health), profiles, stats, storage: unwrap(storageResult),
         error: statsUnavailable && !stats ? 'Local conversation statistics are unavailable until the DSH host is restarted.' : undefined, loading: false })
+      quickHealthError = undefined
+      quickHealthCheckedAt = Date.now()
+      void activeConversationSource?.refreshCachedMenu()
       void refreshOpenList()
       void refreshAgentStats()
     } catch (error) {
       if (generation === refreshGeneration) scope.set({ ...scope.getSnapshot(), error: error instanceof Error ? error.message : String(error), loading: false })
     }
   }
-  let quickHealthAttempted = false
+  let quickHealthPending = false
+  let quickHealthCheckedAt = 0
+  let quickHealthError: string | undefined
   const quickRefreshOnOpen = async (): Promise<void> => {
-    if (!remote || quickHealthAttempted) return
+    if (!remote || quickHealthPending || Date.now() - quickHealthCheckedAt < 30_000) return
     const settings = scope.getSnapshot().settings
     if (!(settings.picker ?? defaultPickerSettings()).conversations.enabled) return
-    quickHealthAttempted = true
+    quickHealthPending = true
+    quickHealthError = undefined
+    void activeConversationSource?.refreshCachedMenu()
+    const activeRemote = remote
     try {
-      const health = unwrap(await remote.quickHealth())
+      const health = unwrap(await activeRemote.quickHealth(AbortSignal.timeout(15_000)))
+      if (remote !== activeRemote) return
       scope.set({ ...scope.getSnapshot(), health })
-    } catch (error) { scope.set({ ...scope.getSnapshot(), error: message(error) }) }
+    } catch (error) {
+      if (remote !== activeRemote) return
+      quickHealthError = message(error)
+      scope.set({ ...scope.getSnapshot(), error: quickHealthError })
+    }
+    finally {
+      quickHealthPending = false
+      quickHealthCheckedAt = Date.now()
+      void activeConversationSource?.refreshCachedMenu()
+    }
   }
   /**
    * Re-read provider statistics only.
@@ -214,6 +234,7 @@ export function apply(ctx: ClientContext): void {
     remote = (ctx.reflect as unknown as { get(name: string): unknown }).get('remote.referenceAnything') as ReferenceAnythingRemoteFace | undefined
     if (!remote) throw new Error('referenceAnything Remote did not mount')
     await refreshLocal()
+    void quickRefreshOnOpen()
     void refreshUpdateStatus()
     return () => { remote = undefined; if (poll) clearInterval(poll); void dispose() }
   }, 'reference-anything.client.remote')
@@ -222,6 +243,28 @@ export function apply(ctx: ClientContext): void {
   const sessions = (ctx as unknown as { sessions: ISessions }).sessions
   const updateMenu = createPickerMenuUpdater(inputTriggers, sessions)
   const guardMenuActions = createPickerMenuActionGuard(inputTriggers, sessions)
+  const installPackageUpdate = async () => {
+    if (!remote) throw new Error(t('menu.updateDisconnected'))
+    const result = unwrap(await remote.installUpdate())
+    const previous = scope.getSnapshot().update
+    const update = { ...previous, currentVersion: result.version, latestVersion: result.version, updateAvailable: false, checkedAt: Date.now() }
+    notices.show(t(result.restartRequired ? 'notice.updateInstalled' : 'notice.upToDate', { version: result.version }), { update, error: undefined })
+    return result
+  }
+  ctx.effect(() => {
+    const source = createUpdateSource(async () => {
+      const activeRemote = remote
+      if (!activeRemote) return undefined
+      const previous = scope.getSnapshot().update
+      const update = unwrap(await (previous && Date.now() - previous.checkedAt >= 3_600_000
+        ? activeRemote.checkUpdate() : activeRemote.updateStatus()))
+      if (remote !== activeRemote) return undefined
+      scope.set({ ...scope.getSnapshot(), update })
+      return update
+    }, installPackageUpdate, updateMenu, t)
+    const unregister = inputTriggers.registerSource(source)
+    return () => { unregister(); source.dispose() }
+  }, 'reference-anything.client.update-menu')
   let sourceDisposers: Array<() => void> = []
   let appliedPicker: PickerSettings | undefined
   const registerSources = (picker: PickerSettings) => {
@@ -266,8 +309,11 @@ export function apply(ctx: ClientContext): void {
       conversationSearch.run(query, signal, async () => {
         // Re-read after the debounce: the Remote can unmount with its scope.
         if (!remote) return []
+        void quickRefreshOnOpen()
         return unwrap(await remote.search({ query, ...(provider ? { provider } : {}), limit }, signal))
       }), t, optionsFor('conversations'), {
+        health: () => scope.getSnapshot().health,
+        healthCheck: () => ({ pending: quickHealthPending, error: quickHealthError }),
         sync: () => startSync(scope.getSnapshot().settings.enabledProviders, 'incremental'),
         status: () => scope.getSnapshot().sync,
         lastSyncedAt: () => lastSyncFinishedAt ?? scope.getSnapshot().stats
@@ -308,10 +354,11 @@ export function apply(ctx: ClientContext): void {
       agentSearch.run(query, signal, async () => {
         // Re-read after the debounce, as the conversation source does above.
         if (!remote) return []
-        return filterAgentCandidates(
+        const rows = filterAgentCandidates(
           unwrap(await remote.agentSearch(sessionId, { query, limit: 100 }, signal)),
           scope.getSnapshot().settings.enabledAgents,
-        ).slice(0, limit)
+        )
+        return [...rows.filter(row => row.warning !== undefined), ...rows.filter(row => row.warning === undefined).slice(0, limit)]
       }), t, optionsFor('agents'), async (sessionId, id) => {
         if (!remote?.agentImport) throw new Error(t('agent.importUnavailable'))
         const importedId = unwrap(await remote.agentImport(sessionId, { id }))
@@ -464,16 +511,8 @@ export function apply(ctx: ClientContext): void {
         } catch (error) { scope.set({ ...scope.getSnapshot(), error: message(error), notice: undefined }) }
       },
       installUpdate: async () => {
-        try {
-          if (!remote) return
-          const result = unwrap(await remote.installUpdate())
-          const previous = scope.getSnapshot().update
-          const update = {
-            currentVersion: result.version, latestVersion: result.version, updateAvailable: false, checkedAt: Date.now(),
-            releaseNotes: previous?.releaseNotes, releaseUrl: previous?.releaseUrl,
-          }
-          notices.show(result.restartRequired ? t('notice.updateInstalled', { version: result.version }) : t('notice.upToDate', { version: previous?.currentVersion || result.version }), { update, error: undefined })
-        } catch (error) { scope.set({ ...scope.getSnapshot(), error: message(error), notice: undefined }) }
+        try { await installPackageUpdate() }
+        catch (error) { scope.set({ ...scope.getSnapshot(), error: message(error), notice: undefined }) }
       },
       setupAll: async (extensionPageOpened: boolean) => {
         if (!remote) return

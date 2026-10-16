@@ -5,13 +5,17 @@ export const providerSchema = z.enum(['chatgpt', 'claude', 'gemini', 'deepseek',
 export type ChatProvider = z.infer<typeof providerSchema>
 export const ALL_PROVIDERS: readonly ChatProvider[] = providerSchema.options
 
-export const localAgentSchema = z.enum(['claude-code', 'codex', 'cursor', 'qoder', 'reasonix', 'openclaw', 'kimi', 'grokbuild', 'hermes', 'gemini-cli', 'pi', 'opencode', 'mimocode', 'zcode'])
+export const READABLE_LOCAL_AGENTS = ['claude-code', 'codex', 'cursor', 'qoder', 'reasonix', 'openclaw', 'kimi', 'grokbuild', 'hermes', 'gemini-cli', 'pi', 'opencode', 'mimocode', 'zcode'] as const
+export const IMPORT_ONLY_AGENTS = ['antigravity', 'kilocode', 'chatgpt', 'workbuddy', 'qwen', 'continue', 'cline', 'goose', 'dsh4', 'zed', 'crush', 'teleagent', 'trae', 'vibe', 'dsh'] as const
+export const localAgentSchema = z.enum([...READABLE_LOCAL_AGENTS, ...IMPORT_ONLY_AGENTS])
 export type LocalAgent = z.infer<typeof localAgentSchema>
 export const ALL_LOCAL_AGENTS: readonly LocalAgent[] = localAgentSchema.options
 export const LOCAL_AGENT_LABEL: Readonly<Record<LocalAgent, string>> = {
   'claude-code': 'Claude Code', codex: 'Codex', cursor: 'Cursor', qoder: 'Qoder', reasonix: 'Reasonix',
   openclaw: 'OpenClaw', kimi: 'Kimi', grokbuild: 'Grok Build', hermes: 'Hermes', 'gemini-cli': 'Gemini CLI',
   pi: 'Pi', opencode: 'opencode', mimocode: 'mimocode', zcode: 'zcode',
+  antigravity: 'Antigravity', kilocode: 'Kilo Code', chatgpt: 'ChatGPT', workbuddy: 'WorkBuddy', qwen: 'Qwen Code',
+  continue: 'Continue', cline: 'Cline', goose: 'Goose', dsh4: 'DSH4', zed: 'Zed', crush: 'Crush', teleagent: 'TeleAgent', trae: 'Trae Work', vibe: 'Mistral Vibe', dsh: 'DSH',
 }
 
 export const pickerSourceSchema = z.enum(['commands', 'skills', 'files', 'sessions', 'agents', 'conversations', 'drives', 'plugins'])
