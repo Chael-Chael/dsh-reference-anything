@@ -1,6 +1,6 @@
 {
   "name": "dsh-reference-anything",
-  "version": "0.4.4",
+  "version": "0.5.0",
   "description": "Reference files, sessions, commands, skills, and historical external AI chats from the DSH @ menu.",
   "icon": "./images/logo-icon.png",
   "license": "MIT",
@@ -75,11 +75,20 @@
     "cordis.patch.yml",
     "locale/*.json",
     "images/agents",
+    "release-notes",
     "images/logo.png",
     "images/logo-icon.png",
     "images/logo-mono.png",
     "NOTICE.md",
-    "README.md"
+    "vendor/chat-import-reader/parsers.mjs",
+    "vendor/chat-import-reader/availability-worker.mjs",
+    "vendor/chat-import-reader/parsers.d.mts",
+    "vendor/chat-import-reader/LICENSE*",
+    "vendor/chat-import-reader/README.md",
+    "README.md",
+    "vendor/chat-import-reader/scanners.mjs",
+    "vendor/chat-import-reader/scan-worker.mjs",
+    "vendor/chat-import-reader/upstream-sha256.json"
   ],
   "dsh": {
     "bundle": {
@@ -101,12 +110,19 @@
     }
   },
   "scripts": {
+    "agent:context": "node scripts/agent/workflow.mjs context",
+    "agent:sync": "node scripts/agent/workflow.mjs sync",
+    "agent:verify": "node scripts/agent/workflow.mjs verify",
+    "agent:release:prepare": "node scripts/agent/workflow.mjs release-prepare",
+    "agent:release:gate": "node scripts/agent/workflow.mjs release-gate",
+    "agent:retro": "node scripts/agent/workflow.mjs retro",
     "build": "node build.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
     "check": "npm run typecheck && npm run test && npm run build",
     "prepublishOnly": "npm run check",
-    "prepare": "node build.mjs"
+    "prepare": "node build.mjs",
+    "vendor:sync": "node scripts/vendor-chat-import-reader.mjs"
   },
   "peerDependencies": {
     "@deepseek-ai/cordis": ">=4.0.1",
@@ -131,6 +147,7 @@
     "@deepseek-ai/dsh-session-reference": ">=0.2.0-rc.2",
     "@deepseek-ai/dsh-settings": ">=0.2.0-rc.2",
     "@deepseek-ai/dsh-storage-domain": ">=0.2.0-rc.2",
+    "@deepseek-ai/dsh-system-prompt": ">=0.2.0-rc.2",
     "@deepseek-ai/dsh-tools": ">=0.2.0-rc.2",
     "@deepseek-ai/dsh-typert-protocol": ">=0.2.0-rc.2",
     "@deepseek-ai/dsh-typert-registry": ">=0.2.0-rc.2",
@@ -185,8 +202,9 @@
   },
   "dependencies": {
     "@deepseek-ai/schemastery": "^3.18.1",
+    "@jackwener/opencli": "2.0.0",
     "@lobehub/icons": "^5.16.0",
-    "dsh-chat-import": "https://codeload.github.com/Nwflower/dsh-chat-import/tar.gz/c2e010198cb1249601f7a6c96144631a8b3cc53b",
+    "fflate": "0.8.2",
     "react-markdown": "^10.1.0",
     "sortablejs": "^1.15.7",
     "zod": "^4.4.3"
@@ -212,6 +230,7 @@
     "@deepseek-ai/dsh-file-reference": "0.2.0-rc.2",
     "@deepseek-ai/dsh-llm": "0.2.0-rc.2",
     "@deepseek-ai/dsh-output-retention": "0.2.0-rc.2",
+    "@deepseek-ai/dsh-plugin-manager": "0.2.0-rc.2",
     "@deepseek-ai/dsh-session": "0.2.0-rc.2",
     "@deepseek-ai/dsh-session-reference": "0.2.0-rc.2",
     "@deepseek-ai/dsh-settings": "0.2.0-rc.2",
@@ -223,7 +242,6 @@
     "@deepseek-ai/dsh-typert-registry": "0.2.0-rc.2",
     "@deepseek-ai/dsh-util-code-language": "0.2.0-rc.2",
     "@deepseek-ai/dsh-util-workspace-path": "0.2.0-rc.2",
-    "@jackwener/opencli": "1.8.6",
     "@shikijs/langs": "4.3.1",
     "@types/node": "^22.20.1",
     "@types/react": "^18.2.0",

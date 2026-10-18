@@ -77,7 +77,7 @@ function assertIdentityResult(result, domain, operation) {
   return result.identity
 }
 
-const PROVIDER_READY_TIMEOUT_MS = 1200
+const PROVIDER_READY_TIMEOUT_MS = 10_000
 const PROVIDER_READY_INITIAL_DELAY_MS = 50
 const PROVIDER_READY_MAX_DELAY_MS = 400
 
@@ -264,14 +264,16 @@ export function registerProvider(config) {
       await navigate(page, config.home, { settleMs: 600 })
       const expectedScope = parseExpectedAccountScope(kwargs.accountScope)
       if (expectedScope) {
-        const identity = await evaluate(page, config.whoamiScript, {}, `${config.site} detail identity`)
+        const identity = await evaluateWhenProviderReady(
+          page, config.whoamiScript, {}, `${config.site} detail identity`, { accepts: terminalIdentityResult },
+        )
         const stableIdentity = assertIdentityResult(identity, config.domain, `${config.site} detail`)
         const actualScope = createHash('sha256').update(`${config.provider.toLocaleLowerCase()}\0${stableIdentity}`).digest('hex')
         if (actualScope !== expectedScope) {
           throw new CommandExecutionError(`DSH_ACCOUNT_SCOPE_MISMATCH: ${config.site} detail: conversation belongs to a different logged-in account`)
         }
       }
-      let result = await evaluate(page, config.detailScript, { id }, `${config.site} detail`)
+      let result = await evaluateWhenProviderReady(page, config.detailScript, { id }, `${config.site} detail`)
       if (result?.ok !== true && result?.code !== 'AUTH' && result?.code !== 'RATE_LIMIT' && config.fallbackScript) {
         await navigate(page, config.conversationUrl(id), { settleMs: 1800 })
         result = await evaluate(page, config.fallbackScript, { id }, `${config.site} detail fallback`)

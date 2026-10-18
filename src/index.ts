@@ -15,7 +15,7 @@ import type { ContentBlock } from '@deepseek-ai/dsh-llm'
 import type { Session } from '@deepseek-ai/dsh-session'
 import z from '@deepseek-ai/schemastery'
 import { ReferenceAnythingError } from './errors.ts'
-import { mayContainReference, parseReferenceText } from './uri.ts'
+import { decodeReferenceUri, mayContainReference, parseReferenceText, referenceReadHandle } from './uri.ts'
 import type {
   ReferenceRef,
   ReferenceSnapshot,
@@ -169,6 +169,29 @@ export default class ReferenceRuntime extends Service {
       if (mentioned) this.grant(String(session.id), ref)
     }
     this.assertGranted(session && String(session.id), ref)
+  }
+
+  /** Resolve short handles only against references already named in this task. */
+  resolveReadReference(session: Session | undefined, uri: string): ReferenceRef {
+    if (!uri.startsWith('ref:')) return decodeReferenceUri(uri)
+    const candidates: ReferenceRef[] = []
+    if (session) {
+      for (const key of this.grants.get(String(session.id)) ?? []) {
+        const separator = key.indexOf('\u0000')
+        candidates.push({ source: key.slice(0, separator), id: key.slice(separator + 1) })
+      }
+      for (const event of session.snapshotEvents()) {
+        const blocks = event.type === 'user/message' ? event.data.content
+          : event.type === 'tool/result' ? event.data.message.content : []
+        for (const block of blocks) {
+          if (block.type !== 'text' || !mayContainReference(block.text)) continue
+          try { candidates.push(...parseReferenceText(block.text).references.map(input => input.ref)) } catch { /* Ignore malformed history. */ }
+        }
+      }
+    }
+    const matched = candidates.find(ref => ref.source !== 'local-agent' && referenceReadHandle(ref) === uri)
+    if (!matched) throw new ReferenceAnythingError('Unknown reference handle in this task; use reference_list and copy its uri exactly.', 'CONVERSATION_REFERENCE_NOT_GRANTED')
+    return matched
   }
 
   /** Release task-local grants when a host knows the task is gone. */

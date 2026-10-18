@@ -12,7 +12,7 @@ import { localAgentSchema, providerSchema, settingsRecordSchema } from './wire.t
  * leaks.
  */
 export const agentCandidateSchema = z.object({ id: z.string(), kind: z.string(), label: z.string(), provider: z.string(), updatedAt: z.number().optional(), referenceId: z.string().optional(), importOnly: z.boolean().optional(), importStatus: z.enum(['imported', 'partial', 'not-imported', 'archived']).optional(), warning: z.string().optional() }).readonly()
-export const agentStatsSchema = z.object({ agent: localAgentSchema, conversations: z.number().int().nonnegative(), error: z.string().optional(), unavailable: z.boolean().optional() }).readonly()
+export const agentStatsSchema = z.object({ agent: localAgentSchema, conversations: z.number().int().nonnegative(), error: z.string().optional(), unavailable: z.boolean().optional(), paths: z.array(z.string()).optional(), readable: z.boolean().optional() }).readonly()
 // `origin` is the drive's own display path, shown under the candidate. It is
 // never a download URL: those are signed with the account's credential and
 // must not cross this wire.
@@ -55,6 +55,7 @@ export const healthSchema = z.object({
   version: z.string(), daemon: z.string(), pluginInstalled: z.boolean(),
   daemonRunning: z.boolean(), extensionConnected: z.boolean(), extensionState: extensionStateSchema,
   extensionVersion: z.string().optional(), profileCount: z.number().int().nonnegative().optional(),
+  latestExtensionVersion: z.string().optional(), extensionUpdateAvailable: z.boolean().optional(), extensionCompatible: z.boolean().optional(),
   opencliCompatible: z.boolean(), daemonVersion: z.string().optional(), daemonStale: z.boolean(),
   connectivityOk: z.boolean(), connectivityChecked: z.boolean(), pluginVersion: z.string().optional(), adapterCommandsReady: z.boolean(), adapterCompatible: z.boolean(), latestVersion: z.string().optional(), updateAvailable: z.boolean(),
   versionError: z.string().optional(), daemonError: z.string().optional(), pluginError: z.string().optional(), doctorError: z.string().optional(),
@@ -66,6 +67,7 @@ export const openCliDiscoverySchema = z.object({
 export const packageUpdateStatusSchema = z.object({
   currentVersion: z.string(), latestVersion: z.string(), updateAvailable: z.boolean(),
   checkedAt: z.number().int().nonnegative(), releaseNotes: z.string().max(12_000).optional(), releaseUrl: z.string().url().optional(), error: z.string().optional(),
+  currentReleaseNotes: z.string().max(12_000).optional(), currentReleaseUrl: z.string().url().optional(),
 }).readonly()
 export const packageUpdateResultSchema = z.object({
   version: z.string(), restartRequired: z.boolean(),
@@ -133,10 +135,17 @@ export const openListMountInputSchema = z.object({ id: z.string().min(1) }).stri
 export const openListDisableMountSchema = z.object({ id: z.string().min(1), disabled: z.boolean().optional() }).strict().readonly()
 export const openListUpgradeInputSchema = z.object({ rollback: z.boolean().optional() }).strict().readonly()
 
+export const chatImportCompatibilitySchema = z.object({
+  state: z.enum(['ready', 'incompatible', 'unavailable', 'disabled', 'installing', 'restart-required']),
+  version: z.string(), missing: z.array(z.string()), canUpgrade: z.boolean(), error: z.string().optional(),
+}).strict().readonly()
+
 export const REFERENCE_ANYTHING_INVOCATIONS: readonly InvocationDescriptor[] = [
+  descriptor('chatImportStatus', [], strict('ChatImportCompatibility', chatImportCompatibilitySchema)),
+  descriptor('chatImportUpgradeInstall', [], strict('ChatImportCompatibility', chatImportCompatibilitySchema), true),
   descriptor('agentResume', [agentLookup, { name: 'input', wire: 'input', source: 'json', codec: strict('AgentResumeInput', z.object({ id: z.string().min(1) }).strict().readonly()) }], strict('ResumeSummary', z.string().min(1)), true),
   descriptor('agentImport', [agentLookup, { name: 'input', wire: 'input', source: 'json', codec: strict('AgentImportInput', z.object({ id: z.string().min(1) }).strict().readonly()) }], strict('ImportedSessionId', z.string().min(1)), true),
-  descriptor('agentSearch', [agentLookup, { name: 'input', wire: 'input', source: 'json', codec: strict('AgentSearchInput', z.object({ query: z.string(), limit: z.number().int().min(1).max(100) }).readonly()) }], strict('AgentCandidate[]', z.array(agentCandidateSchema)), true),
+  descriptor('agentSearch', [agentLookup, { name: 'input', wire: 'input', source: 'json', codec: strict('AgentSearchInput', z.object({ query: z.string(), limit: z.number().int().min(1).max(100), kind: localAgentSchema.optional() }).readonly()) }], strict('AgentCandidate[]', z.array(agentCandidateSchema)), true),
   descriptor('agentStats', [], strict('AgentStats[]', z.array(agentStatsSchema)), true),
   // No session lookup, unlike `agentSearch`: a drive is the same drive from
   // every workspace, so there is nothing to scope the query to.

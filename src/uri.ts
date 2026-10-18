@@ -1,3 +1,4 @@
+import { LOCAL_REFERENCE_SCHEME, LOCAL_REFERENCE_OPEN, LOCAL_REFERENCE_CLOSE, localLocatorId, localLocatorFromId, validateLocalLocator } from './local-locator.ts'
 /**
  * Canonical `dsh-ref:` URI and the inline mention that carries it.
  *
@@ -10,10 +11,15 @@
  */
 
 import { ReferenceAnythingError } from './errors.ts'
+import { createHash } from 'node:crypto'
 import type { ReferenceInput, ReferenceRef } from './types.ts'
-import { decodeReferenceUriUnchecked, encodeReferenceUri, REFERENCE_SCHEME } from './uri-codec.ts'
+import { decodeReferenceUriUnchecked, encodeReferenceUri, encodeLegacyReferenceUri, REFERENCE_SCHEME } from './uri-codec.ts'
 
 export { encodeReferenceUri, REFERENCE_SCHEME }
+
+export function referenceReadHandle(ref: ReferenceRef): string {
+  return `ref:${createHash('sha256').update(encodeLegacyReferenceUri(ref)).digest('hex').slice(0, 24)}`
+}
 
 /**
  * Decode one canonical reference URI.
@@ -65,8 +71,14 @@ export interface ParsedReferenceText {
  */
 export function parseReferenceText(text: string): ParsedReferenceText {
   const references: ReferenceInput[] = []
-  const pattern = /@\[((?:\\.|[^\\\]])*)\]\((dsh-ref:[^\s)]*)\)|(dsh-ref:[A-Za-z0-9_-]+)/gu
-  const rendered = text.replace(pattern, (
+  const withLocators = text.replace(/<local-agent-reference>([\s\S]*?)<\/local-agent-reference>/gu, (_match, json: string) => {
+    const value = JSON.parse(json)
+    const locator = validateLocalLocator(value)
+    references.push({ ref: { source: 'local-agent', id: localLocatorId(locator) }, label: typeof value.label === 'string' ? value.label : locator.sessionId })
+    return `@${typeof value.label === 'string' ? value.label : locator.sessionId}`
+  })
+  const pattern = /@\[((?:\\.|[^\\\]])*)\]\(((?:dsh-ref:|dsh-local:)[^\s)]*)\)|((?:dsh-ref:[A-Za-z0-9_-]+|dsh-local:\?[^\s<>]+))/gu
+  const rendered = withLocators.replace(pattern, (
     _match: string,
     rawLabel: string | undefined,
     markdownUri: string | undefined,
@@ -75,7 +87,7 @@ export function parseReferenceText(text: string): ParsedReferenceText {
     const uri = markdownUri ?? bareUri
     if (uri === undefined) throw invalidUri(String(_match))
     const ref = decodeReferenceUri(uri)
-    const label = rawLabel === undefined ? ref.id : unescapeLabel(rawLabel)
+    const label = rawLabel === undefined ? (ref.source === 'local-agent' ? localLocatorFromId(ref.id).sessionId : ref.id) : unescapeLabel(rawLabel)
     references.push({ ref, label })
     return `@${label}`
   })
@@ -91,7 +103,7 @@ export function parseReferenceText(text: string): ParsedReferenceText {
  * @returns whether a full parse is worth running.
  */
 export function mayContainReference(text: string): boolean {
-  return text.includes(REFERENCE_SCHEME)
+  return text.includes(REFERENCE_SCHEME) || text.includes(LOCAL_REFERENCE_SCHEME) || (text.includes(LOCAL_REFERENCE_OPEN) && text.includes(LOCAL_REFERENCE_CLOSE))
 }
 
 function escapeLabel(label: string): string {

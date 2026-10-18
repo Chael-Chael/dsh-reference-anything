@@ -5,7 +5,9 @@ import {
   mutateActiveTriggerMenu, refreshActiveTriggerMenu,
 } from '../src/client/styles.ts'
 import { LOCAL_AGENT_ICON_MARKER, PICKER_ICON_MARKER, PROVIDER_ICON_PATH } from '../src/client/provider-icons.tsx'
+import { AGENT_ICON_MONO_URI } from '../src/client/agent-icons.ts'
 import { en, zh } from '../src/client/locale.ts'
+import { ALL_LOCAL_AGENTS, LOCAL_AGENT_LABEL } from '../src/wire.ts'
 
 afterEach(() => {
   document.body.replaceChildren()
@@ -13,6 +15,90 @@ afterEach(() => {
 })
 
 describe('reference DOM customization', () => {
+  it.each([
+    ...ALL_LOCAL_AGENTS.map(agent => [agent, agent === 'kimi' ? 'Kimi CLI' : LOCAL_AGENT_LABEL[agent], 'Local agent conversations']),
+    ...Object.entries({ chatgpt: 'ChatGPT', claude: 'Claude', gemini: 'Gemini', deepseek: 'DeepSeek', grok: 'Grok', kimi: 'Kimi' })
+      .map(([provider, label]) => [provider, label, 'External conversations']),
+  ])('keeps %s icons stable when an alpha row is refreshed', async (agent, label, source) => {
+    document.body.innerHTML = `<div data-composer-card><div role="listbox">
+      <div role="presentation" data-source="${source}"></div>
+      <button role="option"><span></span><span>Task</span><span>Codex · today</span></button>
+    </div></div>`
+    const dispose = adoptReferenceIconProjection()
+    const row = document.querySelector('[role="option"]')!
+    const icon = row.firstElementChild!
+    const replaceChildren = icon.replaceChildren.bind(icon)
+    const replace = vi.spyOn(icon, 'replaceChildren')
+    // Bound mutations so a regression fails instead of starving the test runner.
+    replace.mockImplementation((...children) => {
+      if (replace.mock.calls.length > 3) dispose()
+      replaceChildren(...children)
+    })
+    try {
+      row.children[2]!.textContent = `${label} · today`
+      await new Promise(resolve => setTimeout(resolve, 0))
+      expect(icon.getAttribute('data-dsh-ref-menu-icon')).toBe(agent)
+      expect(replace.mock.calls.length).toBeLessThanOrEqual(1)
+      row.children[1]!.textContent = 'Updated task'
+      await new Promise(resolve => setTimeout(resolve, 0))
+      expect(replace.mock.calls.length).toBeLessThanOrEqual(1)
+    } finally { dispose(); replace.mockRestore() }
+  })
+  it.each(ALL_LOCAL_AGENTS.filter(agent => !['claude-code', 'codex', 'cursor', 'qoder', 'openclaw', 'kimi', 'grokbuild', 'hermes', 'gemini-cli', 'pi', 'opencode', 'mimocode', 'zcode', 'chatgpt'].includes(agent)))('reuses the settings logo for %s in menus and reference chips', agent => {
+    document.body.innerHTML = `<div data-composer-card><div role="listbox">
+      <button role="option"><span>${LOCAL_AGENT_ICON_MARKER[agent]}</span><span>Task</span></button>
+      <div role="presentation" data-source="Local agent conversations"></div>
+      <button role="option"><span></span><span>Task</span><span>${LOCAL_AGENT_LABEL[agent]} · today</span></button>
+    </div><span id="agent-chip" data-composer-chip="Local agent conversations"><span><svg></svg><span>${LOCAL_AGENT_LABEL[agent]}·Task</span></span></span></div>`
+    const dispose = adoptReferenceIconProjection()
+    try {
+      const icons = document.querySelectorAll(`[data-dsh-ref-menu-icon="${agent}"] img`)
+      expect(icons).toHaveLength(2)
+      for (const icon of Array.from(icons)) expect(icon.getAttribute('src')).toBe(AGENT_ICON_MONO_URI[agent])
+      expect(document.getElementById('agent-chip')!.style.getPropertyValue('--dsh-ref-chip-icon-mask')).toBe(`url("${AGENT_ICON_MONO_URI[agent]}")`)
+    } finally { dispose() }
+  })
+
+  it('preserves the WorkBuddy clipping region when removing its tile background', () => {
+    const svg = new DOMParser().parseFromString(decodeURIComponent(AGENT_ICON_MONO_URI.workbuddy!.split(',')[1]!), 'image/svg+xml')
+    expect(svg.querySelector('clipPath rect')).not.toBeNull()
+    expect(svg.querySelector('svg > g > rect[width="280"]')).toBeNull()
+  })
+
+  it('uses the custom session bubble in ordinary and subagent menu sections', () => {
+    document.body.innerHTML = `<div data-composer-card><div role="listbox">
+      <div role="presentation">子 Agent</div>
+      <button role="option" id="dsh-slash-option-DSH sessions-0"><span><svg><path d="native" /></svg></span><span>Child</span></button>
+      <div role="presentation">DSH 对话</div>
+      <button role="option" id="dsh-slash-option-DSH sessions-1"><span><svg><path d="native" /></svg></span><span>Task</span></button>
+    </div></div>`
+    const dispose = adoptReferenceIconProjection()
+    try {
+      for (const row of Array.from(document.querySelectorAll('[role="option"]'))) {
+        expect(row.querySelector('path')?.getAttribute('d')).toBe('M7.9 20A9 9 0 1 0 4 16.1L2 22Z')
+      }
+    } finally { dispose() }
+  })
+
+  it.each(['Codex', 'Claude', 'ChatGPT'])('keeps imported %s sessions as DSH session bubbles', label => {
+    document.body.innerHTML = `<div data-composer-card>
+      <span id="session" data-composer-chip="DSH sessions"><span><svg></svg><span>${label}·Imported task</span></span></span>
+    </div>`
+    const dispose = adoptReferenceIconProjection()
+    try {
+      const chip = document.getElementById('session')!
+      expect(chip.dataset.dshRefChipIcon).toBe('session')
+      expect(decodeURIComponent(chip.style.getPropertyValue('--dsh-ref-chip-icon-mask'))).toContain('M7.9 20A9 9 0 1 0 4 16.1L2 22Z')
+    } finally { dispose() }
+  })
+
+  it.each(['reference', 'session', ''])('does not infer an imported session logo from its title for source %s', source => {
+    document.body.innerHTML = `<div data-composer-card><span id="imported" data-decoration="chip" data-reference-appearance="session" ${source ? `data-reference-source="${source}"` : ''}><span><svg/></span><span>Codex·Imported task</span></span></div>`
+    const dispose = adoptReferenceIconProjection()
+    try { expect(document.getElementById('imported')!.dataset.dshRefChipIcon).toBe('session') }
+    finally { dispose() }
+  })
+
   it('places each agent description on its own row and allows wrapping', () => {
     adoptStyles()
     document.body.innerHTML = '<div class="dsh_ref_settings"><article class="dsh_ref_agent_provider"><div class="dsh_ref_provider_main"><div class="dsh_ref_provider_summary"><h4>Antigravity</h4><strong>34</strong><small>Discovered by chat import</small><small>Import only</small></div></div></article></div>'
@@ -196,7 +282,7 @@ describe('reference DOM customization', () => {
   it('reuses Provider and file-type menu glyphs without changing chip geometry nodes', () => {
     document.body.innerHTML = `
       <div data-composer-card>
-        <span id="conversation" data-decoration="chip" data-reference-appearance="session">
+        <span id="conversation" data-decoration="chip" data-reference-appearance="session" data-reference-source="External conversations">
           <span><span>@</span><svg width="16" height="16"><path d="native-session" /></svg></span><span>Claude·Design</span>
         </span>
         <span id="file" data-decoration="chip" data-reference-appearance="file">
@@ -251,6 +337,22 @@ describe('reference DOM customization', () => {
     dispose()
   })
 
+  it('keeps ChatGPT logos for both Web and local-import references', () => {
+    document.body.innerHTML = `<div data-composer-card>
+      <div role="listbox"><div role="option"><span>\uE125</span><span>调研</span></div></div>
+      <span id="web-gpt" data-composer-chip="External conversations"><span><svg></svg><span>ChatGPT·调研</span></span></span>
+      <span id="local-gpt" data-decoration="chip" data-reference-appearance="session" data-reference-source="Local agent conversations">ChatGPT·调研</span>
+    </div>`
+    const dispose = adoptReferenceIconProjection()
+    for (const id of ['web-gpt', 'local-gpt']) {
+      const chip = document.getElementById(id)!
+      expect(chip.dataset.dshRefChipIcon).toBe('chatgpt')
+      expect(decodeURIComponent(chip.style.getPropertyValue('--dsh-ref-chip-icon-mask'))).toContain('M9.205 8.658')
+    }
+    expect(document.querySelector('[role="option"] svg path')?.getAttribute('d')).toContain('M9.205 8.658')
+    dispose()
+  })
+
   it('projects file types into DSH alpha Composer chips', () => {
     document.body.innerHTML = `<div data-composer-card><span id="alpha-file" data-composer-chip="Files and folders" contenteditable="false">
       <span><svg width="14" height="14"></svg><span>07_Customer_Feedback.csv</span></span>
@@ -263,7 +365,7 @@ describe('reference DOM customization', () => {
 
   it('projects local-agent chips with their logo without confusing same-named Web providers', () => {
     document.body.innerHTML = `<div data-composer-card>
-      <span id="agent" data-decoration="chip" data-reference-appearance="session"><span><svg/></span><span>Kimi CLI·Agent task</span></span>
+      <span id="agent" data-decoration="chip" data-reference-appearance="session" data-reference-source="Local agent conversations"><span><svg/></span><span>Kimi CLI·Agent task</span></span>
       <span id="web" data-decoration="chip" data-reference-appearance="session" data-reference-source="Web conversations"><span><svg/></span><span>Kimi·Web chat</span></span>
     </div>`
     const dispose = adoptReferenceIconProjection()

@@ -1,3 +1,4 @@
+import { localLocatorId } from '../src/local-locator.ts'
 import { describe, expect, it } from 'vitest'
 import {
   decodeReferenceUri,
@@ -7,6 +8,7 @@ import {
   parseReferenceText,
 } from '../src/uri.ts'
 import { ReferenceAnythingError } from '../src/errors.ts'
+import { encodeLegacyReferenceUri } from '../src/uri-codec.ts'
 
 const hostile = [
   'plain',
@@ -20,6 +22,35 @@ const hostile = [
 ]
 
 describe('reference URIs', () => {
+  it.each([
+    ['web-chat', '', ['chatgpt', 'account-scope', 'conversation-123']],
+    ['cloud-drive', 'openlist:', { v: 1, path: `/网盘/${'directory/'.repeat(12)}notes.md` }],
+  ])('preserves the exact nested payload of %s', (source, prefix, data) => {
+    const ref = { source: source as string, id: `${prefix}${Buffer.from(JSON.stringify(data, null, 2)).toString('base64url')}` }
+    expect(decodeReferenceUri(encodeReferenceUri(ref))).toEqual(ref)
+    expect(encodeReferenceUri(ref).length).toBeLessThan(encodeLegacyReferenceUri(ref).length)
+  })
+  it.each(['web-chat', 'cloud-drive', 'local-plugin'])('compresses %s references losslessly and accepts their legacy spelling', source => {
+    const ref = { source, id: `${source}:${'项目/long-directory/'.repeat(30)}session-123` }
+    const uri = encodeReferenceUri(ref)
+    const legacy = encodeLegacyReferenceUri(ref)
+    expect(uri).toMatch(/^dsh-ref:z1_/)
+    expect(uri.length).toBeLessThan(legacy.length)
+    expect(decodeReferenceUri(uri)).toEqual(ref)
+    expect(decodeReferenceUri(legacy)).toEqual(ref)
+    expect(parseReferenceText(`Read ${uri}`).references[0]?.ref).toEqual(ref)
+    expect(parseReferenceText(formatReferenceMention(ref, '会话')).references[0]?.ref).toEqual(ref)
+    expect(() => decodeReferenceUri(uri.slice(0, -2))).toThrow()
+  })
+
+  it('rejects compressed references with oversized output or trailing bytes', () => {
+    const ref = { source: 'web-chat', id: 'repeat/'.repeat(100) }
+    const uri = encodeReferenceUri(ref)
+    const bytes = Buffer.from(uri.slice('dsh-ref:z1_'.length), 'base64url')
+    bytes.writeUInt32BE(0xffffffff, 0)
+    expect(() => decodeReferenceUri(`dsh-ref:z1_${bytes.toString('base64url')}`)).toThrow()
+    expect(() => decodeReferenceUri(`${uri}AAAA`)).toThrow()
+  })
   it.each(hostile)('round-trips source and id containing %j', (value) => {
     const ref = { source: `src ${value}`, id: value }
     expect(decodeReferenceUri(encodeReferenceUri(ref))).toEqual(ref)
@@ -93,4 +124,11 @@ describe('mention text', () => {
     expect(mayContainReference('nothing here')).toBe(false)
     expect(mayContainReference(`x ${encodeReferenceUri(ref)}`)).toBe(true)
   })
+})
+
+it('uses readable local locators and rejects legacy local URIs',()=>{
+ const ref={source:'local-agent',id:localLocatorId({source:'codex',path:'C:/用户/a (b).jsonl',sessionId:'s'})}
+ expect(decodeReferenceUri(encodeReferenceUri(ref))).toEqual(ref)
+ expect(parseReferenceText(formatReferenceMention(ref,'会话')).references[0]?.ref).toEqual(ref)
+ expect(()=>decodeReferenceUri(encodeLegacyReferenceUri(ref))).toThrow()
 })

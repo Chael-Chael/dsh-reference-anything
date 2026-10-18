@@ -1,0 +1,5 @@
+{"role":"user","content":"在 github 上搜索 codegraph 并安装"}
+{"role":"assistant","content":"我先搜索一下。","reasoning_content":"用户需要 codegraph 工具，先搜索 GitHub。"}
+{"role":"assistant","content":null,"tool_calls":[{"id":"call_00_abc123","type":"function","function":{"name":"search_files","arguments":"{\"pattern\": \"codegraph\"}"}}]}
+{"role":"tool","tool_call_id":"call_00_abc123","name":"search_files","content":"找到了 codegraph v0.9.8"}
+{"role":"assistant","content":"安装完成，位置在 AppData/Local/codegraph。"}

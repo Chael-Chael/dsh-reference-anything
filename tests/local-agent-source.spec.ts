@@ -1,3 +1,4 @@
+import { localLocatorId } from '../src/local-locator.ts'
 import { appendFile, mkdir, mkdtemp, rm, symlink, truncate, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -11,7 +12,7 @@ import * as localAgent from '../src/sources/local-agent/index.ts'
 import { LOCAL_AGENT_SOURCE_ID, referenceId } from '../src/sources/local-agent/index.ts'
 import type { Config } from '../src/sources/local-agent/index.ts'
 import type { ReferenceSnapshot } from '../src/types.ts'
-import { encodeReferenceUri } from '../src/uri.ts'
+import { encodeReferenceUri, referenceReadHandle } from '../src/uri.ts'
 
 /** Wide enough for every fixture here; clamping has its own test. */
 const WINDOW = { limit: 100 }
@@ -165,17 +166,15 @@ function reply(index: number): string {
 }
 
 describe('discovery', () => {
-  it('maps scanned files to existing readable references without accepting outside or unsupported files', async () => {
+  it('creates independent locators for every supported discovered source', async () => {
     const { ctx, dispose } = await mount()
     try {
       const service = ctx.get('referenceLocalAgents')!
       const id = await service.referenceForDiscovered('claude-code', join(claudeRoot, 'project-a', 'session.jsonl'), 's')
-      expect(id).toBe(CLAUDE_REF.id)
-      expect(texts(await service.read({ source: LOCAL_AGENT_SOURCE_ID, id: id! }, WINDOW))).toContain('prompt 0')
-      await expect(service.referenceForDiscovered('claude-code', join(outside, 'session.jsonl'), 's')).resolves.toBeUndefined()
-      await expect(service.referenceForDiscovered('trae', join(claudeRoot, 'project-a', 'session.jsonl'), 's')).resolves.toBeUndefined()
-      await writeFile(join(codexRoot, 'storage.db'), '{}')
-      await expect(service.referenceForDiscovered('codex', join(codexRoot, 'storage.db'), 's')).resolves.toBeUndefined()
+      expect(id).toContain('claude-code:chat-import:')
+      expect(texts(await service.read({ source: LOCAL_AGENT_SOURCE_ID, id: id! }, WINDOW)).join(' ')).toContain('prompt 0')
+      expect(await service.referenceForDiscovered('trae', '/selected/session.db', 's')).toContain('trae:chat-import:')
+      expect(await service.referenceForDiscovered('unsupported', '/selected/file', 's')).toBeUndefined()
     } finally { await dispose() }
   })
   it('counts recognized conversations by Agent', async () => {
@@ -495,6 +494,32 @@ describe('addressing', () => {
 })
 
 describe('as a mounted plugin', () => {
+  it('restores a pasted readable locator in a different task without the original task mapping', async () => {
+    const { ctx, dispose } = await mount()
+    try {
+      const ref = { source: 'local-agent', id: localLocatorId({source:'claude',path:'C:/history/conversation.jsonl',sessionId:'s'}) }
+      const uri = encodeReferenceUri(ref)
+      expect(uri).toMatch(/^dsh-local:/)
+      const target = Session.create(SessionId('pasted-task'))
+      expect(() => ctx.references.assertSessionGranted(target, ref)).toThrow()
+      target.append('user/message', createUserMessage({
+        content: [{ type: 'text', text: `Please read ${uri}` }], source: { kind: 'user' },
+      }), { surfaceOp: 'append' })
+      const restored = Session.create(target.id, target.snapshotEvents())
+      const resolved = ctx.references.resolveReadReference(restored, uri)
+      expect(resolved).toEqual(ref)
+      expect(() => ctx.references.assertSessionGranted(restored, resolved)).not.toThrow()
+      expect(() => ctx.references.assertSessionGranted(Session.create(SessionId('not-pasted')), resolved)).toThrow()
+    } finally { await dispose() }
+  })
+  it('rejects obsolete local short handles even when a grant exists', async () => {
+    const {ctx,dispose}=await mount()
+    try {
+      const ref={source:'local-agent',id:localLocatorId({source:'codex',path:'C:/history/test.jsonl',sessionId:'s'})}
+      ctx.references.grant('task',ref)
+      expect(()=>ctx.references.resolveReadReference(Session.create(SessionId('task')),referenceReadHandle(ref))).toThrow()
+    } finally {await dispose()}
+  })
   it('needs a grant before the model may read a transcript', async () => {
     const { ctx, dispose } = await mount()
     expect(() => ctx.references.assertGranted('task-a', CLAUDE_REF))
@@ -506,28 +531,30 @@ describe('as a mounted plugin', () => {
 
   it('recovers a grant from a URI mentioned in durable task history', async () => {
     const { ctx, dispose } = await mount()
+    const localRef={source:'local-agent',id:localLocatorId({source:'claude',path:'C:/history/test.jsonl',sessionId:'s'})}
     const session = Session.create(SessionId('task-history'))
     session.append('user/message', createUserMessage({
-      content: [{ type: 'text', text: `read ${encodeReferenceUri(CLAUDE_REF)}` }],
+      content: [{ type: 'text', text: `read ${encodeReferenceUri(localRef)}` }],
       source: { kind: 'user' },
     }), { surfaceOp: 'append' })
     const restored = Session.create(session.id, session.snapshotEvents())
-    expect(() => ctx.references.assertSessionGranted(restored, CLAUDE_REF)).not.toThrow()
-    expect(() => ctx.references.assertGranted('task-history', CLAUDE_REF)).not.toThrow()
+    expect(() => ctx.references.assertSessionGranted(restored, localRef)).not.toThrow()
+    expect(() => ctx.references.assertGranted('task-history', localRef)).not.toThrow()
     await dispose()
   })
 
   it('recovers a grant from a URI returned by a tool', async () => {
     const { ctx, dispose } = await mount()
+    const localRef={source:'local-agent',id:localLocatorId({source:'claude',path:'C:/history/test.jsonl',sessionId:'s'})}
     const session = Session.create(SessionId('task-tool-result'))
     session.append('tool/result', {
       turn: 1, step: 1,
       message: createToolResultMessage({
         callId: ToolCallId('reference-list'), isError: false,
-        content: [{ type: 'text', text: encodeReferenceUri(CLAUDE_REF) }],
+        content: [{ type: 'text', text: encodeReferenceUri(localRef) }],
       }),
     }, { surfaceOp: 'append' })
-    expect(() => ctx.references.assertSessionGranted(session, CLAUDE_REF)).not.toThrow()
+    expect(() => ctx.references.assertSessionGranted(session, localRef)).not.toThrow()
     await dispose()
   })
 

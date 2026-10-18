@@ -222,6 +222,10 @@ export class ConversationSyncManager {
     let accountScope = ''
     let progress: ProgressWriter | undefined
     try {
+      if ((await runner.health(signal)).extensionCompatible === false) {
+        throw new OpenCliError('Browser extension is incompatible with OpenCLI; update the extension or plugin, then recheck setup', 'OPENCLI_CONFIGURATION')
+      }
+      signal.throwIfAborted()
       const sinceFor = (scope: string): string => this.listingSince(provider, scope, mode)
       let rows: ProviderConversationRow[]
       let since = ''

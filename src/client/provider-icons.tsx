@@ -61,6 +61,10 @@ export const LOCAL_AGENT_ICON_MARKER = {
   'claude-code': '\uE118', codex: '\uE119', cursor: '\uE11A', qoder: '\uE11B',
   openclaw: '\uE11C', kimi: '\uE11D', grokbuild: '\uE11E', hermes: '\uE11F',
   'gemini-cli': '\uE120', pi: '\uE121', opencode: '\uE122', mimocode: '\uE123', zcode: '\uE124',
+  chatgpt: '\uE125',
+  reasonix: '\uE131', antigravity: '\uE132', kilocode: '\uE133', workbuddy: '\uE134',
+  qwen: '\uE135', continue: '\uE136', cline: '\uE137', goose: '\uE138', dsh4: '\uE139',
+  zed: '\uE13A', crush: '\uE13B', teleagent: '\uE13C', trae: '\uE13D', vibe: '\uE13E', dsh: '\uE13F',
 } as unknown as Readonly<Partial<Record<LocalAgent, InputTriggerCandidateIcon>>>
 
 type PickerIconNode = Readonly<{
@@ -263,6 +267,7 @@ const AGENT_LOGO = {
 type MemoLogo = ComponentType<{ 'aria-hidden'?: boolean }> & { type: (props: { 'aria-hidden'?: boolean }) => ReactElement }
 
 export function agentLogoElement(agent: LocalAgent): ReactElement | undefined {
+  if (agent === 'chatgpt') return ProviderLogo({ provider: 'chatgpt' })
   const Logo = AGENT_LOGO[agent as keyof typeof AGENT_LOGO] as unknown as ComponentType<{ 'aria-hidden'?: boolean }> | undefined
   return Logo ? (Logo as MemoLogo).type({ 'aria-hidden': true }) : undefined
 }

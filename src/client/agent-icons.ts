@@ -63,6 +63,6 @@ export const AGENT_ICON_SVG: Readonly<Record<LocalAgent, string>> = {
 // Remove upstream tile backgrounds before applying a monochrome silhouette.
 export const AGENT_ICON_MONO_URI = Object.fromEntries(Object.entries(AGENT_ICON_SVG).map(([agent, svg]) => [agent,
   `data:image/svg+xml,${encodeURIComponent(svg
-    .replace(/<rect (?:x="-4" y="-4" )?width="(32|512|280|30)" height="\1"[^>]*(?:\/>|><\/rect>)/g, '')
+    .replace(/<clipPath\b[\s\S]*?<\/clipPath>|<rect (?:x="-4" y="-4" )?width="(32|512|280|30)" height="\1"[^>]*(?:\/>|><\/rect>)/g, match => match.startsWith('<clipPath') ? match : '')
     .replace(/<g filter="url\(#filter[01]_f_744_3208\)">[\s\S]*?<\/g>/g, ''))}`,
 ]))

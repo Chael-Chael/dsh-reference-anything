@@ -26,6 +26,16 @@ async function installedProfile(version = '0.2.1'): Promise<{ packageRoot: strin
 }
 
 describe('package update manager', () => {
+  it('returns notes for both exact versions and promotes the installed release after updating', async () => {
+    const { packageRoot } = await installedProfile('0.4.4')
+    const fetchReleaseNotes = vi.fn(async (version: string) => ({ releaseNotes: `Changes in ${version}`, releaseUrl: `https://example.com/v${version}` }))
+    const manager = new PackageUpdateManager({ packageRoot, fetchLatest: async () => '0.4.5', fetchReleaseNotes, install: async () => {} })
+    await expect(manager.status()).resolves.toMatchObject({
+      releaseNotes: 'Changes in 0.4.5', currentReleaseNotes: 'Changes in 0.4.4', currentReleaseUrl: 'https://example.com/v0.4.4',
+    })
+    await manager.update()
+    await expect(manager.status()).resolves.toMatchObject({ currentVersion: '0.4.5', currentReleaseNotes: 'Changes in 0.4.5', currentReleaseUrl: 'https://example.com/v0.4.5' })
+  })
   it('requests ordinary JSON from the npm latest endpoint', async () => {
     const request = vi.fn(async () => new Response(JSON.stringify({ version: '0.2.2' }), {
       status: 200, headers: { 'content-type': 'application/json' },
@@ -116,6 +126,7 @@ describe('package update manager', () => {
     await expect(manager.update()).resolves.toEqual({ version: '0.2.1', restartRequired: false })
     expect(install).not.toHaveBeenCalled()
     expect(fetchReleaseNotes).toHaveBeenCalledWith('0.2.1', undefined)
+    expect(fetchReleaseNotes).toHaveBeenCalledTimes(1)
   })
 
   it('returns a displayable status when the registry is unavailable', async () => {

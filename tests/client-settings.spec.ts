@@ -29,7 +29,7 @@ describe('settings source registration guard', () => {
       expect(AGENT_ICON_SVG[agent]).toContain('<svg')
       const mono = decodeURIComponent(AGENT_ICON_MONO_URI[agent]!)
       expect(mono).toContain('<svg')
-      expect(mono).not.toMatch(/<rect (?:x="-4" y="-4" )?width="(32|512|280|30)" height="\1"/)
+      expect(mono.replace(/<clipPath\b[\s\S]*?<\/clipPath>/g, '')).not.toMatch(/<rect (?:x="-4" y="-4" )?width="(32|512|280|30)" height="\1"/)
       expect(mono).not.toContain('<g filter="url(#filter')
     }
   })

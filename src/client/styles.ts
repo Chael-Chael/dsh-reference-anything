@@ -1,3 +1,4 @@
+import { AGENT_ICON_MONO_URI } from './agent-icons.ts'
 import { LOCAL_AGENT_LABEL, defaultPickerSettings, type AgentActionsSettings, type ChatProvider, type LocalAgent } from '../wire.ts'
 import { Children, isValidElement, type ReactElement, type ReactNode } from 'react'
 import {
@@ -12,6 +13,14 @@ const css = `
   /* Reference Anything customizes the public @ menu and only the visual glyph
      inside matching Composer reference chips. Native text continues to own all
      caret, selection, wrapping, and message geometry. */
+.dsh_ref_update_dialog[role="dialog"]{width:680px;max-width:calc(100vw - 32px)}
+.dsh_ref_release_feature{display:grid;gap:16px;font-family:inherit}
+.dsh_ref_release_media{display:flex;align-items:center;justify-content:center;aspect-ratio:16/9;overflow:hidden;border:1px solid var(--dsw-alias-border-l1);border-radius:12px;background:var(--dsw-alias-bg-layer-2,rgba(128,128,128,.08))}
+.dsh_ref_release_media img{display:block;width:100%;height:100%;object-fit:contain}
+.dsh_ref_release_description{margin:0;min-height:4.5em;white-space:pre-wrap;font-size:14px;line-height:1.6;color:var(--dsw-alias-label-secondary)}
+.dsh_ref_release_footer{display:flex;align-items:center;justify-content:flex-end;gap:16px;width:100%;flex-wrap:wrap}
+.dsh_ref_release_navigation{display:flex;align-items:center;justify-content:flex-end;gap:12px;margin-left:auto}
+.dsh_ref_release_navigation>span{font-size:12px;color:var(--dsw-alias-label-tertiary)}
 [role="option"]:has(.dsh_ref_update_icon){position:relative;padding-right:42px!important}
 .dsh_ref_update_dismiss{display:flex;align-items:center;justify-content:center;position:absolute;right:10px;top:50%;transform:translateY(-50%);width:28px;height:28px;border:0;border-radius:6px;background:transparent;color:inherit;font-size:20px;cursor:pointer}
 .dsh_ref_update_dismiss:hover{background:var(--dsw-alias-interactive-bg-hover,rgba(38,49,72,.06))}
@@ -83,7 +92,7 @@ body[data-ds-dark-theme] .dsh_ref_storage_header p{color:var(--dsw-alias-label-t
 @media(max-width:520px){.dsh_ref_provider{grid-template-columns:34px minmax(0,1fr)}.dsh_ref_provider_summary{grid-template-columns:1fr auto;gap:6px 10px}.dsh_ref_provider_controls>.dsh_ref_provider_actions{justify-content:flex-start}}
 /* General is a layout group, not a card. Keep only the actual picker list framed. */
 /* The remaining sections keep their structural outline, but not a filled grey card. */
-.dsh_ref_workspace>.dsh_ref_panel,.dsh_ref_workspace>.dsh_ref_sources{background:transparent}body[data-ds-dark-theme] .dsh_ref_workspace>.dsh_ref_panel,body[data-ds-dark-theme] .dsh_ref_workspace>.dsh_ref_sources{background:#242428}.dsh_ref_check>span.is_ready{border-color:rgba(22,163,74,.35);background:rgba(22,163,74,.1);color:#16a34a}.dsh_ref_check>span.is_neutral{border-color:rgba(100,116,139,.35);background:rgba(100,116,139,.1);color:#64748b}.dsh_ref_check>span.is_error{border-color:rgba(220,38,38,.35);background:rgba(220,38,38,.08);color:#dc2626}.dsh_ref_check small.is_warning,.dsh_ref_provider>em,.dsh_ref_error{color:#dc2626}
+.dsh_ref_workspace>.dsh_ref_panel,.dsh_ref_workspace>.dsh_ref_sources{background:transparent}body[data-ds-dark-theme] .dsh_ref_workspace>.dsh_ref_panel,body[data-ds-dark-theme] .dsh_ref_workspace>.dsh_ref_sources{background:#242428}.dsh_ref_check>span.is_ready{border-color:rgba(22,163,74,.35);background:rgba(22,163,74,.1);color:#16a34a}.dsh_ref_check>span.is_neutral{border-color:rgba(100,116,139,.35);background:rgba(100,116,139,.1);color:#64748b}.dsh_ref_check>span.is_update{border-color:rgba(217,119,6,.35);background:rgba(217,119,6,.1);color:#d97706}.dsh_ref_check small.is_update{color:#d97706}.dsh_ref_check>span.is_error{border-color:rgba(220,38,38,.35);background:rgba(220,38,38,.08);color:#dc2626}.dsh_ref_check small.is_warning,.dsh_ref_provider>em,.dsh_ref_error{color:#dc2626}
 .dsh_ref_health.is_ready{border-color:rgba(22,163,74,.35);background:rgba(22,163,74,.1);color:#16a34a}.dsh_ref_check_body{flex:1}.dsh_ref_check_actions{display:flex!important;align-items:center;flex-wrap:wrap;gap:7px!important;margin-top:6px}.dsh_ref_check_actions>button{min-height:28px;padding:0 9px;border-color:var(--dsh-ref-blue-line);border-radius:7px;color:var(--dsh-ref-blue);font-size:10px}.dsh_ref_check_profile{display:flex!important;grid-template-columns:none!important;align-items:center;gap:7px!important}.dsh_ref_check_profile select{height:29px;max-width:220px;padding:0 8px;border:1px solid var(--dsh-ref-line);border-radius:7px;background:var(--dsh-ref-control-surface);color:var(--dsw-alias-label-primary);font:11px Geist,"Segoe UI",sans-serif}.dsh_ref_store_fallback{margin:14px 0 0;padding:10px 12px;border:1px solid rgba(220,38,38,.3);border-radius:9px;background:rgba(220,38,38,.06);color:#dc2626;font-size:11px}.dsh_ref_store_fallback a{color:inherit;font-weight:700}.dsh_ref_setup_step{margin:14px 0 0;padding:9px 11px;border:1px solid var(--dsh-ref-blue-line);border-radius:9px;background:var(--dsh-ref-blue-soft);color:var(--dsh-ref-blue);font-size:11px;font-weight:650}
 .dsh_ref_chat{gap:0}.dsh_ref_chat_divider{height:0;margin:20px 0;border-top:1px solid var(--dsh-ref-line)}
 .dsh_ref_cloud{display:grid;gap:14px}.dsh_ref_cloud_actions,.dsh_ref_cloud_cards article>div{display:flex;gap:8px;flex-wrap:wrap}.dsh_ref_cloud_connect,.dsh_ref_cloud_mount_form{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;padding-top:14px;border-top:1px solid var(--dsh-ref-line)}.dsh_ref_cloud label{display:grid;gap:5px;font-size:11px;font-weight:650}.dsh_ref_cloud input,.dsh_ref_cloud select,.dsh_ref_cloud textarea{min-width:0;padding:0 9px;border:1px solid var(--dsh-ref-line);border-radius:7px;background:var(--dsh-ref-control-surface);color:var(--dsw-alias-label-primary);font:12px Geist,"Segoe UI",sans-serif}.dsh_ref_cloud input,.dsh_ref_cloud select{height:34px}.dsh_ref_cloud textarea{padding-block:8px;resize:vertical}.dsh_ref_cloud .dsh_ref_masked_secret{-webkit-text-security:disc}.dsh_ref_cloud input[type=checkbox]{width:16px;height:16px;padding:0}.dsh_ref_cloud_mount_form h4{grid-column:1 / -1;margin:0;font-size:13px}.dsh_ref_cloud_cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:10px}.dsh_ref_cloud_cards article{display:grid;gap:7px;padding:12px;border:1px solid var(--dsh-ref-line);border-radius:10px;background:var(--dsh-ref-card-surface)}.dsh_ref_cloud_cards strong{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13px}.dsh_ref_cloud_cards article>span,.dsh_ref_cloud_cards article>small{font-size:10px;opacity:.76}.dsh_ref_cloud_cards button{min-height:28px;padding:0 9px;font-size:10px}@media(max-width:640px){.dsh_ref_cloud_connect,.dsh_ref_cloud_mount_form{grid-template-columns:1fr}}
@@ -352,6 +361,7 @@ body[data-ds-dark-theme] .dsh_ref_settings input,body[data-ds-dark-theme] .dsh_r
 .dsh_ref_agent_logo{filter:brightness(0)}
 body[data-ds-dark-theme] .dsh_ref_agent_logo{filter:brightness(0) invert(1);opacity:.9}
 .dsh_ref_settings .dsh_ref_agent_provider .dsh_ref_provider_controls{flex-wrap:wrap}
+.dsh_ref_agent_paths{grid-column:1 / -1;min-width:0;font-size:12px;line-height:18px;color:var(--dsw-alias-label-primary);opacity:.78}.dsh_ref_agent_paths>summary{cursor:pointer}.dsh_ref_agent_paths>div{margin-top:6px;overflow-wrap:anywhere;white-space:normal}
 @media(max-width:480px){.dsh_ref_settings .dsh_ref_agent_grid{grid-template-columns:minmax(0,1fr)}}
 .dsh_ref_settings .dsh_ref_provider_divider{display:none}
 .dsh_ref_settings .dsh_ref_workspace{gap:12px}
@@ -387,7 +397,7 @@ body[data-ds-dark-theme] .dsh_ref_agent_logo{filter:brightness(0) invert(1);opac
 .dsh_ref_settings :is(button.is_primary,.dsh_ref_recheck,.dsh_ref_actions .is_primary,.dsh_ref_service_actions button:first-child):hover:not(:disabled){border-color:var(--dsw-alias-label-secondary)!important;background:var(--dsw-alias-label-secondary)!important;color:var(--dsw-alias-label-primary-foreground,#fff)!important}
 /* Health markers use circles, matching the official status treatment. */
 .dsh_ref_settings .dsh_ref_check>span{width:32px;height:32px;margin-top:0;border-radius:50%;font-size:14px;line-height:32px}
-.dsh_ref_settings .dsh_ref_check>span{min-width:32px!important;max-width:32px!important;min-height:32px!important;max-height:32px!important;aspect-ratio:1/1;border-radius:100%!important;flex:0 0 32px!important}
+.dsh_ref_settings .dsh_ref_check>span{min-width:32px!important;max-width:32px!important;min-height:32px!important;max-height:32px!important;aspect-ratio:1/1;box-sizing:border-box;corner-shape:round!important;border-radius:50%!important;flex:0 0 32px!important}
 /* These sections are complete official-style cards. Their internal rows keep
  * the existing separators, while the shell owns the outer radius and stroke. */
 .dsh_ref_settings .dsh_ref_settings_card{border:.5px solid var(--dsw-alias-settings-card-stroke,var(--dsw-alias-border-l2));border-radius:var(--dsw-radius-xl)!important;background:var(--dsw-alias-settings-card-fill,var(--dsw-alias-bg-layer-1));overflow:hidden}
@@ -1047,7 +1057,10 @@ export function adoptReferenceIconProjection(): () => void {
   const agentKinds = Object.keys(LOCAL_AGENT_ICON_MARKER) as LocalAgent[]
   const providerMasks = Object.fromEntries(providers.map(provider => [provider, providerIconMask(PROVIDER_ICON_PATH[provider])])) as Record<ChatProvider, string>
   const pickerMasks = Object.fromEntries(pickerKinds.map(kind => [kind, pickerIconMask(kind)])) as Record<PickerIconKind, string>
-  const agentMasks = Object.fromEntries(agentKinds.map(agent => [agent, reactIconMask(agentLogoElement(agent)!)])) as Partial<Record<LocalAgent, string>>
+  const agentMasks = Object.fromEntries(agentKinds.map(agent => {
+    const logo = agentLogoElement(agent)
+    return [agent, logo === undefined ? `url("${AGENT_ICON_MONO_URI[agent]}")` : reactIconMask(logo)]
+  })) as Partial<Record<LocalAgent, string>>
   const paintPicker = (node: HTMLElement, kind: PickerIconKind, secondary?: PickerIconKind): void => {
     node.replaceChildren(createPickerIcon(kind), ...(secondary === undefined ? [] : [createPickerIcon(secondary)]))
     node.classList.remove('dsh_ref_projected_icon')
@@ -1066,14 +1079,24 @@ export function adoptReferenceIconProjection(): () => void {
   }
   const paintAgent = (node: HTMLElement, agent: LocalAgent): void => {
     const logo = agentLogoElement(agent)
-    if (logo === undefined) return paintPicker(node, 'agent')
-    node.replaceChildren(createReactIcon(logo))
+    if (logo === undefined) {
+      const image = document.createElement('img')
+      image.src = AGENT_ICON_MONO_URI[agent]!
+      image.className = 'dsh_ref_agent_logo'
+      image.width = image.height = 16
+      image.alt = ''
+      image.setAttribute('aria-hidden', 'true')
+      node.replaceChildren(image)
+    } else node.replaceChildren(createReactIcon(logo))
     node.classList.remove('dsh_ref_picker_icon', 'dsh_ref_dual_icon')
     node.classList.add('dsh_ref_projected_icon')
     node.dataset.dshRefMenuIcon = agent
   }
   const projectAlphaOption = (option: Element): void => {
     const icon = option.firstElementChild
+    if (icon instanceof HTMLElement && option.id.startsWith('dsh-slash-option-DSH sessions-') && icon.querySelector('svg')) {
+      return icon.dataset.dshRefMenuIcon === 'session' ? undefined : paintPicker(icon, 'session')
+    }
     if (!(icon instanceof HTMLElement) || ((icon.childElementCount > 0 && !icon.hasAttribute('data-dsh-ref-menu-icon')) || (icon.textContent ?? '') !== '')) return
     let heading = option.previousElementSibling
     while (heading !== null && !(heading.getAttribute('role') === 'presentation' && heading.hasAttribute('data-source'))) heading = heading.previousElementSibling
@@ -1137,10 +1160,7 @@ export function adoptReferenceIconProjection(): () => void {
           } else {
             const agent = agentKinds.find(item => text.includes(LOCAL_AGENT_ICON_MARKER[item] ?? ''))
             if (agent !== undefined) {
-              node.replaceChildren(createReactIcon(agentLogoElement(agent)!))
-              node.classList.remove('dsh_ref_picker_icon')
-              node.classList.add('dsh_ref_projected_icon')
-              node.dataset.dshRefMenuIcon = agent
+              paintAgent(node, agent)
               node = walker.nextNode()
               continue
             }
@@ -1215,21 +1235,15 @@ function projectComposerChips(
     if (appearance === 'session') {
       if (referenceSource === 'All local plugins') {
         applyChipIcon(chip, 'plugin', pickerMasks.plugin)
-        continue
+      } else if (referenceSource === 'Local agent conversations' || referenceSource === 'local-agent') {
+        const agent = (Object.keys(LOCAL_AGENT_CHIP_LABEL) as LocalAgent[]).find(item => label.startsWith(`${LOCAL_AGENT_CHIP_LABEL[item]}·`))
+        applyChipIcon(chip, agent ?? 'agent', (agent === undefined ? undefined : agentMasks[agent]) ?? pickerMasks.agent)
+      } else if (referenceSource === 'External conversations' || referenceSource === 'Web conversations' || referenceSource === 'web-chat') {
+        const provider = (Object.keys(CHIP_PROVIDER_LABEL) as ChatProvider[]).find(item => label.startsWith(`${CHIP_PROVIDER_LABEL[item]}·`))
+        applyChipIcon(chip, provider ?? 'session', provider === undefined ? pickerMasks.session : providerMasks[provider])
+      } else {
+        applyChipIcon(chip, 'session', pickerMasks.session)
       }
-      const agent = (Object.keys(LOCAL_AGENT_CHIP_LABEL) as LocalAgent[]).find(item => label.startsWith(`${LOCAL_AGENT_CHIP_LABEL[item]}·`))
-      if (agent !== undefined) {
-        applyChipIcon(chip, agent, agentMasks[agent] ?? pickerMasks.agent)
-        continue
-      }
-      if (referenceSource === 'Local agent conversations' || referenceSource === 'local-agent') {
-        applyChipIcon(chip, 'agent', pickerMasks.agent)
-        continue
-      }
-      const provider = (Object.keys(CHIP_PROVIDER_LABEL) as ChatProvider[])
-        .find(item => label.startsWith(`${CHIP_PROVIDER_LABEL[item]}·`))
-      if (provider !== undefined) applyChipIcon(chip, provider, providerMasks[provider])
-      else applyChipIcon(chip, 'session', pickerMasks.session)
     } else if (appearance === 'file' || appearance === 'folder') {
       if (chip.dataset.referenceSource === 'Cloud drive files' || chip.dataset.referenceSource === 'cloud-drive') {
         applyChipIcon(chip, 'drive', pickerMasks.drive)

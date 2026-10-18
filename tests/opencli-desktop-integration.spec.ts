@@ -15,7 +15,7 @@ describe.skipIf(!desktop)('official Desktop OpenCLI invocation', () => {
     try {
       const shim = join(root, 'opencli.cmd')
       const entry = join(root, 'node_modules', '@jackwener', 'opencli', 'dist', 'src', 'main.js')
-      const require = createRequire(new URL('../node_modules/@jackwener/opencli/package.json', import.meta.url))
+      const require = createRequire(createRequire(import.meta.url).resolve('@jackwener/opencli'))
       const commander = pathToFileURL(require.resolve('commander')).href
       await mkdir(join(entry, '..'), { recursive: true })
       await writeFile(join(root, 'package.json'), '{"type":"module"}')

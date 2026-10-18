@@ -105,7 +105,7 @@ Type `@`, search across enabled sources, and insert the selected reference into 
 
 ## 📦 Installation
 
-The local version is **v0.4.4**, with a declared minimum DSH SDK version of **`0.2.0-rc.2`**.
+The local development version is **v0.5.0** (not yet published), with a declared minimum DSH SDK version of **`0.2.0-rc.2`**.
 
 ### Official desktop app
 
@@ -127,23 +127,23 @@ dsh plugin --profile web add dshmarket
 dsh plugin --profile web add dsh-reference-anything
 ```
 
-The installed version depends on the selected channel; this README describes the local v0.4.4 source.
+The installed version depends on the selected channel; this README describes the local v0.5.0 source.
 
 ### Optional: Connect web AI chats
 
-Only web chats need this step. Local sources work without it. Sign into the desired platforms in your browser; one-click OpenCLI setup needs npm.
+Only web chats need this step. Local sources work without it. Sign into the desired platforms in your browser. OpenCLI is installed with this plugin; adapter setup still needs npm.
 
-After installing the DSH plugin, open `Settings → Reference Anything → Availability check` in DSH (restart DSH first if this settings entry is not yet visible), then click **One-click setup**. It discovers OpenCLI; installs or upgrades it globally through npm when it is missing or older than `1.8.6`; installs the bundled adapters for all six platforms; starts or refreshes Browser Bridge; and opens the OpenCLI Browser Bridge page in the [Chrome Web Store](https://chromewebstore.google.com/detail/opencli/ildkmabpimmkaediidaifkhjpohdnifk). Confirm the extension installation, then return and click **Recheck setup**. Any remaining failed check displays its own recovery action.
+After installing the DSH plugin, open `Settings → Reference Anything → Availability check` in DSH (restart DSH first if this settings entry is not yet visible), then click **One-click setup**. It uses OpenCLI 2.0.0 installed as a runtime dependency and updated together with this plugin; installs the bundled adapters for all six platforms; starts or refreshes Browser Bridge; and opens the OpenCLI Browser Bridge page in the [Chrome Web Store](https://chromewebstore.google.com/detail/opencli/ildkmabpimmkaediidaifkhjpohdnifk). Confirm the extension installation, then return and click **Recheck setup**. Any remaining failed check displays its own recovery action.
 
-You can also install OpenCLI and the conversation adapter manually, then start Browser Bridge:
+For a custom global OpenCLI, install it manually and enter its full executable path in settings. The default opencli always uses the plugin dependency:
 
 ```powershell
-npm install --global "@jackwener/opencli@>=1.8.6"
+npm install --global "@jackwener/opencli@2.0.0"
 opencli plugin install file:///C:/path/to/dsh-reference-anything/opencli-plugin
 opencli daemon restart
 ```
 
-Replace `C:/path/to/dsh-reference-anything` with the repository location. Browser extensions cannot be silently installed from a webpage; confirm the installation in the Chrome Web Store, or download an extension package from [OpenCLI Releases](https://github.com/jackwener/opencli/releases) and use “Load unpacked.” If the browser blocks the store popup, the settings page keeps a normal fallback link. When multiple browser profiles are connected, select and apply one directly in the failed check. Global npm installation remains subject to OS permissions; failures retain their original diagnostic in the settings page.
+Replace `C:/path/to/dsh-reference-anything` with the repository location. Browser extensions cannot be silently installed from a webpage; confirm the installation in the Chrome Web Store, or download an extension package from [OpenCLI Releases](https://github.com/jackwener/opencli/releases) and use “Load unpacked.” If the browser blocks the store popup, the settings page keeps a normal fallback link. When multiple browser profiles are connected, select and apply one directly in the failed check. OpenCLI updates with this plugin; the browser store updates the extension separately.
 
 ## 🚀 Usage
 
@@ -215,27 +215,31 @@ Selected sessions use DSH's canonical `dsh-session:` mention and native session 
 
 Type `@agent:` to search and reference conversations saved by other local agent tools.
 
-When dsh-chat-import >= 0.26.0 is enabled, the menu uses its public scanning API and shows import status and scan warnings. Existing source switches, additional directories, workspace scope, and transcript readers remain in use; without the API, discovery falls back to the existing local scanner. Settings cover all 29 scan formats, with per-source switches and additional directories. New formats use API counts and show scan failures or an unavailable API explicitly; their icons are vendored from dsh-chat-import under MIT (see images/agents/LICENSE).
+All 29 sources use bundled read-only scanners and parsers derived from dsh-chat-import. Scanning and references work without installing Chat Import. Source switches, additional directories and workspace scope still apply; settings show source paths, counts and scan errors. Enter inserts a reference, including recoverable images through DSH attachments; viewing images requires a vision-capable model. Confirmed empty conversations are hidden; read errors remain visible. Local references now store a readable source, path and session ID; reselect references created with the old local URI protocol.
 
-Chat import is installed as a dependency. Reference Anything loads its Host entry only when no independent instance is installed, configured, or starting. Disabled, broken, or outdated independent installations are not bypassed. If an independent instance loads later, our instance finishes cleanup before it starts; disabling Reference Anything does not unload that independent instance. Restart DSH to restore the fallback after removing the independent plugin. This does not automatically install chat import's standalone client panel.
+When you send a local reference, the plugin reads its original record and attaches a recent body preview before the model responds. Body messages have stable numbers; tool details and the image directory are separate. The model can use `reference_read` (body ranges or associated tools), `reference_search` (body text) and `reference_image` (actual image content), with readable `source`, `path`, `sessionId` and `revision` fields. It does not need local URI handles or cursors.
 
-The upstream npm release is currently 0.25.2, so the dependency is pinned to upstream commit `c2e010198cb1249601f7a6c96144631a8b3cc53b`, which includes the 0.26.0 API. Installation requires GitHub access until the dependency switches to a published npm version.
+At send time, local previews share one budget based on estimated remaining context, after accounting for conversation history, pending messages, system/tool changes, output reservation and a safety margin (5% of capacity, at least 1024 tokens). The output reservation uses the configured/model output cap, or otherwise 10% of capacity capped at 8192 tokens. New preview text is conservatively charged at one UTF-8 byte per token. `reference-mention.maxReferenceBytes` is an additional shared upper bound; its default is `max(65536, floor(model context tokens × 4 × 0.2))`. Unknown capacity or insufficient space defers body expansion and retains readable locators plus a notice. This minimal metadata remains even when the context is already full; the host still owns overflow handling. On-demand tool reads retain their separate output limit. Older body messages are omitted first while preserving the newest message and compaction checkpoints, then long text is shortened with its head and tail retained. Omitted messages, shortened text, hidden tools and unread images are reported separately. Image calls have a separate 10 MiB limit.
 
-Additional formats discovered through chat import are marked **Import only** until a compatible reader is available. Selecting one opens the import flow instead of inserting an unreadable reference. These entries are hidden when quick import is disabled. Scanning does not import conversations; upstream search matches titles, projects, and paths.
+Locators persist in message history. Copy the complete `<local-agent-reference>…</local-agent-reference>` block to reuse a reference in another conversation; a title alone is insufficient. Reads still require task authorization and an allowed source root. A changed source invalidates message/image numbers; omit `revision` in `reference_read` to refresh. No text snapshots or parsed-body caches are saved: later reads, searches and image calls reread the original source, which must still exist at that path.
+
+Import status, session import and handoff summaries use the optional Chat Import API. Install or upgrade the independent plugin from settings when needed; Reference Anything does not install it on startup. An unavailable API leaves import status unknown and does not stop local scanning or reference reading. Tab retains the configured import and summary actions and confirmation flow.
+
+The scanner runs in a separate process and caches metadata for 30 seconds. Parsing a reference may still read its complete source before returning a page. Source code and icons retain their MIT licenses (see `vendor/chat-import-reader/` and `images/agents/LICENSE`). Maintainers update both snapshots with `npm run vendor:sync -- <built-dsh-chat-import-directory>`; see the vendor README for checks before shipping.
 
 <p align="center"><img src="./images/at-local-agents.png" alt="Browse other local agents' transcripts from the @ menu" width="800" /></p>
 
-**Supported agents:** Claude Code, Codex, Cursor, Qoder, Reasonix, OpenClaw, Kimi, Grok Build, Hermes, Gemini CLI, Pi, opencode, mimocode, and zcode.
+**Supported sources:** Claude Code, Codex, Cursor, Gemini CLI, Antigravity, Reasonix, opencode, mimocode, zcode, Grok Build, OpenClaw, Pi, Hermes, Kimi, Kilo Code, Qoder, ChatGPT exports, WorkBuddy, Qwen Code, Continue, Cline, Goose, DSH 4, Zed, Crush, Teleagent, Trae Work, Vibe, and DSH.
 
 **Features:**
 
 - Automatically detects conversation history and shows the number found for each agent
 - Lets you enable agents independently or choose a custom history folder
 - Searches all detected conversations by default, with an option to limit results to the current workspace
-- Reads conversation content on demand; tool names are concise by default, with full details available when needed
+- Automatically previews recent body text; reads numbered messages, associated tool details and images on demand
 - Supports agent-specific prefixes such as `@codex:`, `@claude-code:`, and `@gemini-cli:`
 
-Local history is read-only: it is neither imported into a new DSH session nor resumed through Continue Session. Claude Code and Codex adapters have been checked against real transcripts; other formats are primarily fixture-tested and may vary by tool version. Database reads for opencode, mimocode, and zcode require `node:sqlite` in the DSH host runtime.
+References read local history without modifying it. Import and handoff-summary actions are separate operations through Chat Import. Claude Code and Codex adapters have been checked against real transcripts; other formats are primarily fixture-tested and may vary by tool version. Database reads for opencode, mimocode, and zcode require `node:sqlite` in the DSH host runtime.
 
 #### 🧩 @Local plugins — installed and configured plugins
 
@@ -272,7 +276,7 @@ Supports historical conversations from ChatGPT, Claude, Gemini, DeepSeek, Grok, 
 @[ChatGPT·Conversation title](dsh-ref:<opaque-base64url>)
 ```
 
-Opening the source URL happens only in the UI; the URL is never injected into model context. The initial reference contains only a safe pointer; if the model needs the body, it calls `reference_read` on demand.
+Opening the source URL happens only in the UI; the URL is never injected into model context. A Web conversation reference initially contains only a safe pointer; if the model needs the body, it calls `reference_read` on demand.
 
 #### ☁️ @Cloud drive files — files connected through OpenList
 

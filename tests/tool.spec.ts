@@ -4,7 +4,8 @@ import { ToolRuntime } from '@deepseek-ai/dsh-tools'
 import { beforeEach, describe, expect, it } from 'vitest'
 import ReferenceRuntime from '../src/index.ts'
 import * as tool from '../src/tool.ts'
-import { encodeReferenceUri } from '../src/uri.ts'
+import { encodeReferenceUri, referenceReadHandle } from '../src/uri.ts'
+import { Session, SessionId } from '@deepseek-ai/dsh-session'
 import type { ReferenceRef, ReferenceSnapshot, ReferenceSource } from '../src/types.ts'
 
 const ref: ReferenceRef = { source: 'file', id: 'chat.json' }
@@ -105,6 +106,24 @@ describe('registration', () => {
 })
 
 describe('reference_list', () => {
+  it('outputs one URI while keeping historical short handles readable in the authorized task', async () => {
+    const scoped = await mount({ requiresGrant: true })
+    const session = Session.create(SessionId('short-tool'))
+    const execute = (name: string, args: unknown, owner = session) => scoped.tools.execute({
+      signal: new AbortController().signal, callId: `short-${++calls}` as never,
+      name, arguments: args, agent: { session: owner } as never,
+    })
+    {
+      const listed = await execute('reference_list', {})
+      expect(textOf(listed)).toContain(encodeReferenceUri(ref))
+      expect(textOf(listed)).not.toContain('readUri')
+      const read = await execute('reference_read', { uri: referenceReadHandle(ref) })
+      expect(read.isError).toBeFalsy()
+      expect(textOf(read)).toContain('by request hash')
+      const denied = await execute('reference_read', { uri: referenceReadHandle(ref) }, Session.create(SessionId('unrelated')))
+      expect(denied.isError).toBe(true)
+    }
+  })
   it('returns an opaque URI the model can hand straight to reference_read', async () => {
     const result = await run(ctx, 'reference_list', {})
     expect(result.isError).toBeFalsy()
@@ -132,27 +151,10 @@ describe('reference_list', () => {
 })
 
 describe('reference_read', () => {
-  it('defaults external Agent reads to summary and allows a full reread', async () => {
-    const agentRef = { source: 'local-agent', id: 'codex:session.jsonl' }
-    const details: Array<string | undefined> = []
-    const scoped = await mount({
-      id: 'local-agent',
-      requiresGrant: false,
-      read: (_target, window) => {
-        details.push(window.detail)
-        return Promise.resolve({
-          ref: agentRef,
-          label: 'Agent session',
-          body: { kind: 'conversation' as const, items: [{ role: 'assistant' as const, text: '[tool: exec]' }], startIndex: 0, totalTurns: 1, hasOlder: false },
-          partial: false,
-          capturedAt: 0,
-        })
-      },
-    })
-    const uri = encodeReferenceUri(agentRef)
-    expect(textOf(await run(scoped, 'reference_read', { uri }))).toContain('detail: "full"')
-    await run(scoped, 'reference_read', { uri, detail: 'full' })
-    expect(details).toEqual(['summary', 'full'])
+  it('rejects the old local URI/summary protocol', async () => {
+    const uri='dsh-ref:'+Buffer.from(JSON.stringify({source:'local-agent',id:'codex:session.jsonl'})).toString('base64url')
+    const result=await run(ctx,'reference_read',{uri,detail:'full'})
+    expect(result.isError).toBe(true)
   })
 
   it('returns the conversation inside the untrusted frame', async () => {
@@ -235,4 +237,14 @@ describe('presentation is pure and replay-safe', () => {
       card: 'generic', title: 'Read outside conversation', kind: 'read', rawInput: 'dsh-ref:AAAA',
     })
   })
+})
+
+it('reference_read renders retained historical images as DSH image blocks', async () => {
+ const image = { attachmentId: 'sha256:' + 'a'.repeat(64), mediaType: 'image/png' as const, bytes: 8, width: 1, height: 1 }
+ const scoped = await mount({ read: async () => ({ ref, label: 'Image history', capturedAt: Date.now(), partial: false,
+   body: { kind: 'conversation', items: [{ role: 'user', text: 'What is in this historical image?', images: [image] }], startIndex: 0, totalTurns: 1, hasOlder: false } }) })
+ const result = await run(scoped, 'reference_read', { uri: encodeReferenceUri(ref) })
+ expect(result.isError).toBeFalsy()
+ expect(result.content).toContainEqual({ type: 'image', attachment: image })
+ expect(textOf(result)).toContain('untrusted reference material')
 })

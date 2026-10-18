@@ -1,4 +1,7 @@
+import { localLocatorId } from '../src/local-locator.ts'
 import { describe, expect, it, vi } from 'vitest'
+import type { ISessions } from '@deepseek-ai/dsh-api-session-controller/client'
+import { en } from '../src/client/locale.ts'
 import {
   AGENT_SOURCE, CONVERSATION_SOURCE, DRIVE_SOURCE, FILE_SOURCE, PLUGIN_SOURCE, agentReferenceUri, conversationReferenceUri, createCloudDriveSource,
   createCommandSource, createConversationSource, createFileSource, createLocalAgentSource, createPluginSource, createSearchDebounce,
@@ -19,6 +22,23 @@ const options = (overrides: Partial<PickerSourceOptions> = {}): PickerSourceOpti
 const session = { sessionId: 'session-1' as never }
 const request = (query = '', quoted = false) => ({
   query, quoted, position: 'inline' as const, drilled: false, signal: new AbortController().signal,
+})
+
+it('opens file pills with official session addresses, preserving outside-workspace paths', () => {
+  const openResource = vi.fn()
+  const sessions = { list: { getSnapshot: () => ({ byId: { [session.sessionId]: { cwd: 'D:\\repo' } } }) } } as unknown as Pick<ISessions, 'list'>
+  const source = createFileSource(async () => [], undefined, undefined, { sessions, openResource })
+  for (const [ref, path] of [
+    ['@"D:\\repo\\docs\\a #?.md"', 'docs/a%20%23%3F.md'],
+    ['@D:/repository/a.md', 'D:/repository/a.md'],
+    ['@"./docs/a b.md"', 'docs/a%20b.md'],
+    ['@/tmp/a.md', '/tmp/a.md'],
+  ]) {
+    expect(source.openReference!(session, { ref: ref!, appearance: 'file' })).toBe(true)
+    expect(openResource).toHaveBeenLastCalledWith(`dsh-resource://file/session/${session.sessionId}/${path}`)
+  }
+  expect(source.openReference!(session, { ref: '@docs/', appearance: 'folder' })).toBe(false)
+  expect(openResource).toHaveBeenCalledTimes(4)
 })
 const pick = (candidate: InputTriggerCandidate) => ({
   candidate, session, position: 'inline' as const, via: 'menu' as const, action: 'pick' as const,
@@ -100,7 +120,7 @@ describe('native @ sources', () => {
     expect(failed.name).toContain('Service check failed')
     expect(failed.description).toBe('Check Settings · Request timed out')
     check = { pending: false }
-    health = { version: '1.8.6', daemon: '', pluginInstalled: true, daemonRunning: true,
+    health = { version: '1.8.6', extensionVersion: '1.8.6', daemon: '', pluginInstalled: true, daemonRunning: true,
       extensionConnected: true, extensionState: 'connected', opencliCompatible: true,
       daemonStale: false, connectivityOk: false, connectivityChecked: false,
       adapterCommandsReady: true, adapterCompatible: true, updateAvailable: false }
@@ -113,6 +133,34 @@ describe('native @ sources', () => {
     expect(JSON.stringify(updateMenu.mock.calls.at(-1))).toContain('Service not ready')
     health = { ...health, extensionConnected: true, connectivityOk: false }
     expect((await source.candidates(session, request()))[0]?.name).toContain('Service not ready')
+  })
+
+  it('keeps dependency faults and both updates visible in the pinned sync description', async () => {
+    let health: Health = { version: '1.0.0', daemon: '', pluginInstalled: true,
+      daemonRunning: true, extensionConnected: true, extensionState: 'connected', opencliCompatible: true,
+      daemonStale: false, connectivityOk: true, connectivityChecked: true,
+      adapterCommandsReady: true, adapterCompatible: true, updateAvailable: true, latestVersion: '2.0.0',
+      extensionVersion: '1.0.0', latestExtensionVersion: '2.0.0', extensionUpdateAvailable: true }
+    const translate = (key: string, params?: Record<string, unknown>) => (en[key as keyof typeof en] ?? key).replace(/\{(\w+)\}/gu, (_, name: string) => String(params?.[name] ?? name))
+    const updateMenu = vi.fn((_update: PickerMenuUpdate) => true)
+    const source = createConversationSource(async () => [searchRow()], translate, options({ limit: 0, updateMenu }), {
+      sync: vi.fn(), status: () => undefined, lastSyncedAt: () => undefined, lastSourceResult: () => undefined,
+      health: () => health,
+    })
+    const row = (await source.candidates(session, request()))[0]!
+    expect(row.name).toContain('Dependency update available')
+    expect(row.description).toContain('OpenCLI v1.0.0 can update to v2.0.0')
+    expect(row.description).toContain('Browser extension: Connected v1.0.0; v2.0.0 is available')
+    health = { ...health, version: '', versionError: 'executable missing', updateAvailable: false,
+      daemonRunning: false, daemonError: 'daemon stopped', pluginInstalled: false, pluginError: 'adapter missing',
+      extensionConnected: false, extensionState: 'profile-required', profileCount: 2, extensionUpdateAvailable: false }
+    await source.refreshCachedMenu()
+    const failed = updateMenu.mock.lastCall![0].candidates[0]!
+    expect(failed.description).toContain('OpenCLI: executable missing')
+    expect(failed.description).toContain('Browser Bridge: daemon stopped')
+    expect(failed.description).toContain('Conversation adapter: adapter missing')
+    expect(failed.description).toContain('Browser extension:')
+    expect(failed.name).not.toContain('Dependency update available')
   })
 
   it('routes a concrete chat alias to its provider', async () => {
@@ -209,12 +257,42 @@ describe('native @ sources', () => {
     expect(source.onPick({ ...pick(candidate), action: 'drill' })).toEqual({ text: '@"docs with space/', continue: true })
   })
 
+  it('publishes native breadcrumbs after directory drill and routes ancestor picks', () => {
+    const source = createFileSource(async () => [])
+    const crumbs = source.header!(session, { query: 'docs/testing/', quoted: false, drilled: true })!
+    expect(crumbs.map(crumb => crumb.label)).toEqual(['Workspace', 'docs', 'testing'])
+    expect(crumbs.at(-1)?.current).toBe(true)
+    expect(source.onPick(pick({ name: crumbs[0]!.label, value: crumbs[0]!.value }))).toEqual({ text: '@', continue: true })
+    expect(source.onPick(pick({ name: crumbs[1]!.label, value: crumbs[1]!.value }))).toEqual({ text: '@docs/', continue: true })
+    expect(source.header!(session, { query: 'docs/', drilled: false })).toBeUndefined()
+    expect(source.header!(session, { query: 'agent:docs/', drilled: true })).toBeUndefined()
+    const quoted = source.header!(session, { query: 'docs with space/testing/', quoted: true, drilled: true })!
+    expect(source.onPick(pick({ name: quoted[1]!.label, value: quoted[1]!.value }))).toEqual({ text: '@"docs with space/', continue: true })
+  })
+
   it('inserts a local directory when its settling pick is used', async () => {
     const source = createFileSource(async () => [{ path: 'docs', kind: 'directory' }])
     const candidate = (await source.candidates(session, request('docs')))[0]!
     expect(source.onPick(pick(candidate))).toMatchObject({
       insert: { source: FILE_SOURCE, ref: '@docs/', label: 'docs/', appearance: 'folder', clipboardText: '@docs/' },
     })
+  })
+
+  it('restricts file drills to files until returning to the workspace root', async () => {
+    const files = createFileSource(async () => [{ path: 'docs', kind: 'directory' }])
+    const load = vi.fn(async () => [])
+    const others = [createCommandSource(load), createSkillSource(load), createSessionSource(load),
+      createConversationSource(load), createLocalAgentSource(load), createPluginSource(load), createCloudDriveSource(load)]
+    const directory = (await files.candidates(session, request()))[0]!
+    files.onPick({ ...pick(directory), action: 'drill' })
+    for (const source of others) {
+      expect(await source.candidates(session, { ...request('docs/read'), drilled: true })).toEqual([])
+    }
+    expect(load).not.toHaveBeenCalled()
+    const root = files.header!(session, { query: 'docs/', drilled: true })![0]!
+    files.onPick(pick({ name: root.label, value: root.value }))
+    await others[0]!.candidates(session, { ...request(), drilled: true })
+    expect(load).toHaveBeenCalledOnce()
   })
 
   it('classifies official file candidates for menu logo projection', () => {
@@ -231,13 +309,60 @@ describe('native @ sources', () => {
       sessionId: 'source' as never, label: '项目聊天导出', cwd: 'fixture-repo', createdAt: 1, mention, sameWorkspace: true,
     }])
     const candidate = (await source.candidates(session, request()))[0]!
-    expect(candidate.icon).toBe(PICKER_ICON_MARKER.session)
+    expect(candidate.icon).toBe('session')
     expect(candidate.description).toBe(`fixture-repo · ${new Date(1).toLocaleString()}`)
     const outcome = source.onPick(pick(candidate))
     if (outcome === undefined || outcome === 'handled' || !('insert' in outcome)) throw new Error('expected insert')
     expect(outcome.insert).toMatchObject({
       ref: mention, label: '项目聊天导出', appearance: 'session', clipboardText: mention,
     })
+  })
+
+  it('uses official session display titles, activity dates and direct-subagent grouping without changing mention targets', async () => {
+    const rows = ['ordinary', 'child', 'other-child', 'unknown'].map(id => ({
+      sessionId: id as never, label: `Title ${id}`, createdAt: 1, sameWorkspace: true,
+      mention: `@[Title ${id}](dsh-session:${id})`, ...(id === 'child' ? { displayTitle: 'Researcher' } : {}),
+    }))
+    const listed = {
+      ordinary: { updatedAt: 2000 },
+      child: { updatedAt: 3000, origin: 'subagent', parentId: session.sessionId },
+      'other-child': { updatedAt: 4000, origin: 'subagent', parentId: 'another-parent' },
+    }
+    const sessions = { list: { getSnapshot: () => ({ byId: listed }) } } as unknown as Pick<ISessions, 'list'>
+    const source = createSessionSource(async () => rows, undefined, options({ limit: 10 }), sessions)
+    const candidates = await source.candidates(session, request())
+    expect(source.showGroupTitle).toBe(false)
+    expect(candidates.map(row => row.icon)).toEqual(['session', 'session', 'session', 'session'])
+    expect(candidates.map(row => [row.name, row.section])).toEqual([
+      ['Researcher', 'Subagents'], ['Title ordinary', 'DSH sessions'],
+      ['Title other-child', 'DSH sessions'], ['Title unknown', 'DSH sessions'],
+    ])
+    expect(candidates.map(row => row.description)).toEqual([3000, 2000, 4000, 1].map(time => new Date(time).toLocaleString()))
+    expect(source.onPick(pick(candidates[0]!))).toMatchObject({ insert: {
+      label: 'Researcher', ref: rows[1]!.mention, clipboardText: rows[1]!.mention,
+    } })
+    listed.child.updatedAt = 5000
+    expect((await source.candidates(session, request()))[0]!.description).toBe(new Date(5000).toLocaleString())
+  })
+
+  it('hydrates cold session metadata without opening agents, hides blanks and preserves canonical mentions', async () => {
+    const rows = ['cold-empty', 'cold-child'].map(id => ({ sessionId: id as never,
+      label: id, displayTitle: id, mention: `@[${id}](dsh-session:${id})`, createdAt: 1, sameWorkspace: true }))
+    const values: Record<string, unknown> = {}
+    const sessions = { list: { getSnapshot: () => ({ byId: {
+      'cold-empty': { blank: false },
+      'cold-child': { blank: false, origin: 'subagent', parentId: session.sessionId },
+    }, projectionsBySession: values }) }, refreshProjections: vi.fn(async (id: string) => {
+      values[id] = { state: 'ready', values: { sessionListMetadata: { blank: id === 'cold-empty', lastPromptAt: 9000 },
+        subagent: id === 'cold-child' ? { label: 'Cold researcher' } : null } }
+    }) } as unknown as Pick<ISessions, 'list' | 'refreshProjections'>
+    const source = createSessionSource(async () => rows, undefined, options({ limit: 10 }), sessions)
+    const candidates = await source.candidates(session, request())
+    expect(candidates.map(row => row.name)).toEqual(['Cold researcher'])
+    expect(candidates[0]!.description).toBe(new Date(9000).toLocaleString())
+    expect(source.onPick(pick(candidates[0]!))).toMatchObject({ insert: { ref: rows[1]!.mention } })
+    await source.candidates(session, request())
+    expect(sessions.refreshProjections).toHaveBeenCalledTimes(2)
   })
 
   it('keeps Commands and Skills in @ while returning native slash text', async () => {
@@ -309,16 +434,16 @@ describe('native @ sources', () => {
 
 describe('local agent conversations', () => {
   const agentRow = (over: Partial<AgentCandidate> = {}): AgentCandidate => ({
-    id: 'codex:2026/08/rollout-a.jsonl', kind: 'codex', label: 'Refactor the scan probe',
+    id: localLocatorId({source:'codex',path:'C:/history/rollout-a.jsonl',sessionId:'sample'}), kind: 'codex', label: 'Refactor the scan probe',
     provider: 'Codex', updatedAt: Date.UTC(2026, 7, 17), ...over,
   })
 
-  it('uses the canonical opaque dsh-ref URI, so the host dispatches to the local-agent source', () => {
-    const uri = agentReferenceUri('claude-code:project-a/session.jsonl')
-    expect(uri).toMatch(/^dsh-ref:[A-Za-z0-9_-]+$/)
-    expect(decodeReferenceUri(uri)).toEqual({ source: 'local-agent', id: 'claude-code:project-a/session.jsonl' })
-    // The transcript path never appears verbatim in the URI a mention carries.
-    expect(uri).not.toContain('project-a')
+  it('carries readable local locator fields in the composer transport', () => {
+    const id=localLocatorId({source:'claude',path:'C:/project-a/session.jsonl',sessionId:'sample'})
+    const uri=agentReferenceUri(id)
+    expect(uri).toMatch(/^dsh-local:/)
+    expect(uri).toContain('source=claude')
+    expect(decodeReferenceUri(uri)).toEqual({source:'local-agent',id})
   })
 
   it('routes hyphenated agent spellings here while bare provider names keep meaning the browser chat', () => {
@@ -343,13 +468,30 @@ describe('local agent conversations', () => {
     expect(scopedQuery('本地对话', 'agents')).toBe('本地对话')
   })
 
+  it('shows cached agent rows during refresh and discards a refresh after changing query', async () => {
+    let finish!: (rows: readonly AgentCandidate[]) => void
+    const updateMenu = vi.fn((_update: PickerMenuUpdate) => true)
+    const search = vi.fn().mockResolvedValueOnce([agentRow({ label: 'Old' })])
+      .mockImplementationOnce(() => new Promise(resolve => { finish = resolve }))
+      .mockResolvedValueOnce([agentRow({ label: 'Other' })])
+    const source = createLocalAgentSource(search, undefined, options({ updateMenu }))
+    expect((await source.candidates(session, request('agents:')))[0]?.name).toBe('Old')
+    expect((await source.candidates(session, request('agents:')))[0]?.name).toBe('Old')
+    expect((await source.candidates(session, request('agents:other')))[0]?.name).toBe('Other')
+    finish([agentRow({ label: 'Late' })])
+    await new Promise(resolve => setTimeout(resolve, 0))
+    expect(updateMenu).not.toHaveBeenCalled()
+  })
+
   it('filters a concrete agent alias to its configured kind', async () => {
-    const source = createLocalAgentSource(async () => [
+    const search = vi.fn(async () => [
       agentRow({ id: 'claude-code:a', kind: 'claude-code', label: 'A' }),
       agentRow({ id: 'codex:b', kind: 'codex', label: 'B' }),
-    ], undefined, options({ sourceAliasTargets: { work: 'codex' } }))
+    ])
+    const source = createLocalAgentSource(search, undefined, options({ sourceAliasTargets: { work: 'codex' }, shortcuts: { work: 'agents' } }))
     const rows = await source.candidates(session, request('work:query'))
     expect(rows.map(row => row.name)).toEqual(['B'])
+    expect(search).toHaveBeenCalledWith(session.sessionId, 'query', expect.anything(), expect.any(Number), 'codex')
   })
 
   it('gives every format whose name is not already taken a prefix of its own', () => {
@@ -468,7 +610,7 @@ describe('local agent conversations', () => {
   })
 
   it('hides Tab for unsupported formats when only summary is enabled', async () => {
-    const source = createLocalAgentSource(async () => [agentRow({ id: 'cursor:test', kind: 'cursor' })], undefined, options(),
+    const source = createLocalAgentSource(async () => [agentRow({ id: localLocatorId({source:'cursor',path:'C:/history/test.jsonl',sessionId:'test'}), kind: 'cursor' })], undefined, options(),
       vi.fn(), vi.fn(), { showImport: false, showSummary: true, skipConfirmation: false })
     const candidate = (await source.candidates(session, request()))[0]!
     expect(candidate.drill).toBeUndefined()
@@ -742,3 +884,66 @@ function searchRow(overrides: Partial<SearchResult> = {}): SearchResult {
 
 
 
+
+describe('local Agent Chat Import upgrade row', () => {
+  it('pins the upgrade above conversations and deduplicates clicks without inserting text', async () => {
+    let done!: () => void
+    let compatible = false
+    const upgrade = vi.fn(() => new Promise<void>(resolve => { done = () => { compatible = true; resolve() } }))
+    const source = createLocalAgentSource(async () => [], undefined, options({ limit: 1 }), undefined, undefined, undefined, {
+      status: async () => ({ state: compatible ? 'ready' : 'incompatible', version: '0.25.2', missing: compatible ? [] : ['importPath'], canUpgrade: !compatible }), upgrade,
+    })
+    const rows = await source.candidates(session, request())
+    expect(rows).toHaveLength(1)
+    expect(rows[0]?.name).toBe('chatImport.upgrade')
+    expect(source.onPick(pick(rows[0]!))).toBe('handled')
+    source.onPick(pick(rows[0]!))
+    await vi.waitFor(() => expect(upgrade).toHaveBeenCalledTimes(1))
+    done()
+    await vi.waitFor(async () => { await source.refreshCachedMenu({ refetch: true }); expect(await source.candidates(session, request())).toEqual([]) })
+  })
+  it.each(['ready'] as const)('hides the upgrade row for %s', async state => {
+    const source = createLocalAgentSource(async () => [], undefined, options(), undefined, undefined, undefined, {
+      status: async () => ({ state, version: '0.26.0', missing: [], canUpgrade: false }), upgrade: vi.fn(),
+    })
+    expect(await source.candidates(session, request())).toEqual([])
+    expect(await source.candidates(session, request('files:'))).toEqual([])
+  })
+  it.each(['disabled', 'unavailable', 'incompatible', 'installing', 'restart-required'] as const)('warns about %s without installing or inserting a reference', async state => {
+    const upgrade = vi.fn()
+    const source = createLocalAgentSource(async () => [], undefined, options({ limit: 0 }), undefined, undefined, undefined, {
+      status: async () => ({ state, version: '0.25.2', missing: ['importPath'], canUpgrade: false }), upgrade,
+    })
+    const rows = await source.candidates(session, request())
+    expect(rows).toHaveLength(1)
+    expect(rows[0]?.name).toBe('chatImport.apiAttention')
+    expect(rows[0]?.description).toContain(`chatImport.${state}`)
+    expect(source.onPick(pick(rows[0]!))).toBe('handled')
+    expect(upgrade).not.toHaveBeenCalled()
+    expect(await source.candidates(session, request('', true))).toEqual([])
+  })
+  it('shows a status query failure and removes it when the API recovers', async () => {
+    const status = vi.fn().mockRejectedValueOnce(new Error('status endpoint failed'))
+      .mockResolvedValue({ state: 'ready', missing: [], version: '0.26.1', canUpgrade: false })
+    const source = createLocalAgentSource(async () => [], undefined, options(), undefined, undefined, undefined, { status, upgrade: vi.fn() })
+    expect((await source.candidates(session, request()))[0]?.description).toContain('status endpoint failed')
+    await vi.waitFor(async () => expect(await source.candidates(session, request())).toEqual([]))
+  })
+  it('shows missing status and provider errors even without an upgrade action', async () => {
+    const status = vi.fn().mockResolvedValueOnce(undefined)
+      .mockResolvedValue({ state: 'unavailable', missing: ['importPath'], version: '', canUpgrade: false, error: 'Plugin Manager unavailable' })
+    const source = createLocalAgentSource(async () => [], undefined, options(), undefined, undefined, undefined, { status, upgrade: vi.fn() })
+    expect((await source.candidates(session, request()))[0]?.description).toContain('chatImport.unavailable')
+    await vi.waitFor(async () => expect((await source.candidates(session, request()))[0]?.description).toContain('Plugin Manager unavailable'))
+  })
+  it('keeps a failed upgrade retryable with the error on the row', async () => {
+    const upgrade = vi.fn().mockRejectedValueOnce(new Error('network failed')).mockResolvedValue(undefined)
+    const source = createLocalAgentSource(async () => [], undefined, options(), undefined, undefined, undefined, {
+      status: async () => ({ state: 'incompatible', version: '0.25.2', missing: ['importPath'], canUpgrade: true }), upgrade,
+    })
+    source.onPick(pick((await source.candidates(session, request()))[0]!))
+    await vi.waitFor(async () => { await source.refreshCachedMenu({ refetch: true }); expect((await source.candidates(session, request()))[0]?.description).toBe('network failed') })
+    source.onPick(pick((await source.candidates(session, request()))[0]!))
+    await vi.waitFor(() => expect(upgrade).toHaveBeenCalledTimes(2))
+  })
+})

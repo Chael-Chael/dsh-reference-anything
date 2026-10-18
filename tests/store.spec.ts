@@ -43,6 +43,7 @@ function turns(count: number, prefix = 'old'): ProviderTurnRow[] {
 
 function fakeRunner(overrides: Partial<OpenCliRunner> = {}): OpenCliRunner {
   return {
+    health: async () => ({ extensionCompatible: true }),
     whoami: async () => 'account-hash',
     history: async () => [history],
     detail: async () => turns(2),

@@ -1,0 +1,11 @@
+# Chat Import API 异常菜单提醒
+- 日期：2026-10-18（Asia/Shanghai）
+- 范围：本地 Agent @ 菜单，API 正常不提醒；保留不兼容且可升级时的升级行；其他非 ready 状态或状态查询失败显示置顶说明，不插入引用、不自动安装。
+- 变更：src/client/source.ts、src/client/locale.ts、tests/client-source.spec.ts。完整检查发现既有 conversation-availability 测试数组推断错误，补 as const 消除 string | undefined 类型错误。
+- Red/green：新增 7 个场景先因缺失提醒失败；实现后 client-source 75 项通过。测试考虑已有 stale-while-revalidate，恢复状态等待重新获取。
+- 完整 agent:verify：FAIL，54 文件通过、2 文件失败、2 跳过；1032 项通过、4 失败、8 跳过。失败为 conversation-availability 的 chatgpt 空记录及 web.spec.ts 的 3 个扫描/统计用例，不改动相关业务逻辑。日志：.codex-tmp/agent-workflow/verify-1792253989447/check.log。
+- build：PASS；agent:sync：命令 PASS，两环境重启后另行检查 UI。
+- Web：PASS 正常 API 下 @agents: 无 API 异常提醒（另有 Trae 扫描警告，不属于 API 健康状态）。异常 UI BLOCKED：插件管理 setBundleEnabled 停用失败，Failed to fetch，插件仍启用。没有发送消息，结束草稿为空。
+- Desktop：BLOCKED。重启后窗口“DeepSeek Harness 无法使用”，提示应用无法启动或已意外停止；没有禁用第三方插件或修改 Desktop 配置。诊断日志：C:/Users/27923/AppData/Roaming/@deepseek-ai/dsh-desktop/logs/crash-2026-10-17T16-22-21-241Z-host.log。
+- 图标：沿用升级箭头，新异常提示为 !，没有新增专属品牌 Logo。
+- 未发布、未提交；全套验证与异常真实 UI 尚未通过。无新的稳定经验规则需要晋升。

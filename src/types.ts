@@ -68,6 +68,7 @@ export interface ConversationItem {
   readonly role: 'user' | 'assistant' | 'document'
   /** Visible text of that turn. Tool calls, reasoning, and injected context are not projected. */
   readonly text: string
+  readonly images?: readonly import('./chat-import-reader.ts').ReferenceImage[]
   /** Attachment metadata only; bytes stay behind an explicit authorized read. */
   readonly attachments?: readonly ConversationAttachment[]
 }

@@ -1,14 +1,17 @@
 import { execFile as nodeExecFile } from 'node:child_process'
-import { existsSync } from 'node:fs'
+import { existsSync, lstatSync, realpathSync, unlinkSync } from 'node:fs'
 import { delimiter, dirname, join, resolve } from 'node:path'
 import { promisify } from 'node:util'
 import { spawn } from 'node:child_process'
 import { createHash } from 'node:crypto'
+import { createRequire } from 'node:module'
+import { homedir } from 'node:os'
+import { fileURLToPath } from 'node:url'
 import type { ChatProvider } from './store/spec.ts'
 import type { ProviderConversationRow, ProviderTurnRow } from './store/store.ts'
 
 const execFile = promisify(nodeExecFile)
-export const MIN_OPENCLI_VERSION = '1.8.6'
+export const MIN_OPENCLI_VERSION = '2.0.0'
 export const MIN_ADAPTER_VERSION = '0.2.3'
 /** Allows a 25 MiB attachment to cross JSON/base64 stdout with bounded headroom. */
 export const DEFAULT_OPENCLI_MAX_STDOUT_BYTES = 40 * 1024 * 1024
@@ -19,6 +22,18 @@ const SITE: Record<ChatProvider, string> = {
 }
 const REQUIRED_ADAPTER_COMMANDS = ['chatgpt', 'claude', 'gemini', 'deepseek', 'grok', 'kimi'] as const
 const ADAPTER_PLUGIN_NAME = 'dsh-chat-history'
+
+/** Admin commands changed from text to JSON envelopes in OpenCLI 2. */
+function jsonData(output: string): Record<string, unknown> | Record<string, unknown>[] | undefined {
+  try {
+    const result = JSON.parse(output)
+    if (result?.ok === true && result.data && typeof result.data === 'object') {
+      if (Array.isArray(result.data) && !result.data.every((row: unknown) => row && typeof row === 'object' && !Array.isArray(row))) return undefined
+      return result.data
+    }
+  } catch { /* Explicit legacy executables may still return text. */ }
+  return undefined
+}
 
 export type OpenCliErrorCode = 'EXTENSION_NOT_CONNECTED' | 'PROVIDER_TIMEOUT' | 'PROVIDER_NOT_LOGGED_IN'
   | 'PROVIDER_ACCOUNT_MISMATCH' | 'PROVIDER_RATE_LIMIT' | 'OPENCLI_CONFIGURATION' | 'OPENCLI_OUTPUT_TOO_LARGE' | 'OPENCLI_FAILED'
@@ -49,6 +64,9 @@ export interface OpenCliHealth {
   extensionConnected: boolean
   extensionState: ExtensionState
   extensionVersion?: string
+  latestExtensionVersion?: string
+  extensionUpdateAvailable?: boolean
+  extensionCompatible?: boolean
   profileCount?: number
   opencliCompatible: boolean
   daemonVersion?: string
@@ -89,6 +107,17 @@ export interface DaemonStatus {
  * rest of the viability panel.
  */
 export function parseDaemonStatus(output: string): DaemonStatus {
+  const data = jsonData(output)
+  if (data && !Array.isArray(data)) {
+    const daemonRunning = data.running === true
+    const extensionState: ExtensionState = !daemonRunning ? 'daemon-offline'
+      : data.profileRequired === true ? 'profile-required'
+      : data.profileDisconnected === true ? 'profile-disconnected'
+      : data.extensionConnected === true ? 'connected' : 'disconnected'
+    return { daemonRunning, extensionState, extensionConnected: extensionState === 'connected',
+      ...(typeof data.extensionVersion === 'string' ? { extensionVersion: data.extensionVersion } : {}),
+      ...(Array.isArray(data.profiles) ? { profileCount: data.profiles.length } : {}) }
+  }
   const daemonRunning = /^Daemon:\s+(?:running|stale)\b/m.test(output)
   const connected = /^Extension:\s+connected\b/m.test(output)
   const version = connected ? output.match(/^Extension:\s+connected \((v)?([^)\s]+)\)/m)?.[2] : undefined
@@ -196,34 +225,48 @@ export class OpenCliRunner {
   }
 
   private async inspectHealth(checkConnectivity: boolean, signal?: AbortSignal): Promise<OpenCliHealth> {
-    const [version, daemon, plugins, doctor, latest] = await Promise.all([
+    const [version, daemon, plugins, doctor] = await Promise.all([
       this.probe(['--version'], signal), this.probe(['daemon', 'status'], signal), this.probe(['plugin', 'list'], signal),
       checkConnectivity ? this.probe(['doctor'], signal) : Promise.resolve({ value: '', diagnostic: '' }),
-      latestOpenCliVersion(signal),
     ])
     const status = parseDaemonStatus(daemon.value)
     const cliVersion = normalizeVersion(version.value)
-    const daemonVersion = daemon.value.match(/^Version:\s+v?([^\s(]+)/m)?.[1]
-    const pluginVersion = plugins.value.match(/dsh-chat-history\s+@([^\s—]+)/i)?.[1]
+    const daemonData = jsonData(daemon.value)
+    const pluginData = jsonData(plugins.value)
+    const adapter = Array.isArray(pluginData) ? pluginData.find(row => row.name === ADAPTER_PLUGIN_NAME) : undefined
+    const daemonVersion = !Array.isArray(daemonData) && typeof daemonData?.daemonVersion === 'string'
+      ? daemonData.daemonVersion : daemon.value.match(/^Version:\s+v?([^\s(]+)/m)?.[1]
+    const pluginVersion = typeof adapter?.version === 'string' ? adapter.version : plugins.value.match(/dsh-chat-history\s+@([^\s—]+)/i)?.[1]
     const pluginInstalled = /dsh-chat-history/i.test(plugins.value)
     const adapterLoadError = adapterPluginLoadError(plugins.diagnostic)
     const adapterCommandsReady = !adapterLoadError
       && REQUIRED_ADAPTER_COMMANDS.every(command => new RegExp(`\\b${command}\\b`, 'i').test(plugins.value))
     const opencliCompatible = versionAtLeast(cliVersion, MIN_OPENCLI_VERSION)
     const daemonStale = Boolean(status.daemonRunning && (!daemonVersion || normalizeVersion(daemonVersion) !== cliVersion))
-    const connectivityOk = /\[OK\]\s+Connectivity:/i.test(doctor.value)
+    const doctorData = jsonData(doctor.value)
+    const report = !Array.isArray(doctorData) ? doctorData : undefined
+    const extensionCompatible = Array.isArray(report?.issues)
+      ? !report.issues.some(issue => typeof issue === 'string' && issue.startsWith('CLI version incompatible with extension:')) : undefined
+    const latestExtensionVersion = typeof report?.latestExtensionVersion === 'string' ? report.latestExtensionVersion : undefined
+    const connectivity = !Array.isArray(doctorData) ? doctorData?.connectivity : undefined
+    const connectivityOk = (connectivity !== null && typeof connectivity === 'object' && 'ok' in connectivity && connectivity.ok === true)
+      || /\[OK\]\s+Connectivity:/i.test(doctor.value)
     return {
       version: cliVersion, daemon: daemon.value.trim(), pluginInstalled,
       daemonRunning: status.daemonRunning, extensionConnected: status.extensionConnected, extensionState: status.extensionState,
       opencliCompatible, daemonStale, connectivityOk, connectivityChecked: checkConnectivity,
       ...(status.extensionVersion ? { extensionVersion: status.extensionVersion } : {}),
+      ...(latestExtensionVersion ? { latestExtensionVersion } : {}),
+      ...(extensionCompatible !== undefined ? { extensionCompatible } : {}),
+      extensionUpdateAvailable: Boolean(status.extensionVersion && latestExtensionVersion
+        && versionAtLeast(latestExtensionVersion, status.extensionVersion) && latestExtensionVersion !== status.extensionVersion),
       ...(status.profileCount !== undefined ? { profileCount: status.profileCount } : {}),
       ...(daemonVersion ? { daemonVersion: normalizeVersion(daemonVersion) } : {}),
       ...(pluginVersion ? { pluginVersion: normalizeVersion(pluginVersion) } : {}),
       adapterCommandsReady,
       adapterCompatible: pluginInstalled && adapterCommandsReady && versionAtLeast(pluginVersion ?? '', MIN_ADAPTER_VERSION),
-      ...(latest.value.trim() ? { latestVersion: normalizeVersion(latest.value) } : {}),
-      updateAvailable: Boolean(latest.value.trim() && versionAtLeast(normalizeVersion(latest.value), cliVersion) && normalizeVersion(latest.value) !== cliVersion),
+      latestVersion: MIN_OPENCLI_VERSION,
+      updateAvailable: Boolean(cliVersion && versionAtLeast(MIN_OPENCLI_VERSION, cliVersion) && MIN_OPENCLI_VERSION !== cliVersion),
       ...(version.error ? { versionError: version.error } : {}),
       ...(daemon.error ? { daemonError: daemon.error } : {}),
       ...(plugins.error || adapterLoadError ? { pluginError: plugins.error || adapterLoadError } : {}),
@@ -239,6 +282,13 @@ export class OpenCliRunner {
 
   async profiles(signal?: AbortSignal): Promise<BrowserProfile[]> {
     const output = await this.raw(['profile', 'list'], signal)
+    const data = jsonData(output)
+    if (data && !Array.isArray(data) && Array.isArray(data.profiles)) {
+      return data.profiles.filter((row: Record<string, unknown> | null) => row && typeof row.contextId === 'string')
+        .map((row: Record<string, unknown>) => ({ id: row.contextId as string,
+          ...(typeof row.alias === 'string' ? { alias: row.alias } : {}),
+          connected: row.connected === true, isDefault: row.default === true }))
+    }
     const disconnected = output.indexOf('Disconnected saved profiles:')
     return output.split(/\r?\n/).flatMap((line) => {
       const match = line.match(/^\s{2}([A-Za-z0-9_-]+)(?:\s+([A-Za-z0-9_-]+))?(?:\s+default)?\s+—\s+(connected|not connected)/)
@@ -314,7 +364,8 @@ export class OpenCliRunner {
       '--site-session', 'ephemeral', '--window', 'background', '-f', 'json',
     ], signal)
     try {
-      const parsed: unknown = JSON.parse(stdout)
+      const value: unknown = JSON.parse(stdout)
+      const parsed = value && typeof value === 'object' && 'ok' in value && value.ok === true && 'data' in value ? value.data : value
       if (!Array.isArray(parsed) || parsed.some(row => !row || typeof row !== 'object' || Array.isArray(row))) throw new Error('expected object array')
       return parsed as Record<string, unknown>[]
     } catch (error) {
@@ -339,7 +390,7 @@ export class OpenCliRunner {
       const detail = error as { code?: number | string; killed?: boolean; signal?: string; stderr?: string; stdout?: string }
       if (detail.code === 'ERR_CHILD_PROCESS_STDIO_MAXBUFFER') throw new OpenCliError('OpenCLI output exceeded the configured limit', 'OPENCLI_OUTPUT_TOO_LARGE', { cause: error })
       if (detail.killed || detail.signal === 'SIGTERM') throw new OpenCliError('OpenCLI provider request timed out', 'PROVIDER_TIMEOUT', { cause: error })
-      const stderr = String(detail.stderr || detail.stdout || '').trim().slice(0, 2_000)
+      const stderr = [detail.stderr, detail.stdout].filter(Boolean).join('\n').trim().slice(0, 2_000)
       const exit = typeof detail.code === 'number' ? detail.code : undefined
       const code: OpenCliErrorCode = stderr.includes('DSH_ACCOUNT_SCOPE_MISMATCH') ? 'PROVIDER_ACCOUNT_MISMATCH'
         : stderr.includes('DSH_PROVIDER_RATE_LIMIT') ? 'PROVIDER_RATE_LIMIT'
@@ -351,20 +402,11 @@ export class OpenCliRunner {
   }
 }
 
-async function latestOpenCliVersion(signal?: AbortSignal): Promise<{ value: string; diagnostic: string }> {
-  const npm = resolveNpmInvocation()
-  if (!npm) return { value: '', diagnostic: '' }
-  try {
-    const result = await execFile(npm.file, [...npm.prefix, 'view', OPENCLI_NPM_PACKAGE, 'version'], { encoding: 'utf8', timeout: 15_000, signal })
-    return { value: String(result.stdout).trim(), diagnostic: '' }
-  } catch { return { value: '', diagnostic: '' } }
-}
-
 /** Keep successful-process diagnostics: OpenCLI reports plugin import failures on stderr while exiting zero. */
 function adapterPluginLoadError(diagnostic = ''): string {
   const lines = diagnostic.split(/\r?\n/)
     .map(line => line.trim())
-    .filter(line => /Plugin dsh-chat-history\//i.test(line))
+    .filter(line => /Plugin dsh-chat-history(?:\/| because)/i.test(line))
   return [...new Set(lines)].join('\n').slice(0, 2_000)
 }
 
@@ -385,25 +427,17 @@ export async function discoverOpenCli(configured = 'opencli', signal?: AbortSign
   return { found: false, executable: configured, version: '', ...(lastError ? { error: lastError } : {}) }
 }
 
-/** Install or upgrade the supported OpenCLI package through this Node runtime's npm. */
+/** Select the version installed with this plugin instead of mutating global npm packages. */
 export async function installOpenCli(signal?: AbortSignal): Promise<OpenCliDiscovery> {
-  const npm = resolveNpmInvocation()
-  if (!npm) {
-    throw new OpenCliError('npm was not found next to the Node.js runtime; install Node.js/npm, then retry', 'OPENCLI_INSTALL_FAILED')
-  }
   try {
-    await execFile(npm.file, [...npm.prefix, 'install', '--global', `${OPENCLI_NPM_PACKAGE}@>=${MIN_OPENCLI_VERSION}`], {
-      encoding: 'utf8', timeout: 5 * 60_000, maxBuffer: 8 * 1024 * 1024,
-      windowsHide: true, shell: false, signal,
-    })
+    createRequire(import.meta.url).resolve(OPENCLI_NPM_PACKAGE)
+    const runner = new OpenCliRunner()
+    const version = await runner.version(signal)
+    await runner.verifyInstallation(signal)
+    return { found: true, executable: 'opencli', version }
   } catch (error) {
-    const detail = error as { stderr?: string; stdout?: string }
-    const output = String(detail.stderr || detail.stdout || '').trim().slice(0, 2_000)
-    throw new OpenCliError(output || 'npm could not install OpenCLI globally', 'OPENCLI_INSTALL_FAILED', { cause: error })
+    throw new OpenCliError('Bundled OpenCLI is unavailable; reinstall or update dsh-reference-anything', 'OPENCLI_INSTALL_FAILED', { cause: error })
   }
-  const discovery = await discoverOpenCli('opencli', signal)
-  if (!discovery.found) throw new OpenCliError(discovery.error || 'OpenCLI was installed but could not be located', 'OPENCLI_INSTALL_FAILED')
-  return discovery
 }
 
 function openCliCandidates(configured: string): string[] {
@@ -417,23 +451,6 @@ function openCliCandidates(configured: string): string[] {
     candidates.push('/usr/local/bin/opencli', '/opt/homebrew/bin/opencli')
   }
   return [...new Set(candidates.filter(Boolean))]
-}
-
-function resolveNpmInvocation(): { file: string; prefix: string[] } | undefined {
-  const node = resolveNodeExecutable()
-  const npmExecPath = process.env.npm_execpath
-  if (npmExecPath && existsSync(npmExecPath)) {
-    return /\.(?:c?js|mjs)$/i.test(npmExecPath)
-      ? { file: node, prefix: [npmExecPath] }
-      : { file: npmExecPath, prefix: [] }
-  }
-  const npmEntries = [
-    join(dirname(node), 'node_modules', 'npm', 'bin', 'npm-cli.js'),
-    join(dirname(node), '..', 'node_modules', 'npm', 'bin', 'npm-cli.js'),
-  ]
-  for (const entry of npmEntries) if (existsSync(entry)) return { file: node, prefix: [entry] }
-  if (process.platform !== 'win32') return { file: 'npm', prefix: [] }
-  return undefined
 }
 
 /** Electron Node mode still advertises Electron, so CLI parsers misread argv. */
@@ -467,14 +484,24 @@ export function versionAtLeast(value: string, minimum: string): boolean {
 }
 
 function resolveInvocation(configured: string): { file: string; prefix: string[] } {
+  if (configured === 'opencli') {
+    const entry = createRequire(import.meta.url).resolve(OPENCLI_NPM_PACKAGE)
+    if (process.platform === 'win32') {
+      // shortcut: OpenCLI 2.0 cannot replace Windows junctions; remove when upstream fixes host-link migration.
+      for (const root of [join(homedir(), '.opencli', 'plugins', ADAPTER_PLUGIN_NAME), fileURLToPath(new URL('../opencli-plugin', import.meta.url))]) {
+        const link = join(root, 'node_modules', '@jackwener', 'opencli')
+        if (lstatSync(link, { throwIfNoEntry: false })?.isSymbolicLink()
+          && (!existsSync(link) || realpathSync(link) !== realpathSync(resolve(entry, '../../..')))) {
+          try { unlinkSync(link) } catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error }
+        }
+      }
+    }
+    return { file: resolveNodeExecutable(), prefix: [entry] }
+  }
   const explicit = resolve(configured)
   if (/\.cmd$/i.test(configured) && existsSync(explicit)) {
     const entry = join(explicit, '..', 'node_modules', '@jackwener', 'opencli', 'dist', 'src', 'main.js')
     if (existsSync(entry)) return { file: resolveNodeExecutable(dirname(explicit)), prefix: [entry] }
-  }
-  if (process.platform === 'win32' && configured === 'opencli') {
-    const entry = process.env.APPDATA && join(process.env.APPDATA, 'npm', 'node_modules', '@jackwener', 'opencli', 'dist', 'src', 'main.js')
-    if (entry && existsSync(entry)) return { file: resolveNodeExecutable(join(process.env.APPDATA!, 'npm')), prefix: [entry] }
   }
   return { file: configured, prefix: [] }
 }

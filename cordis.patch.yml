@@ -19,10 +19,9 @@
       config:
         listLimit: 20
 
-    # Expands plugin-owned `@[label](dsh-ref:…)` mentions into untrusted
-    # metadata on every surface. Native file and `dsh-session:` references stay
-    # with DSH's official services. External transcripts are not prefetched;
-    # the agent calls reference_read only when the current task needs one.
+    # Local Agent mentions receive bounded body previews before the model runs.
+    # Other external sources retain deferred reading. Native file and
+    # `dsh-session:` references stay with DSH's official services.
     - id: reference-mention
       name: 'dsh-reference-anything/reference'
       config:

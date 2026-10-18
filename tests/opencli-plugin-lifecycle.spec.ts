@@ -79,4 +79,16 @@ describe('OpenCLI sync browser lifecycle', () => {
       .resolves.toEqual({ ok: false, code: 'AUTH' })
     expect(attempts).toBe(1)
   })
+
+  it('retries an about:blank evaluation error until navigation commits', async () => {
+    let attempts = 0
+    const page = { evaluate: async () => {
+      if (++attempts === 1) throw new Error("Failed to parse URL from /api/auth/session")
+      return JSON.stringify({ ok: true, identity: 'account' })
+    } }
+    await expect(evaluateWhenProviderReady(page, 'async function () {}', {}, 'identity', {
+      initialDelayMs: 1, timeoutMs: 100,
+    })).resolves.toEqual({ ok: true, identity: 'account' })
+    expect(attempts).toBe(2)
+  })
 })

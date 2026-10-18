@@ -1,0 +1,36 @@
+[
+  {
+    "title": "引用，或导入后继续",
+    "description": "找到本地 Agent 历史会话后，按 Enter 引用到当前对话；想继续之前的工作，按 Tab 打开操作菜单，确认导入完整历史后在 DSH 中继续。",
+    "media": "demos/agent-import.gif",
+    "alt": "引用，或导入后继续操作演示"
+  },
+  {
+    "title": "升级 Chat Import，启用导入与交接",
+    "description": "如果 Chat Import 版本缺少导入或摘要接口，菜单和设置会提示升级。点击升级按钮，安装完成后按提示重启 DSH。演示中的版本号与执行结果为示例。",
+    "media": "demos/chat-import-upgrade.gif",
+    "alt": "升级 Chat Import，启用导入与交接操作演示"
+  },
+  {
+    "title": "本地插件，也能直接引用",
+    "description": "输入 @plugin: 查看本地插件及其状态，继续输入名称筛选。按 Enter 将插件目录插入为引用，让 Agent 基于目录检查配置和实现。",
+    "media": "demos/local-plugins.gif",
+    "alt": "本地插件，也能直接引用操作演示"
+  },
+  {
+    "title": "用自己的快捷词找到需要的来源",
+    "description": "在设置中自定义快捷词，多个词用逗号分隔。多个来源使用同一个词时，可以一起搜索；用 codex 等具体来源快捷词，则能精确限定范围。",
+    "media": "demos/shortcuts.gif",
+    "alt": "用自己的快捷词找到需要的来源操作演示"
+  },
+  {
+    "title": "Tab 浏览目录，Enter 引用目录",
+    "description": "在 @ 文件菜单中，按 Tab 进入目录继续浏览，按 Enter 引用选中的目录。引用保留文件夹图标与目录路径，方便辨认交给 Agent 的内容。",
+    "media": "demos/folders.gif",
+    "alt": "Tab 浏览目录，Enter 引用目录操作演示"
+  },
+  {
+    "title": "未来更新预告",
+    "description": "未来计划带来：\n\n1. 不依赖 OpenCLI 的静默网页端对话同步\n2. 更强大的会话搜索\n3. 更实用的 @云盘权限\n4. @电脑窗口功能\n\n这个插件靠用爱发电持续维护。如果它对你有帮助，欢迎到 GitHub 点一颗 Star 支持！也欢迎有时间、有能力的朋友提交 Issue，反馈问题和建议，或通过 PR 一起完善插件。感谢每一份支持。\n\n[前往 GitHub · Star / Issue / PR](https://github.com/Chael-Chael/dsh-reference-anything)"
+  }
+]

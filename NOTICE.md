@@ -75,3 +75,12 @@ dependencies and are used under the DeepSeek Harness project's MIT license.
 Settings icons in images/agents are copied from Nwflower/dsh-chat-import (dbd03e1dfeaffea980458df1afc4ef899af9a2a4).
 Copyright (c) 2026 Nwflower; Copyright (c) 2026 Scarlett.
 Distributed under the MIT License; the full license is included in images/agents/LICENSE.
+
+## Bundled conversation scanners and readers
+
+`vendor/chat-import-reader/parsers.mjs` and `scanners.mjs` contain adapted
+read-only discovery, database summary, parser and preview code from Nwflower/dsh-chat-import npm 0.26.1, plus its fzstd decoder.
+Copyright (c) 2026 Nwflower and Scarlett; fzstd copyright (c) 2020 Arjun Barrett.
+Both are MIT licensed. Full licenses are shipped in
+`vendor/chat-import-reader/LICENSE` and `LICENSE.fzstd`; source hashes and
+regeneration instructions accompany the snapshot in the repository.

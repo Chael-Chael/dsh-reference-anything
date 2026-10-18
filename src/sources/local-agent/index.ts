@@ -1,3 +1,4 @@
+import { LocalConversationScanner } from '../../local-conversation-scanner.ts'
 /**
  * Reference source over transcripts other coding agents leave on disk.
  *
@@ -58,6 +59,10 @@ import type {
 } from './types.ts'
 import { isQueryAdapter } from './types.ts'
 import { sliceTurns } from '../../window.ts'
+import { chatImportReference, chatImportTarget, readChatImport } from '../../chat-import-reader.ts'
+import { scanFormat, discoverySchema, agentKind } from '../../chat-import-discovery.ts'
+import { ConversationAvailability } from '../../conversation-availability.ts'
+import { ALL_LOCAL_AGENTS, LOCAL_AGENT_LABEL, type LocalAgent } from '../../wire.ts'
 import type {} from '../../index.ts'
 
 /** Cordis plugin name used by loader diagnostics. */
@@ -168,6 +173,8 @@ export class LocalAgentService extends Service implements ReferenceSource {
   static inject = inject
   static Config = Config
   readonly id = LOCAL_AGENT_SOURCE_ID
+  readonly scanner = new LocalConversationScanner()
+  readonly conversationAvailability = new ConversationAvailability()
   /**
    * Gated: these are other sessions' conversations, often from other projects.
    * The model may read one only after its user named it.
@@ -199,6 +206,8 @@ export class LocalAgentService extends Service implements ReferenceSource {
   protected async [Service.init](): Promise<void> {
     const domain = await this.ctx.storageDomain.open(localAgentDomainSpec)
     this.ctx.effect(() => () => domain.close(), 'reference-local-agent.domainClose')
+    this.ctx.effect(() => () => this.scanner.dispose(), 'reference-local-agent.scannerClose')
+    this.ctx.effect(() => () => this.conversationAvailability.dispose(), 'reference-local-agent.availabilityClose')
     this.store = new AgentBookmarkStore(domain)
     this.ctx.effect(() => this.ctx.references.registerSource(this), 'reference-local-agent.registerSource()')
   }
@@ -207,15 +216,7 @@ export class LocalAgentService extends Service implements ReferenceSource {
    * @returns whether any configured root is a readable directory.
    */
   async available(): Promise<boolean> {
-    const checks = await Promise.all(this.roots.map(async (root) => {
-      try {
-        return (await stat(root.path)).isDirectory()
-      } catch {
-        // An agent that is not installed has no directory; that is ordinary.
-        return false
-      }
-    }))
-    return checks.includes(true)
+    return true
   }
 
   /** Replace UI-managed extra roots while retaining every deployment root. */
@@ -277,25 +278,16 @@ export class LocalAgentService extends Service implements ReferenceSource {
     return { roots: this.roots.filter(root => enabled.has(root.kind)), scope: this.settings.scope }
   }
 
-  /** Only offer a reference if the existing reader resolves the exact scanned file. */
+  /** Scan locators are read by the bundled parsers or a newer public read API. */
   async referenceForDiscovered(kind: string, path: string, sessionId: string): Promise<string | undefined> {
-    if (!isAgentKind(kind)) return undefined
-    for (const root of this.roots) {
-      if (root.kind !== kind || !inWorkspace(path, root.path)) continue
-      const rel = relative(root.path, path)
-      const adapter = this.adapters.get(kind)!
-      if (!isQueryAdapter(adapter) && !adapter.matches(rel.replaceAll('\\', '/'))) continue
-      const id = referenceId(kind, isQueryKind(kind) ? `${rel}${SESSION_SEPARATOR}${sessionId}` : rel)
-      try {
-        const found = await this.locate(id)
-        if (found.descriptor.path === await realpath(path)) return id
-      } catch { /* A discovered format may use storage this reader does not support. */ }
-    }
-    return undefined
+    if (!ALL_LOCAL_AGENTS.includes(kind as LocalAgent)) return undefined
+    return chatImportReference({ format: scanFormat(kind), path, sessionId })
   }
 
   /** Resolve only a configured transcript, retaining the source session for database imports. */
   async importTarget(id: string): Promise<{ format: string; path: string; sessionIds?: string[] }> {
+    const target = chatImportTarget(id)
+    if (target) return { format: target.format, path: target.path, sessionIds: [target.sessionId] }
     const { descriptor, sessionId } = await this.locate(id)
     return {
       format: descriptor.kind === 'claude-code' ? 'claude' : descriptor.kind === 'gemini-cli' ? 'gemini' : descriptor.kind,
@@ -306,6 +298,29 @@ export class LocalAgentService extends Service implements ReferenceSource {
 
   private async listIn(query: string, limit: number, cwd: string, signal?: AbortSignal): Promise<ReferenceSummary[]> {
     signal?.throwIfAborted()
+    if (this.ctx.get('referenceChatHistory')?.getSettings) {
+      const settings = this.ctx.get('referenceChatHistory')?.getSettings()
+      const found = new Map<string, ReferenceSummary>()
+      for (const kind of settings ? settings.enabledAgents ?? ALL_LOCAL_AGENTS : this.settings.agents) {
+        const custom = settings?.agentDirectories?.[kind]
+        const paths = new Set<string | undefined>([undefined, ...this.roots.filter(root => root.kind === kind).map(root => root.path)])
+        if (custom) paths.add(expandRoot(custom, homedir()))
+        for (const path of paths) {
+          signal?.throwIfAborted()
+          const result = discoverySchema.parse(await this.scanner.scanDiscover({ format: scanFormat(kind), query, ...(path ? { path } : {}) }, signal))
+          if (result.warnings.length) throw new Error(result.warnings.map(warning => `${warning.format}: ${warning.error}`).join('; '))
+          for (const row of result.sessions) {
+            if (!await this.conversationAvailability.visible({ format: row.format, path: row.sourcePath, sessionId: row.sessionId })) continue
+            if (this.settings.scope === 'workspace' && !inWorkspace(row.cwd ?? '', cwd)) continue
+            const id = chatImportReference({ format: row.format, path: row.sourcePath, sessionId: row.sessionId })
+            found.set(id, { ref: { source: LOCAL_AGENT_SOURCE_ID, id }, label: row.title || row.sessionId, origin: row.sourcePath,
+              provider: LOCAL_AGENT_LABEL[agentKind(row.format) as LocalAgent], ...(row.lastActiveAt == null ? {} : { updatedAt: row.lastActiveAt }) })
+          }
+        }
+      }
+      return [...found.values()].sort((a, b) => (b.updatedAt ?? 0) - (a.updatedAt ?? 0)).slice(0, limit)
+    }
+
     const enabled = this.enabledAgentKinds()
     const entries = (await this.scan(signal)).filter(entry => enabled.has(entry.kind))
     const known = await this.describe(entries, signal)
@@ -355,6 +370,8 @@ export class LocalAgentService extends Service implements ReferenceSource {
    */
   async read(ref: ReferenceRef, window: ReferenceWindow, signal?: AbortSignal): Promise<ReferenceSnapshot> {
     signal?.throwIfAborted()
+    const target = chatImportTarget(ref.id)
+    if (target) return readChatImport(this.ctx, ref, target, { ...window, limit: Math.min(window.limit, this.settings.maxReadTurns) }, signal)
     const { adapter, descriptor, sessionId } = await this.locate(ref.id)
     const cursor = window.cursor === undefined ? undefined : decodeAgentCursor(window.cursor, ref.id)
     if (cursor !== undefined && !cursorStillValid(cursor, descriptor.size)) throw cursorExpired()

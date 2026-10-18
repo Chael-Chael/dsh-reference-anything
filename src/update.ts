@@ -21,6 +21,8 @@ export interface PackageUpdateStatus {
   checkedAt: number
   releaseNotes?: string
   releaseUrl?: string
+  currentReleaseNotes?: string
+  currentReleaseUrl?: string
   error?: string
 }
 
@@ -90,6 +92,8 @@ export class PackageUpdateManager {
       checkedAt: Date.now(),
       releaseNotes: status.releaseNotes,
       releaseUrl: status.releaseUrl,
+      currentReleaseNotes: status.releaseNotes,
+      currentReleaseUrl: status.releaseUrl,
     }
     return { version: status.latestVersion, restartRequired: true }
   }
@@ -104,12 +108,19 @@ export class PackageUpdateManager {
       const updateAvailable = compareVersions(latestVersion, currentVersion) > 0
       let release: Pick<PackageUpdateStatus, 'releaseNotes' | 'releaseUrl'> = {}
       try { release = await this.fetchReleaseNotes(latestVersion, signal) } catch { /* Release notes are advisory. */ }
+      let currentRelease = release
+      if (currentVersion !== latestVersion) {
+        currentRelease = {}
+        try { currentRelease = await this.fetchReleaseNotes(currentVersion, signal) } catch { /* Release notes are advisory. */ }
+      }
       const status: PackageUpdateStatus = {
         currentVersion,
         latestVersion,
         updateAvailable,
         checkedAt,
         ...release,
+        currentReleaseNotes: currentRelease.releaseNotes,
+        currentReleaseUrl: currentRelease.releaseUrl,
       }
       this.cached = status
       return status

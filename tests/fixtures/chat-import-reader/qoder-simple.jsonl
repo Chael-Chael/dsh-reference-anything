@@ -1,0 +1,3 @@
+{"type":"user","uuid":"u-1","sessionId":"qoder-simple","timestamp":"2026-01-02T03:04:05.000Z","cwd":"/home/u/demo","message":{"role":"user","content":"解释这个文件"}}
+{"type":"assistant","uuid":"a-1","sessionId":"qoder-simple","timestamp":"2026-01-02T03:04:06.000Z","cwd":"/home/u/demo","message":{"role":"assistant","content":[{"type":"text","text":"这是一个示例文件。"}]}}
+{"type":"ai-title","aiTitle":"示例会话","sessionId":"qoder-simple"}

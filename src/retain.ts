@@ -98,7 +98,7 @@ export function retainConversation(
  * @param maxOutputBytes - budget for the shortened text including its notice.
  * @returns the shortened text and the exact number of UTF-8 bytes it lost.
  */
-function truncateWithNotice(text: string, maxOutputBytes: number): { text: string; omittedBytes: number } {
+export function truncateWithNotice(text: string, maxOutputBytes: number): { text: string; omittedBytes: number } {
   const totalBytes = Buffer.byteLength(text, 'utf8')
   if (totalBytes <= maxOutputBytes) return { text, omittedBytes: 0 }
   let low = 0

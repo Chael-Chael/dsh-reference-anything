@@ -1,0 +1,27 @@
+{
+  "sessionId": "b26d7f99-0116-4d1d-b125-98c228a4b933",
+  "projectHash": "384e9530e99733805bc2c98a596ab23e67d4c29a6ef263cdc1c89b3bcd022c69",
+  "startTime": "2026-04-17T18:09:18.567Z",
+  "lastUpdated": "2026-04-17T18:12:52.535Z",
+  "directories": ["D:\\demo\\gemini-proj"],
+  "kind": "main",
+  "messages": [
+    {
+      "id": "868b9468-8d87-4dcf-8d11-15557c20b810",
+      "timestamp": "2026-04-17T18:10:02.229Z",
+      "type": "user",
+      "content": [{ "text": "Create a basic python interpreter in rust." }]
+    },
+    {
+      "id": "868b9468-8d87-4dcf-8d11-15557c20b811",
+      "timestamp": "2026-04-17T18:10:05.000Z",
+      "type": "gemini",
+      "content": "I'll set up the project structure first.",
+      "thoughts": [
+        { "subject": "Project Setup", "description": "Starting with cargo init." }
+      ],
+      "model": "gemini-3-flash-preview",
+      "toolCalls": []
+    }
+  ]
+}

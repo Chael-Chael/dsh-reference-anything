@@ -27,7 +27,7 @@ function snapshot(browse: BrowseState): SettingsSnapshot { return { settings, br
 
 const healthyHealth: Health = {
   version: '1.8.6', daemon: 'Daemon: running', pluginInstalled: true, updateAvailable: false, daemonRunning: true,
-  extensionConnected: true, extensionState: 'connected', opencliCompatible: true,
+  extensionConnected: true, extensionState: 'connected', extensionVersion: '1.0.24', opencliCompatible: true,
   daemonVersion: '1.8.6', daemonStale: false, connectivityOk: true, connectivityChecked: true,
   pluginVersion: '0.2.1', adapterCommandsReady: true, adapterCompatible: true,
 }
@@ -601,6 +601,39 @@ describe('viability recovery actions', () => {
     const el = renderSettings({ settings, loading: true })
     const button = Array.from(el.querySelectorAll('button')).find(item => item.textContent === 'One-click setup') as HTMLButtonElement
     expect(button.disabled).toBe(true)
+  })
+
+  it('offers a nonblocking extension upgrade and opens official Releases', async () => {
+    const open = vi.spyOn(window, 'open').mockReturnValue({ opener: window } as unknown as Window)
+    const health = { ...healthyHealth, extensionUpdateAvailable: true, latestExtensionVersion: '1.0.25', extensionCompatible: true }
+    const el = renderSettings({ settings, loading: false, health })
+    expect(el.querySelector('.dsh_ref_check>span.is_update')).not.toBeNull()
+    const upgrade = Array.from(el.querySelectorAll('button')).find(item => item.textContent === 'Official Releases')!
+    const store = Array.from(el.querySelectorAll('button')).find(item => item.textContent === 'Open extension store')!
+    await act(async () => { store.click() })
+    expect(open).toHaveBeenLastCalledWith(expect.stringContaining('chromewebstore.google.com'), '_blank')
+    await act(async () => { upgrade.click() })
+    expect(open).toHaveBeenLastCalledWith('https://github.com/jackwener/OpenCLI/releases', '_blank')
+    open.mockReturnValue(null)
+    await act(async () => { upgrade.click() })
+    expect(el.querySelector('.dsh_ref_store_fallback a')?.getAttribute('href')).toBe('https://github.com/jackwener/OpenCLI/releases')
+    const sync = Array.from(el.querySelectorAll('button')).find(item => item.textContent === 'Sync enabled sources now')!
+    expect(sync.disabled).toBe(false)
+  })
+
+  it('blocks sync only for an explicitly incompatible extension', () => {
+    const el = renderSettings({ settings, loading: false, health: { ...healthyHealth, extensionCompatible: false } })
+    expect(el.textContent).toContain('is incompatible with OpenCLI')
+    expect(Array.from(el.querySelectorAll('button')).find(item => item.textContent === 'Official Releases')).toBeDefined()
+    expect(Array.from(el.querySelectorAll('button')).find(item => item.textContent === 'Sync enabled sources now')?.disabled).toBe(true)
+  })
+
+  it('offers a recheck for an unknown version without claiming incompatibility', () => {
+    const el = renderSettings({ settings, loading: false, health: { ...healthyHealth, extensionVersion: undefined } })
+    const row = Array.from(el.querySelectorAll('.dsh_ref_check')).find(item => item.textContent?.includes('Connected (version unknown)'))!
+    expect(row.querySelector('span')?.classList.contains('is_neutral')).toBe(true)
+    expect(row.querySelector('button')?.textContent).toBe('Recheck setup')
+    expect(row.textContent).not.toContain('incompatible')
   })
 
   it('opens the extension store synchronously before setup starts', async () => {

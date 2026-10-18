@@ -1,0 +1,108 @@
+[
+  {
+    "id": "conv-001",
+    "title": "Python debugging help",
+    "create_time": 1710000000,
+    "update_time": 1710003600,
+    "mapping": {
+      "node-1": {
+        "id": "node-1",
+        "message": {
+          "id": "msg-1",
+          "author": { "role": "user" },
+          "content": { "content_type": "text", "parts": ["Why is my loop not working?"] },
+          "create_time": 1710000000
+        },
+        "parent": null,
+        "children": ["node-2"]
+      },
+      "node-2": {
+        "id": "node-2",
+        "message": {
+          "id": "msg-2",
+          "author": { "role": "assistant" },
+          "content": { "content_type": "text", "parts": ["The issue is likely the off-by-one in the range."] },
+          "create_time": 1710000050
+        },
+        "parent": "node-1",
+        "children": ["node-3"]
+      },
+      "node-3": {
+        "id": "node-3",
+        "message": {
+          "id": "msg-3",
+          "author": { "role": "user" },
+          "content": { "content_type": "text", "parts": ["Fixed it, thanks!"] },
+          "create_time": 1710000100
+        },
+        "parent": "node-2",
+        "children": []
+      }
+    }
+  },
+  {
+    "id": "conv-002",
+    "title": "Recipe ideas",
+    "create_time": 1710005000,
+    "update_time": 1710008000,
+    "mapping": {
+      "n1": {
+        "id": "n1",
+        "message": {
+          "id": "m1",
+          "author": { "role": "user" },
+          "content": { "content_type": "text", "parts": ["Give me a pasta recipe"] },
+          "create_time": 1710005000
+        },
+        "parent": null,
+        "children": ["n2"]
+      },
+      "n2": {
+        "id": "n2",
+        "message": {
+          "id": "m2",
+          "author": { "role": "assistant" },
+          "content": { "content_type": "text", "parts": ["Here is a simple aglio e olio recipe."] },
+          "create_time": 1710005050
+        },
+        "parent": "n1",
+        "children": ["n3", "n4"]
+      },
+      "n3": {
+        "id": "n3",
+        "message": null,
+        "parent": "n2",
+        "children": []
+      },
+      "n4": {
+        "id": "n4",
+        "message": {
+          "id": "m4",
+          "author": { "role": "assistant" },
+          "content": { "content_type": "text", "parts": ["Actually, use cacio e pepe instead."] },
+          "create_time": 1710005200
+        },
+        "parent": "n2",
+        "children": []
+      }
+    }
+  },
+  {
+    "id": "conv-003",
+    "title": "System-only conversation",
+    "create_time": 1710010000,
+    "mapping": {
+      "s1": {
+        "id": "s1",
+        "message": {
+          "id": "sm1",
+          "author": { "role": "system" },
+          "content": { "content_type": "text", "parts": ["You are a helpful assistant."] },
+          "create_time": 1710010000
+        },
+        "parent": null,
+        "children": []
+      }
+    }
+  }
+]

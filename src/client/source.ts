@@ -1,18 +1,21 @@
 import { formatFileMention } from '@deepseek-ai/dsh-file-reference/grammar'
+import { isAbsoluteWorkspacePath, sessionFileAddress } from '@deepseek-ai/dsh-util-workspace-path'
+import type { ChatImportCompatibility } from '../chat-import-compatibility.ts'
 import type { FileReferenceCandidate } from '@deepseek-ai/dsh-file-reference/types'
 import type { SessionReferenceMentionCandidate } from '@deepseek-ai/dsh-session-reference/types'
+import type { ISessions } from '@deepseek-ai/dsh-api-session-controller/client'
 import type {
   CandidateRequest, ClientSessionContext, InputTriggerCandidate, InputTriggerSource, TokenSpan,
 } from '@deepseek-ai/dsh-client-ui-input-trigger/client'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import type { TranslateNS } from '@deepseek-ai/dsh-client-locale/client'
-import { defaultPickerSettings, type AgentActionsSettings, type ChatProvider, type PickerDisplayMode } from '../wire.ts'
-import { setupReady } from './health.ts'
+import { defaultPickerSettings, type AgentActionsSettings, type LocalAgent, type ChatProvider, type PickerDisplayMode } from '../wire.ts'
+import { healthAttention, setupReady } from './health.ts'
 import { parseProviderQuery } from '../search.ts'
 import { encodeReferenceUri } from '../uri-codec.ts'
 import type { AgentCandidate, DriveCandidate, LocalPluginCandidate, SearchResult, SyncStatus, Health } from './remote.ts'
 import {
-  AGENT_ICON_MARKER, COMMAND_ICON_MARKER, DRIVE_ICON_MARKER, LOCAL_AGENT_ICON_MARKER, PICKER_ICON_MARKER, PROVIDER_ICON_MARKER, SESSION_ICON_MARKER, SKILL_ICON_MARKER,
+  AGENT_ICON_MARKER, COMMAND_ICON_MARKER, DRIVE_ICON_MARKER, LOCAL_AGENT_ICON_MARKER, PICKER_ICON_MARKER, PROVIDER_ICON_MARKER, SKILL_ICON_MARKER,
   candidateIcon, type PickerIconKind,
 } from './provider-icons.tsx'
 import type { REFERENCE_ANYTHING_NS } from './locale.ts'
@@ -176,12 +179,14 @@ interface DriveReference { id: string; label: string }
 type CandidateValue =
   | { kind: 'conversation'; reference: ConversationReference }
   | { kind: 'file'; fileKind: FileReferenceCandidate['kind']; label: string; mention: string }
+  | { kind: 'file-navigation'; mention: string }
   | { kind: 'session'; label: string; mention: string }
   | { kind: 'agent'; reference: AgentReference }
   | { kind: 'agent-import'; reference: AgentReference; confirmed?: boolean }
   | { kind: 'agent-resume'; reference: AgentReference }
   | { kind: 'agent-back' }
   | { kind: 'agent-warning' }
+  | { kind: 'agent-upgrade' }
   | { kind: 'drive'; reference: DriveReference }
   | { kind: 'drive-search' }
   | { kind: 'drive-folder'; path: string }
@@ -276,10 +281,11 @@ function syncMenuCandidate(actions: ConversationSourceActions, t: T): InputTrigg
   const health = actions.health?.()
   const check = actions.healthCheck?.()
   const status = check?.pending ? t('menu.serviceChecking') : check?.error ? t('menu.serviceFailed') : serviceStatus(health, t)
-  const needsCheck = actions.health && !check?.pending && (check?.error || !setupReady(health))
+  const attention = healthAttention(health, t)
+  const needsCheck = actions.health && !check?.pending && (check?.error || attention.length > 0 || !setupReady(health))
   return {
-    name: actions.health ? `${presentation.name} · ${status}` : presentation.name,
-    description: needsCheck ? `${t('menu.checkSettings')} · ${check?.error || presentation.description}` : presentation.description,
+    name: actions.health ? `${presentation.name} · ${status}${health?.updateAvailable || health?.extensionUpdateAvailable ? ` · ${t('menu.dependencyUpdate')}` : ''}` : presentation.name,
+    description: needsCheck ? `${t('menu.checkSettings')} · ${[check?.error, ...attention].filter(Boolean).join(' · ') || presentation.description}` : presentation.description,
     icon: candidateIcon(PICKER_ICON_MARKER.refresh),
     value: encodeCandidate({ kind: 'action', action: 'sync' }),
   }
@@ -319,13 +325,34 @@ function syncSourceResult(sync: SyncStatus | undefined): { success: number; tota
   }
 }
 
+// Shared by source groups so a file drill never launches unrelated searches.
+const fileBrowseDirectories = new Map<SessionId, string>()
+
 export function createFileSource(
   load: (sessionId: SessionId, query: string, signal: AbortSignal) => Promise<readonly FileReferenceCandidate[]>,
   t: T = fallback,
   options: PickerSourceOptions = { ...DEFAULT_SOURCE_OPTIONS, order: 10 },
+  preview?: { sessions: Pick<ISessions, 'list'>; openResource(address: string): void },
 ): RefreshablePickerSource {
   const source: InputTriggerSource = {
     trigger: '@', name: FILE_SOURCE, order: options.order,
+    header(_session, { query, quoted, drilled }) {
+      if (!drilled) return undefined
+      const scoped = scopedQuery(query, 'files', options.shortcut, options.shortcuts)
+      if (scoped === undefined) return undefined
+      const path = scoped.replaceAll('\\', '/')
+      const directory = path.slice(0, path.lastIndexOf('/') + 1)
+      if (!directory) return undefined
+      const parts = directory.split('/').filter(Boolean)
+      return [
+        { label: t('menu.workspace'), value: encodeCandidate({ kind: 'file-navigation', mention: '@' }) },
+        ...parts.map((label, index) => ({
+          label,
+          current: index === parts.length - 1,
+          value: encodeCandidate({ kind: 'file-navigation', mention: formatFileMention({ path: parts.slice(0, index + 1).join('/'), kind: 'directory' }, quoted === true)! }),
+        })),
+      ]
+    },
     async candidates(session, { query, quoted, signal }) {
       const scoped = scopedQuery(query, 'files', options.shortcut, options.shortcuts)
       if (scoped === undefined) return []
@@ -344,10 +371,19 @@ export function createFileSource(
         }]
       })
     },
-    onPick({ candidate, action }) {
+    onPick({ candidate, action, session }) {
       const value = decodeCandidate(candidate.value)
+      if (value?.kind === 'file-navigation') {
+        const path = value.mention.replace(/^@"?/u, '')
+        if (path) fileBrowseDirectories.set(session.sessionId, path)
+        else fileBrowseDirectories.delete(session.sessionId)
+        return { text: value.mention, continue: true }
+      }
       if (value?.kind !== 'file') return undefined
-      if (value.fileKind === 'directory' && action === 'drill') return { text: value.mention, continue: true }
+      if (value.fileKind === 'directory' && action === 'drill') {
+        fileBrowseDirectories.set(session.sessionId, value.mention.replace(/^@"?/u, ''))
+        return { text: value.mention, continue: true }
+      }
       return {
         insert: {
           source: FILE_SOURCE,
@@ -358,6 +394,17 @@ export function createFileSource(
         },
       }
     },
+    openReference(session, { ref, appearance }) {
+      if (appearance !== 'file' || !preview) return false
+      let path = (ref.startsWith('@"') ? ref.slice(2, -1) : ref.slice(1)).replaceAll('\\', '/')
+      const root = preview.sessions.list.getSnapshot().byId[session.sessionId]?.cwd?.replaceAll('\\', '/').replace(/\/+$/u, '')
+      if (isAbsoluteWorkspacePath(path) && root) {
+        if (path === root) path = ''
+        else if (path.startsWith(`${root}/`)) path = path.slice(root.length + 1)
+      }
+      preview.openResource(sessionFileAddress(session.sessionId, path))
+      return true
+    },
     codec: { clipboardText: ref => ref, serialize: ref => Promise.resolve(ref) },
   }
   return withDisplayPolicy(source, options, t)
@@ -367,19 +414,51 @@ export function createSessionSource(
   search: (sessionId: SessionId, query: string, signal: AbortSignal) => Promise<readonly SessionReferenceMentionCandidate[]>,
   t: T = fallback,
   options: PickerSourceOptions = { ...DEFAULT_SOURCE_OPTIONS, order: 20 },
+  sessions?: Pick<ISessions, 'list'> & Partial<Pick<ISessions, 'refreshProjections'>>,
 ): RefreshablePickerSource {
   const source: InputTriggerSource = {
-    trigger: '@', name: SESSION_SOURCE, order: options.order,
+    trigger: '@', name: SESSION_SOURCE, order: options.order, showGroupTitle: false,
     async candidates(session, { query, quoted, signal }) {
       if (quoted === true) return []
       const scoped = scopedQuery(query, 'sessions', options.shortcut, options.shortcuts)
       if (scoped === undefined) return []
-      return (await search(session.sessionId, scoped, signal)).map(row => ({
-        name: row.label,
-        description: [row.cwd, new Date(row.createdAt).toLocaleString()].filter(Boolean).join(' · '),
-        icon: candidateIcon(SESSION_ICON_MARKER),
-        value: encodeCandidate({ kind: 'session', label: row.label, mention: row.mention }),
-      }))
+      const rows = await search(session.sessionId, scoped, signal)
+      // The host lists cold sessions before it knows their blank/title projections.
+      // Reuse its connection-scoped read cache; never activate an Agent to inspect it.
+      if (sessions?.refreshProjections) {
+        const cold = rows.filter(row => {
+          const snapshot = sessions.list.getSnapshot()
+          return snapshot.byId[row.sessionId]?.projectionValues?.sessionListMetadata === undefined
+            && snapshot.projectionsBySession?.[row.sessionId]?.state !== 'ready'
+        })
+        for (let offset = 0; offset < cold.length; offset += 4) {
+          signal.throwIfAborted()
+          await Promise.all(cold.slice(offset, offset + 4).map(row => sessions.refreshProjections!(row.sessionId)))
+        }
+      }
+      signal.throwIfAborted()
+      const snapshot = sessions?.list.getSnapshot()
+      return rows.flatMap(row => {
+        const summary = snapshot?.byId[row.sessionId]
+        const projections = snapshot?.projectionsBySession?.[row.sessionId]?.values ?? summary?.projectionValues
+        const metadata = projections?.sessionListMetadata
+        if ((metadata?.blank ?? summary?.blank) === true) return []
+        const child = summary?.origin === 'subagent' && summary.parentId === session.sessionId
+        const officialLabel = row.displayTitle ?? row.label
+        const label = officialLabel === row.sessionId
+          ? projections?.subagent?.label ?? summary?.title ?? officialLabel
+          : officialLabel
+        return {
+          child,
+          candidate: {
+            name: label,
+            section: t(child ? 'source.subagents' : 'source.sessions'),
+            description: [row.cwd, new Date(Math.max(metadata?.lastPromptAt ?? 0, summary?.updatedAt ?? row.createdAt)).toLocaleString()].filter(Boolean).join(' · '),
+            icon: candidateIcon('session'),
+            value: encodeCandidate({ kind: 'session', label, mention: row.mention }),
+          },
+        }
+      }).sort((a, b) => Number(b.child) - Number(a.child)).map(item => item.candidate)
     },
     onPick({ candidate }) {
       const value = decodeCandidate(candidate.value)
@@ -412,13 +491,17 @@ export function createSessionSource(
  * @returns the source to register on `ctx.inputTriggers`.
  */
 export function createLocalAgentSource(
-  search: (sessionId: SessionId, query: string, signal: AbortSignal, limit: number) => Promise<readonly AgentCandidate[]>,
+  search: (sessionId: SessionId, query: string, signal: AbortSignal, limit: number, kind?: LocalAgent) => Promise<readonly AgentCandidate[]>,
   t: T = fallback,
   options: PickerSourceOptions = { ...DEFAULT_SOURCE_OPTIONS, order: 25 },
   importAndOpen?: (sessionId: SessionId, id: string) => Promise<void>,
   resume?: (sessionId: SessionId, id: string, span: TokenSpan) => Promise<void>,
   actions: AgentActionsSettings = defaultPickerSettings().agents,
+  chatImport?: { status(): Promise<ChatImportCompatibility | undefined>; upgrade(): Promise<void> },
 ): RefreshablePickerSource {
+  let upgrading = false
+  let upgradeError: string | undefined
+  let upgradeAvailable = false
   const availableActions = (id: string): Array<'agent-import' | 'agent-resume'> => [
     ...(actions.showImport && importAndOpen ? ['agent-import' as const] : []),
     ...(actions.showSummary && resume && /^(claude-code|codex):/u.test(id) ? ['agent-resume' as const] : []),
@@ -474,14 +557,32 @@ export function createLocalAgentSource(
       if (scoped === undefined) return []
       const match = query.trim().match(/^([^@:\s/]+):(.*)$/u)
       const target = match ? options.sourceAliasTargets?.[match[1]!.toLocaleLowerCase()] : undefined
-      const results = await search(session.sessionId, scoped, signal, options.maxCandidates)
+      const results = await search(session.sessionId, scoped, signal, options.maxCandidates, target as LocalAgent | undefined)
+      let statusError: string | undefined
+      const compatibility = await chatImport?.status().catch(error => {
+        statusError = error instanceof Error ? error.message : String(error)
+        return undefined
+      })
+      upgradeAvailable = compatibility?.state === 'incompatible' && compatibility.canUpgrade
+      const upgradeRows: InputTriggerCandidate[] = upgrading || upgradeAvailable ? [{
+        icon: () => '↑',
+        name: t(upgrading ? 'chatImport.upgrading' : 'chatImport.upgrade'),
+        description: upgradeError ?? t('chatImport.menuUpgradeDetail', { version: compatibility?.version || '—' }),
+        value: encodeCandidate({ kind: 'agent-upgrade' }),
+      }] : chatImport && compatibility?.state !== 'ready' ? [{
+        icon: () => '!',
+        name: t('chatImport.apiAttention'),
+        description: [t(`chatImport.${compatibility?.state ?? 'unavailable'}`, { version: compatibility?.version || '—' }),
+          statusError || compatibility?.error, t('menu.checkSettings')].filter(Boolean).join(' · '),
+        value: encodeCandidate({ kind: 'agent-warning' }),
+      }] : []
       const warnings: InputTriggerCandidate[] = results.filter(row => row.warning !== undefined).map(row => ({
         name: t('agent.scanWarning'), description: `${row.label}: ${row.warning}`, value: encodeCandidate({ kind: 'agent-warning' }),
       }))
       const rows = results.filter(row => row.warning === undefined && (target === undefined || row.kind === target))
       // Agent sessions go untitled far more often than browser chats do, and
       // several in a row can share an opening prompt, so numbering matters.
-      return [...warnings, ...disambiguate(rows.map((row): InputTriggerCandidate => {
+      return [...upgradeRows, ...warnings, ...disambiguate(rows.map((row): InputTriggerCandidate => {
         const title = row.label.trim() || 'Untitled'
         // Same separator rule as web chats: a spaced `@Codex · Title` is
         // otherwise re-projected by the user-bubble renderer as a native pill.
@@ -502,6 +603,19 @@ export function createLocalAgentSource(
     },
     onPick({ candidate, session, action, span }) {
       const value = decodeCandidate(candidate.value)
+      if (value?.kind === 'agent-upgrade') {
+        if (!chatImport || upgrading || !upgradeAvailable) return 'handled'
+        upgrading = true
+        upgradeError = undefined
+        void refreshable.refreshCachedMenu({ refetch: true })
+        void Promise.resolve().then(() => chatImport.upgrade()).catch(error => {
+          upgradeError = error instanceof Error ? error.message : String(error)
+        }).finally(() => {
+          upgrading = false
+          void refreshable.refreshCachedMenu({ refetch: true })
+        })
+        return 'handled'
+      }
       if (value?.kind === 'agent-warning') return 'handled'
       if (value?.kind === 'agent-back') {
         const selected = selections.get(session.sessionId)
@@ -550,7 +664,8 @@ export function createLocalAgentSource(
       serialize: ref => Promise.resolve(formatAgentMention(decodeAgentReference(ref))),
     },
   }
-  return withDisplayPolicy(source, options, t, candidate => candidate, true)
+  const refreshable = withDisplayPolicy(source, options, t, candidate => candidate, true)
+  return refreshable
 }
 
 /** The dimmed second line: which agent wrote it, and when it last moved. */
@@ -877,14 +992,20 @@ function withDisplayPolicy(
   return {
     ...source,
     async candidates(session, request) {
+      const directory = fileBrowseDirectories.get(session.sessionId)
+      if (!request.drilled || !request.query.startsWith(directory ?? '\0')) fileBrowseDirectories.delete(session.sessionId)
+      else if (source.name !== FILE_SOURCE) {
+        caches.delete(session.sessionId)
+        return []
+      }
       const previous = caches.get(session.sessionId)
       if (staleWhileRevalidate && previous !== undefined
         && !request.drilled && previous.request.drilled === request.drilled
-        && previous.request.query === request.query && previous.request.quoted === request.quoted
-        && previous.request.position === request.position) {
+        && previous.request.query === request.query && previous.request.quoted === request.quoted) {
         if (!refreshing.has(session.sessionId)) {
           refreshing.add(session.sessionId)
           const revision = previous.revision + 1
+          previous.request = { query: request.query, quoted: request.quoted, position: request.position, drilled: request.drilled }
           previous.revision = revision
           void source.candidates(session, request).then((all) => {
             if (request.signal.aborted || caches.get(session.sessionId) !== previous || previous.revision !== revision) return
@@ -951,7 +1072,7 @@ function withDisplayPolicy(
 
 function isSyncAction(candidate: InputTriggerCandidate): boolean {
   const value = decodeCandidate(candidate.value)
-  return value?.kind === 'agent-warning' || (value?.kind === 'action' && value.action === 'sync')
+  return value?.kind === 'agent-upgrade' || value?.kind === 'agent-warning' || (value?.kind === 'action' && value.action === 'sync')
 }
 
 function escapeLabel(value: string): string { return value.replace(/[\\\]]/gu, match => `\\${match}`) }
@@ -1021,10 +1142,12 @@ function formatDate(value: string, t: T): string {
 
 const fallback: T = (key, params) => {
   const dictionary: Record<string, string> = {
+    'source.subagents': 'Subagents',
     'plugin.status.live': 'Running', 'plugin.status.disabled': 'Disabled', 'plugin.status.inert': 'Not running',
     'source.conversations': 'External conversations', 'source.files': 'Files and folders', 'source.sessions': 'DSH sessions', 'source.agents': 'Local agent conversations', 'source.drives': 'Cloud drive files', 'source.commands': 'Commands', 'source.skills': 'Skills', 'source.plugins': 'All local plugins',
     'conversation.description': '{provider} · {date}', 'drive.description': '{provider} · {path}', 'drive.searchIncomplete': 'Results may be incomplete', 'drive.searchAction': 'Search cloud drive files…', 'drive.searchActionDetail': 'Select, then type a filename, for example @drive:notes', 'drive.parentFolder': 'Parent folder', 'conversation.unknownDate': 'unknown date', 'skill.userOnly': 'user-only · ',
     'menu.serviceChecking': '◐ Checking service', 'menu.serviceFailed': '○ Service check failed', 'menu.checkSettings': 'Check Settings', 'menu.serviceUnknown': '○ Service status unknown', 'menu.serviceReady': '● Service ready', 'menu.serviceUnverified': '◐ Connection unverified', 'menu.serviceUnavailable': '○ Service not ready',
+    'menu.workspace': 'Workspace',
     'menu.syncAll': 'Sync all now', 'menu.syncAllDetail': 'Refresh the local external-conversation index',
     'menu.syncRunning': 'Syncing…', 'menu.syncRunningDetail': 'An external-conversation sync is already running',
     'menu.syncAgain': 'Sync again', 'menu.syncLastResult': 'Last synced {time} · Successful sources {success}/{total}',

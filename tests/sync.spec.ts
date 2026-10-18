@@ -51,6 +51,7 @@ function turns(count: number, prefix = 'turn'): ProviderTurnRow[] {
 
 function fakeRunner(overrides: Partial<OpenCliRunner> = {}): OpenCliRunner {
   return {
+    health: async () => ({ extensionCompatible: true }),
     whoami: async (provider: ChatProvider) => `scope-${provider}`,
     history: async (provider: ChatProvider) => [row(provider, 'c1')],
     detail: async () => turns(2),
@@ -70,6 +71,21 @@ const settled = (manager: ConversationSyncManager, jobId: string) =>
   waitFor(() => manager.status(jobId)?.status !== 'running')
 
 describe('auto-sync resilience', () => {
+  it('rejects incompatible extensions before reading or changing provider data', async () => {
+    const db = store()
+    let read = false
+    const runner = fakeRunner({
+      health: async () => ({ ...await fakeRunner().health(), extensionCompatible: false }),
+      whoami: async () => { read = true; return 'account' },
+    })
+    const manager = new ConversationSyncManager(db, () => runner)
+    const job = manager.start(['chatgpt'], 'incremental')
+    await settled(manager, job)
+    expect(read).toBe(false)
+    expect(manager.status(job)?.status).toBe('failed')
+    expect(manager.status(job)?.providerProgress[0]?.error).toContain('incompatible')
+  })
+
   it('syncs providers serially', async () => {
     const db = store()
     let active = 0

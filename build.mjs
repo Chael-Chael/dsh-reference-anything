@@ -2,6 +2,7 @@ import { build } from 'esbuild'
 import { execFileSync } from 'node:child_process'
 import { readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
 import { resolve } from 'node:path'
+import { loadReleaseFeatures } from './scripts/release-features.mjs'
 
 const outputDirectory = resolve('lib')
 rmSync(outputDirectory, { recursive: true, force: true })
@@ -38,6 +39,7 @@ await build({
   target: ['es2022'],
   sourcemap: false,
   jsx: 'automatic',
+  define: { __REFERENCE_RELEASE_FEATURES__: JSON.stringify(loadReleaseFeatures(resolve('release-notes'))) },
   loader: { '.svg': 'text' },
   external: clientExternals.filter(name => name !== 'react-dom'),
   // Bundle the small react-dom/client entry shim; the host seeds only react-dom.

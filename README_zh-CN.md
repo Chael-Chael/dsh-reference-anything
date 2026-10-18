@@ -104,7 +104,7 @@
 
 ## 📦 安装
 
-当前本地版本为 **v0.4.4**，包声明的 DSH SDK 最低版本为 **`0.2.0-rc.2`**。
+当前本地开发版本为 **v0.5.0**（尚未发布），包声明的 DSH SDK 最低版本为 **`0.2.0-rc.2`**。
 
 ### 官方桌面端
 
@@ -126,23 +126,23 @@ dsh plugin --profile web add dshmarket
 dsh plugin --profile web add dsh-reference-anything
 ```
 
-安装入口提供的版本以对应渠道为准；本文按本地 v0.4.4 源码描述功能。
+安装入口提供的版本以对应渠道为准；本文按本地 v0.5.0 源码描述功能。
 
 ### 可选：连接网页 AI 对话
 
-仅网页对话需要此步骤。本地来源可直接使用；请先在浏览器登录所需平台，一键安装 OpenCLI 需要可用的 npm。
+仅网页对话需要此步骤。本地来源可直接使用；请先在浏览器登录所需平台。OpenCLI 随插件安装，适配器安装仍需要可用的 npm。
 
-安装 DSH 插件后，打开 DSH 的 `Settings → Reference Anything → 可用性检查`（如果尚未出现该设置项，请先重启 DSH），点击**「一键安装」**：它会自动查找 OpenCLI；若未找到 OpenCLI 或版本低于 `1.8.6`，则通过 npm 全局安装或升级；随后安装插件包内附带的六个平台适配器，启动或刷新 Browser Bridge，并打开 OpenCLI Browser Bridge 扩展的 [Chrome Web Store 安装页](https://chromewebstore.google.com/detail/opencli/ildkmabpimmkaediidaifkhjpohdnifk)。在商店页确认安装后，回到设置页点击「重新检查」；每个仍未通过的检查项旁都会显示对应的恢复操作。
+安装 DSH 插件后，打开 DSH 的 `Settings → Reference Anything → 可用性检查`（如果尚未出现该设置项，请先重启 DSH），点击**「一键安装」**：它会使用随插件安装和升级的 OpenCLI 2.0.0 运行时依赖；随后安装插件包内附带的六个平台适配器，启动或刷新 Browser Bridge，并打开 OpenCLI Browser Bridge 扩展的 [Chrome Web Store 安装页](https://chromewebstore.google.com/detail/opencli/ildkmabpimmkaediidaifkhjpohdnifk)。在商店页确认安装后，回到设置页点击「重新检查」；每个仍未通过的检查项旁都会显示对应的恢复操作。
 
-也可以手动安装 OpenCLI 和对话适配器，并启动 Browser Bridge：
+如需使用自定义全局 OpenCLI，可手动安装，并在设置的 OpenCLI 可执行文件中填写其完整路径；默认 opencli 始终使用插件依赖：
 
 ```powershell
-npm install --global "@jackwener/opencli@>=1.8.6"
+npm install --global "@jackwener/opencli@2.0.0"
 opencli plugin install file:///C:/path/to/dsh-reference-anything/opencli-plugin
 opencli daemon restart
 ```
 
-请将示例中的 `C:/path/to/dsh-reference-anything` 替换为仓库所在路径。浏览器扩展无法由网页静默安装，必须通过 Chrome Web Store（或从 [OpenCLI Releases](https://github.com/jackwener/opencli/releases) 下载后手动选择 “Load unpacked”）确认安装。如果浏览器阻止自动打开商店，设置页会保留可点击的备用链接。如果 OpenCLI 发现多个浏览器 Profile，可直接在失败的检查项中选择并应用一个已连接的 Profile。全局 npm 安装受操作系统权限限制；失败时页面会保留原始错误，供用户按提示处理。
+请将示例中的 `C:/path/to/dsh-reference-anything` 替换为仓库所在路径。浏览器扩展无法由网页静默安装，必须通过 Chrome Web Store（或从 [OpenCLI Releases](https://github.com/jackwener/opencli/releases) 下载后手动选择 “Load unpacked”）确认安装。如果浏览器阻止自动打开商店，设置页会保留可点击的备用链接。如果 OpenCLI 发现多个浏览器 Profile，可直接在失败的检查项中选择并应用一个已连接的 Profile。OpenCLI 随插件升级；浏览器扩展由浏览器商店单独更新。
 
 ## 🚀 使用
 
@@ -214,27 +214,31 @@ Reference Anything 直接向 DSH 原生 `@` 菜单注册八个来源，不会引
 
 键入 `@agent:`，即可搜索并引用其他本地 Agent 工具保存的历史对话。
 
-启用 dsh-chat-import >= 0.26.0 后，菜单使用其公开扫描 API，并展示导入状态和扫描异常。现有来源开关、附加目录、工作区范围和正文读取器继续生效；API 不可用时回退到原本的本地扫描。设置页覆盖全部 29 种扫描来源，分别支持来源开关和附加目录；新增来源通过 API 统计数量，并明确显示扫描异常或 API 不可用状态。图标复制自 dsh-chat-import，保留 MIT 许可证（见 images/agents/LICENSE）。
+全部 29 种来源使用内置的只读扫描器和解析器，代码来自 dsh-chat-import。扫描和引用无需安装 Chat Import。来源开关、附加目录和工作区范围继续生效；设置页显示来源目录、数量和扫描异常。Enter 插入引用，可恢复的图片通过 DSH 附件返回，查看图片需要支持视觉的模型。确认没有正文的会话会隐藏，读取异常的会话仍然保留。本地引用现在保存可读的来源、路径和会话 ID；旧版 URI 协议的本地引用需要重新选择。
 
-chat import 作为依赖随包安装；没有独立实例时，由本插件加载其 Host 入口。已独立安装、已配置或正在启动的实例优先，禁用、损坏或旧版本不会被另一份实例绕过。运行中加载独立实例时，先释放我们创建的实例，再允许独立实例启动；停用 Reference Anything 不会卸载独立实例。独立插件被移除后，重启 DSH 可重新启用随包兜底。本机制不自动安装 chat import 的独立客户端面板。
+发送本地引用时，插件读取原始记录，在模型回答前自动附上最近正文预览。正文独立编号，工具细节和图片目录分开组织。需要更多内容时，模型使用 `reference_read`（正文范围或关联工具）、`reference_search`（正文搜索）和 `reference_image`（真实图片），参数是可读的 `source`、`path`、`sessionId`、`revision`，不再需要本地 URI 句柄或 cursor。
 
-目前 npm 上游仍为 0.25.2，依赖暂锁定在含 0.26.0 API 的上游 commit `c2e010198cb1249601f7a6c96144631a8b3cc53b`，安装需要访问 GitHub。待上游发布后可切换到 npm 版本。
+每次发送时，本地引用预览共享一份按剩余上下文估算的预算，扣除历史记录、本次消息、系统提示与工具定义变化、回答预留和安全余量（容量的 5%，至少 1024 tokens）。回答预留使用配置或模型声明的输出上限，否则使用容量的 10%，最多 8192 tokens。新增预览保守地按每个 UTF-8 字节占一个 token 计费。`reference-mention.maxReferenceBytes` 是额外的共享上限，默认 `max(65536, floor(模型上下文 tokens × 4 × 0.2))`。无法取得容量或空间不足时不展开正文，只保留可读定位字段和提示；即使上下文已经满了，这些最小信息也会保留，最终超限仍由宿主处理。后续工具补读沿用独立的输出限制。先省略较早正文，保留最新消息及压缩检查点，再截短过长文本并保留首尾。分别说明省略的消息、截短的文本、未展开工具和未读取图片。单次图片读取另限 10 MiB。
 
-通过 chat import 扩展的来源，在兼容读取器补齐前标记为**仅支持导入**。选中后进入导入流程，不会插入无法读取的引用；关闭快捷导入时隐藏这些条目。扫描不会执行导入；上游搜索匹配标题、项目和路径。
+定位字段随消息历史保存。跨对话复制时，需复制完整的 `<local-agent-reference>…</local-agent-reference>` 块，只有标题不够。读取仍校验当前任务授权和来源目录。原记录更新后，旧消息号和图片号不能继续用；调用 `reference_read` 时省略 `revision` 可刷新预览。不会保存正文快照或缓存完整解析结果；补读、搜索、看图都会重新读取原来源，需要原记录仍在该路径。
+
+导入状态、会话导入和交接摘要通过可选的 Chat Import API 提供。需要时可在设置页安装或升级独立插件；Reference Anything 不会在启动时自动安装。API 不可用时不显示导入状态，也不影响本地扫描和引用读取。Tab 保留已配置的导入、摘要操作及确认流程。
+
+扫描在独立进程中运行，元数据缓存 30 秒。引用解析仍可能先读取完整来源，再返回一页。源码和图标保留 MIT 许可证（见 `vendor/chat-import-reader/` 和 `images/agents/LICENSE`）。维护者可用 `npm run vendor:sync -- <已构建的-dsh-chat-import-目录>` 同步扫描和解析快照，发布前检查见 vendor README。
 
 <p align="center"><img src="./images/at-local-agents.png" alt="从 @ 菜单浏览本地其他 Agent 的历史会话" width="800" /></p>
 
-**支持的 Agent：** Claude Code、Codex、Cursor、Qoder、Reasonix、OpenClaw、Kimi、Grok Build、Hermes、Gemini CLI、Pi、opencode、mimocode 和 zcode。
+**支持的来源：** Claude Code、Codex、Cursor、Gemini CLI、Antigravity、Reasonix、opencode、mimocode、zcode、Grok Build、OpenClaw、Pi、Hermes、Kimi、Kilo Code、Qoder、ChatGPT 导出、WorkBuddy、Qwen Code、Continue、Cline、Goose、DSH 4、Zed、Crush、Teleagent、Trae Work、Vibe 和 DSH。
 
 **功能：**
 
 - 自动识别历史对话，并显示每个 Agent 的对话数量
 - 可独立启用不同 Agent，也可选择自定义历史目录
 - 默认搜索全部已识别对话，也可限制为当前工作区
-- 按需读取对话正文；默认精简展示工具名称，需要时可读取完整细节
+- 发送时自动预览最近正文；按编号补读正文、关联工具细节和图片
 - 支持 `@codex:`、`@claude-code:`、`@gemini-cli:` 等 Agent 专属前缀
 
-本地记录只读，不会导入为新的 DSH 会话，也不支持 Continue Session。Claude Code 和 Codex 适配器曾用真实记录验证；其余格式主要通过测试样例验证，实际兼容性可能因工具版本而异。opencode、mimocode 和 zcode 的数据库读取需要 DSH 宿主运行时提供 `node:sqlite`。
+引用只读，不修改本地记录；导入和交接摘要是通过 Chat Import 提供的独立操作。Claude Code 和 Codex 适配器曾用真实记录验证；其余格式主要通过测试样例验证，实际兼容性可能因工具版本而异。opencode、mimocode 和 zcode 的数据库读取需要 DSH 宿主运行时提供 `node:sqlite`。
 
 #### 🧩 @Local plugins — 本地已安装和已配置的插件
 
