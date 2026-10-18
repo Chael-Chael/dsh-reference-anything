@@ -11,6 +11,7 @@
 | 修改 UI | [设计规范](design.md)、[浏览器验收](docs/testing/npm-release-checklist.md) |
 | 功能测试失败 | [官方 Session Log 诊断](docs/testing/session-log-diagnosis.md)：导出失败会话、分析事件链、修复并保留复测证据 |
 | npm 发布 | [发版规程](docs/testing/npm-release-checklist.md)，使用 agent:release:prepare / agent:release:gate |
+| 输出/更新验收报告 | [累计完整报告要求](docs/testing/npm-release-checklist.md#累计完整报告必需)：交付本版本全部记录，不能只报本轮增量 |
 | README、发布说明、新功能 GIF | [发布素材与用户审稿](docs/development/release-materials.md)、[Release 正文模板](docs/development/release-notes-template.md)；Agent 完成初稿和录制，最终文字必须交用户审核 |
 | 任务完成、返工或复盘 | [复盘与经验晋升](docs/development/retrospective.md) |
 | 制作 GIF | [演示流程](scripts/web-demos/README.md) |

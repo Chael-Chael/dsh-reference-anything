@@ -1,0 +1,37 @@
+[
+  {
+    "id": "folders",
+    "title": "目录浏览与引用",
+    "duration": 16.14,
+    "gif": "D:\\dsh-reference-anything\\demo-recordings\\web-1792217520342\\folders.gif",
+    "mp4": "D:\\dsh-reference-anything\\demo-recordings\\web-1792217520342\\folders.mp4"
+  },
+  {
+    "id": "agent-import",
+    "title": "会话引用与导入",
+    "duration": 18.14,
+    "gif": "D:\\dsh-reference-anything\\demo-recordings\\web-1792217520342\\agent-import.gif",
+    "mp4": "D:\\dsh-reference-anything\\demo-recordings\\web-1792217520342\\agent-import.mp4"
+  },
+  {
+    "id": "chat-import-upgrade",
+    "title": "升级 Chat Import",
+    "duration": 12.8,
+    "gif": "D:\\dsh-reference-anything\\demo-recordings\\web-1792217520342\\chat-import-upgrade.gif",
+    "mp4": "D:\\dsh-reference-anything\\demo-recordings\\web-1792217520342\\chat-import-upgrade.mp4"
+  },
+  {
+    "id": "local-plugins",
+    "title": "本地插件引用",
+    "duration": 12.14,
+    "gif": "D:\\dsh-reference-anything\\demo-recordings\\web-1792217520342\\local-plugins.gif",
+    "mp4": "D:\\dsh-reference-anything\\demo-recordings\\web-1792217520342\\local-plugins.mp4"
+  },
+  {
+    "id": "shortcuts",
+    "title": "自定义与共享快捷词",
+    "duration": 25.07,
+    "gif": "D:\\dsh-reference-anything\\demo-recordings\\web-1792217520342\\shortcuts.gif",
+    "mp4": "D:\\dsh-reference-anything\\demo-recordings\\web-1792217520342\\shortcuts.mp4"
+  }
+]

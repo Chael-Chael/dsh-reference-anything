@@ -67,6 +67,7 @@ node scripts/web-demos/start.mjs
 | --- | --- | --- |
 | `folders` | 输入 `@file:docs` → Tab → 输入 `testing` → Tab → 用顶部导航返回 docs → Enter | Tab 进入目录浏览；Enter 插入目录引用 |
 | `agent-import` | 输入 `@agent:` → Enter 引用 → 清除输入 → 再输入 `@agent:` → Tab → 点击确认导入 → 显示历史对话 | Enter 插入会话引用；Tab 打开导入选项，仍需确认导入 |
+| `local-references` | 输入 `@codex:缓存` → Enter → `@claude-code:接口` → Enter → 输入比较问题，不发送 | 多来源只读引用；虚构数据不作为真实模型读取证据 |
 | `chat-import-upgrade` | 切换到升级场景 → 输入 `@agent:` → 点击升级 Chat Import → 设置 → 引用万物 → 本地 Agent 对话查看状态 | 展示版本不兼容时的入口，以及模拟升级后的“需要重启”状态 |
 | `local-plugins` | 输入 `@plugin:dsh-reference-anything` → Enter | 插入真实插件列表中的插件引用 |
 | `shortcuts` | 设置 → 引用万物 → 将本地 Agent 快捷词设为 `agent, work`，网页对话设为 `chat, work` → 关闭设置 → 输入 `@work:缓存`，再试 `@codex:缓存` | 共享快捷词可匹配多个来源；具体提供方快捷词仍缩小范围 |

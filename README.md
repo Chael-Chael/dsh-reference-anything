@@ -39,12 +39,22 @@ One `@` for them all.
 
 After typing `@`, you can browse and click items in the menu with your mouse, or use the keyboard to enter text, search, and narrow down the results. When a folder is selected, press `Tab` to enter it and continue browsing, or `Enter` to insert the folder reference.
 
+### 0.5.0 preview (not yet released)
+
+Reference local Agent history with Enter, or press Tab and confirm to import it into DSH. Local scanning and read-only references work without Chat Import; importing requires it. Older local references must be reselected from the menu.
+
+![Selecting fictional Codex and Claude Code conversations in the real Web UI; no model request is sent.](./release-notes/0.5.0/demos/local-references.gif)
+
+![Enter inserts a reference; Tab opens confirmation before a simulated import of fictional history.](./release-notes/0.5.0/demos/agent-import.gif)
+
+These recordings demonstrate the UI with fictional data. They are not live-service acceptance evidence. See the [0.5.0 release draft](./docs/release-v0.5.0.md) for changes and migration notes; full release acceptance is still in progress.
+
 Use one `@` menu to reference:
 
 - 🧩 DSH commands and Skills
 - 📁 Workspace files and folders
 - 💬 DSH session history
-- 🖥️ **Added by this plugin — highlight: Transcripts saved locally by 14 agent CLIs, including Claude Code, Codex, and Cursor, with quick import into DSH's native session format**
+- 🖥️ **Local Agent conversations:** bundled scanning and read-only parsers for 29 source formats, including Claude Code, Codex and Cursor; optional import into DSH through Chat Import. Live acceptance coverage is recorded separately.
 - ✨ **Added by this plugin — highlight: Historical conversations from web chatbots including ChatGPT, Claude, Gemini, DeepSeek, Grok, and Kimi**
 - ☁️ **Added by this plugin: Files from cloud drives connected through OpenList**
 - 🧩 **Added by this plugin: Installed and configured local DSH plugins, without repeatedly hunting through directories**

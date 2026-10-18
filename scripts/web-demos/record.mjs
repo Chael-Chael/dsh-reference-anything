@@ -12,7 +12,7 @@ const output=join(root,'demo-recordings','web-'+Date.now())
 mkdirSync(output,{recursive:true})
 const font=readFileSync(join(root,'scripts/feature-demos/vendor/SourceHanSansSC-VF.otf')).toString('base64')
 const browser=await chromium.launch({channel:'msedge',headless:true})
-const names={'folders':'目录浏览与引用','agent-import':'会话引用与导入','chat-import-upgrade':'升级 Chat Import','local-plugins':'本地插件引用','shortcuts':'自定义与共享快捷词'}
+const names={'folders':'目录浏览与引用','agent-import':'会话引用与导入','chat-import-upgrade':'升级 Chat Import','local-plugins':'本地插件引用','shortcuts':'自定义与共享快捷词','local-references':'跨来源会话只读引用'}
 const ids=process.argv.slice(2).length?process.argv.slice(2):Object.keys(names)
 const results=[]
 let activePage
@@ -25,7 +25,9 @@ try{for(const id of ids){
  page.on('pageerror',e=>errors.push(e.message))
  page.setDefaultTimeout(20000)
  await page.goto(url)
- await page.getByRole('button',{name:'稍后配置',exact:true}).click().catch(()=>{})
+ const onboarding=page.getByRole('dialog',{name:'开始使用',exact:true})
+ await onboarding.waitFor({state:'visible',timeout:5000}).catch(()=>{})
+ if(await onboarding.isVisible())await onboarding.getByRole('button',{name:'关闭',exact:true}).click()
  const editor=page.locator('[contenteditable="true"]').first()
  await editor.waitFor()
  await page.addStyleTag({content:`@font-face{font-family:DemoSourceHan;src:url(data:font/otf;base64,${font})}body,button,input,textarea,[contenteditable],body *{font-family:DemoSourceHan,sans-serif!important}#demo-key{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);background:#fff;box-shadow:0 3px 14px #0002;border:1px solid #d6d9e0;border-bottom-width:3px;border-radius:9px;padding:12px 26px;z-index:2147483647;font-size:24px;display:flex;align-items:center;gap:18px;white-space:nowrap;opacity:0;transition:opacity .15s;pointer-events:none}#demo-key kbd{font-size:32px;font-weight:700;line-height:1.2;padding:5px 12px;border:1px solid #cdd2df;border-bottom:3px solid #b5bdce;border-radius:7px;background:#f2f4fa;color:#284cda}#demo-pointer{position:fixed;left:0;top:0;width:25px;height:32px;z-index:2147483647;pointer-events:none;filter:drop-shadow(0 2px 2px #0003)}.demo-ring{position:fixed;width:38px;height:38px;margin:-19px;border:2px solid #4d6bfe;border-radius:50%;pointer-events:none;z-index:2147483646;animation:demo-pulse .55s ease-out forwards}@keyframes demo-pulse{from{transform:scale(.4);opacity:1}to{transform:scale(1.5);opacity:0}}`})
@@ -59,7 +61,13 @@ try{for(const id of ids){
   await editor.press('Escape');await settings();await click(page.getByRole('button',{name:'@ 本地 Agent 对话 选择要从本机历史记录中读取、并显示在 @ 候选中的 Agent。',exact:true}))
   const status=page.locator('.dsh_ref_agent_actions').getByText('Chat Import 安装或升级已完成',{exact:false})
   await status.waitFor();await status.scrollIntoViewIfNeeded();await page.mouse.move(850,600,{steps:15});await page.mouse.wheel(0,360);await pause(2200)
- }else{
+ }else if(id==='local-references'){
+  await click(editor);await type('@codex:缓存');await page.getByRole('option').filter({hasText:'缓存策略设计'}).waitFor()
+  await editor.press('Enter');await pause(1200);assert((await editor.innerText()).includes('缓存策略设计'))
+  await type(' @claude-code:接口');await page.getByRole('option').filter({hasText:'接口重构方案'}).waitFor()
+  await editor.press('Enter');await pause(1200);assert((await editor.innerText()).includes('接口重构方案'))
+  await type(' 对照两段历史讨论，只读分析，不导入会话。');await pause(1800)
+ }else if(id==='shortcuts'){
   await settings()
   for(const [source,label,value] of [['agents','本地 Agent 对话','agent, work'],['conversations','网页端 AI 对话','chat, work']]){
    await click(page.getByRole('button',{name:label+' · 快捷短语',exact:true}))

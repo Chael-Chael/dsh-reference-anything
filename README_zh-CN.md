@@ -39,14 +39,24 @@
 
 输入 `@` 后，既可以用鼠标浏览并点击菜单中的条目，也可以直接用键盘输入文本进行搜索，缩小结果范围。选中文件夹后，按 `Tab` 进入文件夹继续浏览，按 `Enter` 插入文件夹引用。
 
+### 0.5.0 预览（尚未发布）
+
+选中本地 Agent 历史后，按 Enter 插入引用，或按 Tab 并确认后导入 DSH。扫描和只读引用无需 Chat Import，导入仍需安装它。旧格式本地引用需要重新从菜单选择。
+
+![真实 Web 界面中选择 Codex 和 Claude Code 虚构会话；未发送模型请求。](./release-notes/0.5.0/demos/local-references.gif)
+
+![Enter 插入引用，Tab 打开确认后模拟导入虚构历史。](./release-notes/0.5.0/demos/agent-import.gif)
+
+以上录制使用虚构数据展示实际界面，不作为真实服务验收证据。变更及迁移说明见 [0.5.0 发布草稿](./docs/release-v0.5.0.md)；完整发版验收仍在进行。
+
 通过同一个 `@` 菜单，可以引用：
 
 - 🧩 DSH 命令与 Skills
 - 📁 工作区文件和文件夹
 - 💬 DSH 历史会话
-- 🖥️ **本插件新增：本地其他 Agent CLI 留在磁盘上的历史对话（Claude Code、Codex、Cursor 等共 14 种），并可以快速导入这些会话到 DSH 的原生格式（重点）**
+- 🖥️ **本地 Agent 对话**：内置 Claude Code、Codex、Cursor 等 29 种来源格式的扫描和只读解析能力，可通过 Chat Import 导入 DSH；真实验收覆盖范围另行记录。
 - ✨ **本插件新增：来自 ChatGPT、Claude、Gemini、DeepSeek、Grok 和 Kimi 这些网页端 Chatbot 的历史对话（重点）**
-- ☁️ **本插进新增：通过 OpenList 连接的云盘文件**
+- ☁️ **本插件新增：通过 OpenList 连接的云盘文件**
 - 🧩 **本插件新增：本机已安装和已配置的 DSH 插件，无需再频繁翻找目录**
 
 在扩展 `@` 的能力之外，我们还支持一些对于 `@` 菜单界面的增强：

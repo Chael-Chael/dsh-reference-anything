@@ -1,0 +1,14 @@
+[
+  {
+    "title": "把不同 Agent 的历史带进当前对话",
+    "description": "在 @ 菜单中选择本地会话，按 Enter 插入只读引用。发送后自动提供正文预览，需要时再搜索、补读工具记录或查看图片；多条引用共享剩余上下文预算。",
+    "media": "demos/local-references.gif",
+    "alt": "真实 Web 演示界面中依次选择 Codex 和 Claude Code 虚构会话并插入引用，未发送模型请求。"
+  },
+  {
+    "title": "引用之外，也可以导入继续",
+    "description": "选中本地会话后按 Tab 打开操作，确认后通过 Chat Import 导入完整历史。Claude Code 和 Codex 还提供实验性交接摘要；扫描和只读引用无需安装 Chat Import。",
+    "media": "demos/agent-import.gif",
+    "alt": "真实 Web 演示界面中 Enter 插入引用、Tab 打开导入确认，再显示模拟导入的虚构历史。"
+  }
+]

@@ -1,0 +1,3 @@
+const {chromium}=require('C:/Users/27923/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules/playwright');
+(async()=>{let b=await chromium.launch({channel:'msedge'}),p=await b.newPage({viewport:{width:960,height:640}});p.on('console',m=>console.log(m.text()));p.on('pageerror',e=>console.log(e.message));await p.goto('file:///D:/dsh-reference-anything/.codex-tmp/feature-demos/preview.html?capture');await p.waitForTimeout(1500);console.log(await p.locator('body').innerText());console.log(await p.locator('input').evaluateAll(ns=>ns.map(n=>n.outerHTML)));await p.screenshot({path:'.codex-tmp/feature-demos/debug.png'});await b.close()})()
+

@@ -1,0 +1,38 @@
+- button "新建会话"
+- button "收起侧边栏"
+- button "新建会话": 新会话
+- navigation "全局面板":
+  - button "插件"
+  - button "自动化任务"
+- text: 工作区
+- button "搜索会话"
+- textbox "搜索会话名称"
+- button "视图选项"
+- button "添加工作区"
+- tree "会话":
+  - treeitem "默认工作区" [expanded]
+  - treeitem "新会话" [selected]
+  - treeitem "缓存策略设计 1天"
+  - treeitem "缓存策略设计 1天"
+  - treeitem "缓存策略设计 1天"
+  - treeitem "缓存策略设计 1天"
+  - treeitem "未命名 1天"
+  - treeitem "未分组"
+- button "账号菜单": 更多
+- banner:
+  - button "打开右侧边栏"
+- text: 探索未至之境 预览版
+- button "选择工作区": 默认工作区
+- button "标准模式"
+- textbox "描述你想要构建的内容, / 调用指令, @ 文件或对话"
+- button "添加文件或调用指令"
+- button "访问模式，当前：工作区内修改": 工作区内修改
+- button "请选择模型"
+- button "发送消息" [disabled]
+- dialog "开始使用":
+  - heading "开始使用" [level=2]
+  - button "关闭"
+  - paragraph: 登录 DeepSeek 账号，或添加 API Key，即可开始使用。你的项目和文件保存在本地。
+  - button "添加 API Key"
+  - button "登录"
+- img

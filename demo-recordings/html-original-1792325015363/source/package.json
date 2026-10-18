@@ -1,0 +1,9 @@
+{
+  "name": "dsh-feature-demos",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "remotion": "4.0.534",
+    "@remotion/player": "4.0.534"
+  }
+}
