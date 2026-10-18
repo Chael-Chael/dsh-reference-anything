@@ -1,4 +1,5 @@
 import { LocalConversationScanner } from '../../local-conversation-scanner.ts'
+import { assertLocalScope, assertLocalSourceEnabled } from '../../local-reference.ts'
 /**
  * Reference source over transcripts other coding agents leave on disk.
  *
@@ -179,7 +180,7 @@ export class LocalAgentService extends Service implements ReferenceSource {
    * Gated: these are other sessions' conversations, often from other projects.
    * The model may read one only after its user named it.
    */
-  readonly requiresGrant = true
+  readonly requiresGrant = false
 
   private readonly settings: Required<Config>
   private readonly adapters: ReadonlyMap<AgentKind, AgentAdapter>
@@ -298,17 +299,26 @@ export class LocalAgentService extends Service implements ReferenceSource {
 
   private async listIn(query: string, limit: number, cwd: string, signal?: AbortSignal): Promise<ReferenceSummary[]> {
     signal?.throwIfAborted()
+    if (this.ctx.get('referenceChatHistory')?.getSettings?.().picker?.agents.enabled === false) return []
     if (this.ctx.get('referenceChatHistory')?.getSettings) {
       const settings = this.ctx.get('referenceChatHistory')?.getSettings()
       const found = new Map<string, ReferenceSummary>()
+      const failures: string[] = []
       for (const kind of settings ? settings.enabledAgents ?? ALL_LOCAL_AGENTS : this.settings.agents) {
         const custom = settings?.agentDirectories?.[kind]
         const paths = new Set<string | undefined>([undefined, ...this.roots.filter(root => root.kind === kind).map(root => root.path)])
         if (custom) paths.add(expandRoot(custom, homedir()))
         for (const path of paths) {
           signal?.throwIfAborted()
-          const result = discoverySchema.parse(await this.scanner.scanDiscover({ format: scanFormat(kind), query, ...(path ? { path } : {}) }, signal))
-          if (result.warnings.length) throw new Error(result.warnings.map(warning => `${warning.format}: ${warning.error}`).join('; '))
+          let result: ReturnType<typeof discoverySchema.parse>
+          try {
+            result = discoverySchema.parse(await this.scanner.scanDiscover({ format: scanFormat(kind), query, ...(path ? { path } : {}) }, signal))
+          } catch (error) {
+            signal?.throwIfAborted()
+            failures.push(`${kind}: ${error instanceof Error ? error.message : String(error)}`)
+            continue
+          }
+          failures.push(...result.warnings.map(warning => `${warning.format}: ${warning.error}`))
           for (const row of result.sessions) {
             if (!await this.conversationAvailability.visible({ format: row.format, path: row.sourcePath, sessionId: row.sessionId })) continue
             if (this.settings.scope === 'workspace' && !inWorkspace(row.cwd ?? '', cwd)) continue
@@ -318,6 +328,8 @@ export class LocalAgentService extends Service implements ReferenceSource {
           }
         }
       }
+      for (const failure of failures) this.ctx.logger.warn(`reference local discovery: ${failure}`)
+      if (!found.size && failures.length) throw new Error(failures.join('; '))
       return [...found.values()].sort((a, b) => (b.updatedAt ?? 0) - (a.updatedAt ?? 0)).slice(0, limit)
     }
 
@@ -371,8 +383,17 @@ export class LocalAgentService extends Service implements ReferenceSource {
   async read(ref: ReferenceRef, window: ReferenceWindow, signal?: AbortSignal): Promise<ReferenceSnapshot> {
     signal?.throwIfAborted()
     const target = chatImportTarget(ref.id)
-    if (target) return readChatImport(this.ctx, ref, target, { ...window, limit: Math.min(window.limit, this.settings.maxReadTurns) }, signal)
+    if (target) {
+      const locator = { source: target.format, path: target.path, sessionId: target.sessionId }
+      await assertLocalScope(this.ctx, locator, signal)
+      const result = await readChatImport(this.ctx, ref, target, { ...window, limit: Math.min(window.limit, this.settings.maxReadTurns) }, signal)
+      await assertLocalScope(this.ctx, locator, signal)
+      return result
+    }
+    const kind = parseReferenceId(ref.id)?.kind
+    if (kind) assertLocalSourceEnabled(this.ctx, scanFormat(kind))
     const { adapter, descriptor, sessionId } = await this.locate(ref.id)
+    assertLocalSourceEnabled(this.ctx, scanFormat(descriptor.kind))
     const cursor = window.cursor === undefined ? undefined : decodeAgentCursor(window.cursor, ref.id)
     if (cursor !== undefined && !cursorStillValid(cursor, descriptor.size)) throw cursorExpired()
 
@@ -407,6 +428,7 @@ export class LocalAgentService extends Service implements ReferenceSource {
       : sessionBookmark(descriptor, descriptor.session)
     const label = labelFor(descriptor, bookmark)
     const nextCursor = nextCursorFor(ref.id, descriptor.size, page)
+    assertLocalSourceEnabled(this.ctx, scanFormat(descriptor.kind))
     return {
       ref,
       label,

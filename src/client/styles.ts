@@ -13,11 +13,13 @@ const css = `
   /* Reference Anything customizes the public @ menu and only the visual glyph
      inside matching Composer reference chips. Native text continues to own all
      caret, selection, wrapping, and message geometry. */
-.dsh_ref_update_dialog[role="dialog"]{width:680px;max-width:calc(100vw - 32px)}
-.dsh_ref_release_feature{display:grid;gap:16px;font-family:inherit}
+.dsh_ref_update_dialog[role="dialog"]{width:680px;max-width:100%;max-height:100%}
+.dsh_ref_release_content{min-height:0;overflow-y:auto;overflow-x:hidden}
+.dsh_ref_update_dialog[role="dialog"]>div:last-child{flex-shrink:0}
+.dsh_ref_release_feature{display:grid;grid-template-columns:minmax(0,1fr);min-width:0;gap:16px;font-family:inherit}
 .dsh_ref_release_media{display:flex;align-items:center;justify-content:center;aspect-ratio:16/9;overflow:hidden;border:1px solid var(--dsw-alias-border-l1);border-radius:12px;background:var(--dsw-alias-bg-layer-2,rgba(128,128,128,.08))}
 .dsh_ref_release_media img{display:block;width:100%;height:100%;object-fit:contain}
-.dsh_ref_release_description{margin:0;min-height:4.5em;white-space:pre-wrap;font-size:14px;line-height:1.6;color:var(--dsw-alias-label-secondary)}
+.dsh_ref_release_description{margin:0;min-height:4.5em;white-space:normal;overflow-wrap:anywhere;font-size:14px;line-height:1.6;color:var(--dsw-alias-label-primary)}
 .dsh_ref_release_footer{display:flex;align-items:center;justify-content:flex-end;gap:16px;width:100%;flex-wrap:wrap}
 .dsh_ref_release_navigation{display:flex;align-items:center;justify-content:flex-end;gap:12px;margin-left:auto}
 .dsh_ref_release_navigation>span{font-size:12px;color:var(--dsw-alias-label-tertiary)}

@@ -147,7 +147,7 @@ export function UpdateDialog({ update, install, close, t, locale }: {
   const language = useSyncExternalStore(subscribe, locale ? () => locale.getSnapshot().active : defaultLanguage)
   const features = releaseFeaturesFor(update.latestVersion, language)
   const feature = features[page]
-  return <Modal open className="dsh_ref_update_dialog" onClose={() => { if (!busy) close() }} title={feature?.title ?? t(update.updateAvailable ? 'menu.updateAvailable' : 'menu.currentRelease', { version: update.latestVersion })}
+  return <Modal open className="dsh_ref_update_dialog" contentClassName="dsh_ref_release_content" onClose={() => { if (!busy) close() }} title={feature?.title ?? t(update.updateAvailable ? 'menu.updateAvailable' : 'menu.currentRelease', { version: update.latestVersion })}
     closeLabel={t('menu.closeUpdate')} description={update.updateAvailable ? t('settings.updateAvailableDetail', { current: update.currentVersion, latest: update.latestVersion }) : t('menu.installedVersion', { version: update.currentVersion })}
     footer={<div className="dsh_ref_release_footer">
       {update.updateAvailable && <Button disabled={busy || Boolean(result)} onClick={async () => {

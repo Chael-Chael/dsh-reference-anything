@@ -6,8 +6,6 @@ import { resolveLocalPlugins } from './local-plugins.ts'
 import { compareVersions } from './update.ts'
 
 const PACKAGE = 'dsh-chat-import'
-// shortcut: npm has not published the API release; remove this fallback once it has.
-const API_RELEASE = 'https://codeload.github.com/Nwflower/dsh-chat-import/tar.gz/90377104c2b0f8932a63daa871ff7083ddb7c77d'
 export const CHAT_IMPORT_APIS = ['scanDiscover', 'importPath', 'resumeSummary'] as const
 export interface ChatImportCompatibility {
   state: 'ready' | 'incompatible' | 'unavailable' | 'disabled' | 'installing' | 'restart-required'
@@ -59,7 +57,8 @@ export async function chatImportUpgradeTarget(signal?: AbortSignal): Promise<{ s
   if (!response.ok) throw new Error(`Chat Import update lookup failed (${response.status})`)
   const latest = await response.json() as { name?: string; version?: string }
   if (latest.name !== PACKAGE || !latest.version || !/^\d+\.\d+\.\d+$/.test(latest.version)) throw new Error('Invalid Chat Import registry response')
-  return compareVersions(latest.version, '0.26.0') >= 0 ? { spec: `${PACKAGE}@${latest.version}`, version: latest.version } : { spec: API_RELEASE, version: '0.26.0' }
+  if (compareVersions(latest.version, '0.26.1') < 0) throw new Error('dsh-chat-import 0.26.1 or newer is required; no compatible npm release is available.')
+  return { spec: `${PACKAGE}@${latest.version}`, version: latest.version }
 }
 /** Auto-install only absent providers; explicit requests can upgrade incompatible providers. */
 export function ensureChatImport(ctx: Context, upgrade = false, signal?: AbortSignal): Promise<void> {

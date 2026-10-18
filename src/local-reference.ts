@@ -8,7 +8,7 @@ import type { Agent } from '@deepseek-ai/dsh-agent'
 import { AttachmentId } from '@deepseek-ai/dsh-attachment'
 import { ReferenceAnythingError } from './errors.ts'
 import { localConversationRoots, readLocalConversation } from './local-conversation-reader.ts'
-import { localLocatorId, validateLocalLocator, LOCAL_REFERENCE_OPEN, LOCAL_REFERENCE_CLOSE, type LocalLocator } from './local-locator.ts'
+import { validateLocalLocator, LOCAL_REFERENCE_OPEN, LOCAL_REFERENCE_CLOSE, type LocalLocator } from './local-locator.ts'
 import { agentKind, scanFormat } from './chat-import-discovery.ts'
 import { ALL_LOCAL_AGENTS } from './wire.ts'
 import { referenceImageSchema } from './chat-import-reader.ts'
@@ -55,8 +55,18 @@ async function parseSlot<T>(work: () => Promise<T>, signal?: AbortSignal): Promi
   finally { const next = waiters.shift(); if (next) next(); else active-- }
 }
 
+export function assertLocalSourceEnabled(ctx: Context, source: string): void {
+  const history = ctx.get('referenceChatHistory')
+  const settings = history?.getSettings?.() ?? history?.store.settings
+  if (!ctx.get('referenceLocalAgents') || settings?.picker?.agents.enabled === false
+    || !(settings?.enabledAgents ?? ALL_LOCAL_AGENTS).includes(agentKind(source) as typeof ALL_LOCAL_AGENTS[number])) {
+    throw new ReferenceAnythingError(`Local conversation source ${source} is disabled. Enable it in Reference Anything settings before reading; previous references do not bypass this setting.`, 'SOURCE_UNAVAILABLE')
+  }
+}
+
 export async function assertLocalScope(ctx: Context, locator: LocalLocator, signal?: AbortSignal): Promise<string> {
   if (!ALL_LOCAL_AGENTS.some(kind => scanFormat(kind) === locator.source) || !isAbsolute(locator.path)) throw new ReferenceAnythingError('Unsupported source or non-absolute conversation path.', 'REFERENCE_INVALID_URI')
+  assertLocalSourceEnabled(ctx, locator.source)
   const roots = localConversationRoots()[locator.source]
   const configured = ctx.get('referenceLocalAgents')?.discoveryPolicy().roots.filter(root => scanFormat(root.kind) === locator.source).map(root => root.path) ?? []
   const custom = ctx.get('referenceChatHistory')?.getSettings().agentDirectories?.[agentKind(locator.source) as keyof typeof ctx.referenceChatHistory.store.settings.agentDirectories]
@@ -73,15 +83,15 @@ export async function assertLocalScope(ctx: Context, locator: LocalLocator, sign
   throw new ReferenceAnythingError('This conversation path is outside the allowed roots for its source. Select it from a configured local Agent source; arbitrary paths are not allowed.', 'CONVERSATION_REFERENCE_NOT_GRANTED')
 }
 
-export async function loadLocalReference(ctx: Context, agent: Agent | undefined, value: LocalLocator, revision?: string, signal?: AbortSignal): Promise<LocalDocument> {
+export async function loadLocalReference(ctx: Context, _agent: Agent | undefined, value: LocalLocator, revision?: string, signal?: AbortSignal): Promise<LocalDocument> {
   const locator = validateLocalLocator(value)
-  ctx.references.assertSessionGranted(agent?.session, { source: 'local-agent', id: localLocatorId(locator) })
   try {
     const canonicalPath = await assertLocalScope(ctx, locator, signal)
     return await parseSlot(async () => {
       const document = documentSchema.parse(await readLocalConversation({ format: locator.source, path: canonicalPath, sessionId: locator.sessionId,
         limit: 100, detail: 'full', structured: true, ...(revision ? { revision } : {}) }, signal))
       if (document.sessionId && document.sessionId !== locator.sessionId) throw new ReferenceAnythingError('The source contains a different sessionId. Refresh the list and reselect the correct conversation.', 'REFERENCE_NOT_FOUND')
+      await assertLocalScope(ctx, locator, signal)
       return document
     }, signal)
   } catch (cause) { signal?.throwIfAborted(); throw failures(cause) }
@@ -97,11 +107,11 @@ function ranges(numbers: number[]): Array<[number, number]> {
   return result
 }
 
-export function renderLocalPreview(locator: LocalLocator, document: LocalDocument, budget: number, label = document.title, selected = document.messages): string {
+export function buildLocalPreview(locator: LocalLocator, document: LocalDocument, budget: number, label = document.title, selected = document.messages, measure?: (data: LocalPreview) => number): LocalPreview {
   const retained = selected.map(message => ({ ...message, omittedTextBytes: 0 }))
-  const render = () => {
+  const project = () => {
     const included = new Set(retained.map(message => message.number))
-    return `${LOCAL_NOTICE}\n${LOCAL_REFERENCE_OPEN}\n${stringifyTagSafeJson({ ...locator, label, revision: document.revision,
+    return { ...locator, label, revision: document.revision,
       totalMessages: document.messages.length, totalImages: document.images.length,
       shownMessages: ranges(retained.map(message => message.number)), messages: retained,
       images: document.images.filter(image => included.has(image.message)).map(({ id, message }) => ({ id, message })),
@@ -110,9 +120,9 @@ export function renderLocalPreview(locator: LocalLocator, document: LocalDocumen
         toolRecordsNotExpanded: document.tools.length, imageContentsNotRead: document.images.length, sourcePartial: document.partial },
       tools: { reference_read: 'Use source/path/sessionId/revision/start/limit. Message numbers are 1-based; mode=body or tools. Omit revision to refresh the latest preview.',
         reference_search: 'Use source/path/sessionId/revision/query to search body text.', reference_image: 'Use source/path/sessionId/revision/imageId to view actual image content.' },
-    })}\n${LOCAL_REFERENCE_CLOSE}`
+    }
   }
-  const size = () => Buffer.byteLength(render(), 'utf8')
+  const size = () => measure ? measure(project()) : Buffer.byteLength(renderLocalData(project()), 'utf8')
   while (size() > budget) {
     const drop = retained.findIndex((message, i) => !message.checkpoint && i !== retained.length - 1)
     if (drop < 0) break
@@ -127,7 +137,27 @@ export function renderLocalPreview(locator: LocalLocator, document: LocalDocumen
     longest.text = result.text
     longest.omittedTextBytes = result.omittedBytes
   }
-  return render()
+  return project()
+}
+
+export interface LocalPreview extends LocalLocator {
+  label: string
+  revision: string
+  totalMessages: number
+  totalImages: number
+  shownMessages: Array<[number, number]>
+  messages: Array<LocalDocument['messages'][number] & { omittedTextBytes: number }>
+  images: Array<{ id: string; message: number }>
+  omissions: { omittedMessageRanges: Array<[number, number]>; truncatedMessages: Array<{ number: number; omittedTextBytes: number }>; toolRecordsNotExpanded: number; imageContentsNotRead: number; sourcePartial: boolean }
+  tools: { reference_read: string; reference_search: string; reference_image: string }
+}
+
+export function renderLocalData(data: LocalPreview): string {
+  return `${LOCAL_NOTICE}\n${LOCAL_REFERENCE_OPEN}\n${stringifyTagSafeJson(data)}\n${LOCAL_REFERENCE_CLOSE}`
+}
+
+export function renderLocalPreview(locator: LocalLocator, document: LocalDocument, budget: number, label = document.title, selected = document.messages): string {
+  return renderLocalData(buildLocalPreview(locator, document, budget, label, selected))
 }
 
 export async function localImage(ctx: Context, document: LocalDocument, imageId: string, signal?: AbortSignal) {

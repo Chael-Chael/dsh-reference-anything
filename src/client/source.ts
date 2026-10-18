@@ -563,17 +563,17 @@ export function createLocalAgentSource(
         statusError = error instanceof Error ? error.message : String(error)
         return undefined
       })
-      upgradeAvailable = compatibility?.state === 'incompatible' && compatibility.canUpgrade
+      upgradeAvailable = (compatibility?.state === 'incompatible' || compatibility?.state === 'unavailable') && compatibility.canUpgrade
       const upgradeRows: InputTriggerCandidate[] = upgrading || upgradeAvailable ? [{
         icon: () => '↑',
-        name: t(upgrading ? 'chatImport.upgrading' : 'chatImport.upgrade'),
-        description: upgradeError ?? t('chatImport.menuUpgradeDetail', { version: compatibility?.version || '—' }),
+        name: t(upgrading ? 'chatImport.upgrading' : compatibility?.version ? 'chatImport.upgrade' : 'chatImport.install'),
+        description: upgradeError ?? t(compatibility?.version ? 'chatImport.menuUpgradeDetail' : 'chatImport.menuInstallDetail', { version: compatibility?.version || '—' }),
         value: encodeCandidate({ kind: 'agent-upgrade' }),
       }] : chatImport && compatibility?.state !== 'ready' ? [{
         icon: () => '!',
         name: t('chatImport.apiAttention'),
         description: [t(`chatImport.${compatibility?.state ?? 'unavailable'}`, { version: compatibility?.version || '—' }),
-          statusError || compatibility?.error, t('menu.checkSettings')].filter(Boolean).join(' · '),
+          statusError || compatibility?.error].filter(Boolean).join(' · '),
         value: encodeCandidate({ kind: 'agent-warning' }),
       }] : []
       const warnings: InputTriggerCandidate[] = results.filter(row => row.warning !== undefined).map(row => ({

@@ -1,65 +1,65 @@
 [
   {
     "title": "把历史对话直接“搬”进 DSH，无缝接着聊",
-    "description": "以前想接着别的本地会话继续聊，要么得来回复制粘贴聊天记录，要么只能把旧对话当成静态背景资料。\n\n现在，在 `@` 菜单里找到本地历史会话，你有两种方式处理它：\n- **只当参考资料（按 `Enter`）**：直接引用该会话；\n- **接着往下聊（按 `Tab`）**：在弹出的菜单中选择**导入**并确认，就能把整段历史记录直接搬进 DSH，顺着之前的上下文继续对话！（如果觉得每次确认太麻烦，也可以在设置中关闭二次确认，一步到位）\n\n> 💡 **提示**：使用导入功能需安装并启用 `dsh-chat-import`（0.26.1 或更高兼容版本）。",
+    "description": "以前想接着别的本地会话继续聊，要么得来回复制粘贴聊天记录，要么只能把旧对话当成静态背景资料。\n\n现在，在 **@** 菜单里找到本地历史会话，你有两种方式处理它：\n- **只当参考资料（按 **Enter**）**：直接引用该会话；\n- **接着往下聊（按 **Tab**）**：在弹出的菜单中选择**导入**并确认，就能把整段历史记录直接搬进 DSH，顺着之前的上下文继续对话！（如果觉得每次确认太麻烦，也可以在设置中关闭二次确认，一步到位）\n\n> 💡 **提示**：使用导入功能需安装并启用 **dsh-chat-import**（0.26.1 或更高兼容版本）。",
     "media": "demos/agent-import.gif",
     "alt": "Enter 引用会话，Tab 打开操作菜单，确认后展示模拟导入的历史；使用虚构数据。",
     "en": {
       "title": "Import Past Conversations into DSH and Pick Up Where You Left Off",
-      "description": "Want to continue an existing local session without copying and pasting chat logs or treating old threads purely as static context?\n\nNow, when you find a local session in the `@` menu, you have two ways to use it:\n- **Reference as context (`Enter`)**: Insert the session directly as a reference;\n- **Import and continue chatting (`Tab`)**: Open the action menu, select **Import**, and confirm to bring the entire conversation history into DSH and keep chatting seamlessly! (Prefer a faster workflow? You can disable the confirmation prompt in Settings.)\n\n> 💡 **Note**: Importing requires `dsh-chat-import` v0.26.1 or a compatible newer version to be installed and enabled.",
+      "description": "Want to continue an existing local session without copying and pasting chat logs or treating old threads purely as static context?\n\nNow, when you find a local session in the **@** menu, you have two ways to use it:\n- **Reference as context (**Enter**)**: Insert the session directly as a reference;\n- **Import and continue chatting (**Tab**)**: Open the action menu, select **Import**, and confirm to bring the entire conversation history into DSH and keep chatting seamlessly! (Prefer a faster workflow? You can disable the confirmation prompt in Settings.)\n\n> 💡 **Note**: Importing requires **dsh-chat-import** v0.26.1 or a compatible newer version to be installed and enabled.",
       "alt": "Press Enter to reference a session, or Tab to open the action menu and import history; uses mock data."
     }
   },
   {
     "title": "菜单内一键升级配套插件，不用手动折腾",
-    "description": "如果提示 `dsh-chat-import` 版本太旧、用不了“对话导入”或“交接摘要”，不用自己再去后台找安装包手动更新了。\n\n直接在菜单里点击**升级提示**，即可一键完成更新（需升级至 0.26.1 或更高兼容版本）。升级后如果弹出重启提示，重启一下 DSH 即可生效。",
+    "description": "如果提示 **dsh-chat-import** 版本太旧、用不了“对话导入”或“交接摘要”，不用自己再去后台找安装包手动更新了。\n\n直接在菜单里点击**升级提示**，即可一键完成更新（需升级至 0.26.1 或更高兼容版本）。升级后如果弹出重启提示，重启一下 DSH 即可生效。",
     "media": "demos/chat-import-upgrade.gif",
     "alt": "在菜单中升级 dsh-chat-import，并在设置中查看模拟的重启提示。",
     "en": {
-      "title": "One-Click Upgrade for `dsh-chat-import` Right from the Menu",
-      "description": "If an outdated version of `dsh-chat-import` prevents you from using chat import or handoff summaries, you no longer need to update it manually.\n\nSimply click the **upgrade prompt** right inside the menu to update to v0.26.1 or later. If prompted after the upgrade, restart DSH to apply the changes.",
+      "title": "One-Click Upgrade for dsh-chat-import Right from the Menu",
+      "description": "If an outdated version of **dsh-chat-import** prevents you from using chat import or handoff summaries, you no longer need to update it manually.\n\nSimply click the **upgrade prompt** right inside the menu to update to v0.26.1 or later. If prompted after the upgrade, restart DSH to apply the changes.",
       "alt": "Upgrade dsh-chat-import from the menu and view the simulated restart prompt in settings."
     }
   },
   {
-    "title": "输入 `@plugin:`，直接让 Agent 帮你检查本地插件",
-    "description": "插件报错想让 Agent 帮忙排查，或者想研究某个插件的源码？以前还得自己去电脑深层目录里翻找插件的安装路径，非常劝退。\n\n现在只需输入 `@plugin:`，搜索插件名称并按 `Enter`，就能直接把该插件的本地目录喂给 Agent（支持当前 DSH 环境中已安装的所有插件）。",
+    "title": "输入 @plugin:，直接让 Agent 帮你检查本地插件",
+    "description": "插件报错想让 Agent 帮忙排查，或者想研究某个插件的源码？以前还得自己去电脑深层目录里翻找插件的安装路径，非常劝退。\n\n现在只需输入 **@plugin:**，搜索插件名称并按 **Enter**，就能直接把该插件的本地目录喂给 Agent（支持当前 DSH 环境中已安装的所有插件）。",
     "media": "demos/local-plugins.gif",
     "alt": "在 @plugin: 菜单筛选本地插件，按 Enter 插入插件目录引用。",
     "en": {
-      "title": "Type `@plugin:` to Reference Installed Plugins Directly",
-      "description": "Want your Agent to troubleshoot a plugin issue or inspect its source code? Digging through deep system folders just to find the installation path is a hassle.\n\nNow you can simply type `@plugin:`, search for the plugin name, and press `Enter` to pass its installation directory straight to the Agent (supports all plugins currently installed in your DSH environment).",
+      "title": "Type @plugin: to Reference Installed Plugins Directly",
+      "description": "Want your Agent to troubleshoot a plugin issue or inspect its source code? Digging through deep system folders just to find the installation path is a hassle.\n\nNow you can simply type **@plugin:**, search for the plugin name, and press **Enter** to pass its installation directory straight to the Agent (supports all plugins currently installed in your DSH environment).",
       "alt": "Filter local plugins in the @plugin: menu and press Enter to insert the plugin directory reference."
     }
   },
   {
     "title": "自定义快捷词，直接缩小搜索范围，不用手动翻找",
-    "description": "`@` 菜单里东西太多，想找历史对话时还得在一堆文件、目录和不同来源里手动翻找？\n\n现在你可以给各个对话来源设置**专属快捷词**（支持设置多个，用英文逗号分隔），输入时直接按类别过滤，快速锁定搜索范围：\n- **按分类合并搜**：比如忘了具体在哪聊过，可以给“本地 Agent”和“网页对话”都加上同一个快捷词（如 `chat`），输入 `@chat:` 就能把搜索范围直接缩小到这两类对话中；\n- **按来源精准搜**：明确只想找某一个来源时，直接输入它的专属快捷词（比如 `@codex:`），即可一步到位只搜 Codex。",
+    "description": "**@** 菜单里东西太多，想找历史对话时还得在一堆文件、目录和不同来源里手动翻找？\n\n现在你可以给各个对话来源设置**专属快捷词**（支持设置多个，用英文逗号分隔），输入时直接按类别过滤，快速锁定搜索范围：\n- **按分类合并搜**：比如忘了具体在哪聊过，可以给“本地 Agent”和“网页对话”都加上同一个快捷词（如 **chat**），输入 **@chat:** 就能把搜索范围直接缩小到这两类对话中；\n- **按来源精准搜**：明确只想找某一个来源时，直接输入它的专属快捷词（比如 **@codex:**），即可一步到位只搜 Codex。",
     "media": "demos/shortcuts.gif",
     "alt": "在设置中配置共享快捷词，再用共享词和具体来源词搜索会话。",
     "en": {
       "title": "Custom Shortcuts to Narrow Down Your Search Scope Instantly",
-      "description": "Tired of scrolling through a cluttered `@` menu full of files, folders, and different sources just to find a past conversation?\n\nYou can now assign **custom shortcuts** to different chat sources in Settings (multiple shortcuts can be separated by commas), allowing you to filter by category and narrow down your search scope right as you type:\n- **Search across a combined group**: Not sure where a conversation happened? Assign the same shortcut (e.g., `chat`) to both Local Agents and Web Chats, then type `@chat:` to narrow your search exclusively to those sources;\n- **Target a specific source**: When you know exactly where to look, use a dedicated shortcut like `@codex:` to filter exclusively for Codex sessions.",
+      "description": "Tired of scrolling through a cluttered **@** menu full of files, folders, and different sources just to find a past conversation?\n\nYou can now assign **custom shortcuts** to different chat sources in Settings (multiple shortcuts can be separated by commas), allowing you to filter by category and narrow down your search scope right as you type:\n- **Search across a combined group**: Not sure where a conversation happened? Assign the same shortcut (e.g., **chat**) to both Local Agents and Web Chats, then type **@chat:** to narrow your search exclusively to those sources;\n- **Target a specific source**: When you know exactly where to look, use a dedicated shortcut like **@codex:** to filter exclusively for Codex sessions.",
       "alt": "Configure shared shortcuts in settings, then search sessions using both shared and source-specific shortcuts."
     }
   },
   {
     "title": "不用死记路径，像逛文件夹一样找到目录并引用",
-    "description": "想引用某个深层文件夹，但记不住完整路径、也不想手打？\n\n现在 `@` 文件菜单支持直接层层浏览了：\n- **进入子目录**：选中文件夹后按 `Tab` 键；\n- **返回上一级**：点击菜单顶部的导航栏；\n- **确认引用**：找到目标文件夹后按 `Enter`，一键插入到当前对话中。",
+    "description": "想引用某个深层文件夹，但记不住完整路径、也不想手打？\n\n现在 **@** 文件菜单支持直接层层浏览了：\n- **进入子目录**：选中文件夹后按 **Tab** 键；\n- **返回上一级**：点击菜单顶部的导航栏；\n- **确认引用**：找到目标文件夹后按 **Enter**，一键插入到当前对话中。",
     "media": "demos/folders.gif",
     "alt": "在文件菜单按 Tab 进入子目录，再返回并按 Enter 引用目录。",
     "en": {
-      "title": "Browse Folders Directly in the `@` Menu — No Need to Type Full Paths",
-      "description": "Want to reference a deeply nested folder without memorizing or typing out its full path?\n\nYou can now navigate folder hierarchies directly inside the `@` file menu:\n- **Open subfolder**: Select a folder and press `Tab` to step inside;\n- **Go back**: Use the breadcrumb navigation bar at the top of the menu;\n- **Insert reference**: Press `Enter` on your target folder to insert it directly into your chat.",
+      "title": "Browse Folders Directly in the @ Menu — No Need to Type Full Paths",
+      "description": "Want to reference a deeply nested folder without memorizing or typing out its full path?\n\nYou can now navigate folder hierarchies directly inside the **@** file menu:\n- **Open subfolder**: Select a folder and press **Tab** to step inside;\n- **Go back**: Use the breadcrumb navigation bar at the top of the menu;\n- **Insert reference**: Press **Enter** on your target folder to insert it directly into your chat.",
       "alt": "Press Tab in the file menu to enter subdirectories, navigate back, and press Enter to reference a folder."
     }
   },
   {
     "title": "未来更新预告",
-    "description": "接下来我们还计划带来这些实用功能，敬请期待：\n\n1. **更省心的网页端对话同步**：后台静默同步网页聊天记录，不再需要额外安装和折腾 OpenCLI\n2. **更强大的会话搜索**：找历史记录更准、更快\n3. **更实用的 `@云盘` 权限支持**：打通更多云端文件引用场景\n4. **全新的 `@电脑窗口` 功能**：不用截图，直接让 AI 读取你当前打开的软件窗口\n\n---\n\n❤️ **写在最后**\n\n这个插件一直靠“用爱发电”持续维护。如果它对你有帮助，欢迎到 GitHub 点一颗 **Star ⭐** 支持！平时遇到任何问题或有新点子，随时欢迎提交 Issue 反馈；也特别欢迎有时间、有能力的朋友通过 PR 一起完善插件。感谢每一份支持！",
+    "description": "接下来我们还计划带来这些实用功能，敬请期待：\n\n1. **更省心的网页端对话同步**：后台静默同步网页聊天记录，不再需要额外安装和折腾 OpenCLI\n2. **更强大的会话搜索**：找历史记录更准、更快\n3. **更实用的 **@云盘** 权限支持**：打通更多云端文件引用场景\n4. **全新的 **@电脑窗口** 功能**：不用截图，直接让 AI 读取你当前打开的软件窗口\n\n---\n\n❤️ **写在最后**\n\n这个插件一直靠“用爱发电”持续维护。如果它对你有帮助，欢迎到 [GitHub](https://github.com/Chael-Chael/dsh-reference-anything) 点一颗 **Star ⭐** 支持！平时遇到任何问题或有新点子，随时欢迎提交 Issue 反馈；也特别欢迎有时间、有能力的朋友通过 PR 一起完善插件。感谢每一份支持！",
     "en": {
       "title": "What's Next",
-      "description": "Here is what we are planning for upcoming releases:\n\n1. **Zero-Config Web Chat Sync**: Silent background syncing for web conversations — no OpenCLI setup required\n2. **More Powerful Session Search**: Faster and more accurate history lookup\n3. **Enhanced `@CloudDrive` Permissions**: Broader and more practical cloud file referencing\n4. **`@Window` Context**: Reference active desktop application windows directly without taking screenshots\n\n---\n\n❤️ **Support the Project**\n\nThis plugin is a labor of love maintained in our spare time. If it saves you time and makes your workflow smoother, please consider giving us a **Star ⭐ on GitHub**! Feel free to open an Issue if you run into bugs or have feature ideas, and PRs are always welcome if you'd like to help build and improve the plugin together. Thank you for all your support!"
+      "description": "Here is what we are planning for upcoming releases:\n\n1. **Zero-Config Web Chat Sync**: Silent background syncing for web conversations — no OpenCLI setup required\n2. **More Powerful Session Search**: Faster and more accurate history lookup\n3. **Enhanced **@CloudDrive** Permissions**: Broader and more practical cloud file referencing\n4. ****@Window** Context**: Reference active desktop application windows directly without taking screenshots\n\n---\n\n❤️ **Support the Project**\n\nThis plugin is a labor of love maintained in our spare time. If it saves you time and makes your workflow smoother, please consider giving us a **Star ⭐ on [GitHub](https://github.com/Chael-Chael/dsh-reference-anything)**! Feel free to open an Issue if you run into bugs or have feature ideas, and PRs are always welcome if you'd like to help build and improve the plugin together. Thank you for all your support!"
     }
   }
 ]

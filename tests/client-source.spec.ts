@@ -886,6 +886,17 @@ function searchRow(overrides: Partial<SearchResult> = {}): SearchResult {
 
 
 describe('local Agent Chat Import upgrade row', () => {
+  it('installs an absent provider directly from the menu without inserting text', async () => {
+    const upgrade = vi.fn().mockResolvedValue(undefined)
+    const source = createLocalAgentSource(async () => [], undefined, options(), undefined, undefined, undefined, {
+      status: async () => ({ state: 'unavailable', version: '', missing: ['importPath'], canUpgrade: true }), upgrade,
+    })
+    const [row] = await source.candidates(session, request())
+    expect(row?.name).toBe('chatImport.install')
+    expect(row?.description).not.toContain('menu.checkSettings')
+    expect(source.onPick(pick(row!))).toBe('handled')
+    await vi.waitFor(() => expect(upgrade).toHaveBeenCalledTimes(1))
+  })
   it('pins the upgrade above conversations and deduplicates clicks without inserting text', async () => {
     let done!: () => void
     let compatible = false

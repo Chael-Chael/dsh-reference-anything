@@ -6,7 +6,7 @@ import { Context } from '@deepseek-ai/cordis'
 import { Session, SessionId } from '@deepseek-ai/dsh-session'
 import { createToolResultMessage, createUserMessage, ToolCallId } from '@deepseek-ai/dsh-llm'
 import type { Domain, DomainSpec, KvTable } from '@deepseek-ai/dsh-storage-domain'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import ReferenceRuntime from '../src/index.ts'
 import * as localAgent from '../src/sources/local-agent/index.ts'
 import { LOCAL_AGENT_SOURCE_ID, referenceId } from '../src/sources/local-agent/index.ts'
@@ -166,6 +166,23 @@ function reply(index: number): string {
 }
 
 describe('discovery', () => {
+  it('keeps healthy discovered sessions when another provider warns or throws', async () => {
+    const { ctx, dispose } = await mount({}, ['codex', 'trae', 'kimi'])
+    const history = ctx.get('referenceChatHistory')!
+    history.getSettings = (() => history.store.settings) as typeof history.getSettings
+    const service = ctx.get('referenceLocalAgents')!
+    vi.spyOn(service.scanner, 'scanDiscover').mockImplementation(async input => {
+      if (input.format === 'kimi') throw new Error('scanner failed')
+      if (input.format === 'trae') return { sessions: [], warnings: [{ format: 'trae', target: 'fixture', error: 'broken source' }] }
+      return { sessions: [{ format: 'codex', sessionId: 'healthy', sourcePath: join(codexRoot, 'rollout-1.jsonl'), title: 'healthy session' }], warnings: [] }
+    })
+    try {
+      const found = await service.list('', 10)
+      expect(found.map(row => row.label)).toEqual(['healthy session'])
+      vi.mocked(service.scanner.scanDiscover).mockRejectedValue(new Error('all broken'))
+      await expect(service.list('', 10)).rejects.toThrow('all broken')
+    } finally { await dispose() }
+  })
   it('creates independent locators for every supported discovered source', async () => {
     const { ctx, dispose } = await mount()
     try {
@@ -189,9 +206,9 @@ describe('discovery', () => {
     const { ctx, dispose } = await mount({}, ['codex'])
     const found = await ctx.references.list('', 1)
     expect(found.map(entry => entry.ref.id)).toEqual(['codex:rollout-1.jsonl'])
-    // The read path intentionally remains available for a previously granted ref.
+    // A previous task grant cannot override the current source switch.
     ctx.references.grant('task-existing', CLAUDE_REF)
-    await expect(ctx.references.read(CLAUDE_REF, WINDOW)).resolves.toMatchObject({ ref: CLAUDE_REF })
+    await expect(ctx.references.read(CLAUDE_REF, WINDOW)).rejects.toMatchObject({ code: 'SOURCE_UNAVAILABLE' })
     await dispose()
   })
   it('lists transcripts from every configured root', async () => {
@@ -501,7 +518,7 @@ describe('as a mounted plugin', () => {
       const uri = encodeReferenceUri(ref)
       expect(uri).toMatch(/^dsh-local:/)
       const target = Session.create(SessionId('pasted-task'))
-      expect(() => ctx.references.assertSessionGranted(target, ref)).toThrow()
+      expect(() => ctx.references.assertSessionGranted(target, ref)).not.toThrow()
       target.append('user/message', createUserMessage({
         content: [{ type: 'text', text: `Please read ${uri}` }], source: { kind: 'user' },
       }), { surfaceOp: 'append' })
@@ -509,7 +526,7 @@ describe('as a mounted plugin', () => {
       const resolved = ctx.references.resolveReadReference(restored, uri)
       expect(resolved).toEqual(ref)
       expect(() => ctx.references.assertSessionGranted(restored, resolved)).not.toThrow()
-      expect(() => ctx.references.assertSessionGranted(Session.create(SessionId('not-pasted')), resolved)).toThrow()
+      expect(() => ctx.references.assertSessionGranted(Session.create(SessionId('not-pasted')), resolved)).not.toThrow()
     } finally { await dispose() }
   })
   it('rejects obsolete local short handles even when a grant exists', async () => {
@@ -520,10 +537,10 @@ describe('as a mounted plugin', () => {
       expect(()=>ctx.references.resolveReadReference(Session.create(SessionId('task')),referenceReadHandle(ref))).toThrow()
     } finally {await dispose()}
   })
-  it('needs a grant before the model may read a transcript', async () => {
+  it('does not require a task grant for local transcripts', async () => {
     const { ctx, dispose } = await mount()
     expect(() => ctx.references.assertGranted('task-a', CLAUDE_REF))
-      .toThrow(expect.objectContaining({ code: 'CONVERSATION_REFERENCE_NOT_GRANTED' }))
+      .not.toThrow()
     ctx.references.grant('task-a', CLAUDE_REF)
     expect(() => ctx.references.assertGranted('task-a', CLAUDE_REF)).not.toThrow()
     await dispose()
@@ -558,11 +575,11 @@ describe('as a mounted plugin', () => {
     await dispose()
   })
 
-  it('rejects an unmentioned reference in a real session without granting access', async () => {
+  it('allows an unmentioned local reference while enforcing its source on read', async () => {
     const { ctx, dispose } = await mount()
     const session = Session.create(SessionId('task-no-grant'))
     expect(() => ctx.references.assertSessionGranted(session, CLAUDE_REF))
-      .toThrow(expect.objectContaining({ code: 'CONVERSATION_REFERENCE_NOT_GRANTED' }))
+      .not.toThrow()
     await dispose()
   })
 

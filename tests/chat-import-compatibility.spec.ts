@@ -45,10 +45,10 @@ it('never enables a user-disabled bundle or upgrades a bundled-only provider', a
   expect(await chatImportCompatibility(ctx)).toMatchObject({ canUpgrade: true })
   expect(installBundle).not.toHaveBeenCalled()
 })
-it('uses the pinned API artifact while npm still only publishes 0.25.2', async () => {
-  vi.mocked(fetch).mockResolvedValue(Response.json({ name: 'dsh-chat-import', version: '0.25.2' }))
-  await upgradeChatImport(ctx)
-  expect(installBundle).toHaveBeenCalledWith(expect.stringMatching(/^https:\/\/codeload.github.com\/Nwflower\/dsh-chat-import\/tar.gz\/[a-f0-9]{40}$/), { enabled: true })
+it.each(['0.25.2', '0.26.0'])('rejects registry versions below the minimum: %s', async version => {
+  vi.mocked(fetch).mockResolvedValue(Response.json({ name: 'dsh-chat-import', version }))
+  await expect(upgradeChatImport(ctx)).rejects.toThrow('0.26.1')
+  expect(installBundle).not.toHaveBeenCalled()
 })
 it('does not downgrade a newer plugin with missing APIs or install an invalid response', async () => {
   vi.mocked(resolveLocalPlugins).mockResolvedValue([{ id: 'import', name: 'dsh-chat-import', label: 'Chat Import', version: '0.27.0', status: 'live' }])

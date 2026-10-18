@@ -14,6 +14,7 @@ import * as tool from '../src/tool.ts'
 import { localLocatorId, type LocalLocator } from '../src/local-locator.ts'
 import { formatReferenceMention, parseReferenceText } from '../src/uri.ts'
 import { loadLocalReference, renderLocalPreview } from '../src/local-reference.ts'
+import { readLocalTool } from '../src/local-reference-tools.ts'
 
 let mentionFiber: { dispose(): Promise<void> }
 let root: string, ctx: Context, locator: LocalLocator, agent: Agent, raw: string
@@ -30,7 +31,7 @@ beforeEach(async()=>{
  ctx.provide('referenceLocalAgents',{discoveryPolicy:()=>({roots:[{kind:'codex',path:root}],scope:'all'})})
  await ctx.plugin(SystemPrompt,{})
  await ctx.plugin(ToolRuntime,{})
- await ctx.plugin(tool,{})
+ await ctx.plugin(tool,{maxReadTurns:50})
  mentionFiber=await ctx.plugin(mention,{})
  ctx.provide('llm',{resolveModelInfo:async()=>({context:{contextWindow:100000}})})
  agent={session:Session.create(SessionId('local-test')),options:{provider:'test',model:'test'}} as Agent
@@ -39,6 +40,82 @@ afterEach(async()=>{await rm(root,{recursive:true,force:true})})
 const text=(result:{content:readonly {type:string;text?:string}[]})=>result.content.filter(row=>row.type==='text').map(row=>row.text).join('\n')
 const grant=()=>ctx.references.grant(String(agent.session.id),{source:'local-agent',id:localLocatorId(locator)})
 const call=(name:string,args:unknown)=>ctx.tools.execute({agent,signal:new AbortController().signal,callId:'t' as never,name,arguments:args})
+
+it('returns local body values directly and paginates 118 messages without gaps', async()=>{
+ grant()
+ await writeFile(locator.path,[{type:'session_meta',payload:{id:'sample'}},...Array.from({length:118},(_,i)=>message('user',`message ${i+1}`))].map(row=>JSON.stringify(row)).join('\n'))
+ const numbers:number[]=[]
+ for(const start of [1,51,101]) {
+  const result=await call('reference_read',{...locator,start,limit:50})
+  expect(result.isError,text(result)).not.toBe(true)
+  const data=result.value as any
+  expect(data.mode).toBe('body')
+  expect(data.totalMessages).toBe(118)
+  expect(data.nextStart).toBe(start===101?null:start+50)
+  expect(text(result)).toContain('nextStart')
+  expect(data.messageRange).toEqual([start,Math.min(start+49,118)])
+  numbers.push(...data.messages.map((m:any)=>m.number))
+  expect(data.messages.map((m:any)=>m.text)).toEqual(JSON.parse(data.localText.split('<local-agent-reference>')[1].split('</local-agent-reference>')[0]).messages.map((m:any)=>m.text))
+ }
+ expect(numbers).toEqual(Array.from({length:118},(_,i)=>i+1))
+ const tail=await call('reference_read',{...locator,limit:1})
+ expect((tail.value as any).messages.map((m:any)=>m.number)).toEqual([118])
+ expect((tail.value as any).hasOlder).toBe(true)
+})
+
+it('reads without a task grant but immediately blocks disabled sources across every local tool', async()=>{
+ const settings={enabledAgents:['codex'],picker:{agents:{enabled:true}}}
+ ctx.provide('referenceChatHistory',{getSettings:()=>settings,store:{settings}} as never)
+ const first=await call('reference_read',{...locator,start:1,limit:1})
+ expect(first.isError,text(first)).not.toBe(true)
+ const revision=(first.value as any).revision
+ ctx.references.revoke(String(agent.session.id))
+ expect((await call('reference_read',{...locator,revision,start:1,limit:1})).isError).not.toBe(true)
+ grant()
+ for(const disable of [()=>{settings.enabledAgents=[]},()=>{settings.enabledAgents=['codex'];settings.picker.agents.enabled=false}]) {
+  disable()
+  for(const [name,extra] of [['reference_read',{}],['reference_read',{mode:'tools'}],['reference_search',{query:'color'}],['reference_image',{imageId:'image-1'}]] as const) {
+   const result=await call(name,{...locator,revision,...extra})
+   expect(result.isError).toBe(true)
+   expect(text(result)).toContain('disabled')
+  }
+ }
+ settings.picker.agents.enabled=true
+ expect((await call('reference_read',{...locator,start:1,limit:1})).isError).not.toBe(true)
+})
+
+it('returns structured associated tools and enforces the complete output byte budget', async()=>{
+ grant()
+ const doc=await loadLocalReference(ctx,agent,locator)
+ const result=await call('reference_read',{...locator,revision:doc.revision,start:1,limit:1,mode:'tools'})
+ expect(result.isError,text(result)).not.toBe(true)
+ const data=result.value as any
+ expect(data.messages).toEqual([])
+ expect(data.toolRecords.map((t:any)=>t.text).join(' ')).toContain('secret tool output')
+ expect(data.nextStart).toBe(2)
+ expect(text(result)).toContain('"nextStart": 2')
+ const invalid=await call('reference_read',{...locator,limit:60})
+ expect(invalid.isError).toBe(true)
+ expect(text(invalid)).toContain('1-50')
+ await writeFile(locator.path,raw.replace('secret tool output','中文\\n'.repeat(20000)).replace('What color is this?','中文'.repeat(20000)))
+ const changed=await loadLocalReference(ctx,agent,locator)
+ for(const mode of ['body','tools'] as const){
+  const value=await readLocalTool(ctx,agent,{...locator,revision:changed.revision,start:1,limit:1,mode},6000,50,new AbortController().signal)
+  expect(Buffer.byteLength(JSON.stringify(value))).toBeLessThanOrEqual(6000)
+  expect(value.omittedBytes).toBeGreaterThan(0)
+ }
+})
+
+it('reports empty source parser failures and rejects invalid windows and mixed protocols',async()=>{
+ grant()
+ for(const extra of [{start:0},{start:3},{limit:0},{limit:1.5},{detail:'summary'},{mode:'tools'}]) {
+  expect((await call('reference_read',{...locator,...extra})).isError).toBe(true)
+ }
+ await writeFile(locator.path,JSON.stringify({type:'session_meta',payload:{id:'sample'}})+'\n')
+ const result=await call('reference_read',{...locator,start:1,limit:1})
+ expect(result.isError).toBe(true)
+ expect(text(result)).toContain('parser could not read')
+})
 
 it('injects actual body, durable locator and image directory before the first model response',async()=>{
  const prompt=createUserMessage({source:{kind:'user'},content:[{type:'text',text:formatReferenceMention({source:'local-agent',id:localLocatorId(locator)},'Color')}]})
@@ -56,9 +133,9 @@ it('injects actual body, durable locator and image directory before the first mo
  agent.session.append('user/message',result.messages[0]!,{surfaceOp:'append'})
  ctx.references.revoke(String(agent.session.id))
  expect((await loadLocalReference(ctx,agent,locator)).messages).toHaveLength(2)
- // A different session must copy the complete block; the title alone grants nothing.
+ // An enabled source can be read from another session without copying a grant.
  const other={session:Session.create(SessionId('copy-test'))} as Agent
- await expect(loadLocalReference(ctx,other,locator)).rejects.toThrow('not been granted')
+ expect((await loadLocalReference(ctx,other,locator)).messages).toHaveLength(2)
  other.session.append('user/message',createUserMessage({source:{kind:'user'},content:[{type:'text',text:preview}]}),{surfaceOp:'append'})
  expect((await loadLocalReference(ctx,other,locator)).messages).toHaveLength(2)
 })

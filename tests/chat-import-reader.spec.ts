@@ -1,4 +1,7 @@
 import { readLocalConversation } from '../src/local-conversation-reader.ts'
+import { mkdtemp, writeFile, rm } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 vi.mock('../src/local-conversation-reader.ts', async importOriginal => ({ ...await importOriginal<object>(), readLocalConversation: vi.fn() }))
 beforeEach(() => { vi.mocked(readLocalConversation).mockResolvedValue(page) })
 import { Context } from '@deepseek-ai/cordis'
@@ -72,8 +75,12 @@ it('offers all sources with only the npm 0.26.1 scan API and quick import disabl
 })
 
 it('offers all scanned formats as readable references even when quick import is off', async () => {
+ const root=await mkdtemp(join(tmpdir(),'reference-scope-'))
+ const target={format:'antigravity',path:join(root,'session.jsonl'),sessionId:'s'}
+ await writeFile(target.path,'fixture')
+ try {
  const ctx=new Context()
- ctx.provide('referenceChatHistory',{store:{settings:{enabledAgents:['antigravity']}},getSettings:()=>({enabledAgents:['antigravity'],picker:{agents:{showImport:false}},agentDirectories:{}})})
+ ctx.provide('referenceChatHistory',{store:{settings:{enabledAgents:['antigravity']}},getSettings:()=>({enabledAgents:['antigravity'],picker:{agents:{showImport:false}},agentDirectories:{antigravity:root}})})
  const service=new LocalAgentService(ctx,{scope:'all'})
  const readConversation=vi.fn(async()=>page)
  const scanDiscover=vi.fn(async()=>({sessions:[{format:'antigravity',sessionId:'s',sourcePath:target.path,title:'Image history',importStatus:'not-imported'}],warnings:[]}))
@@ -91,6 +98,7 @@ it('offers all scanned formats as readable references even when quick import is 
  const out=await service.read({source:'local-agent',id:row.referenceId},{limit:1},signal)
  expect(out.body.items[0]?.text).toContain('What is this?')
  expect(readConversation).not.toHaveBeenCalled()
+ } finally { await rm(root,{recursive:true,force:true}) }
 })
 
 
