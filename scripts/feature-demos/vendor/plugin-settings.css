@@ -567,4 +567,3 @@ body[data-ds-dark-theme] .dsh_ref_agent_logo{filter:brightness(0) invert(1);opac
 .dsh_ref_settings .dsh_ref_source_alias_list>label{padding:2px 0}
 .dsh_ref_settings .dsh_ref_source_alias_list>label>span:has(>input){display:flex;align-items:center;box-sizing:border-box;min-width:0;width:100%;height:32px;padding:0 10px!important;border:1px solid var(--dsw-alias-border-l4)!important;border-radius:9px;background:var(--dsw-alias-bg-layer-1)!important}
 .dsh_ref_settings .dsh_ref_source_alias_list>label>span>input{min-width:0;height:100%!important;min-height:0!important;margin:0!important;padding:0!important;border:0!important;border-radius:0!important;background:transparent!important;box-shadow:none!important}
-

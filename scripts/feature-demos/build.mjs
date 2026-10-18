@@ -15,4 +15,3 @@ const output=resolve('.codex-tmp/feature-demos')
 mkdirSync(output,{recursive:true})
 writeFileSync(resolve(output,'preview.html'),`<!doctype html><html lang="zh-CN"><meta charset="utf-8"><title>DSH 新功能演示</title><style>${css}</style><body><div id="root"></div><script type="module">${js.replaceAll('</script','<\\/script')}</script></body></html>`)
 console.log(resolve(output,'preview.html'))
-
