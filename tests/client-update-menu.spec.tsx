@@ -29,6 +29,28 @@ afterEach(() => {
 const available = (): PackageUpdateStatus => ({ currentVersion: '0.4.4', latestVersion: '0.4.5', updateAvailable: true, checkedAt: Date.now(), releaseNotes: '## Changes\nFixed search.' })
 
 describe('update menu', () => {
+  it('switches card title, Markdown and alt live with the DSH locale', () => {
+    vi.stubGlobal('__REFERENCE_RELEASE_FEATURES__', {
+      '0.4.5': [{ title: '中文', description: '**中文说明**', media: 'demo.gif', alt: '中文图', en: { title: 'English', description: '**English copy**', alt: 'English image' } }],
+    })
+    let active = 'zh'
+    const listeners = new Set<() => void>()
+    const locale = {
+      getSnapshot: () => ({ active, locales: [], revision: 0 }),
+      subscribe: (notify: () => void) => { listeners.add(notify); return () => { listeners.delete(notify) } },
+    }
+    const host = document.createElement('div'); document.body.append(host); root = createRoot(host)
+    act(() => { root!.render(<UpdateDialog update={available()} install={vi.fn()} close={vi.fn()} t={t} locale={locale} />) })
+    expect(document.querySelector('h2')?.textContent).toBe('中文')
+    act(() => { active = 'en'; listeners.forEach(notify => notify()) })
+    expect(document.querySelector('h2')?.textContent).toBe('English')
+    expect(document.querySelector('.dsh_ref_release_description strong')?.textContent).toBe('English copy')
+    expect(document.querySelector('.dsh_ref_release_media img')?.getAttribute('alt')).toBe('English image')
+    act(() => { active = 'zh'; listeners.forEach(notify => notify()) })
+    expect(document.querySelector('h2')?.textContent).toBe('中文')
+    act(() => { root!.unmount() }); root = undefined
+    expect(listeners.size).toBe(0)
+  })
   it('renders a text-only preview without an empty media frame', () => {
     vi.stubGlobal('__REFERENCE_RELEASE_FEATURES__', {
       '0.4.5': [{ title: 'Next release', description: 'Coming soon [GitHub](https://github.com/Chael-Chael/dsh-reference-anything)' }],

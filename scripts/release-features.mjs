@@ -7,6 +7,7 @@ const cardsSchema = z.array(z.object({
   description: z.string().trim().min(1),
   media: z.string().min(1).optional(),
   alt: z.string().trim().min(1).optional(),
+  en: z.object({ title: z.string().trim().min(1), description: z.string().trim().min(1), alt: z.string().trim().min(1).optional() }).strict().optional(),
 }).strict().refine(card => !card.media || Boolean(card.alt), 'Media requires alt text')).min(1)
 const mediaTypes = { '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.gif': 'image/gif', '.webp': 'image/webp' }
 

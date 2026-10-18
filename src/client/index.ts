@@ -292,7 +292,7 @@ export function apply(ctx: ClientContext): void {
       if (remote !== activeRemote) return undefined
       scope.set({ ...scope.getSnapshot(), update })
       return update
-    }, installPackageUpdate, updateMenu, t)
+    }, installPackageUpdate, updateMenu, t, ctx.locale)
     const unregister = inputTriggers.registerSource(source)
     return () => { unregister(); source.dispose() }
   }, 'reference-anything.client.update-menu')
@@ -522,7 +522,7 @@ export function apply(ctx: ClientContext): void {
   const shownReleases = new Set<string>()
   const ReferenceSettings = (props: Parameters<typeof ConversationSettings>[0]) => createElement(ConversationSettings, {
     ...props,
-    releaseIntro: createElement(SettingsReleaseIntro, { useScope: props.useScope, shown: shownReleases, install: installPackageUpdate, t: props.t }),
+    releaseIntro: createElement(SettingsReleaseIntro, { useScope: props.useScope, shown: shownReleases, install: installPackageUpdate, t: props.t, locale: ctx.locale }),
   })
   ctx.slots.inject('settings.section', () => ctx.slots.register({
     name: 'settings.section', id: 'reference-anything', order: 56, label: () => t('settings.title'), locale: REFERENCE_ANYTHING_NS,

@@ -39,15 +39,24 @@ One `@` for them all.
 
 After typing `@`, you can browse and click items in the menu with your mouse, or use the keyboard to enter text, search, and narrow down the results. When a folder is selected, press `Tab` to enter it and continue browsing, or `Enter` to insert the folder reference.
 
-### 0.5.0 preview (not yet released)
+### 0.5.0 major update preview · Turn history into your next step
 
-Reference local Agent history with Enter, or press Tab and confirm to import it into DSH. Local scanning and read-only references work without Chat Import; importing requires it. Older local references must be reselected from the menu.
+**0.5.0 is a major update: make work from across your Agents the starting point of your next conversation.**
 
-![Selecting fictional Codex and Claude Code conversations in the real Web UI; no model request is sent.](./release-notes/0.5.0/demos/local-references.gif)
+This release reworks how local history is discovered, read and continued: **14 → 29 source formats, automatic body previews, numbered reads, body search, native images, full imports and experimental handoff summaries.** Find the history, inspect the discussion, tool results and images, then pick up the work.
 
-![Enter inserts a reference; Tab opens confirmation before a simulated import of fictional history.](./release-notes/0.5.0/demos/agent-import.gif)
+- **More than double the source catalog: 14 → 29 formats.** Scanning and read-only references do not require installing Chat Import.
+- **Read closely, search and view images.** Automatic body previews, numbered body/tool reads, dedicated body search and native-image retrieval.
+- **Pick up the work.** Enter to reference; Tab for full imports or experimental handoff summaries. Imports require confirmation by default.
+- **Upgrade everyday navigation.** Subagent-session groups, file breadcrumbs, shortcut matching, Web connection diagnostics and offline GIF feature cards.
 
-These recordings demonstrate the UI with fictional data. They are not live-service acceptance evidence. See the [0.5.0 release draft](./docs/release-v0.5.0.md) for changes and migration notes; full release acceptance is still in progress.
+**Local tool calls have changed:** `uri/cursor/detail` becomes `source/path/sessionId/revision` with `start/limit/mode`, alongside new `reference_search` and `reference_image` tools. Reselect old local references; see the [complete release and migration guide](./docs/release-v0.5.0.md).
+
+![Selecting fictional Codex and Claude Code history in the real Web UI; no model request is sent.](./release-notes/0.5.0/demos/local-references.gif)
+
+![Enter references; Tab opens confirmation before a simulated import of fictional history.](./release-notes/0.5.0/demos/agent-import.gif)
+
+Not yet released; full acceptance is still in progress. The 29-format catalog is not a claim that every source has passed real-account testing. GIFs use demo data and handoff summaries are experimental.
 
 Use one `@` menu to reference:
 
@@ -86,6 +95,57 @@ Type `@`, search across enabled sources, and insert the selected reference into 
 > DSH is currently in Beta, so its underlying capabilities and interfaces may change as it evolves. This plugin will adapt alongside those changes. Because of some current DSH limitations, parts of the implementation may not yet be ideal; we will continue to follow DSH updates and improve the plugin over time. See the relevant sections below for specific limitations and usage notes.
 
 ## 📰 News
+
+### 0.5.0 feature previews (not yet released)
+
+#### Import Past Conversations into DSH and Pick Up Where You Left Off
+
+Want to continue an existing local session without copying and pasting chat logs or treating old threads purely as static context?
+
+Now, when you find a local session in the `@` menu, you have two ways to use it:
+- **Reference as context (`Enter`)**: Insert the session directly as a reference;
+- **Import and continue chatting (`Tab`)**: Open the action menu, select **Import**, and confirm to bring the entire conversation history into DSH and keep chatting seamlessly! (Prefer a faster workflow? You can disable the confirmation prompt in Settings.)
+
+> 💡 **Note**: Importing requires `dsh-chat-import` v0.26.1 or a compatible newer version to be installed and enabled.
+
+![Press Enter to reference a session, or Tab to open the action menu and import history; uses mock data.](./release-notes/0.5.0/demos/agent-import.gif)
+
+#### One-Click Upgrade for `dsh-chat-import` Right from the Menu
+
+If an outdated version of `dsh-chat-import` prevents you from using chat import or handoff summaries, you no longer need to update it manually.
+
+Simply click the **upgrade prompt** right inside the menu to update to v0.26.1 or later. If prompted after the upgrade, restart DSH to apply the changes.
+
+![Upgrade dsh-chat-import from the menu and view the simulated restart prompt in settings.](./release-notes/0.5.0/demos/chat-import-upgrade.gif)
+
+#### Type `@plugin:` to Reference Installed Plugins Directly
+
+Want your Agent to troubleshoot a plugin issue or inspect its source code? Digging through deep system folders just to find the installation path is a hassle.
+
+Now you can simply type `@plugin:`, search for the plugin name, and press `Enter` to pass its installation directory straight to the Agent (supports all plugins currently installed in your DSH environment).
+
+![Filter local plugins in the @plugin: menu and press Enter to insert the plugin directory reference.](./release-notes/0.5.0/demos/local-plugins.gif)
+
+#### Custom Shortcuts to Narrow Down Your Search Scope Instantly
+
+Tired of scrolling through a cluttered `@` menu full of files, folders, and different sources just to find a past conversation?
+
+You can now assign **custom shortcuts** to different chat sources in Settings (multiple shortcuts can be separated by commas), allowing you to filter by category and narrow down your search scope right as you type:
+- **Search across a combined group**: Not sure where a conversation happened? Assign the same shortcut (e.g., `chat`) to both Local Agents and Web Chats, then type `@chat:` to narrow your search exclusively to those sources;
+- **Target a specific source**: When you know exactly where to look, use a dedicated shortcut like `@codex:` to filter exclusively for Codex sessions.
+
+![Configure shared shortcuts in settings, then search sessions using both shared and source-specific shortcuts.](./release-notes/0.5.0/demos/shortcuts.gif)
+
+#### Browse Folders Directly in the `@` Menu — No Need to Type Full Paths
+
+Want to reference a deeply nested folder without memorizing or typing out its full path?
+
+You can now navigate folder hierarchies directly inside the `@` file menu:
+- **Open subfolder**: Select a folder and press `Tab` to step inside;
+- **Go back**: Use the breadcrumb navigation bar at the top of the menu;
+- **Insert reference**: Press `Enter` on your target folder to insert it directly into your chat.
+
+![Press Tab in the file menu to enter subdirectories, navigate back, and press Enter to reference a folder.](./release-notes/0.5.0/demos/folders.gif)
 
 - **2026-10-12 · v0.4.4** — Added local plugin discovery to the `@` menu, configurable source and provider shortcuts, improved picker icons and folder insertion, and added the `model` command entry.
 

@@ -1,23 +1,26 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react'
 import type { SnapshotSelectorHook } from '@deepseek-ai/dsh-client-store'
 import type { SettingsSnapshot } from './components.tsx'
 import { createRoot, type Root } from 'react-dom/client'
 import { Button, Modal } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { InputTriggerSource } from '@deepseek-ai/dsh-client-ui-input-trigger/client'
 import ReactMarkdown from 'react-markdown'
-import type { TranslateNS } from '@deepseek-ai/dsh-client-locale/client'
+import type { TranslateNS, LocaleRuntime } from '@deepseek-ai/dsh-client-locale/client'
 import type { PackageUpdateResult, PackageUpdateStatus } from './remote.ts'
 import type { PickerMenuUpdater } from './menu-update.ts'
 import { releaseFeaturesFor } from './release-features.ts'
 
 type T = TranslateNS<'reference-anything'>
+type ReleaseLocale = Pick<LocaleRuntime, 'getSnapshot' | 'subscribe'>
+const noSubscribe = () => () => {}
+const defaultLanguage = () => 'zh'
 const DISMISSED_VERSION = 'dsh-reference-anything.dismissed-update'
 const DISMISSED_RELEASE = 'dsh-reference-anything.dismissed-release'
 const AUTO_SHOWN_RELEASE = 'dsh-reference-anything.auto-shown-release'
 
-export function SettingsReleaseIntro({ useScope, shown, install, t }: {
+export function SettingsReleaseIntro({ useScope, shown, install, t, locale }: {
   useScope: SnapshotSelectorHook<SettingsSnapshot>; shown: Set<string>
-  install(): Promise<PackageUpdateResult>; t: T
+  install(): Promise<PackageUpdateResult>; t: T; locale?: ReleaseLocale
 }) {
   const update = useScope(state => state.update)
   const [intro, setIntro] = useState<PackageUpdateStatus>()
@@ -40,7 +43,7 @@ export function SettingsReleaseIntro({ useScope, shown, install, t }: {
   }, [update, shown, openIntro])
   return <>
     {update?.currentVersion && update.currentVersion !== '0.0.0' && <Button type="button" aria-haspopup="dialog" onClick={openIntro}>{t('settings.showReleaseIntro')}</Button>}
-    {intro && <UpdateDialog key={intro.currentVersion} update={intro} install={install} t={t} close={() => setIntro(undefined)} />}
+    {intro && <UpdateDialog key={intro.currentVersion} update={intro} install={install} t={t} locale={locale} close={() => setIntro(undefined)} />}
   </>
 
 }
@@ -50,6 +53,7 @@ export function createUpdateSource(
   install: () => Promise<PackageUpdateResult>,
   updateMenu: PickerMenuUpdater,
   t: T,
+  locale?: ReleaseLocale,
 ): InputTriggerSource & { dispose(): void } {
   let dismissed: string | undefined
   try { dismissed = window.localStorage.getItem(DISMISSED_VERSION) ?? undefined } catch { /* Storage may be disabled. */ }
@@ -102,7 +106,7 @@ export function createUpdateSource(
         releaseUrl: latest.currentReleaseUrl ?? (latest.currentVersion === latest.latestVersion ? latest.releaseUrl : undefined),
       } : latest
       if (!host) { host = document.createElement('div'); document.body.append(host); root = createRoot(host) }
-      root!.render(<UpdateDialog key={candidate.value} update={update} install={install} t={t}
+      root!.render(<UpdateDialog key={candidate.value} update={update} install={install} t={t} locale={locale}
         close={() => { root?.render(null) }} />)
       return 'handled'
     },
@@ -132,14 +136,16 @@ function UpdateIcon({ label, dismiss }: { label: string; dismiss(): void }) {
   </span>
 }
 
-export function UpdateDialog({ update, install, close, t }: {
-  update: PackageUpdateStatus; install(): Promise<PackageUpdateResult>; close(): void; t: T
+export function UpdateDialog({ update, install, close, t, locale }: {
+  update: PackageUpdateStatus; install(): Promise<PackageUpdateResult>; close(): void; t: T; locale?: ReleaseLocale
 }) {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [result, setResult] = useState<PackageUpdateResult>()
   const [page, setPage] = useState(0)
-  const features = releaseFeaturesFor(update.latestVersion)
+  const subscribe = useCallback((notify: () => void) => locale ? locale.subscribe(notify) : noSubscribe(), [locale])
+  const language = useSyncExternalStore(subscribe, locale ? () => locale.getSnapshot().active : defaultLanguage)
+  const features = releaseFeaturesFor(update.latestVersion, language)
   const feature = features[page]
   return <Modal open className="dsh_ref_update_dialog" onClose={() => { if (!busy) close() }} title={feature?.title ?? t(update.updateAvailable ? 'menu.updateAvailable' : 'menu.currentRelease', { version: update.latestVersion })}
     closeLabel={t('menu.closeUpdate')} description={update.updateAvailable ? t('settings.updateAvailableDetail', { current: update.currentVersion, latest: update.latestVersion }) : t('menu.installedVersion', { version: update.currentVersion })}
