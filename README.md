@@ -39,21 +39,6 @@ One `@` for them all.
 
 After typing `@`, you can browse and click items in the menu with your mouse, or use the keyboard to enter text, search, and narrow down the results. When a folder is selected, press `Tab` to enter it and continue browsing, or `Enter` to insert the folder reference.
 
-### 0.5.0 major update · Turn history into your next step
-
-**0.5.0 is a major update: make work from across your Agents the starting point of your next conversation.**
-
-This release reworks how local history is discovered, read and continued: **14 → 29 source formats, automatic body previews, numbered reads, body search, native images, full imports and experimental handoff summaries.** Find the history, inspect the discussion, tool results and images, then pick up the work.
-
-- **More than double the source catalog: 14 → 29 formats.** Scanning and read-only references do not require installing Chat Import.
-- **Read closely, search and view images.** Automatic body previews, numbered body/tool reads, dedicated body search and native-image retrieval.
-- **Pick up the work.** Enter to reference; Tab for full imports or experimental handoff summaries. Imports require confirmation by default.
-- **Upgrade everyday navigation.** Subagent-session groups, file breadcrumbs, shortcut matching, Web connection diagnostics and offline GIF feature cards.
-
-**Local tool calls have changed:** `uri/cursor/detail` becomes `source/path/sessionId/revision` with `start/limit/mode`, alongside new `reference_search` and `reference_image` tools. Reselect old local references; see the [complete release and migration guide](./docs/release-v0.5.0.md).
-
-The 29-format catalog is not a claim that every source has passed real-account testing. GIFs use demo data and handoff summaries are experimental.
-
 Use one `@` menu to reference:
 
 - 🧩 DSH commands and Skills
