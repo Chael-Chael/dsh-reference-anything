@@ -39,7 +39,7 @@ One `@` for them all.
 
 After typing `@`, you can browse and click items in the menu with your mouse, or use the keyboard to enter text, search, and narrow down the results. When a folder is selected, press `Tab` to enter it and continue browsing, or `Enter` to insert the folder reference.
 
-### 0.5.0 major update preview · Turn history into your next step
+### 0.5.0 major update · Turn history into your next step
 
 **0.5.0 is a major update: make work from across your Agents the starting point of your next conversation.**
 
@@ -52,11 +52,7 @@ This release reworks how local history is discovered, read and continued: **14 �
 
 **Local tool calls have changed:** `uri/cursor/detail` becomes `source/path/sessionId/revision` with `start/limit/mode`, alongside new `reference_search` and `reference_image` tools. Reselect old local references; see the [complete release and migration guide](./docs/release-v0.5.0.md).
 
-![Selecting fictional Codex and Claude Code history in the real Web UI; no model request is sent.](./release-notes/0.5.0/demos/local-references.gif)
-
-![Enter references; Tab opens confirmation before a simulated import of fictional history.](./release-notes/0.5.0/demos/agent-import.gif)
-
-Not yet released; full acceptance is still in progress. The 29-format catalog is not a claim that every source has passed real-account testing. GIFs use demo data and handoff summaries are experimental.
+The 29-format catalog is not a claim that every source has passed real-account testing. GIFs use demo data and handoff summaries are experimental.
 
 Use one `@` menu to reference:
 
@@ -96,7 +92,7 @@ Type `@`, search across enabled sources, and insert the selected reference into 
 
 ## 📰 News
 
-### 0.5.0 feature previews (not yet released)
+### 0.5.0 released · Feature demos
 
 #### Import Past Conversations into DSH and Pick Up Where You Left Off
 
@@ -175,7 +171,7 @@ You can now navigate folder hierarchies directly inside the `@` file menu:
 
 ## 📦 Installation
 
-The local development version is **v0.5.0** (not yet published), with a declared minimum DSH SDK version of **`0.2.0-rc.2`**.
+The released version is **v0.5.0**, with a declared minimum DSH SDK version of **`0.2.0-rc.2`**.
 
 ### Official desktop app
 
@@ -197,7 +193,7 @@ dsh plugin --profile web add dshmarket
 dsh plugin --profile web add dsh-reference-anything
 ```
 
-The installed version depends on the selected channel; this README describes the local v0.5.0 source.
+The installed version depends on the selected channel; this README describes v0.5.0.
 
 ### Optional: Connect web AI chats
 
