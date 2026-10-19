@@ -92,9 +92,8 @@
         maxReadTurns: 20
         blockChars: 4000
 
-    # Transcripts other coding agents leave on disk, listed by title and read a
-    # window at a time. Reading one needs a per-task grant: these are other
-    # sessions' conversations, so the model may only open what its user named.
+    # Local transcripts are read only from enabled sources and allowed roots;
+    # no per-task grant. Every read rechecks the current source policy.
     - id: reference-local-agent
       name: 'dsh-reference-anything/local-agent'
       config:

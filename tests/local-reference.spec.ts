@@ -17,6 +17,7 @@ import { loadLocalReference, renderLocalPreview } from '../src/local-reference.t
 import { readLocalTool } from '../src/local-reference-tools.ts'
 
 let mentionFiber: { dispose(): Promise<void> }
+let toolFiber: { dispose(): Promise<void> }
 let root: string, ctx: Context, locator: LocalLocator, agent: Agent, raw: string
 const png='iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aDxkAAAAASUVORK5CYII='
 const message=(role:string,text:string, image=false)=>({type:'response_item',payload:{type:'message',role,content:[{type:role==='user'?'input_text':'output_text',text},...(image?[{type:'input_image',image_url:`data:image/png;base64,${png}`}]:[])]}})
@@ -31,7 +32,7 @@ beforeEach(async()=>{
  ctx.provide('referenceLocalAgents',{discoveryPolicy:()=>({roots:[{kind:'codex',path:root}],scope:'all'})})
  await ctx.plugin(SystemPrompt,{})
  await ctx.plugin(ToolRuntime,{})
- await ctx.plugin(tool,{maxReadTurns:50})
+ toolFiber=await ctx.plugin(tool,{maxReadTurns:50})
  mentionFiber=await ctx.plugin(mention,{})
  ctx.provide('llm',{resolveModelInfo:async()=>({context:{contextWindow:100000}})})
  agent={session:Session.create(SessionId('local-test')),options:{provider:'test',model:'test'}} as Agent
@@ -51,6 +52,9 @@ it('returns local body values directly and paginates 118 messages without gaps',
   const data=result.value as any
   expect(data.mode).toBe('body')
   expect(data.totalMessages).toBe(118)
+  expect(data).not.toHaveProperty('startIndex')
+  expect(data).not.toHaveProperty('totalTurns')
+  expect(data.messages.every((m:any)=>!Object.hasOwn(m,'omittedTextBytes'))).toBe(true)
   expect(data.nextStart).toBe(start===101?null:start+50)
   expect(text(result)).toContain('nextStart')
   expect(data.messageRange).toEqual([start,Math.min(start+49,118)])
@@ -92,6 +96,7 @@ it('returns structured associated tools and enforces the complete output byte bu
  const data=result.value as any
  expect(data.messages).toEqual([])
  expect(data.toolRecords.map((t:any)=>t.text).join(' ')).toContain('secret tool output')
+ expect(data.toolRecords.every((t:any)=>!Object.hasOwn(t,'omittedTextBytes'))).toBe(true)
  expect(data.nextStart).toBe(2)
  expect(text(result)).toContain('"nextStart": 2')
  const invalid=await call('reference_read',{...locator,limit:60})
@@ -103,6 +108,11 @@ it('returns structured associated tools and enforces the complete output byte bu
   const value=await readLocalTool(ctx,agent,{...locator,revision:changed.revision,start:1,limit:1,mode},6000,50,new AbortController().signal)
   expect(Buffer.byteLength(JSON.stringify(value))).toBeLessThanOrEqual(6000)
   expect(value.omittedBytes).toBeGreaterThan(0)
+  if(value.mode==='body') {
+   expect(value.messages[0]?.text.length).toBeGreaterThan(100)
+   expect(value.messages.every(m=>!Object.hasOwn(m,'omittedTextBytes'))).toBe(true)
+   expect(value.omissions.truncatedMessages.reduce((sum,row)=>sum+row.omittedTextBytes,0)).toBe(value.omittedBytes)
+  } else expect(value.toolRecords.some(row=>(row.omittedTextBytes ?? 0)>0)).toBe(true)
  }
 })
 
@@ -187,6 +197,7 @@ it('fits the complete UTF-8 preview, distinguishes omissions and retains checkpo
  expect(Buffer.byteLength(preview)).toBeLessThanOrEqual(5000)
  const data=JSON.parse(preview.split('<local-agent-reference>')[1]!.split('</local-agent-reference>')[0]!)
  expect(data.messages.map((row:{number:number})=>row.number)).toEqual([1,8])
+ expect(data.messages.every((row:any)=>!Object.hasOwn(row,'omittedTextBytes'))).toBe(true)
  expect(data.omissions.omittedMessageRanges).toEqual([[2,7]])
  expect(data.omissions.truncatedMessages.length).toBeGreaterThan(0)
  expect(data.omissions.toolRecordsNotExpanded).toBe(2)
@@ -331,4 +342,53 @@ it('keeps bounded local output canonical while respecting post-execute denials',
  const blocked=await call('reference_read',locator)
  expect(blocked.isError).toBe(true)
  expect(text(blocked)).toContain('Blocked by host policy')
+})
+
+
+it('returns search hits directly with unambiguous pagination and empty results',async()=>{
+ await writeFile(locator.path,[{type:'session_meta',payload:{id:'sample'}},...Array.from({length:5},(_,i)=>message('user',`needle ${i+1}`))].map(row=>JSON.stringify(row)).join('\n'))
+ const doc=await loadLocalReference(ctx,agent,locator)
+ const args={...locator,revision:doc.revision,query:'NEEDLE',limit:2}
+ const numbers:number[]=[]
+ for(const start of [1,3,5]) {
+  const result=await call('reference_search',{...args,start})
+  expect(result.isError,text(result)).not.toBe(true)
+  const data=result.value as any
+  expect(data).not.toHaveProperty('text')
+  expect(data.totalMatches).toBe(6-start)
+  expect(data.hasMore).toBe(start<5)
+  expect(data.nextStart).toBe(start<5?start+2:null)
+  numbers.push(...data.hits.map((h:any)=>h.number))
+ }
+ expect(numbers).toEqual([1,2,3,4,5])
+ const empty=await call('reference_search',{...args,query:'not-found'})
+ expect(empty.value).toMatchObject({hits:[],totalMatches:0,hasMore:false,nextStart:null})
+ const beyond=await call('reference_search',{...args,start:6})
+ expect(beyond.value).toMatchObject({hits:[],totalMatches:0,hasMore:false,nextStart:null})
+})
+
+
+it('paginates budget-reduced search hits without gaps and excludes tools',async()=>{
+ await toolFiber.dispose()
+ toolFiber=await ctx.plugin(tool,{maxReadTurns:50,maxOutputBytes:3000})
+ await writeFile(locator.path,[{type:'session_meta',payload:{id:'sample'}},...Array.from({length:8},()=>message('user','needle '+'中文'.repeat(300)))].map(row=>JSON.stringify(row)).join('\n'))
+ const doc=await loadLocalReference(ctx,agent,locator)
+ const seen:number[]=[]
+ let start:number|null=1
+ while(start!==null) {
+  const result=await call('reference_search',{...locator,revision:doc.revision,query:'needle',start,limit:50})
+  expect(result.isError,text(result)).not.toBe(true)
+  const value=result.value as any
+  expect(Buffer.byteLength(JSON.stringify(value))).toBeLessThanOrEqual(3000)
+  expect(Buffer.byteLength(text(result))).toBeLessThanOrEqual(3000)
+  expect(value.hits.length).toBeGreaterThan(0)
+  expect(value.hits.length).toBeLessThan(8)
+  seen.push(...value.hits.map((h:any)=>h.number))
+  if(value.nextStart!==null) expect(value.nextStart).toBeGreaterThan(start)
+  start=value.nextStart
+ }
+ expect(seen).toEqual([1,2,3,4,5,6,7,8])
+ await writeFile(locator.path,raw)
+ const refreshed=await loadLocalReference(ctx,agent,locator)
+ expect((await call('reference_search',{...locator,revision:refreshed.revision,query:'secret tool output'})).value).toMatchObject({hits:[],hasMore:false,nextStart:null})
 })

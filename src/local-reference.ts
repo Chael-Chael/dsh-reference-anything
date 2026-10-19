@@ -113,7 +113,7 @@ export function buildLocalPreview(locator: LocalLocator, document: LocalDocument
     const included = new Set(retained.map(message => message.number))
     return { ...locator, label, revision: document.revision,
       totalMessages: document.messages.length, totalImages: document.images.length,
-      shownMessages: ranges(retained.map(message => message.number)), messages: retained,
+      shownMessages: ranges(retained.map(message => message.number)), messages: retained.map(({ omittedTextBytes, ...message }) => message),
       images: document.images.filter(image => included.has(image.message)).map(({ id, message }) => ({ id, message })),
       omissions: { omittedMessageRanges: ranges(document.messages.filter(message => !included.has(message.number)).map(message => message.number)),
         truncatedMessages: retained.filter(message => message.omittedTextBytes > 0).map(message => ({ number: message.number, omittedTextBytes: message.omittedTextBytes })),
@@ -132,10 +132,21 @@ export function buildLocalPreview(locator: LocalLocator, document: LocalDocument
     const longest = retained.reduce<typeof retained[number] | undefined>((best,message) => !best || Buffer.byteLength(message.text) > Buffer.byteLength(best.text) ? message : best, undefined)
     if (!longest || !longest.text) throw new ReferenceAnythingError('Reference metadata cannot fit maxReferenceBytes. Increase the preview byte budget.', 'REFERENCE_BUDGET_EXCEEDED')
     const original = selected.find(message => message.number === longest.number)!.text
-    const result = truncateWithNotice(original, Math.max(0,Buffer.byteLength(longest.text) - (size() - budget) - 128))
-    if (result.text === longest.text) throw new ReferenceAnythingError('Reference metadata cannot fit maxReferenceBytes.', 'REFERENCE_BUDGET_EXCEEDED')
-    longest.text = result.text
-    longest.omittedTextBytes = result.omittedBytes
+    const previous = longest.text
+    let low = 0, high = Buffer.byteLength(previous)
+    // Measure the complete projection: tool output includes both structured and display copies.
+    const setText = (bytes: number) => {
+      const result = truncateWithNotice(original, bytes)
+      longest.text = result.text; longest.omittedTextBytes = result.omittedBytes
+    }
+    while (low < high) {
+      const middle = Math.ceil((low + high) / 2)
+      setText(middle)
+      if (size() <= budget) low = middle
+      else high = middle - 1
+    }
+    setText(low)
+    if (longest.text === previous) throw new ReferenceAnythingError('Reference metadata cannot fit maxReferenceBytes.', 'REFERENCE_BUDGET_EXCEEDED')
   }
   return project()
 }
@@ -146,7 +157,7 @@ export interface LocalPreview extends LocalLocator {
   totalMessages: number
   totalImages: number
   shownMessages: Array<[number, number]>
-  messages: Array<LocalDocument['messages'][number] & { omittedTextBytes: number }>
+  messages: LocalDocument['messages']
   images: Array<{ id: string; message: number }>
   omissions: { omittedMessageRanges: Array<[number, number]>; truncatedMessages: Array<{ number: number; omittedTextBytes: number }>; toolRecordsNotExpanded: number; imageContentsNotRead: number; sourcePartial: boolean }
   tools: { reference_read: string; reference_search: string; reference_image: string }

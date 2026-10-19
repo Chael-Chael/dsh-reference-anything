@@ -6,7 +6,7 @@
 | --- | --- | --- | --- |
 | 引用注册、URI、读取 | `src/index.ts`, `uri.ts`, `uri-codec.ts`, `reference.ts`, `tool.ts` | `tests/runtime.spec.ts`, `uri.spec.ts`, `mention.spec.ts`, `tool*.spec.ts` | 只读、权限、编码兼容、输出限额 |
 | 客户端菜单与设置 | `src/client/index.ts`, `source.ts`, `components.tsx`, `styles.ts` | `tests/client-*.spec.*` + Browser Use | 来源覆盖、键盘语义、异步结果、主题 |
-| 本地 Agent | `src/sources/local-agent/`, `agent-scan-cache.ts`, `local-reference.ts`, `local-reference-tools.ts` | `tests/local-agent-*.spec.ts`, `local-reference.spec.ts`, `agent-scan-cache.spec.ts` | 多格式、缓存、路径、单来源故障隔离；正文直接取 messages、工具记录取 toolRecords，按 nextStart 分页，omissions 区分其他页与预算省略 |
+| 本地 Agent | `src/sources/local-agent/`, `agent-scan-cache.ts`, `local-reference.ts`, `local-reference-tools.ts` | `tests/local-agent-*.spec.ts`, `local-reference.spec.ts`, `agent-scan-cache.spec.ts` | 多格式、缓存、路径、单来源故障隔离；正文直接取 messages、工具记录取 toolRecords，搜索直接取 hits，按 nextStart 分页（末页 null）；本地不返回 startIndex/totalTurns，正文截断统一记于 omissions.truncatedMessages，工具记录只在截断时带 omittedTextBytes |
 | 会话读取和导入 | `src/chat-import-*.ts`, `local-conversation-reader.ts`, `vendor/chat-import-reader/` | `tests/chat-import-*.spec.ts`, `local-conversation-reader.spec.ts`, 合成 fixtures | 导入确认、版本兼容、插件生命周期 |
 | 网页会话/OpenCLI | `src/opencli.ts`, `src/sync/`, `src/sources/web-chat/`, `opencli-plugin/` | `tests/opencli*.spec.ts`, `sync.spec.ts`, `provider-*.spec.ts` | 账号范围、认证、增量、超时 |
 | 云盘/OpenList | `src/openlist/`, `src/sources/cloud-drive/` | `tests/openlist*.spec.ts`, `cloud-drive-source.spec.ts`, `download-directory.spec.ts` | URL 校验、下载目标、凭据 |
