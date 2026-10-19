@@ -3,12 +3,6 @@
 # A patch REPLACES a row's whole `config` rather than merging keys, so when you
 # override one of these in your profile's cordis.patch.yml, restate every key
 # the row needs.
-- id: ui-reference
-  # Reference Anything re-registers Files and DSH sessions as two independent
-  # sources over the same official Remotes.  Disabling only this Client source
-  # keeps the official file/session services and canonical mention semantics.
-  disabled: true
-
 - insert:
     - id: reference-chat-import-runtime
       name: 'dsh-reference-anything/chat-import-runtime'
