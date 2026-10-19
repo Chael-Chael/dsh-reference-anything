@@ -73,8 +73,8 @@ beforeEach(async () => {
 describe('registration', () => {
   it('registers all three tools', () => {
     const names = ctx.tools.schemas().map(schema => schema.name)
-    expect(names).toContain('reference_list')
-    expect(names).toContain('reference_read')
+    expect(names).toContain('external_reference_list')
+    expect(names).toContain('external_reference_read')
     expect(names).toContain('reference_attachment_read')
   })
 
@@ -85,13 +85,13 @@ describe('registration', () => {
     await scoped.plugin(SystemPrompt, {})
     await scoped.plugin(ToolRuntime, {})
     const fiber = await scoped.plugin(tool, {})
-    expect(scoped.tools.schemas().some(schema => schema.name === 'reference_read')).toBe(true)
+    expect(scoped.tools.schemas().some(schema => schema.name === 'external_reference_read')).toBe(true)
     await fiber.dispose()
-    expect(scoped.tools.schemas().some(schema => schema.name === 'reference_read')).toBe(false)
+    expect(scoped.tools.schemas().some(schema => schema.name === 'external_reference_read')).toBe(false)
   })
 
   it('tells the agent how to recover from stale account metadata', async () => {
-    const read = ctx.tools.schemas().find(schema => schema.name === 'reference_read')
+    const read = ctx.tools.schemas().find(schema => schema.name === 'external_reference_read')
     expect(read?.description).toContain('sync that provider')
     expect(read?.description).toContain('do not repeatedly retry')
   })
@@ -105,7 +105,7 @@ describe('registration', () => {
   })
 })
 
-describe('reference_list', () => {
+describe('external_reference_list', () => {
   it('outputs one URI while keeping historical short handles readable in the authorized task', async () => {
     const scoped = await mount({ requiresGrant: true })
     const session = Session.create(SessionId('short-tool'))
@@ -114,26 +114,26 @@ describe('reference_list', () => {
       name, arguments: args, agent: { session: owner } as never,
     })
     {
-      const listed = await execute('reference_list', {})
+      const listed = await execute('external_reference_list', {})
       expect(textOf(listed)).toContain(encodeReferenceUri(ref))
       expect(textOf(listed)).not.toContain('readUri')
-      const read = await execute('reference_read', { uri: referenceReadHandle(ref) })
+      const read = await execute('external_reference_read', { uri: referenceReadHandle(ref) })
       expect(read.isError).toBeFalsy()
       expect(textOf(read)).toContain('by request hash')
-      const denied = await execute('reference_read', { uri: referenceReadHandle(ref) }, Session.create(SessionId('unrelated')))
+      const denied = await execute('external_reference_read', { uri: referenceReadHandle(ref) }, Session.create(SessionId('unrelated')))
       expect(denied.isError).toBe(true)
     }
   })
-  it('returns an opaque URI the model can hand straight to reference_read', async () => {
-    const result = await run(ctx, 'reference_list', {})
+  it('returns an opaque URI the model can hand straight to external_reference_read', async () => {
+    const result = await run(ctx, 'external_reference_list', {})
     expect(result.isError).toBeFalsy()
     expect(textOf(result)).toContain(encodeReferenceUri(ref))
     expect(textOf(result)).toContain('Cache design')
   })
 
   it('filters by query', async () => {
-    expect(textOf(await run(ctx, 'reference_list', { query: 'cache' }))).toContain('Cache design')
-    expect(textOf(await run(ctx, 'reference_list', { query: 'zzz' }))).toContain('No readable outside conversations.')
+    expect(textOf(await run(ctx, 'external_reference_list', { query: 'cache' }))).toContain('Cache design')
+    expect(textOf(await run(ctx, 'external_reference_list', { query: 'zzz' }))).toContain('No readable outside conversations.')
   })
 
   it('caps results at the configured limit, which the model cannot raise', async () => {
@@ -145,20 +145,20 @@ describe('reference_list', () => {
         })),
       ),
     }, { listLimit: 2 })
-    const text = textOf(await run(scoped, 'reference_list', {}))
+    const text = textOf(await run(scoped, 'external_reference_list', {}))
     expect(text.split('dsh-ref:')).toHaveLength(3)
   })
 })
 
-describe('reference_read', () => {
+describe('external_reference_read', () => {
   it('rejects the old local URI/summary protocol', async () => {
     const uri='dsh-ref:'+Buffer.from(JSON.stringify({source:'local-agent',id:'codex:session.jsonl'})).toString('base64url')
-    const result=await run(ctx,'reference_read',{uri,detail:'full'})
+    const result=await run(ctx,'external_reference_read',{uri,detail:'full'})
     expect(result.isError).toBe(true)
   })
 
   it('returns the conversation inside the untrusted frame', async () => {
-    const result = await run(ctx, 'reference_read', { uri: encodeReferenceUri(ref) })
+    const result = await run(ctx, 'external_reference_read', { uri: encodeReferenceUri(ref) })
     expect(result.isError).toBeFalsy()
     const text = textOf(result)
     expect(text).toContain('untrusted reference to something the user keeps')
@@ -184,18 +184,18 @@ describe('reference_read', () => {
         capturedAt: 0,
       }),
     })
-    const text = textOf(await run(scoped, 'reference_read', { uri: encodeReferenceUri(ref) }))
+    const text = textOf(await run(scoped, 'external_reference_read', { uri: encodeReferenceUri(ref) }))
     expect(text.split('</referenced-conversations>')).toHaveLength(2)
   })
 
   it('fails the call on a malformed URI rather than guessing', async () => {
-    const result = await run(ctx, 'reference_read', { uri: 'dsh-ref:!!!' })
+    const result = await run(ctx, 'external_reference_read', { uri: 'dsh-ref:!!!' })
     expect(result.isError).toBe(true)
   })
 
   it('surfaces a source failure as a tool error', async () => {
     const scoped = await mount({ read: () => Promise.reject(new Error('browser is closed')) })
-    const result = await run(scoped, 'reference_read', { uri: encodeReferenceUri(ref) })
+    const result = await run(scoped, 'external_reference_read', { uri: encodeReferenceUri(ref) })
     expect(result.isError).toBe(true)
   })
 
@@ -218,7 +218,7 @@ describe('reference_read', () => {
         capturedAt: 0,
       }),
     }, { maxOutputBytes: 1500 })
-    const result = await run(scoped, 'reference_read', { uri: encodeReferenceUri(ref) })
+    const result = await run(scoped, 'external_reference_read', { uri: encodeReferenceUri(ref) })
     expect(result.isError).toBeFalsy()
     expect(textOf(result)).toContain('turn 39')
     expect(Buffer.byteLength(textOf(result), 'utf8')).toBeLessThan(3000)
@@ -227,8 +227,8 @@ describe('reference_read', () => {
 
 describe('presentation is pure and replay-safe', () => {
   it('derives the pending card from arguments alone', () => {
-    const list = ctx.tools.get('reference_list')
-    const read = ctx.tools.get('reference_read')
+    const list = ctx.tools.get('external_reference_list')
+    const read = ctx.tools.get('external_reference_read')
     expect(list?.presentCall?.({ query: 'cache' })).toEqual({
       card: 'generic', title: 'cache', kind: 'search', rawInput: 'cache',
     })
@@ -239,11 +239,11 @@ describe('presentation is pure and replay-safe', () => {
   })
 })
 
-it('reference_read renders retained historical images as DSH image blocks', async () => {
+it('external_reference_read renders retained historical images as DSH image blocks', async () => {
  const image = { attachmentId: 'sha256:' + 'a'.repeat(64), mediaType: 'image/png' as const, bytes: 8, width: 1, height: 1 }
  const scoped = await mount({ read: async () => ({ ref, label: 'Image history', capturedAt: Date.now(), partial: false,
    body: { kind: 'conversation', items: [{ role: 'user', text: 'What is in this historical image?', images: [image] }], startIndex: 0, totalTurns: 1, hasOlder: false } }) })
- const result = await run(scoped, 'reference_read', { uri: encodeReferenceUri(ref) })
+ const result = await run(scoped, 'external_reference_read', { uri: encodeReferenceUri(ref) })
  expect(result.isError).toBeFalsy()
  expect(result.content).toContainEqual({ type: 'image', attachment: image })
  expect(textOf(result)).toContain('untrusted reference material')

@@ -21,10 +21,9 @@ import type { Agent, PreStepDecision } from '@deepseek-ai/dsh-agent'
 import { boundContextSummary, createUserMessage, freezeMessage } from '@deepseek-ai/dsh-llm'
 import type { ContentBlock, UserMessage } from '@deepseek-ai/dsh-llm'
 import { ReferenceAnythingError } from './errors.ts'
-import { stringifyTagSafeJson } from './serialize.ts'
 import { renderPrompt, type PromptAssembly } from '@deepseek-ai/dsh-system-prompt'
-import { loadLocalReference, renderLocalPreview, LOCAL_NOTICE } from './local-reference.ts'
-import { localLocatorFromId, LOCAL_REFERENCE_OPEN, LOCAL_REFERENCE_CLOSE } from './local-locator.ts'
+import { loadLocalReference, buildLocalPreview, renderLocalData, localBytes, localError, shortLabel, assertLocalScope, DEFAULT_LOCAL_BYTES, LOCAL_INSTRUCTIONS, type LocalPreview, type LocalDocument } from './local-reference.ts'
+import { localLocatorFromId, type LocalLocator } from './local-locator.ts'
 import { renderDeferredReferences } from './render.ts'
 import type { ReferenceContextSource, ReferenceInput } from './types.ts'
 import { mayContainReference, parseReferenceText } from './uri.ts'
@@ -47,13 +46,13 @@ export interface Config {
    * background. Local previews share one send-time byte budget.
    */
   maxReferences?: number
-  /** Upper bound for all local previews in one message; remaining context may lower it. */
-  maxReferenceBytes?: number
+  /** Upper bound for all local previews in one pre-step batch; remaining context may lower it. */
+  maxTextBytes?: number
 }
 
 /** Runtime schema for {@link Config}. */
 export const Config: z<Config> = z.object({
-  maxReferenceBytes: z.number().step(1).min(1),
+  maxTextBytes: z.number().step(1).min(1),
   maxReferences: z.number().step(1).min(1).max(MAX_REFERENCES).default(MAX_REFERENCES),
 })
 
@@ -69,6 +68,7 @@ interface ParsedMessage {
  * @param config - validated deployment settings.
  */
 export function apply(ctx: Context, config: Config = {}): void {
+  ctx.inject(['systemPrompt'], ctx => { ctx.effect(() => ctx.systemPrompt.section({ name: 'reference-anything:local', order: 110, text: LOCAL_INSTRUCTIONS })) })
   const assemblies = new WeakMap<Agent, PromptAssembly>()
   ctx.on('system-prompt/assemble', async (_assembly, context, next) => {
     const assembly = await next()
@@ -109,148 +109,92 @@ export function apply(ctx: Context, config: Config = {}): void {
       const remaining = Math.max(0, Math.floor(window - used - conservativeTokens(pending) - conservativeTokens(minimal) - output - safety))
       const minimalBytes = minimal.reduce((sum, message) => sum + Buffer.byteLength(messageText(message).join('\n')), 0)
       // Charge one UTF-8 byte per token for new reference text, rather than assuming four characters fit.
-      return Math.min(config.maxReferenceBytes ?? Math.max(65_536, Math.floor(window * 4 * 0.2)), minimalBytes + remaining)
-    } catch { signal.throwIfAborted(); return 0 }
+      return Math.min(config.maxTextBytes ?? DEFAULT_LOCAL_BYTES, minimalBytes + remaining)
+    } catch { signal.throwIfAborted(); ctx.logger.warn('Local reference context capacity unavailable; using metadata-only previews.'); return 0 }
   }
   const maxReferences = Math.min(config.maxReferences ?? MAX_REFERENCES, MAX_REFERENCES)
 
   ctx.on('agent/pre-step', async ({ agent, signal }, next): Promise<PreStepDecision> => {
     const decision = await next()
-    if (decision.kind === 'reject' || signal.aborted) return decision
-
-    // The overwhelmingly common case is a prompt with no mentions at all, and
-    // this runs on every step of every turn. Screening with substring scans
-    // before any parsing keeps that case free.
-    const target = decision.messages.findIndex(candidate =>
-      candidate.source.kind === 'user' && messageText(candidate).some(mayContainReference))
-    if (target < 0) return decision
-
-    const original = decision.messages[target]
-    if (original === undefined) return decision
-
-    let parsed: ParsedMessage
-    try {
-      parsed = parseMessage(original)
-    } catch (error: unknown) {
-      // A malformed URI inside an explicit mention is the user asking for
-      // something that does not exist. Saying so beats sending a prompt whose
-      // reference silently resolves to nothing.
-      return entered(decision, target, [notice(describe(error))], original)
-    }
-
-    if (parsed.references.length === 0) return decision
-
-    let contexts: UserMessage[]
-    try {
-      contexts = await resolve(
-        ctx,
-        agent,
-        parsed,
-        maxReferences,
-        signal,
-        (minimal, external) => budget(agent, signal, [...decision.messages.with(target, parsed.message), ...external], minimal),
-      )
-    } catch (error: unknown) {
-      if (signal.aborted) return decision
-      contexts = [notice(describe(error))]
-    }
-    if (signal.aborted) return decision
-
-    return entered(decision, target, contexts, parsed.message)
-  }, { prepend: true })
-}
-
-/**
- * Authorize references; local Agent bodies are projected before the first model step.
- * Other providers keep their existing deferred reading behavior.
- */
-async function resolve(
-  ctx: Context,
-  agent: Agent,
-  parsed: ParsedMessage,
-  maxReferences: number,
-  signal: AbortSignal,
-  budget: (minimal: UserMessage[], external: UserMessage[]) => Promise<number>,
-): Promise<UserMessage[]> {
-  const contexts: UserMessage[] = []
-
-  if (parsed.references.length > 0) {
-    const inputs = dedupe(parsed.references)
-    if (inputs.length > maxReferences) {
-      throw new ReferenceAnythingError(
-        `a message may reference at most ${maxReferences} outside conversation`
-        + `${maxReferences === 1 ? '' : 's'}; this one named ${inputs.length}`,
-        'REFERENCE_TOO_MANY',
-      )
-    }
-    for (const input of inputs) ctx.references.grant(String(agent.session.id), input.ref)
-    const external = inputs.filter(input => input.ref.source !== 'local-agent')
-    const rendered = external.length ? renderDeferredReferences(external) : undefined
-    const deferred = rendered ? [createUserMessage({ content: [{ type: 'text', text: rendered.text }], source: {
-      kind: 'reference-anything', form: 'recall', version: 1, references: rendered.provenance,
-    } satisfies ReferenceContextSource })] : []
-    const local = inputs.filter(input => input.ref.source === 'local-agent')
-    const minimal = local.map(input => notice(`${LOCAL_NOTICE}\nLocal preview deferred: insufficient or unknown remaining context budget. No body or image content is included. Use reference_read with the locator and omit revision to refresh.\n${LOCAL_REFERENCE_OPEN}${stringifyTagSafeJson({ ...localLocatorFromId(input.ref.id), label: input.label })}${LOCAL_REFERENCE_CLOSE}`))
-    const minima = minimal.map(message => Buffer.byteLength(messageText(message).join('\n')))
-    let remaining = Math.max(0, (local.length ? await budget(minimal, deferred) : 0) - minima.reduce((sum, bytes) => sum + bytes, 0))
-    for (const [index, input] of local.entries()) {
-      const locator = localLocatorFromId(input.ref.id)
-      const share = minima[index]! + Math.floor(remaining / (local.length - index))
-      const fallback = minimal[index]!
-      // A locator survives even when no body fits; do not spend a parse on an exhausted budget.
-      if (remaining === 0 || share < Math.max(2048, Buffer.byteLength(messageText(fallback).join('\n')))) {
-        contexts.push(fallback)
-        continue
-      }
+    if (decision.kind === 'reject') return decision
+    signal.throwIfAborted()
+    const deadline = AbortSignal.any([signal, AbortSignal.timeout(30_000)])
+    type Entry = LocalPreview | { ref: LocalLocator; title: string; notice?: string; error?: { code: string; message: string } }
+    const plans: Array<{ index: number; parsed: ParsedMessage; inputs: ReferenceInput[]; entries: Entry[]; external?: ReturnType<typeof renderDeferredReferences>; error?: string }> = []
+    for (const [index, original] of decision.messages.entries()) {
+      if (original.source.kind !== 'user' || !messageText(original).some(mayContainReference)) continue
       try {
-        const document = await loadLocalReference(ctx, agent, locator, undefined, signal)
-        const text = renderLocalPreview(locator, document, share, input.label)
-        const data = JSON.parse(text.slice(text.indexOf(LOCAL_REFERENCE_OPEN) + LOCAL_REFERENCE_OPEN.length, text.indexOf(LOCAL_REFERENCE_CLOSE)))
-        contexts.push(createUserMessage({ content: [{ type: 'text', text }], source: {
-          kind: 'reference-anything', form: 'recall', version: 1, references: [{
-            source: 'local-agent', id: input.ref.id, locator, revision: document.revision, label: input.label,
-            capturedAt: Date.now(), startIndex: data.messages[0]?.number ?? 0, totalTurns: document.messages.length,
-            retainedMessages: data.messages.length, omittedMessages: document.messages.length - data.messages.length,
-            omittedBytes: data.omissions.truncatedMessages.reduce((sum: number, row: { omittedTextBytes: number }) => sum + row.omittedTextBytes, 0),
-            truncated: data.messages.length < document.messages.length || data.omissions.truncatedMessages.length > 0,
-            hasOlder: data.messages.length < document.messages.length, partial: document.partial, inputIndex: inputs.indexOf(input),
-          }],
-        } as never }))
-        remaining = Math.max(0, remaining - Math.max(0, Buffer.byteLength(text) - minima[index]!))
+        const parsed = parseMessage(original), inputs = dedupe(parsed.references)
+        if (!inputs.length) continue
+        if (inputs.length > maxReferences) throw localError('INVALID_ARGUMENT', `at most ${maxReferences} references are allowed per message.`)
+        const local = inputs.filter(input => input.ref.source === 'local-agent')
+        const external = inputs.filter(input => input.ref.source !== 'local-agent')
+        for (const input of external) ctx.references.grant(String(agent.session.id), input.ref)
+        const entries: Entry[] = local.map(input => ({ ref: localLocatorFromId(input.ref.id), title: shortLabel(input.label ?? localLocatorFromId(input.ref.id).sessionId),
+          notice: 'Preview not loaded: insufficient or unknown context budget. Use reference_read with part="messages" and omit from and revision.' }))
+        plans.push({ index, parsed, inputs: local, entries, ...(external.length ? { external: renderDeferredReferences(external) } : {}) })
       } catch (error) {
-        signal.throwIfAborted()
-        const failure = notice(`${describe(error).slice(0, 256)}\n${LOCAL_REFERENCE_OPEN}${stringifyTagSafeJson(locator)}${LOCAL_REFERENCE_CLOSE}`)
-        const context = Buffer.byteLength(messageText(failure).join('\n')) <= share ? failure : fallback
-        contexts.push(context)
-        remaining = Math.max(0, remaining - Math.max(0, Buffer.byteLength(messageText(context).join('\n')) - minima[index]!))
+        plans.push({index,parsed:{message:original,references:[]},inputs:[],entries:[],error:describe(error).slice(0,256)})
       }
     }
-    contexts.push(...deferred)
-  }
-
-  return contexts
+    if (!plans.length) return decision
+    const contextFor = (plan: typeof plans[number]): UserMessage => {
+      if (plan.error) return notice(plan.error)
+      const parts = [...(plan.entries.length ? [renderLocalData(plan.entries)] : []), ...(plan.external ? [plan.external.text] : []), ...(plan.error ? [plan.error] : [])]
+      const references = plan.entries.map((entry, index) => ({ source: 'local-agent', id: plan.inputs[index]!.ref.id, locator: entry.ref,
+        label: entry.title, capturedAt: Date.now(), ...('items' in entry ? { revision: entry.revision, startIndex: entry.items[0]?.messageId ?? 0,
+          retainedMessages: entry.items.length, truncated: entry.next !== null || (entry.items[0]?.messageId ?? 1)>1 } : {}) }))
+      return createUserMessage({content:[{type:'text',text:parts.join('\n')}],source:{kind:'reference-anything',form:'recall',version:1,
+        references:[...references,...(plan.external?.provenance ?? [])]} as never})
+    }
+    const size = () => plans.reduce((sum,plan) => sum + Buffer.byteLength(messageText(contextFor(plan)).join('\n')),0)
+    const cap = config.maxTextBytes ?? DEFAULT_LOCAL_BYTES
+    if (size() > cap) throw localError('BUDGET_TOO_SMALL','Reference metadata exceeds the shared preview budget; use fewer references.')
+    const pending = decision.messages.map((message,index)=>plans.find(plan=>plan.index===index)?.parsed.message??message)
+    const capacity = await budget(agent,signal,pending,plans.map(contextFor))
+    let remaining = Math.max(0,capacity-size())
+    let left = plans.reduce((sum,plan)=>sum+plan.entries.length,0)
+    const captures = new Map<string,Promise<LocalDocument>>()
+    for(const plan of plans) for(let i=0;i<plan.entries.length;i++){
+      const entry=plan.entries[i]!,share=Math.floor(remaining/left--),before=size()
+      try {
+        await assertLocalScope(ctx,entry.ref,deadline)
+        if(share>0){
+          const key=JSON.stringify(entry.ref)
+          let capture=captures.get(key)
+          if(!capture){capture=loadLocalReference(ctx,agent,entry.ref,undefined,deadline);captures.set(key,capture)}
+          const document=await capture
+          const preview=buildLocalPreview(entry.ref,document,before+share,entry.title,value=>{
+            plan.entries[i]=value;const bytes=size();plan.entries[i]=entry;return bytes
+          })
+          plan.entries[i]=preview
+        }
+      } catch(error) {
+        signal.throwIfAborted()
+        if(error instanceof ReferenceAnythingError && error.code==='BUDGET_TOO_SMALL') plan.entries[i]=entry
+        else plan.entries[i]={ref:entry.ref,title:entry.title,error:{code:deadline.aborted?'TIMEOUT':error instanceof ReferenceAnythingError?error.code:'READ_FAILED',
+          message:deadline.aborted?'Reference preparation timed out.':error instanceof ReferenceAnythingError?error.message:'Reference source is unavailable.'}}
+      }
+      remaining=Math.max(0,remaining-(size()-before))
+    }
+    // Recheck permissions immediately before publishing all prepared contexts.
+    for(const plan of plans)for(let i=0;i<plan.entries.length;i++){
+      const entry=plan.entries[i]!
+      if('error' in entry && entry.error)continue
+      try {await assertLocalScope(ctx,entry.ref,deadline)} catch(error){signal.throwIfAborted();plan.entries[i]={ref:entry.ref,title:entry.title,error:{code:deadline.aborted?'TIMEOUT':error instanceof ReferenceAnythingError?error.code:'READ_FAILED',message:'Reference access is no longer available.'}}}
+    }
+    signal.throwIfAborted()
+    if(size()>cap || (capacity>0&&size()>capacity))throw localError('BUDGET_TOO_SMALL','Reference contexts exceed the shared budget.')
+    return {...decision,messages:decision.messages.flatMap((message,index)=>{
+      const plan=plans.find(plan=>plan.index===index)
+      return plan?[plan.parsed.message,contextFor(plan)]:[message]
+    })}
+  }, { prepend: true })
 }
 
 /** Conservative fallback for unknown tokenization, including message and JSON framing. */
 function conservativeTokens(value: unknown): number {
   return Buffer.byteLength(JSON.stringify(value) ?? '', 'utf8') + 16
-}
-
-/**
- * Replace the claimed message and place the background immediately before it.
- *
- * Adjacency is the point: background is only meaningful next to the prompt
- * that named it, and the prompt stays last so it sits closest to the model's
- * answer.
- */
-function entered(
-  decision: Extract<PreStepDecision, { kind: 'enter' }>,
-  target: number,
-  contexts: UserMessage[],
-  message: UserMessage,
-): PreStepDecision {
-  const replaced = decision.messages.with(target, message)
-  return { kind: 'enter', messages: replaced.toSpliced(target, 0, ...contexts) }
 }
 
 /** Rewrite external-conversation mentions to readable text, preserving message identity. */
@@ -259,7 +203,9 @@ function parseMessage(message: UserMessage): ParsedMessage {
   let changed = false
   const content: ContentBlock[] = message.content.map((block) => {
     if (block.type !== 'text') return block
-    const own = parseReferenceText(block.text)
+    const chunks = block.text.split(/(```[\s\S]*?```|~~~[\s\S]*?~~~|`[^`\n]*`)/gu)
+    const parsed = chunks.map((text, index) => index % 2 ? { text, references: [] } : parseReferenceText(text))
+    const own = { text: parsed.map(part => part.text).join(''), references: parsed.flatMap(part => part.references) }
     references.push(...own.references)
     const text = own.text
     if (text === block.text) return block

@@ -190,7 +190,7 @@ export default class ReferenceRuntime extends Service {
       }
     }
     const matched = candidates.find(ref => ref.source !== 'local-agent' && referenceReadHandle(ref) === uri)
-    if (!matched) throw new ReferenceAnythingError('Unknown reference handle in this task; use reference_list and copy its uri exactly.', 'CONVERSATION_REFERENCE_NOT_GRANTED')
+    if (!matched) throw new ReferenceAnythingError('Unknown reference handle in this task; use external_reference_list and copy its uri exactly.', 'CONVERSATION_REFERENCE_NOT_GRANTED')
     return matched
   }
 
@@ -209,9 +209,9 @@ export default class ReferenceRuntime extends Service {
    * @param signal - cancellation from the caller.
    * @returns matching items, capped at `limit`.
    */
-  async list(query = '', limit: number = this.listLimit, signal?: AbortSignal): Promise<ReferenceSummary[]> {
+  async list(query = '', limit: number = this.listLimit, signal?: AbortSignal, externalOnly = false): Promise<ReferenceSummary[]> {
     throwIfCancelled(signal)
-    const available = await this.availableSources(signal)
+    const available = (await this.availableSources(signal)).filter(source => !externalOnly || source.id !== 'local-agent')
     if (available.length === 0) return []
     const settled = await Promise.allSettled(
       available.map(source => source.list(query, limit, signal)),

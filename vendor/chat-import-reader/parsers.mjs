@@ -6019,7 +6019,7 @@ function convertVibeJson(raw, args = {}) {
             argsStr = JSON.stringify(tc.function.arguments);
           }
           step.toolCalls.push({ id: callId, name: fnName, arguments: argsStr });
-          step.content.push({ type: "tool-call", id: callId, name: fnName, arguments: argsStr });
+          step.content.push({ type: "tool-call", id: callId, generatedId: !(typeof tc.id === "string" && tc.id), name: fnName, arguments: argsStr });
         }
       }
       curTurn.steps.push(step);
@@ -6770,57 +6770,55 @@ function conversationContent(out, options) {
   };
 }
 function structuredContent(out) {
-  const messages = [], tools = [], images = [];
-  const events = (out.events || []).filter((event) => ["user/message", "assistant/message", "tool/result"].includes(event.type) && (event.data?.message || event.data)?.source?.plugin !== "chat-import");
-  const calls = /* @__PURE__ */ new Map();
-  let current = 0;
+  const messages = [], tools = [], images = []
+  const events = (out.events || []).filter(event => ['user/message', 'assistant/message', 'tool/result'].includes(event.type)
+    && (event.data?.message || event.data)?.source?.plugin !== 'chat-import')
+  const calls = new Map()
   for (const event of events) {
-    const message = event.data?.message || event.data;
-    const content = Array.isArray(message?.content) ? message.content : [];
-    const isTool = event.type === "tool/result";
-    const body = content.filter((block) => block.type === "text").map((block) => block.text || "").join("\n");
-    if (!isTool && (body || content.some((block) => block.type === "image"))) {
-      current = messages.length + 1;
-      messages.push({
-        number: current,
-        role: event.type === "assistant/message" ? "assistant" : "user",
-        text: body,
-        checkpoint: Boolean(message.source && /compact/.test(JSON.stringify(message.source))),
-        images: []
-      });
+    const message = event.data?.message || event.data
+    const content = Array.isArray(message?.content) ? message.content : []
+    const isTool = event.type === 'tool/result'
+    const body = content.filter(block => block.type === 'text').map(block => block.text || '').join('\n')
+    let owner
+    if (!isTool && (body || content.some(block => block.type === 'image'))) {
+      owner = messages.length + 1
+      const source = message.source
+      const checkpoint = source?.kind === 'compact-checkpoint' || source?.kind === 'plugin:compact'
+        || (source?.kind === 'plugin' && source.plugin === 'compact')
+      messages.push({ number: owner, role: event.type === 'assistant/message' ? 'assistant' : 'user', text: body,
+        checkpoint, images: [] })
     }
-    const visit = (blocks, owner2 = current) => {
+    const visit = (blocks, messageId = owner) => {
       for (const block of blocks) {
-        if (block.type === "image") {
-          const id = `image-${images.length + 1}`;
-          images.push({ id, message: owner2, block });
-          if (messages[owner2 - 1]) messages[owner2 - 1].images.push(id);
-        } else if (block.type === "tool-call") {
-          calls.set(block.id, owner2);
-          tools.push({ message: owner2, kind: "call", name: block.name || "", text: JSON.stringify(block.arguments) ?? "" });
-        } else if (block.type === "tool-result") {
-          const linked = calls.get(block.toolCallId || block.id) ?? owner2;
-          tools.push({ message: linked, kind: "result", text: (block.content || []).filter((b) => b.type === "text").map((b) => b.text || "").join("\n") });
-          visit((block.content || []).filter((b) => b.type !== "text"), linked);
+        if (block.type === 'image') {
+          const id = `image-${images.length + 1}`
+          const name = block.attachment?.name || block.name
+          images.push({ id, ...(messageId ? { message: messageId } : {}), ...(typeof name === 'string' && name ? { name } : {}), block })
+          if (messageId) messages[messageId - 1].images.push(id)
+        } else if (block.type === 'tool-call') {
+          if (block.id) calls.set(block.id, { messageId, name: block.name, sourceId: !block.generatedId })
+          tools.push({ ...(messageId ? { message: messageId } : {}), kind: 'call', name: block.name || '',
+            ...(block.id && !block.generatedId ? { callId: block.id } : {}), text: typeof block.arguments === 'string' ? block.arguments : JSON.stringify(block.arguments) ?? '' })
+        } else if (block.type === 'tool-result') {
+          const callId = block.toolCallId || block.id
+          const linked = calls.get(callId)?.messageId ?? messageId
+          tools.push({ ...(linked ? { message: linked } : {}), kind: 'result', ...(callId && calls.get(callId)?.sourceId !== false ? { callId } : {}),
+            text: (block.content || []).filter(b => b.type === 'text').map(b => b.text || '').join('\n') })
+          visit((block.content || []).filter(b => b.type !== 'text'), linked)
         }
       }
-    };
-    const owner = isTool ? calls.get(message.toolCallId || message.source?.callId) ?? current : current;
-    if (isTool && body) tools.push({ message: owner, kind: "result", text: body });
-    visit(content, owner);
+    }
+    const callId = message.toolCallId || message.source?.callId
+    const linked = calls.get(callId)?.messageId
+    if (isTool && body) tools.push({ ...(linked ? { message: linked } : {}), kind: 'result', ...(callId && calls.get(callId)?.sourceId !== false ? { callId } : {}), text: body })
+    if (isTool) owner = linked
+    visit(content)
   }
-  return {
-    sessionId: out.meta?.sourceId || out.meta?.id || "",
-    title: out.title || "",
-    cwd: out.meta?.cwd || null,
-    revision: createHash("sha256").update(JSON.stringify({ messages, tools, images })).digest("hex"),
-    messages,
-    tools,
-    images,
-    totalMessages: messages.length,
+  return { sessionId: out.meta?.sourceId || out.meta?.id || '', title: out.title || '', cwd: out.meta?.cwd || null,
+    revision: createHash('sha256').update(JSON.stringify({ messages, tools, images })).digest('hex'),
+    messages, tools, images, totalMessages: messages.length,
     partial: Boolean(out.trimmed || out.compacted || out.skipped || out.imagesDegraded),
-    confirmedEmpty: Boolean(!events.length && out.meta && !out.records && !out.skipped && !out.skipReason && !out.imagesDegraded)
-  };
+    confirmedEmpty: Boolean(!events.length && out.meta && !out.records && !out.skipped && !out.skipReason && !out.imagesDegraded) }
 }
 
 // .codex-tmp/vendor-pagination-upstream/lib/import-core.mjs
@@ -11129,7 +11127,7 @@ async function readConversation(fs, input, signal) {
     const page2 = selected[0];
     return page2.totalMessages ? "readable" : page2.confirmedEmpty ? "empty" : "unknown";
   }
-  if (selected.length !== 1 || !selected[0].totalMessages) {
+  if (selected.length !== 1 || (!selected[0].totalMessages && !(input.structured && (selected[0].confirmedEmpty || selected[0].tools?.length || selected[0].images?.length)))) {
     throw new Error("Conversation could not be read: " + entries.map((entry) => entry.error || entry.skipReason || "").filter(Boolean).join("; "));
   }
   const page = selected[0];

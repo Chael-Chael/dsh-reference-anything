@@ -6,6 +6,7 @@
 | --- | --- |
 | 开始/继续开发 | [开发闭环与命令](docs/development/workflow.md)、[代码与验收标准](docs/development/standards.md) |
 | 定位改动、找调用方和测试 | [子系统地图](docs/subsystems/README.md) |
+| 设计引用返回协议、精简本地 Agent 输出 | [引用协议重设计](docs/ideas/reference-protocol-redesign.md)（协议契约与实施入口） |
 | 规划网页 AI 引用改进 | [未来方案：网页 AI 引用](docs/ideas/web-chat-reference.md)（待实施；阅读不代表授权开发） |
 | 启动、build、浏览器测试、Desktop 同步 | [四环境约定](docs/development/environments.md) |
 | 修改 UI | [设计规范](design.md)、[浏览器验收](docs/testing/npm-release-checklist.md) |

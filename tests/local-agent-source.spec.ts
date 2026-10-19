@@ -208,7 +208,7 @@ describe('discovery', () => {
     expect(found.map(entry => entry.ref.id)).toEqual(['codex:rollout-1.jsonl'])
     // A previous task grant cannot override the current source switch.
     ctx.references.grant('task-existing', CLAUDE_REF)
-    await expect(ctx.references.read(CLAUDE_REF, WINDOW)).rejects.toMatchObject({ code: 'SOURCE_UNAVAILABLE' })
+    await expect(ctx.references.read(CLAUDE_REF, WINDOW)).rejects.toMatchObject({ code: 'SOURCE_DISABLED' })
     await dispose()
   })
   it('lists transcripts from every configured root', async () => {

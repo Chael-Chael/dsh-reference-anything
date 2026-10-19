@@ -55,7 +55,7 @@ export async function readChatImport(ctx: Context, ref: ReferenceRef, target: Ch
     if (cause instanceof ReferenceAnythingError) throw cause
     const message = cause instanceof Error ? cause.message : ''
     const code = (cause as NodeJS.ErrnoException | null)?.code
-    if (message === 'Conversation changed; read its latest page again') throw new ReferenceAnythingError('Conversation content changed since this cursor was issued. Call reference_read with the same uri and omit cursor, then use the newly returned nextCursor.', 'REFERENCE_CURSOR_EXPIRED')
+    if (message === 'Conversation changed; read its latest page again') throw new ReferenceAnythingError('Conversation content changed since this cursor was issued. Call external_reference_read with the same uri and omit cursor, then use the newly returned nextCursor.', 'REFERENCE_CURSOR_EXPIRED')
     if (code === 'ENOENT' || message.startsWith('Conversation source not found:')) throw new ReferenceAnythingError('The conversation source file no longer exists. Refresh the local conversation list and reselect the conversation; do not search unrelated files.', 'REFERENCE_NOT_FOUND')
     if (message.startsWith('Conversation body unavailable:')) throw new ReferenceAnythingError('This conversation contains metadata only; its transcript is unavailable. Open it in the original client to restore its transcript, then refresh and reselect it. Do not retry or substitute another conversation.', 'REFERENCE_NOT_FOUND')
     if (code === 'EACCES' || code === 'EPERM') throw new ReferenceAnythingError('Permission denied while reading the conversation source. Check the source file permissions and DSH access; retry after access is restored.', 'REFERENCE_READ_FAILED')

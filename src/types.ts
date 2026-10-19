@@ -42,6 +42,7 @@ export interface ReferenceSummary {
   /** Last known activity in Unix epoch milliseconds, when the source knows it. */
   readonly updatedAt?: number
   /** Optional provider metadata used by rich discovery surfaces. */
+  readonly cwd?: string
   readonly provider?: string
   readonly messageCount?: number
   readonly partial?: boolean

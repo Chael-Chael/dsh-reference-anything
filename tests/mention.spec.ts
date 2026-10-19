@@ -79,24 +79,24 @@ describe('the common path costs nothing', () => {
   it('does nothing once the turn is cancelled', async () => {
     const messages = [userMessage(`see ${encodeReferenceUri(ref)}`)]
     const decision: PreStepDecision = { kind: 'enter', messages }
-    await expect(step(ctx, messages, { signal: AbortSignal.abort(), decision })).resolves.toBe(decision)
+    await expect(step(ctx, messages, { signal: AbortSignal.abort(), decision })).rejects.toThrow()
   })
 })
 
 describe('expansion', () => {
-  it('puts the background immediately before the prompt that named it', async () => {
+  it('puts the background immediately after the prompt that named it', async () => {
     const messages = [userMessage(`what did we decide in ${formatReferenceMention(ref, 'Cache design')}?`)]
     const result = await step(ctx, messages)
     expect(result.kind).toBe('enter')
     const entered = (result as Extract<PreStepDecision, { kind: 'enter' }>).messages
     expect(entered).toHaveLength(2)
-    expect(entered[0]?.source.kind).toBe('reference-anything')
-    expect(entered[1]?.source.kind).toBe('user')
+    expect(entered[1]?.source.kind).toBe('reference-anything')
+    expect(entered[0]?.source.kind).toBe('user')
   })
 
   it('carries an untrusted deferred reference into the context without its body', async () => {
     const result = await step(ctx, [userMessage(`see ${formatReferenceMention(ref, 'Cache design')}`)])
-    const context = (result as Extract<PreStepDecision, { kind: 'enter' }>).messages[0]
+    const context = (result as Extract<PreStepDecision, { kind: 'enter' }>).messages[1]
     const text = context?.content.flatMap(block => block.type === 'text' ? [block.text] : []).join('')
     expect(text).toContain('untrusted reference to something the user keeps')
     expect(text).toContain('bodies were not fetched')
@@ -108,7 +108,7 @@ describe('expansion', () => {
   it('replaces the opaque URI with a readable label and keeps the message identity', async () => {
     const prompt = userMessage(`what did we decide in ${formatReferenceMention(ref, 'Cache design')}?`)
     const result = await step(ctx, [prompt])
-    const rewritten = (result as Extract<PreStepDecision, { kind: 'enter' }>).messages[1]
+    const rewritten = (result as Extract<PreStepDecision, { kind: 'enter' }>).messages[0]
     const text = rewritten?.content.flatMap(block => block.type === 'text' ? [block.text] : []).join('')
     expect(text).toBe('what did we decide in @Cache design?')
     expect(text).not.toContain('dsh-ref:')
@@ -119,7 +119,7 @@ describe('expansion', () => {
 
   it('records provenance the recall card can read', async () => {
     const result = await step(ctx, [userMessage(`see ${formatReferenceMention(ref, 'Cache design')}`)])
-    const context = (result as Extract<PreStepDecision, { kind: 'enter' }>).messages[0]
+    const context = (result as Extract<PreStepDecision, { kind: 'enter' }>).messages[1]
     expect(context?.source).toMatchObject({
       kind: 'reference-anything',
       form: 'recall',
@@ -152,20 +152,20 @@ describe('deferred references', () => {
     const scoped = await mount({ read: () => Promise.reject(new Error('browser is closed')) })
     const result = await step(scoped, [userMessage(`see ${formatReferenceMention(ref, 'Cache design')}`)])
     const entered = (result as Extract<PreStepDecision, { kind: 'enter' }>).messages
-    expect(entered[0]?.source).toMatchObject({ kind: 'reference-anything', form: 'recall' })
-    const text = entered[0]?.content.flatMap(block => block.type === 'text' ? [block.text] : []).join('')
+    expect(entered[1]?.source).toMatchObject({ kind: 'reference-anything', form: 'recall' })
+    const text = entered[1]?.content.flatMap(block => block.type === 'text' ? [block.text] : []).join('')
     expect(text).toContain('bodies were not fetched')
     expect(text).toContain('"preview": null')
     // The uri survives, so the model can retry once the browser is back.
     expect(text).toContain(encodeReferenceUri(ref))
-    const prompt = entered[1]?.content.flatMap(block => block.type === 'text' ? [block.text] : []).join('')
+    const prompt = entered[0]?.content.flatMap(block => block.type === 'text' ? [block.text] : []).join('')
     expect(prompt).toBe('see @Cache design')
   })
 
   it('refuses a malformed mention rather than passing the raw URI to the model', async () => {
     const result = await step(ctx, [userMessage('see @[broken](dsh-ref:!!!)')])
     const entered = (result as Extract<PreStepDecision, { kind: 'enter' }>).messages
-    expect(entered[0]?.source).toMatchObject({ kind: 'reference-anything', form: 'notice' })
+    expect(entered[1]?.source).toMatchObject({ kind: 'reference-anything', form: 'notice' })
   })
 
   it('refuses more references than the configured limit', async () => {
@@ -176,8 +176,8 @@ describe('deferred references', () => {
     ].join(' and ')
     const result = await step(scoped, [userMessage(text)])
     const entered = (result as Extract<PreStepDecision, { kind: 'enter' }>).messages
-    expect(entered[0]?.source).toMatchObject({ kind: 'reference-anything', form: 'notice' })
-    expect(entered[0]?.content.flatMap(b => b.type === 'text' ? [b.text] : []).join(''))
+    expect(entered[1]?.source).toMatchObject({ kind: 'reference-anything', form: 'notice' })
+    expect(entered[1]?.content.flatMap(b => b.type === 'text' ? [b.text] : []).join(''))
       .toContain('at most 1')
   })
 })

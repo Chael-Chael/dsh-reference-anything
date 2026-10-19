@@ -267,11 +267,13 @@ Reference Anything 直接向 DSH 原生 `@` 菜单注册八个来源，不会引
 
 全部 29 种来源使用内置的只读扫描器和解析器，代码来自 dsh-chat-import。扫描和引用无需安装 Chat Import。来源开关、附加目录和工作区范围继续生效；设置页显示来源目录、数量和扫描异常。Enter 插入引用，可恢复的图片通过 DSH 附件返回，查看图片需要支持视觉的模型。确认没有正文的会话会隐藏，读取异常的会话仍然保留。本地引用现在保存可读的来源、路径和会话 ID；旧版 URI 协议的本地引用需要重新选择。
 
-发送本地引用时，插件读取原始记录，在模型回答前自动附上最近正文预览。正文独立编号，工具细节和图片目录分开组织。需要更多内容时，模型使用 `reference_read`（正文范围或关联工具）、`reference_search`（正文搜索）和 `reference_image`（真实图片），参数是可读的 `source`、`path`、`sessionId`、`revision`，不再需要本地 URI 句柄或 cursor。
+发送本地引用时，插件在每条用户消息后附上一个聚合背景。模型使用 `ref: {source, path, sessionId}` 和内容 `revision` 定位。`reference_list` 发现本地会话；`reference_read` 读取 `messages`、`tools` 或 `images`；`reference_search` 搜索正文/工具文本；`reference_image` 返回真实像素。
 
-每次发送时，本地引用预览共享一份按剩余上下文估算的预算，扣除历史记录、本次消息、系统提示与工具定义变化、回答预留和安全余量（容量的 5%，至少 1024 tokens）。回答预留使用配置或模型声明的输出上限，否则使用容量的 10%，最多 8192 tokens。新增预览保守地按每个 UTF-8 字节占一个 token 计费。`reference-mention.maxReferenceBytes` 是额外的共享上限，默认 `max(65536, floor(模型上下文 tokens × 4 × 0.2))`。无法取得容量或空间不足时不展开正文，只保留可读定位字段和提示；即使上下文已经满了，这些最小信息也会保留，最终超限仍由宿主处理。后续工具补读沿用独立的输出限制。先省略较早正文，保留最新消息及压缩检查点，再截短过长文本并保留首尾。分别说明省略的消息、截短的文本、未展开工具和未读取图片。单次图片读取另限 10 MiB。
+读取范围与起点统一放进 `from`：正文使用 `messageId`，工具使用 `toolId` 并可用 `messageId` 限定所属正文，图片使用 `imageId` 并可限定所属正文。续读时把完整 `next` 原样复制为 `from`。长文本按 Unicode 码点 `textOffset` 连续补读，不再只保留首尾。来源明确提供的历史摘要用 `role: "summary"`，来源限制用英文 `notice`，原始内容不翻译。
 
-定位字段随消息历史保存。跨对话复制时，需复制完整的 `<local-agent-reference>…</local-agent-reference>` 块，只有标题不够。读取仍校验当前任务授权和来源目录。原记录更新后，旧消息号和图片号不能继续用；调用 `reference_read` 时省略 `revision` 可刷新预览。不会保存正文快照或缓存完整解析结果；补读、搜索、看图都会重新读取原来源，需要原记录仍在该路径。
+`reference-mention.maxTextBytes` 默认将同一 pre-step 批次的新增引用上下文总量限制在 16 KiB，剩余上下文估算可进一步降低它；`reference-tool.maxTextBytes` 独立限制每次本地工具文本结果，默认也是 16 KiB。容量未知时只给有界定位与说明，连定位也装不下时明确报错。预览保留最近连续尾段，最新消息过长时给可续读的前缀。图片另限 10 MiB。
+
+每次新读取均校验来源开关、允许目录内的真实路径和会话身份，本地引用不要求逐会话授权。版本变化后，保持 `ref`，以 `part: "messages"` 并省略 `revision` 与 `from` 从头重新读取。不保存全文快照或跨调用的完整解析缓存。其他来源通过 `external_reference_list` 和 `external_reference_read` 保留原有 URI 协议。
 
 导入状态、会话导入和交接摘要通过可选的 Chat Import API 提供。需要时可在设置页安装或升级独立插件；Reference Anything 不会在启动时自动安装。API 不可用时不显示导入状态，也不影响本地扫描和引用读取。Tab 保留已配置的导入、摘要操作及确认流程。
 
@@ -326,7 +328,7 @@ Reference Anything 直接向 DSH 原生 `@` 菜单注册八个来源，不会引
 @[ChatGPT·对话标题](dsh-ref:<opaque-base64url>)
 ```
 
-打开来源 URL 仅发生在 UI 中，URL 不会注入模型上下文。初始引用只包含安全指针，模型如需正文才调用 `reference_read` 按需读取。
+打开来源 URL 仅发生在 UI 中，URL 不会注入模型上下文。初始引用只包含安全指针，模型如需正文才调用 `external_reference_read` 按需读取。
 
 #### ☁️ @Cloud drive files — 通过 OpenList 引用网盘文件
 
@@ -351,7 +353,7 @@ Reference Anything 直接向 DSH 原生 `@` 菜单注册八个来源，不会引
 - 分组快捷词用 `:` 分隔，不要用空格：`@` 的候选 token 遇到空格即终止，所以 `@chatgpt 关键词` 会在按下空格时关闭菜单。多词搜索请写成 `@cachedesign` 或 `@cache-design`。
 - 没有类型前缀时，仍同时搜索所有分组
 - 命令和 Skills 选择后由 DSH 原生斜杠命令流程处理，原生 `/` 面板仍可继续使用
-- 把 Picker 切回 DSH 官方文件/会话列表后，所有插件分组都会隐藏，`Local agent conversations` 和 `Cloud drive files` 也不例外。宿主侧来源仍然注册着，已经插入的引用照常展开、`reference_read` 照常可用，只是菜单入口在切回来之前不再出现
+- 把 Picker 切回 DSH 官方文件/会话列表后，所有插件分组都会隐藏，`Local agent conversations` 和 `Cloud drive files` 也不例外。宿主侧来源仍然注册着，已经插入的引用照常展开、`external_reference_read` 照常可用，只是菜单入口在切回来之前不再出现
 
 ## 🔄 @外部对话的实现方式
 
@@ -391,11 +393,11 @@ ChatGPT / Claude / Gemini / DeepSeek / Grok / Kimi
 }
 ```
 
-- agent 需要正文时才调用 `reference_read({ uri, limit, cursor })`；同一页内部按时间正序展示，翻页方向从最新向更旧。
+- agent 需要正文时才调用 `external_reference_read({ uri, limit, cursor })`；同一页内部按时间正序展示，翻页方向从最新向更旧。
 - 初始条目的 `deferred=true` 时，首次调用只传 `uri`，不要传空的 `nextCursor`。
-- offline-mirror 下 `reference_read` 沿当前 revision 的 cursor 翻页；metadata-only 下每次读取都会重新向 Provider 请求正文，并在同一次浏览器操作内校验缓存的账号范围。遇到对话缺失、账号不一致或拉取失败时，Agent 会提示用户先同步对应 Provider 再重试。
+- offline-mirror 下 `external_reference_read` 沿当前 revision 的 cursor 翻页；metadata-only 下每次读取都会重新向 Provider 请求正文，并在同一次浏览器操作内校验缓存的账号范围。遇到对话缺失、账号不一致或拉取失败时，Agent 会提示用户先同步对应 Provider 再重试。
 - `before` 是已弃用的兼容参数；不能与 `cursor` 同时提供。
-- mention 或 `reference_list` 会授予当前 task 对 URI 的读取权限；未授权 URI 会被拒绝。
+- mention 或 `external_reference_list` 会授予当前 task 对 URI 的读取权限；未授权 URI 会被拒绝。
 - 每条 conversation 只保留最新 revision；正文更新后，指向旧 revision 的 cursor 会过期。
 - `reference_attachment_read` 会校验当前任务授权；对于 Web 对话，还会确认当前 Provider 登录账号与同步时保存的账号范围一致。若不一致，会拒绝下载并提示先同步该 Provider、再重新选择对话。
 - 附件在流式读取过程中限制为 25 MiB。PNG、JPEG、WebP 和 GIF 可内联渲染；包括 SVG 在内的其他格式会作为普通临时文件返回。成功文件一小时后过期；失败或插件卸载时会立即清理。

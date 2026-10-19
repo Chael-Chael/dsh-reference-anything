@@ -37,7 +37,7 @@ export async function readConversation(fs, input, signal) {
     const page = selected[0]
     return page.totalMessages ? 'readable' : page.confirmedEmpty ? 'empty' : 'unknown'
   }
-  if (selected.length !== 1 || !selected[0].totalMessages) {
+  if (selected.length !== 1 || (!selected[0].totalMessages && !(input.structured && (selected[0].confirmedEmpty || selected[0].tools?.length || selected[0].images?.length)))) {
     throw new Error('Conversation could not be read: ' + entries.map(entry => entry.error || entry.skipReason || '').filter(Boolean).join('; '))
   }
   const page = selected[0]

@@ -297,7 +297,14 @@ export class LocalAgentService extends Service implements ReferenceSource {
     }
   }
 
-  private async listIn(query: string, limit: number, cwd: string, signal?: AbortSignal): Promise<ReferenceSummary[]> {
+  async referenceDirectory(cwd: string, source?: string, signal?: AbortSignal) {
+    const warnings: string[] = []
+    const items = await this.listIn('', Number.MAX_SAFE_INTEGER, cwd, signal, { source, warnings })
+    return { items, warnings }
+  }
+
+  private async listIn(query: string, limit: number, cwd: string, signal?: AbortSignal,
+    directory?: { source?: string; warnings: string[] }): Promise<ReferenceSummary[]> {
     signal?.throwIfAborted()
     if (this.ctx.get('referenceChatHistory')?.getSettings?.().picker?.agents.enabled === false) return []
     if (this.ctx.get('referenceChatHistory')?.getSettings) {
@@ -305,6 +312,7 @@ export class LocalAgentService extends Service implements ReferenceSource {
       const found = new Map<string, ReferenceSummary>()
       const failures: string[] = []
       for (const kind of settings ? settings.enabledAgents ?? ALL_LOCAL_AGENTS : this.settings.agents) {
+        if (directory?.source && scanFormat(kind) !== directory.source) continue
         const custom = settings?.agentDirectories?.[kind]
         const paths = new Set<string | undefined>([undefined, ...this.roots.filter(root => root.kind === kind).map(root => root.path)])
         if (custom) paths.add(expandRoot(custom, homedir()))
@@ -323,18 +331,19 @@ export class LocalAgentService extends Service implements ReferenceSource {
             if (!await this.conversationAvailability.visible({ format: row.format, path: row.sourcePath, sessionId: row.sessionId })) continue
             if (this.settings.scope === 'workspace' && !inWorkspace(row.cwd ?? '', cwd)) continue
             const id = chatImportReference({ format: row.format, path: row.sourcePath, sessionId: row.sessionId })
-            found.set(id, { ref: { source: LOCAL_AGENT_SOURCE_ID, id }, label: row.title || row.sessionId, origin: row.sourcePath,
+            found.set(id, { ref: { source: LOCAL_AGENT_SOURCE_ID, id }, ...(row.cwd ? { cwd: row.cwd } : {}), label: row.title || row.sessionId, origin: row.sourcePath,
               provider: LOCAL_AGENT_LABEL[agentKind(row.format) as LocalAgent], ...(row.lastActiveAt == null ? {} : { updatedAt: row.lastActiveAt }) })
           }
         }
       }
       for (const failure of failures) this.ctx.logger.warn(`reference local discovery: ${failure}`)
-      if (!found.size && failures.length) throw new Error(failures.join('; '))
+      if (directory) directory.warnings.push(...failures)
+      else if (!found.size && failures.length) throw new Error(failures.join('; '))
       return [...found.values()].sort((a, b) => (b.updatedAt ?? 0) - (a.updatedAt ?? 0)).slice(0, limit)
     }
 
     const enabled = this.enabledAgentKinds()
-    const entries = (await this.scan(signal)).filter(entry => enabled.has(entry.kind))
+    const entries = (await this.scan(signal)).filter(entry => enabled.has(entry.kind) && (!directory?.source || scanFormat(entry.kind) === directory.source))
     const known = await this.describe(entries, signal)
     const workspace = this.settings.scope === 'workspace' ? cwd : undefined
     const needle = query.trim()

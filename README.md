@@ -268,11 +268,13 @@ Type `@agent:` to search and reference conversations saved by other local agent 
 
 All 29 sources use bundled read-only scanners and parsers derived from dsh-chat-import. Scanning and references work without installing Chat Import. Source switches, additional directories and workspace scope still apply; settings show source paths, counts and scan errors. Enter inserts a reference, including recoverable images through DSH attachments; viewing images requires a vision-capable model. Confirmed empty conversations are hidden; read errors remain visible. Local references now store a readable source, path and session ID; reselect references created with the old local URI protocol.
 
-When you send a local reference, the plugin reads its original record and attaches a recent body preview before the model responds. Body messages have stable numbers; tool details and the image directory are separate. The model can use `reference_read` (body ranges or associated tools), `reference_search` (body text) and `reference_image` (actual image content), with readable `source`, `path`, `sessionId` and `revision` fields. It does not need local URI handles or cursors.
+When you send local references, the plugin appends one aggregated background after each user message. The model reads `ref: {source, path, sessionId}` with a content `revision`. `reference_list` discovers local sessions; `reference_read` reads `messages`, `tools` or `images`; `reference_search` searches message/tool text; `reference_image` returns actual pixels.
 
-At send time, local previews share one budget based on estimated remaining context, after accounting for conversation history, pending messages, system/tool changes, output reservation and a safety margin (5% of capacity, at least 1024 tokens). The output reservation uses the configured/model output cap, or otherwise 10% of capacity capped at 8192 tokens. New preview text is conservatively charged at one UTF-8 byte per token. `reference-mention.maxReferenceBytes` is an additional shared upper bound; its default is `max(65536, floor(model context tokens × 4 × 0.2))`. Unknown capacity or insufficient space defers body expansion and retains readable locators plus a notice. This minimal metadata remains even when the context is already full; the host still owns overflow handling. On-demand tool reads retain their separate output limit. Older body messages are omitted first while preserving the newest message and compaction checkpoints, then long text is shortened with its head and tail retained. Omitted messages, shortened text, hidden tools and unread images are reported separately. Image calls have a separate 10 MiB limit.
+Use `from` for both scope and starting position: `messages` uses `messageId`; `tools` uses `toolId` with an optional owning `messageId`; `images` uses `imageId` with an optional owning `messageId`. Copy the complete `next` object into `from` to continue. Long text uses a Unicode code-point `textOffset`, preserving every remaining character rather than keeping only the head and tail. Source-provided summaries use `role: "summary"`; source limitations use an English `notice`. Source content is never translated.
 
-Locators persist in message history. Copy the complete `<local-agent-reference>…</local-agent-reference>` block to reuse a reference in another conversation; a title alone is insufficient. Reads still require task authorization and an allowed source root. A changed source invalidates message/image numbers; omit `revision` in `reference_read` to refresh. No text snapshots or parsed-body caches are saved: later reads, searches and image calls reread the original source, which must still exist at that path.
+`reference-mention.maxTextBytes` caps all new reference contexts in one pre-step batch at 16 KiB by default; estimated remaining context can reduce it. `reference-tool.maxTextBytes` separately caps each local tool text result at 16 KiB. Unknown capacity leaves only bounded metadata and a notice; metadata that cannot fit fails explicitly. Previews contain a continuous recent suffix, with a continuation for an oversized final message. Images have a separate 10 MiB limit.
+
+Every new read checks the enabled source, allowed real path and session identity; no per-session grant is needed for local references. After a version change, restart `reference_read` with the same `ref`, `part: "messages"`, and omit both `revision` and `from`. No full-text snapshots or cross-call parsed-body caches are saved. Other sources retain their existing URI-based protocol under `external_reference_list` and `external_reference_read`.
 
 Import status, session import and handoff summaries use the optional Chat Import API. Install or upgrade the independent plugin from settings when needed; Reference Anything does not install it on startup. An unavailable API leaves import status unknown and does not stop local scanning or reference reading. Tab retains the configured import and summary actions and confirmation flow.
 
@@ -327,7 +329,7 @@ Supports historical conversations from ChatGPT, Claude, Gemini, DeepSeek, Grok, 
 @[ChatGPT·Conversation title](dsh-ref:<opaque-base64url>)
 ```
 
-Opening the source URL happens only in the UI; the URL is never injected into model context. A Web conversation reference initially contains only a safe pointer; if the model needs the body, it calls `reference_read` on demand.
+Opening the source URL happens only in the UI; the URL is never injected into model context. A Web conversation reference initially contains only a safe pointer; if the model needs the body, it calls `external_reference_read` on demand.
 
 #### ☁️ @Cloud drive files — files connected through OpenList
 
@@ -352,7 +354,7 @@ Common providers include OneDrive, Aliyun Drive, Baidu Netdisk, Quark, 115, 123,
 - Use `:` after a group shortcut instead of a space: the `@` candidate token ends at a space, so `@chatgpt keyword` closes the menu as soon as you press the space. For multi-word searches, write `@cachedesign` or `@cache-design`.
 - Without a type prefix, all groups are searched at once.
 - Commands and Skills are handed back to DSH's native slash-command handling after selection; the native `/` panel remains available.
-- Switching the picker back to DSH's official file/session list hides every plugin-owned group, including `Local agent conversations` and `Cloud drive files`. The host source stays registered, so an already-inserted reference still expands and `reference_read` still works; only the menu entry is gone until you switch back.
+- Switching the picker back to DSH's official file/session list hides every plugin-owned group, including `Local agent conversations` and `Cloud drive files`. The host source stays registered, so an already-inserted reference still expands and `external_reference_read` still works; only the menu entry is gone until you switch back.
 
 ## 🔄 How External Conversation References Work
 
@@ -392,11 +394,11 @@ A reference produces an untrusted-data envelope alongside the current user reque
 }
 ```
 
-- The agent calls `reference_read({ uri, limit, cursor })` only when it needs the body. Turns in each page are in chronological order, and pagination moves from newer pages toward older ones.
+- The agent calls `external_reference_read({ uri, limit, cursor })` only when it needs the body. Turns in each page are in chronological order, and pagination moves from newer pages toward older ones.
 - For the initial `deferred=true` item, the first call passes only `uri` and does not send an empty `nextCursor`.
-- In offline-mirror mode, `reference_read` paginates over the current revision. In metadata-only mode, each read requests content from the Provider again and validates the cached account scope inside that same browser operation. Missing, account-mismatch, and fetch errors instruct the agent to ask for a Provider sync before retrying.
+- In offline-mirror mode, `external_reference_read` paginates over the current revision. In metadata-only mode, each read requests content from the Provider again and validates the cached account scope inside that same browser operation. Missing, account-mismatch, and fetch errors instruct the agent to ask for a Provider sync before retrying.
 - `before` is kept only as a deprecated compatibility parameter and cannot be combined with `cursor`.
-- A mention or `reference_list` grants the current task permission to read that URI; unauthorized URIs are rejected.
+- A mention or `external_reference_list` grants the current task permission to read that URI; unauthorized URIs are rejected.
 - Each conversation keeps only the latest revision. Cursors for older revisions expire after content changes.
 - `reference_attachment_read` validates the task grant and, for Web conversations, verifies that the active provider account still matches the account scope captured by sync. A mismatch is rejected with guidance to sync that provider and reselect the conversation.
 - Attachments are capped at 25 MiB while streaming. PNG, JPEG, WebP, and GIF may render inline; every other format, including SVG, is returned as an ordinary temporary file. Successful files expire after one hour, and failures or plugin disposal remove them immediately.

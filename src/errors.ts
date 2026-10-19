@@ -8,6 +8,9 @@ import { HarnessError } from '@deepseek-ai/dsh-llm'
 
 /** Stable, machine-routable failure classes; route on these, never on message text. */
 export type ReferenceErrorCode =
+  | 'INVALID_ARGUMENT' | 'SOURCE_DISABLED' | 'ACCESS_DENIED' | 'NOT_FOUND'
+  | 'REVISION_REQUIRED' | 'REVISION_CHANGED' | 'UNSUPPORTED_PART' | 'IMAGE_UNAVAILABLE'
+  | 'IMAGE_TOO_LARGE' | 'BUDGET_TOO_SMALL' | 'READ_FAILED' | 'TIMEOUT' | 'CANCELLED'
   /** Two sources claimed the same registry id. */
   | 'SOURCE_DUPLICATE'
   /** A reference named a source that is not registered. */

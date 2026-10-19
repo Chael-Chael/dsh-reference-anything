@@ -13,7 +13,7 @@ import * as mention from '../src/reference.ts'
 import * as tool from '../src/tool.ts'
 import { localLocatorId, type LocalLocator } from '../src/local-locator.ts'
 import { formatReferenceMention, parseReferenceText } from '../src/uri.ts'
-import { loadLocalReference, renderLocalPreview } from '../src/local-reference.ts'
+import { loadLocalReference, renderLocalPreview, buildLocalPreview, readLocalPage, selectLocalRows, localBytes, type LocalDocument, type LocalFrom } from '../src/local-reference.ts'
 import { readLocalTool } from '../src/local-reference-tools.ts'
 
 let mentionFiber: { dispose(): Promise<void> }
@@ -29,7 +29,7 @@ beforeEach(async()=>{
  ctx=new Context()
  await ctx.plugin(ReferenceRuntime,{})
  ctx.references.registerSource({id:'local-agent',requiresGrant:true,available:async()=>true,list:async()=>[{ref:{source:'local-agent',id:localLocatorId(locator)},label:'Color'}],read:async()=>{throw Error('legacy read must not run')}})
- ctx.provide('referenceLocalAgents',{discoveryPolicy:()=>({roots:[{kind:'codex',path:root}],scope:'all'})})
+ ctx.provide('referenceLocalAgents',{referenceDirectory:async()=>({items:[{ref:{source:'local-agent',id:localLocatorId(locator)},label:'Color',updatedAt:1}],warnings:[]}),discoveryPolicy:()=>({roots:[{kind:'codex',path:root}],scope:'all'})})
  await ctx.plugin(SystemPrompt,{})
  await ctx.plugin(ToolRuntime,{})
  toolFiber=await ctx.plugin(tool,{maxReadTurns:50})
@@ -40,355 +40,222 @@ beforeEach(async()=>{
 afterEach(async()=>{await rm(root,{recursive:true,force:true})})
 const text=(result:{content:readonly {type:string;text?:string}[]})=>result.content.filter(row=>row.type==='text').map(row=>row.text).join('\n')
 const grant=()=>ctx.references.grant(String(agent.session.id),{source:'local-agent',id:localLocatorId(locator)})
-const call=(name:string,args:unknown)=>ctx.tools.execute({agent,signal:new AbortController().signal,callId:'t' as never,name,arguments:args})
+const call=(name:string,args:unknown)=>ctx.tools.execute({agent,signal:new AbortController().signal,callId:'t' as never,name,arguments:JSON.parse(JSON.stringify(args))})
 
-it('returns local body values directly and paginates 118 messages without gaps', async()=>{
- grant()
+const unwrap=(result: Awaited<ReturnType<typeof call>>):any=>{expect(result.isError,text(result)).not.toBe(true);return result.value}
+const initial=async()=>unwrap(await call('reference_read',{ref:locator}))
+const prompt=(target=locator,label='Color')=>createUserMessage({source:{kind:'user'},content:[{type:'text',text:formatReferenceMention({source:'local-agent',id:localLocatorId(target)},label)+' Keep this question.'}]})
+const step=async(messages:import('@deepseek-ai/dsh-llm').UserMessage[]=[prompt()])=>{
+ const result=await ctx.waterfall('agent/pre-step',{agent,messages,turn:1,step:1,signal:new AbortController().signal},async()=>({kind:'enter' as const,messages}))
+ if(result.kind!=='enter')throw Error('rejected')
+ return result.messages
+}
+const preview=(message:any)=>JSON.parse(text(message).split('<references>')[1]!.split('</references>')[0]!)
+
+it('reads 118 messages continuously with versioned next and a single canonical body',async()=>{
  await writeFile(locator.path,[{type:'session_meta',payload:{id:'sample'}},...Array.from({length:118},(_,i)=>message('user',`message ${i+1}`))].map(row=>JSON.stringify(row)).join('\n'))
- const numbers:number[]=[]
- for(const start of [1,51,101]) {
-  const result=await call('reference_read',{...locator,start,limit:50})
-  expect(result.isError,text(result)).not.toBe(true)
-  const data=result.value as any
-  expect(data.mode).toBe('body')
-  expect(data.totalMessages).toBe(118)
-  expect(data).not.toHaveProperty('startIndex')
-  expect(data).not.toHaveProperty('totalTurns')
-  expect(data.messages.every((m:any)=>!Object.hasOwn(m,'omittedTextBytes'))).toBe(true)
-  expect(data.nextStart).toBe(start===101?null:start+50)
-  expect(text(result)).toContain('nextStart')
-  expect(data.messageRange).toEqual([start,Math.min(start+49,118)])
-  numbers.push(...data.messages.map((m:any)=>m.number))
-  expect(data.messages.map((m:any)=>m.text)).toEqual(JSON.parse(data.localText.split('<local-agent-reference>')[1].split('</local-agent-reference>')[0]).messages.map((m:any)=>m.text))
- }
- expect(numbers).toEqual(Array.from({length:118},(_,i)=>i+1))
- const tail=await call('reference_read',{...locator,limit:1})
- expect((tail.value as any).messages.map((m:any)=>m.number)).toEqual([118])
- expect((tail.value as any).hasOlder).toBe(true)
+ const ids:number[]=[];let from,revision
+ do{
+  const result=await call('reference_read',{ref:locator,revision,from,maxItems:50})
+  const page=unwrap(result);ids.push(...page.items.map((i:any)=>i.messageId));from=page.next;revision=page.revision
+  expect(Object.keys(page).sort()).toEqual(['items','next','revision'])
+  expect(preview(result)).toEqual(page)
+ }while(from)
+ expect(ids).toEqual(Array.from({length:118},(_,i)=>i+1))
+ expect((await initial()).items[0].messageId).toBe(1)
 })
 
-it('reads without a task grant but immediately blocks disabled sources across every local tool', async()=>{
+it('rechecks source settings for read, search, images, listing and hook without needing grants',async()=>{
  const settings={enabledAgents:['codex'],picker:{agents:{enabled:true}}}
  ctx.provide('referenceChatHistory',{getSettings:()=>settings,store:{settings}} as never)
- const first=await call('reference_read',{...locator,start:1,limit:1})
- expect(first.isError,text(first)).not.toBe(true)
- const revision=(first.value as any).revision
- ctx.references.revoke(String(agent.session.id))
- expect((await call('reference_read',{...locator,revision,start:1,limit:1})).isError).not.toBe(true)
- grant()
- for(const disable of [()=>{settings.enabledAgents=[]},()=>{settings.enabledAgents=['codex'];settings.picker.agents.enabled=false}]) {
+ const {revision}=await initial()
+ for(const disable of [()=>{settings.enabledAgents=[]},()=>{settings.enabledAgents=['codex'];settings.picker.agents.enabled=false}]){
   disable()
-  for(const [name,extra] of [['reference_read',{}],['reference_read',{mode:'tools'}],['reference_search',{query:'color'}],['reference_image',{imageId:'image-1'}]] as const) {
-   const result=await call(name,{...locator,revision,...extra})
-   expect(result.isError).toBe(true)
-   expect(text(result)).toContain('disabled')
+  for(const [name,args] of [['reference_read',{}],['reference_read',{part:'tools'}],['reference_search',{query:'color'}],['reference_image',{imageId:1}]] as const){
+   const result=await call(name,{ref:locator,revision,...args});expect(result.isError).toBe(true);expect(text(result)).toContain('disabled')
   }
+  const list=await call('reference_list',{source:'codex'});expect(list.isError).toBe(true)
+  expect(preview((await step())[1])[0].error.code).toBe('SOURCE_DISABLED')
  }
  settings.picker.agents.enabled=true
- expect((await call('reference_read',{...locator,start:1,limit:1})).isError).not.toBe(true)
+ expect((await initial()).items.length).toBeGreaterThan(0)
 })
 
-it('returns structured associated tools and enforces the complete output byte budget', async()=>{
- grant()
+it('does not invent tool ownership, separates calls/results and returns actual image blocks',async()=>{
  const doc=await loadLocalReference(ctx,agent,locator)
- const result=await call('reference_read',{...locator,revision:doc.revision,start:1,limit:1,mode:'tools'})
- expect(result.isError,text(result)).not.toBe(true)
- const data=result.value as any
- expect(data.messages).toEqual([])
- expect(data.toolRecords.map((t:any)=>t.text).join(' ')).toContain('secret tool output')
- expect(data.toolRecords.every((t:any)=>!Object.hasOwn(t,'omittedTextBytes'))).toBe(true)
- expect(data.nextStart).toBe(2)
- expect(text(result)).toContain('"nextStart": 2')
- const invalid=await call('reference_read',{...locator,limit:60})
- expect(invalid.isError).toBe(true)
- expect(text(invalid)).toContain('1-50')
- await writeFile(locator.path,raw.replace('secret tool output','中文\\n'.repeat(20000)).replace('What color is this?','中文'.repeat(20000)))
- const changed=await loadLocalReference(ctx,agent,locator)
- for(const mode of ['body','tools'] as const){
-  const value=await readLocalTool(ctx,agent,{...locator,revision:changed.revision,start:1,limit:1,mode},6000,50,new AbortController().signal)
-  expect(Buffer.byteLength(JSON.stringify(value))).toBeLessThanOrEqual(6000)
-  expect(value.omittedBytes).toBeGreaterThan(0)
-  if(value.mode==='body') {
-   expect(value.messages[0]?.text.length).toBeGreaterThan(100)
-   expect(value.messages.every(m=>!Object.hasOwn(m,'omittedTextBytes'))).toBe(true)
-   expect(value.omissions.truncatedMessages.reduce((sum,row)=>sum+row.omittedTextBytes,0)).toBe(value.omittedBytes)
-  } else expect(value.toolRecords.some(row=>(row.omittedTextBytes ?? 0)>0)).toBe(true)
- }
-})
-
-it('reports empty source parser failures and rejects invalid windows and mixed protocols',async()=>{
- grant()
- for(const extra of [{start:0},{start:3},{limit:0},{limit:1.5},{detail:'summary'},{mode:'tools'}]) {
-  expect((await call('reference_read',{...locator,...extra})).isError).toBe(true)
- }
- await writeFile(locator.path,JSON.stringify({type:'session_meta',payload:{id:'sample'}})+'\n')
- const result=await call('reference_read',{...locator,start:1,limit:1})
- expect(result.isError).toBe(true)
- expect(text(result)).toContain('parser could not read')
-})
-
-it('injects actual body, durable locator and image directory before the first model response',async()=>{
- const prompt=createUserMessage({source:{kind:'user'},content:[{type:'text',text:formatReferenceMention({source:'local-agent',id:localLocatorId(locator)},'Color')}]})
- const result=await ctx.waterfall('agent/pre-step',{agent,messages:[prompt],turn:1,step:1,signal:new AbortController().signal},async()=>({kind:'enter' as const,messages:[prompt]}))
- if(result.kind!=='enter') throw Error('rejected')
- const preview=text(result.messages[0]!)
- expect(preview).toContain('What color is this?')
- expect(preview).toContain('image-1')
- expect(preview).toContain('"totalMessages": 2')
- expect(preview).not.toContain('secret tool output')
- expect(preview).not.toMatch(/dsh-ref:|ref:[a-f0-9]|nextCursor|fullSnapshot|tool details omitted/)
- const fields=parseReferenceText(preview).references
- expect(fields[0]?.ref.id).toBe(localLocatorId(locator))
- // Resumed session after in-memory grants have been discarded.
- agent.session.append('user/message',result.messages[0]!,{surfaceOp:'append'})
- ctx.references.revoke(String(agent.session.id))
- expect((await loadLocalReference(ctx,agent,locator)).messages).toHaveLength(2)
- // An enabled source can be read from another session without copying a grant.
- const other={session:Session.create(SessionId('copy-test'))} as Agent
- expect((await loadLocalReference(ctx,other,locator)).messages).toHaveLength(2)
- other.session.append('user/message',createUserMessage({source:{kind:'user'},content:[{type:'text',text:preview}]}),{surfaceOp:'append'})
- expect((await loadLocalReference(ctx,other,locator)).messages).toHaveLength(2)
-})
-
-it('uses stable body numbers, linked tool details, search and actual image blocks',async()=>{
- grant()
- const document=await loadLocalReference(ctx,agent,locator)
- expect(document.messages.map(row=>row.number)).toEqual([1,2])
- expect(document.tools.map(row=>row.message)).toEqual([1,1])
- const args={...locator,revision:document.revision}
- const body=await call('reference_read',{...args,start:1,limit:1})
- expect(body.isError,text(body)).not.toBe(true)
- expect(text(body)).toContain('What color is this?')
- expect(text(body)).not.toContain('It is red.')
- expect(text(await call('reference_read',{...args,start:1,limit:1,mode:'tools'}))).toContain('secret tool output')
- expect(text(await call('reference_search',{...args,query:'red'}))).toContain('"number": 2')
+ const args={ref:locator,revision:doc.revision}
+ const records=unwrap(await call('reference_read',{...args,part:'tools'})).items
+ expect(records.map((r:any)=>r.toolId)).toEqual([1,2]);expect(records.map((r:any)=>r.kind)).toEqual(['call','result'])
+ expect(records.every((r:any)=>r.messageId===undefined)).toBe(true)
+ expect(records[0].callId).toBe(records[1].callId)
+ expect(records[0].text).toBe('{"file":"test"}')
+ expect(unwrap(await call('reference_read',{...args,part:'tools',from:{messageId:1}})).items).toEqual([])
+ const images=unwrap(await call('reference_read',{...args,part:'images',from:{messageId:1}}))
+ expect(images.items).toEqual([{imageId:1,messageId:1}])
  const saveImage=vi.fn(async()=>({attachmentId:'sha256:'+'a'.repeat(64),mediaType:'image/png',width:1,height:1,bytes:68}))
  ctx.provide('attachments',{saveImage})
- const image=await call('reference_image',{...args,imageId:'image-1'})
- expect(image.isError).not.toBe(true)
- expect(image.content.some(block=>block.type==='image')).toBe(true)
+ const result=await call('reference_image',{...args,imageId:1});unwrap(result)
+ expect(result.content.some(b=>b.type==='image')).toBe(true)
  expect(saveImage).toHaveBeenCalledWith({data:Buffer.from(png,'base64'),mediaType:'image/png'})
- await writeFile(locator.path,raw.replace('secret tool output','changed tool output'))
- for(const [name,extra] of [['reference_read',{start:1}],['reference_search',{query:'red'}],['reference_image',{imageId:'image-1'}]] as const){
-  const result=await call(name,{...args,...extra});expect(result.isError).toBe(true);expect(text(result)).toContain('source changed')
- }
- expect(text(await call('reference_read',locator))).toContain('What color is this?')
 })
 
-it('rejects arbitrary paths even with a forged/copied grant and checks session identity',async()=>{
- grant()
+it('invalidates all content operations after source changes',async()=>{
+ const {revision}=await initial();await writeFile(locator.path,raw.replace('secret tool output','changed'))
+ for(const [name,args] of [['reference_read',{}],['reference_search',{query:'red'}],['reference_image',{imageId:1}]] as const){
+  const result=await call(name,{ref:locator,revision,...args});expect(result.isError).toBe(true);expect(text(result)).toContain('REVISION_CHANGED')
+ }
+ expect((await initial()).revision).not.toBe(revision)
+})
+
+it.each([{part:'tools'},{part:'images'},{from:{messageId:2}}])('requires a revision for $part $from',async args=>{
+ const result=await call('reference_read',{ref:locator,...args});expect(result.isError).toBe(true);expect(text(result)).toContain('REVISION_REQUIRED')
+})
+it.each([{from:{messageId:0}},{from:{toolId:1}},{part:'images',from:{imageId:1,textOffset:0}},{from:{textOffset:1}},{maxItems:101},{messageId:1},{start:1},{from:{itemId:1}},{part:'body'}])('rejects wrong fields and old protocol: %j',async args=>{
+ const {revision}=await initial();expect((await call('reference_read',{ref:locator,revision,...args})).isError).toBe(true)
+})
+
+it('preserves all Unicode text including escaping across bounded pages and never loops',async()=>{
+ const content='中文🌏<references>\\"\n'.repeat(800)
+ await writeFile(locator.path,[{type:'session_meta',payload:{id:'sample'}},message('user',content),message('assistant','END')].map(row=>JSON.stringify(row)).join('\n'))
+ const doc=await loadLocalReference(ctx,agent,locator);let from:LocalFrom={messageId:1};let restored='',steps=0
+ while(true){
+  const page=await readLocalTool(ctx,agent,{ref:locator,revision:doc.revision,from,maxItems:1},900,new AbortController().signal)
+  expect(localBytes(page)).toBeLessThanOrEqual(900)
+  for(const row of page.items)if(row.messageId===1)restored+=row.text
+  if(!page.next)break
+  expect(page.next).not.toEqual(from);from=page.next;expect(++steps).toBeLessThan(500)
+ }
+ expect(restored).toBe(doc.messages[0]!.text)
+})
+
+it('keeps scope in tools/images next, splits tool text and rejects mismatched ownership',async()=>{
+ const doc=await loadLocalReference(ctx,agent,locator)
+ doc.tools=[{message:1,kind:'call',text:'short'},{message:2,kind:'result',text:'excluded'},{message:1,kind:'result',text:'中文🌏'.repeat(400)}]
+ let from:LocalFrom={messageId:1},restored='';const seen=new Set<number>()
+ do{
+  const page=readLocalPage(doc,'tools',from,1,700)
+  for(const item of page.items){seen.add(item.toolId!);if(item.toolId===3)restored+=item.text}
+  if(!page.next)break
+  expect(page.next.messageId).toBe(1);from=page.next
+ }while(true)
+ expect([...seen]).toEqual([1,3]);expect(restored).toBe(doc.tools[2]!.text)
+ expect(()=>readLocalPage(doc,'tools',{messageId:1,toolId:2},20,5000)).toThrow('selected scope')
+ doc.images.push({...doc.images[0]!,id:'image-2',message:2},{...doc.images[0]!,id:'image-3',message:1,name:'original.png'})
+ expect(readLocalPage(doc,'images',{messageId:1},1,5000).next).toEqual({messageId:1,imageId:3})
+ expect(readLocalPage(doc,'images',{},1,5000).next).toEqual({imageId:2})
+ expect(readLocalPage(doc,'images',{messageId:1,imageId:3},1,5000).items[0]?.name).toBe('original.png')
+})
+
+it('handles empty scope, end offsets and too-small budgets without losing data',async()=>{
+ const doc=await loadLocalReference(ctx,agent,locator)
+ expect(readLocalPage(doc,'messages',{messageId:3},20,5000).items).toEqual([])
+ expect(()=>readLocalPage(doc,'messages',{messageId:4},20,5000)).toThrow()
+ expect(()=>readLocalPage(doc,'messages',{messageId:1,textOffset:99999},20,5000)).toThrow()
+ expect(readLocalPage(doc,'messages',{messageId:1,textOffset:Array.from(doc.messages[0]!.text).length},20,5000).items[0]?.messageId).toBe(2)
+ expect(()=>readLocalPage(doc,'messages',{},20,50)).toThrow('BUDGET_TOO_SMALL')
+ doc.messages=[];doc.tools=[];doc.images=[]
+ expect(readLocalPage(doc,'messages',{},20,5000)).toMatchObject({items:[],next:null})
+})
+
+it('searches case-sensitively, returns code-point hit positions and pages without gaps',async()=>{
+ await writeFile(locator.path,[{type:'session_meta',payload:{id:'sample'}},...Array.from({length:8},(_,i)=>message('user','🌏中文 needle '+i+'中'.repeat(200)))].map(row=>JSON.stringify(row)).join('\n'))
+ const {revision}=await initial();let from,seen:number[]=[]
+ do{const page=unwrap(await call('reference_search',{ref:locator,revision,query:'needle',from,maxItems:2}));seen.push(...page.hits.map((h:any)=>h.position.messageId));expect(page.hits[0].position.textOffset).toBe(4);from=page.next}while(from)
+ expect(seen).toEqual([1,2,3,4,5,6,7,8])
+ expect(unwrap(await call('reference_search',{ref:locator,revision,query:'NEEDLE'})).hits).toEqual([])
+ const match=unwrap(await call('reference_search',{ref:locator,revision,query:'needle',maxItems:1})).hits[0]
+ expect(unwrap(await call('reference_read',{ref:locator,revision,from:match.position,maxItems:1})).items[0].text.startsWith('needle')).toBe(true)
+ expect((await call('reference_search',{ref:locator,revision,query:'needle',from:{messageId:1,textOffset:0}})).isError).toBe(true)
+ await writeFile(locator.path,raw);const fresh=await initial()
+ expect(unwrap(await call('reference_search',{ref:locator,revision:fresh.revision,query:'secret tool output'})).hits).toEqual([])
+ expect(unwrap(await call('reference_search',{ref:locator,revision:fresh.revision,part:'tools',query:'secret tool output'})).hits[0].position.toolId).toBe(2)
+})
+
+it('previews only a continuous tail, marks source summaries and never inserts old checkpoints',async()=>{
+ const doc=await loadLocalReference(ctx,agent,locator)
+ doc.messages=Array.from({length:8},(_,i)=>({number:i+1,role:'user' as const,text:'中文正文'.repeat(2000),checkpoint:i===0,images:[]}))
+ const preview=buildLocalPreview(locator,doc,3000)
+ expect(localBytes(preview)).toBeLessThanOrEqual(3000);expect(preview.items.map(i=>i.messageId)).toEqual([8]);expect(preview.next?.messageId).toBe(8)
+ await writeFile(locator.path,[{type:'session_meta',payload:{id:'sample'}},message('user','Before'),{type:'compacted',payload:{message:'Checkpoint summary'}},message('assistant','After')].map(row=>JSON.stringify(row)).join('\n'))
+ const page=await initial();expect(page.items.find((i:any)=>i.role==='summary')?.text).toContain('Checkpoint summary')
+ expect(page.items.every((i:any)=>!Object.hasOwn(i,'checkpoint'))).toBe(true)
+})
+
+it('processes all direct messages after their owners, aggregates and does not recurse on replay',async()=>{
+ const a=prompt(),b=prompt(locator,'Again');const messages=await step([a,b])
+ expect(messages).toHaveLength(4);expect(messages[0]?.id).toBe(a.id);expect(messages[2]?.id).toBe(b.id)
+ expect(preview(messages[1])[0].items[0].text).toContain('What color')
+ expect(preview(messages[3])[0].ref).toEqual(locator)
+ expect(text(messages[1]!)).not.toContain('secret tool output')
+ const replay=await step([messages[1]!]);expect(replay).toHaveLength(1)
+ const combined=createUserMessage({source:{kind:'user'},content:[{type:'text',text:text(a)+' '+text(a)}]})
+ expect(preview((await step([combined]))[1])).toHaveLength(1)
+})
+
+it('shares one batch budget and keeps locators without loading bodies when capacity is unknown',async()=>{
+ await mentionFiber.dispose();mentionFiber=await ctx.plugin(mention,{maxTextBytes:5000})
+ await writeFile(locator.path,[{type:'session_meta',payload:{id:'sample'}},message('user','中文🌏'.repeat(4000))].map(row=>JSON.stringify(row)).join('\n'))
+ const messages=await step([prompt(),prompt()])
+ expect([messages[1],messages[3]].reduce((s,m)=>s+Buffer.byteLength(text(m!)),0)).toBeLessThanOrEqual(5000)
+ expect(preview(messages[1])[0].items.length).toBeGreaterThan(0)
+ ctx.llm.resolveModelInfo=async()=>({id:'test',provider:'test',name:'test'})
+ const delayed=preview((await step())[1])[0]
+ expect(delayed).toHaveProperty('notice');expect(delayed).not.toHaveProperty('revision');expect(delayed).not.toHaveProperty('items');expect(delayed).not.toHaveProperty('deferred')
+})
+
+it('retains path/identity guards and rejects symlink escapes',async()=>{
  const outside=await mkdtemp(join(tmpdir(),'outside-reference-'))
  try{
-  const path=join(outside,'other.jsonl');await writeFile(path,raw)
-  const target={...locator,path};ctx.references.grant(String(agent.session.id),{source:'local-agent',id:localLocatorId(target)})
-  await expect(loadLocalReference(ctx,agent,target)).rejects.toThrow('outside the allowed roots')
-  const link=join(root,'linked');await symlink(outside,link,'junction')
-  const linked={...locator,path:join(link,'other.jsonl')};ctx.references.grant(String(agent.session.id),{source:'local-agent',id:localLocatorId(linked)})
-  await expect(loadLocalReference(ctx,agent,linked)).rejects.toThrow('outside the allowed roots')
+  const file=join(outside,'other.jsonl');await writeFile(file,raw)
+  await expect(loadLocalReference(ctx,agent,{...locator,path:file})).rejects.toThrow('outside the allowed')
+  const link=join(root,'escape');await symlink(outside,link,'junction')
+  await expect(loadLocalReference(ctx,agent,{...locator,path:join(link,'other.jsonl')})).rejects.toThrow('outside the allowed')
+  await expect(loadLocalReference(ctx,agent,{...locator,sessionId:'forged'})).rejects.toThrow()
  }finally{await rm(outside,{recursive:true,force:true})}
- await writeFile(locator.path,raw.replace('"id":"sample"','"id":"other"'))
- await expect(loadLocalReference(ctx,agent,locator)).rejects.toThrow('different sessionId')
 })
 
-it('fits the complete UTF-8 preview, distinguishes omissions and retains checkpoints and the newest message',async()=>{
- grant();const doc=await loadLocalReference(ctx,agent,locator)
- doc.messages=Array.from({length:8},(_,i)=>({number:i+1,role:'user' as const,text:'中文正文'.repeat(2000),checkpoint:i===0,images:[]}))
- const preview=renderLocalPreview(locator,doc,5000)
- expect(Buffer.byteLength(preview)).toBeLessThanOrEqual(5000)
- const data=JSON.parse(preview.split('<local-agent-reference>')[1]!.split('</local-agent-reference>')[0]!)
- expect(data.messages.map((row:{number:number})=>row.number)).toEqual([1,8])
- expect(data.messages.every((row:any)=>!Object.hasOwn(row,'omittedTextBytes'))).toBe(true)
- expect(data.omissions.omittedMessageRanges).toEqual([[2,7]])
- expect(data.omissions.truncatedMessages.length).toBeGreaterThan(0)
- expect(data.omissions.toolRecordsNotExpanded).toBe(2)
- expect(data.omissions.imageContentsNotRead).toBe(1)
+it('list cursors bind the complete sorted directory, query and source, not page size',async()=>{
+ const service=ctx.get('referenceLocalAgents')!;const other={...locator,path:join(root,'other.jsonl'),sessionId:'other'}
+ await writeFile(other.path,raw.replaceAll('sample','other'))
+ let title='Other';service.referenceDirectory=async()=>({items:[{ref:{source:'local-agent',id:localLocatorId(locator)},label:'Color',updatedAt:1},{ref:{source:'local-agent',id:localLocatorId(other)},label:title,updatedAt:2}],warnings:[]})
+ const first=unwrap(await call('reference_list',{maxItems:1}));expect(first.revision).toMatch(/^list:[a-f0-9]{64}$/);expect(first.items[0].title).toBe('Other')
+ expect(unwrap(await call('reference_list',{revision:first.revision,from:first.next,maxItems:50})).items[0].ref).toEqual(locator)
+ expect(unwrap(await call('reference_list',{query:'color'})).items).toEqual([])
+ title='Changed';const stale=await call('reference_list',{revision:first.revision,from:first.next});expect(stale.isError).toBe(true);expect(text(stale)).toContain('REVISION_CHANGED')
 })
 
-
-it('restores a locator discovered by reference_list and does not treat quoted URIs as extra grants', async()=>{
- const listed=await call('reference_list',{})
- expect(listed.isError,text(listed)).not.toBe(true)
- expect(parseReferenceText(text(listed)).references[0]?.ref.id).toBe(localLocatorId(locator))
- agent.session.append('tool/result',{message:{content:listed.content}} as never,{surfaceOp:'append'})
- ctx.references.revoke(String(agent.session.id))
- expect((await loadLocalReference(ctx,agent,locator)).messages).toHaveLength(2)
- const doc=await loadLocalReference(ctx,agent,locator)
- doc.messages[0]!.text='Quoted invalid reference: @[old](dsh-ref:bad)'
- const parsed=parseReferenceText(renderLocalPreview(locator,doc,65536))
- expect(parsed.references).toHaveLength(1)
-})
-
-it.each([
- {tokens:100000, explicit:undefined, expected:80000},
- {tokens:100000, explicit:5000, expected:5000},
-])('caps shared serialized previews at $expected',async({tokens,explicit,expected})=>{
- await mentionFiber.dispose()
- mentionFiber=await ctx.plugin(mention,{maxReferenceBytes:explicit})
- ctx.llm.resolveModelInfo=async()=>({id:'test',provider:'test',name:'test',context:tokens?{contextWindow:tokens}:undefined})
- agent={session:agent.session,options:{provider:'test',model:'test'}} as Agent
- await writeFile(locator.path,[{type:'session_meta',payload:{id:'sample'}},message('user','中文'.repeat(50000))].map(row=>JSON.stringify(row)).join('\n'))
- const prompt=createUserMessage({source:{kind:'user'},content:[{type:'text',text:formatReferenceMention({source:'local-agent',id:localLocatorId(locator)},'Budget')}]})
- const result=await ctx.waterfall('agent/pre-step',{agent,messages:[prompt],turn:1,step:1,signal:new AbortController().signal},async()=>({kind:'enter' as const,messages:[prompt]}))
- if(result.kind!=='enter') throw Error('rejected')
- const bytes=Buffer.byteLength(text(result.messages[0]!))
- expect(bytes).toBeLessThanOrEqual(expected)
- expect(bytes).toBeGreaterThan(expected-1000)
-})
-
-it('shares remaining space, recounts later sends, and preserves the user question',async()=>{
- const other={...locator,path:join(root,'second.jsonl'),sessionId:'second'}
- for(const item of [locator,other]) await writeFile(item.path,[{type:'session_meta',payload:{id:item.sessionId}},message('user','正文🌏'.repeat(30000))].map(row=>JSON.stringify(row)).join('\n'))
- let used=60000
- const measure=vi.fn(()=>({totalTokens:used,baseline:{kind:'usage'}}))
- ctx.provide('tokenMeter',{measure})
- ctx.llm.resolveModelInfo=async()=>({id:'test',provider:'test',name:'test',context:{contextWindow:100000},defaultMaxTokens:8000})
- agent={session:agent.session,options:{provider:'test',model:'test'}} as Agent
- const prompt=createUserMessage({source:{kind:'user'},content:[{type:'text',text:[locator,other].map(l=>formatReferenceMention({source:'local-agent',id:localLocatorId(l)},'Budget')).join(' ')+' Compare without changing files.'}]})
- const send=async()=>{
-  const result=await ctx.waterfall('agent/pre-step',{agent,messages:[prompt],turn:1,step:1,signal:new AbortController().signal},async()=>({kind:'enter' as const,messages:[prompt]}))
-  if(result.kind!=='enter') throw Error('rejected')
-  expect(text(result.messages.at(-1)!)).toContain('Compare without changing files.')
-  return result.messages.slice(0,-1).map(m=>text(m))
- }
- const first=await send()
- expect(first).toHaveLength(2)
- expect(first.every(t=>t.includes('正文'))).toBe(true)
- expect(first.reduce((sum,t)=>sum+Buffer.byteLength(t),0)).toBeLessThan(27000)
- used=78000
- const later=await send()
- expect(later.reduce((sum,t)=>sum+Buffer.byteLength(t),0)).toBeLessThan(9000)
- expect(measure).toHaveBeenCalledTimes(2)
- used=99000
- const full=await send()
- expect(full.every(t=>t.includes('source')&&t.includes('sessionId')&&!t.includes('正文'))).toBe(true)
-})
-
-it('does not parse bodies when capacity is unknown or a large configured cap exceeds remaining space',async()=>{
- await mentionFiber.dispose()
- mentionFiber=await ctx.plugin(mention,{maxReferenceBytes:9999999})
- ctx.llm.resolveModelInfo=async()=>({id:'test',provider:'test',name:'test'})
- agent={session:agent.session,options:{provider:'test',model:'test'}} as Agent
- await rm(locator.path)
- const prompt=createUserMessage({source:{kind:'user'},content:[{type:'text',text:formatReferenceMention({source:'local-agent',id:localLocatorId(locator)},'Unavailable budget')}]})
- const result=await ctx.waterfall('agent/pre-step',{agent,messages:[prompt],turn:1,step:1,signal:new AbortController().signal},async()=>({kind:'enter' as const,messages:[prompt]}))
- if(result.kind!=='enter') throw Error('rejected')
- expect(text(result.messages[0]!)).toContain('preview deferred')
- expect(text(result.messages[0]!)).not.toContain('no longer exists')
-})
-
-it.each(['history','pending','system','tools','output'] as const)('accounts for %s before expanding local bodies',async(kind)=>{
- ctx.llm.resolveModelInfo=async()=>({id:'test',provider:'test',name:'test',context:{contextWindow:20000},defaultMaxTokens:2000})
- const large='保留当前指令🌏'.repeat(3000)
- if(kind==='history') agent.session.append('user/message',createUserMessage({source:{kind:'user'},content:[{type:'text',text:large}]}),{surfaceOp:'append'})
- if(kind==='output') agent={...agent,options:{...agent.options,maxTokens:20000}} as Agent
- const assembly={sections:kind==='system'?[{name:'instruction',text:large}]:[],contexts:[],tools:kind==='tools'?[{name:'large',description:large,parameters:{type:'object' as const,properties:{}}}]:[],variables:{provider:'test',model:'test'}}
- await ctx.waterfall('system-prompt/assemble',assembly,{agent},async()=>assembly)
- const question=kind==='pending'?large:'Keep this exact question.'
- const prompt=createUserMessage({source:{kind:'user'},content:[{type:'text',text:formatReferenceMention({source:'local-agent',id:localLocatorId(locator)},'Color')+' '+question}]})
- const result=await ctx.waterfall('agent/pre-step',{agent,messages:[prompt],turn:1,step:1,signal:new AbortController().signal},async()=>({kind:'enter' as const,messages:[prompt]}))
- if(result.kind!=='enter') throw Error('rejected')
- expect(text(result.messages[0]!)).toContain('preview deferred')
- expect(text(result.messages.at(-1)!)).toContain(question)
- expect(assembly.sections[0]?.text).toBe(kind==='system'?large:undefined)
-})
-
-it('does not reuse usage from a different model and recovers space after history compaction',async()=>{
- agent.session.append('request/header',{header:{config:{provider:'old',model:'old'}}} as never)
- const measure=vi.fn(()=>({totalTokens:9999999,baseline:{kind:'usage'}}))
- ctx.provide('tokenMeter',{measure})
- const prompt=createUserMessage({source:{kind:'user'},content:[{type:'text',text:formatReferenceMention({source:'local-agent',id:localLocatorId(locator)},'Color')}]})
- const send=()=>ctx.waterfall('agent/pre-step',{agent,messages:[prompt],turn:1,step:1,signal:new AbortController().signal},async()=>({kind:'enter' as const,messages:[prompt]}))
- const result=await send()
- if(result.kind!=='enter') throw Error('rejected')
- expect(text(result.messages[0]!)).toContain('What color is this?')
- agent.session.append('request/header',{header:{config:{provider:'test',model:'test'}}} as never)
- const full=await send()
- if(full.kind!=='enter') throw Error('rejected')
- expect(text(full.messages[0]!)).toContain('preview deferred')
- measure.mockReturnValue({totalTokens:1000,baseline:{kind:'usage'}})
- const compacted=await send()
- if(compacted.kind!=='enter') throw Error('rejected')
- expect(text(compacted.messages[0]!)).toContain('What color is this?')
-})
-
-
-it('keeps real Codex attachment prompts and compaction checkpoints alongside full history', async()=>{
- grant()
- await writeFile(locator.path,[{type:'session_meta',payload:{id:'sample'}},
-  message('user',"# Files mentioned by the user:\n## image.png\nImage attachment: true\n## My request:\nFix the logo",true),
-  message('assistant','Fixed the logo'),
-  {type:'compacted',payload:{message:'Checkpoint: logo fixed'}},
-  message('user','Please verify'),message('assistant','Verified')].map(row=>JSON.stringify(row)).join('\n'))
- const doc=await loadLocalReference(ctx,agent,locator)
- expect(doc.messages[0]!.text).toBe('Fix the logo')
- expect(doc.images).toHaveLength(1)
- expect(doc.messages.find(row=>row.checkpoint)?.text).toContain('Checkpoint: logo fixed')
- expect(doc.messages.at(-1)!.text).toBe('Verified')
-})
-
-
-it('keeps bounded local output canonical while respecting post-execute denials',async()=>{
- grant()
- const spill=vi.fn()
- ctx.on('tools/post-execute',async(_exec,_result,next)=>{
-  const decision=await next()
-  if(decision.kind==='accept' && !Object.hasOwn(decision,'value')) spill()
-  return decision
- },{prepend:true})
- const result=await call('reference_read',{...locator,start:1,limit:1})
- expect(result.isError).not.toBe(true)
- expect(spill).not.toHaveBeenCalled()
+it('preserves canonical values and respects host post-execute rejection',async()=>{
+ const spill=vi.fn();ctx.on('tools/post-execute',async(_exec,_result,next)=>{const d=await next();if(d.kind==='accept'&&!Object.hasOwn(d,'value'))spill();return d},{prepend:true})
+ await initial();expect(spill).not.toHaveBeenCalled()
  ctx.on('tools/post-execute',async()=>({kind:'block',feedback:[{type:'text',text:'Blocked by host policy'}]}))
- const blocked=await call('reference_read',locator)
- expect(blocked.isError).toBe(true)
- expect(text(blocked)).toContain('Blocked by host policy')
+ const result=await call('reference_read',{ref:locator});expect(result.isError).toBe(true);expect(text(result)).toContain('Blocked by host policy')
 })
 
-
-it('returns search hits directly with unambiguous pagination and empty results',async()=>{
- await writeFile(locator.path,[{type:'session_meta',payload:{id:'sample'}},...Array.from({length:5},(_,i)=>message('user',`needle ${i+1}`))].map(row=>JSON.stringify(row)).join('\n'))
- const doc=await loadLocalReference(ctx,agent,locator)
- const args={...locator,revision:doc.revision,query:'NEEDLE',limit:2}
- const numbers:number[]=[]
- for(const start of [1,3,5]) {
-  const result=await call('reference_search',{...args,start})
-  expect(result.isError,text(result)).not.toBe(true)
-  const data=result.value as any
-  expect(data).not.toHaveProperty('text')
-  expect(data.totalMatches).toBe(6-start)
-  expect(data.hasMore).toBe(start<5)
-  expect(data.nextStart).toBe(start<5?start+2:null)
-  numbers.push(...data.hits.map((h:any)=>h.number))
- }
- expect(numbers).toEqual([1,2,3,4,5])
- const empty=await call('reference_search',{...args,query:'not-found'})
- expect(empty.value).toMatchObject({hits:[],totalMatches:0,hasMore:false,nextStart:null})
- const beyond=await call('reference_search',{...args,start:6})
- expect(beyond.value).toMatchObject({hits:[],totalMatches:0,hasMore:false,nextStart:null})
+it('does not expand quoted code references and aborts preparation without publishing',async()=>{
+ const code=createUserMessage({source:{kind:'user'},content:[{type:'text',text:'```text\n'+text(prompt())+'\n```'}]})
+ expect(await step([code])).toEqual([code])
+ const controller=new AbortController();ctx.llm.resolveModelInfo=async()=>{controller.abort();throw Error('cancelled')}
+ const messages=[prompt()]
+ await expect(ctx.waterfall('agent/pre-step',{agent,messages,turn:1,step:1,signal:controller.signal},async()=>({kind:'enter' as const,messages}))).rejects.toThrow()
 })
 
+it('reports partial list failures and budgets search results without dropping hits',async()=>{
+ ctx.get('referenceLocalAgents')!.referenceDirectory=async()=>({items:[{ref:{source:'local-agent',id:localLocatorId(locator)},label:'Color'}],warnings:['claude: unavailable']})
+ expect(unwrap(await call('reference_list',{})).notice).toContain('claude')
+ expect((await call('reference_list',{source:'codex'})).isError).toBe(true)
+ await toolFiber.dispose();toolFiber=await ctx.plugin(tool,{maxTextBytes:1400})
+ await writeFile(locator.path,[{type:'session_meta',payload:{id:'sample'}},...Array.from({length:6},()=>message('user','中'.repeat(100)+'needle'+'文'.repeat(100)))].map(row=>JSON.stringify(row)).join('\n'))
+ const {revision}=await initial();let from,ids:number[]=[]
+ do{const page=unwrap(await call('reference_search',{ref:locator,revision,query:'needle',from,maxItems:50}));expect(localBytes(page)).toBeLessThanOrEqual(1400);ids.push(...page.hits.map((h:any)=>h.position.messageId));from=page.next}while(from)
+ expect(ids).toEqual([1,2,3,4,5,6])
+})
 
-it('paginates budget-reduced search hits without gaps and excludes tools',async()=>{
- await toolFiber.dispose()
- toolFiber=await ctx.plugin(tool,{maxReadTurns:50,maxOutputBytes:3000})
- await writeFile(locator.path,[{type:'session_meta',payload:{id:'sample'}},...Array.from({length:8},()=>message('user','needle '+'中文'.repeat(300)))].map(row=>JSON.stringify(row)).join('\n'))
- const doc=await loadLocalReference(ctx,agent,locator)
- const seen:number[]=[]
- let start:number|null=1
- while(start!==null) {
-  const result=await call('reference_search',{...locator,revision:doc.revision,query:'needle',start,limit:50})
-  expect(result.isError,text(result)).not.toBe(true)
-  const value=result.value as any
-  expect(Buffer.byteLength(JSON.stringify(value))).toBeLessThanOrEqual(3000)
-  expect(Buffer.byteLength(text(result))).toBeLessThanOrEqual(3000)
-  expect(value.hits.length).toBeGreaterThan(0)
-  expect(value.hits.length).toBeLessThan(8)
-  seen.push(...value.hits.map((h:any)=>h.number))
-  if(value.nextStart!==null) expect(value.nextStart).toBeGreaterThan(start)
-  start=value.nextStart
- }
- expect(seen).toEqual([1,2,3,4,5,6,7,8])
- await writeFile(locator.path,raw)
- const refreshed=await loadLocalReference(ctx,agent,locator)
- expect((await call('reference_search',{...locator,revision:refreshed.revision,query:'secret tool output'})).value).toMatchObject({hits:[],hasMore:false,nextStart:null})
+// Policy changes invalidate cursors even if the matching directory is unchanged.
+it('invalidates list revisions when enabled source policy changes',async()=>{
+ const settings={enabledAgents:['codex'],picker:{agents:{enabled:true}}}
+ ctx.provide('referenceChatHistory',{getSettings:()=>settings,store:{settings}} as never)
+ const page=unwrap(await call('reference_list',{}))
+ settings.enabledAgents.push('claude-code')
+ const result=await call('reference_list',{revision:page.revision,from:{index:1}})
+ expect(result.isError).toBe(true);expect(text(result)).toContain('REVISION_CHANGED')
 })

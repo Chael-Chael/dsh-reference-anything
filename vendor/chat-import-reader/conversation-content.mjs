@@ -63,36 +63,45 @@ function structuredContent(out) {
   const events = (out.events || []).filter(event => ['user/message', 'assistant/message', 'tool/result'].includes(event.type)
     && (event.data?.message || event.data)?.source?.plugin !== 'chat-import')
   const calls = new Map()
-  let current = 0
   for (const event of events) {
     const message = event.data?.message || event.data
     const content = Array.isArray(message?.content) ? message.content : []
     const isTool = event.type === 'tool/result'
     const body = content.filter(block => block.type === 'text').map(block => block.text || '').join('\n')
+    let owner
     if (!isTool && (body || content.some(block => block.type === 'image'))) {
-      current = messages.length + 1
-      messages.push({ number: current, role: event.type === 'assistant/message' ? 'assistant' : 'user', text: body,
-        checkpoint: Boolean(message.source && /compact/.test(JSON.stringify(message.source))), images: [] })
+      owner = messages.length + 1
+      const source = message.source
+      const checkpoint = source?.kind === 'compact-checkpoint' || source?.kind === 'plugin:compact'
+        || (source?.kind === 'plugin' && source.plugin === 'compact')
+      messages.push({ number: owner, role: event.type === 'assistant/message' ? 'assistant' : 'user', text: body,
+        checkpoint, images: [] })
     }
-    const visit = (blocks, owner = current) => {
+    const visit = (blocks, messageId = owner) => {
       for (const block of blocks) {
         if (block.type === 'image') {
           const id = `image-${images.length + 1}`
-          images.push({ id, message: owner, block })
-          if (messages[owner - 1]) messages[owner - 1].images.push(id)
+          const name = block.attachment?.name || block.name
+          images.push({ id, ...(messageId ? { message: messageId } : {}), ...(typeof name === 'string' && name ? { name } : {}), block })
+          if (messageId) messages[messageId - 1].images.push(id)
         } else if (block.type === 'tool-call') {
-          calls.set(block.id, owner)
-          tools.push({ message: owner, kind: 'call', name: block.name || '', text: JSON.stringify(block.arguments) ?? '' })
+          if (block.id) calls.set(block.id, { messageId, name: block.name, sourceId: !block.generatedId })
+          tools.push({ ...(messageId ? { message: messageId } : {}), kind: 'call', name: block.name || '',
+            ...(block.id && !block.generatedId ? { callId: block.id } : {}), text: typeof block.arguments === 'string' ? block.arguments : JSON.stringify(block.arguments) ?? '' })
         } else if (block.type === 'tool-result') {
-          const linked = calls.get(block.toolCallId || block.id) ?? owner
-          tools.push({ message: linked, kind: 'result', text: (block.content || []).filter(b => b.type === 'text').map(b => b.text || '').join('\n') })
+          const callId = block.toolCallId || block.id
+          const linked = calls.get(callId)?.messageId ?? messageId
+          tools.push({ ...(linked ? { message: linked } : {}), kind: 'result', ...(callId && calls.get(callId)?.sourceId !== false ? { callId } : {}),
+            text: (block.content || []).filter(b => b.type === 'text').map(b => b.text || '').join('\n') })
           visit((block.content || []).filter(b => b.type !== 'text'), linked)
         }
       }
     }
-    const owner = isTool ? calls.get(message.toolCallId || message.source?.callId) ?? current : current
-    if (isTool && body) tools.push({ message: owner, kind: 'result', text: body })
-    visit(content, owner)
+    const callId = message.toolCallId || message.source?.callId
+    const linked = calls.get(callId)?.messageId
+    if (isTool && body) tools.push({ ...(linked ? { message: linked } : {}), kind: 'result', ...(callId && calls.get(callId)?.sourceId !== false ? { callId } : {}), text: body })
+    if (isTool) owner = linked
+    visit(content)
   }
   return { sessionId: out.meta?.sourceId || out.meta?.id || '', title: out.title || '', cwd: out.meta?.cwd || null,
     revision: createHash('sha256').update(JSON.stringify({ messages, tools, images })).digest('hex'),

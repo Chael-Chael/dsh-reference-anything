@@ -20,6 +20,6 @@
  * @param value - any JSON-serializable value.
  * @returns indented JSON carrying no literal `<`.
  */
-export function stringifyTagSafeJson(value: unknown): string {
-  return JSON.stringify(value, null, 2).replace(/</gu, '\\u003c')
+export function stringifyTagSafeJson(value: unknown, compact = false): string {
+  return JSON.stringify(value, null, compact ? undefined : 2).replace(/</gu, '\\u003c')
 }
