@@ -21,6 +21,9 @@ Antigravity IDE typed tool results (directory/file reads, code actions,
 subagents, commands and searches) are matched by tool name rather than discarded
 as missing background output; GENERIC results keep their existing handling.
 Async sidecar reports only supplement GENERIC results, never replace typed output.
+Hermes SQLite and JSONL reads preserve tool-only assistant messages, OpenAI-style
+function calls, and role=tool results. Results are associated by call ID, including
+parallel calls; string arguments and result text remain unchanged.
 
 ## Update from upstream
 

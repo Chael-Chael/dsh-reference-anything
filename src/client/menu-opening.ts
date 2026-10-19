@@ -22,6 +22,8 @@ export function adoptMenuOpening(inputTriggers: InputTriggerServiceContract): ()
       const before = menu.getSnapshot()
       if (!before.open && next.open) opening = next.hit?.trigger === '@' && next.hit.query === ''
       if (!next.open || next.hit?.query !== before.hit?.query && before.open) opening = false
+      // Native navigation can reach the store without our document receiving keydown.
+      if (before.open && next.groups === before.groups && next.highlight !== before.highlight) opening = false
       if (opening) {
         const highlight = openingHighlight(next)
         next = { ...next, highlight: highlight?.source === before.highlight?.source && highlight?.index === before.highlight?.index ? before.highlight : highlight }

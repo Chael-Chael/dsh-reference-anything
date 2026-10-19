@@ -72,6 +72,16 @@ it('removes and restores the plugin source immediately through the settings save
     const web = sources.get(CONVERSATION_SOURCE)!
     const session = { sessionId: 'health-test' as never }
     const request = { query: '', quoted: false, position: 'inline' as const, drilled: false, signal: new AbortController().signal }
+    const native = sources.get('reference')
+    expect(native, 'Desktop drops and file pastes require the native reference owner').toBeDefined()
+    expect(await native!.candidates(session, request)).toEqual([])
+    for (const ref of ['@README.md', '@docs/', '@"D:/demo folder/readme.md"', '@"D:/demo folder/"', '@[Existing session](dsh-session:existing)']) {
+      expect(await native!.codec!.serialize(ref, request.signal)).toBe(ref)
+      expect(native!.codec!.clipboardText(ref)).toBe(ref)
+    }
+    expect(native!.openReference!(session, { ref: '@"docs/a #?.md"', appearance: 'file' })).toBe(true)
+    expect(openResource).toHaveBeenLastCalledWith('dsh-resource://file/session/health-test/docs/a%20%23%3F.md')
+    expect(native!.openReference!(session, { ref: '@docs/', appearance: 'folder' })).toBe(false)
     const dshSessions = sources.get(SESSION_SOURCE)!
     expect((await dshSessions.candidates(session, request)).map(row => row.name)).toEqual(['populated', 'unknown'])
     expect(using).toHaveBeenCalledWith(session.sessionId, { source: 'referenceCandidates', signal: request.signal }, expect.any(Function))
@@ -131,7 +141,12 @@ it('removes and restores the plugin source immediately through the settings save
     expect(settings.picker?.plugins.enabled).toBe(false)
     expect(await save({ ...settings, picker: { ...settings.picker!, plugins: { ...settings.picker!.plugins, enabled: true } } })).toBe(true)
     expect([...sources.keys()]).toEqual(originalSources)
+    expect(await save({ ...settings, picker: { ...settings.picker!, files: { ...settings.picker!.files, enabled: false } } })).toBe(true)
+    expect(sources.has(FILE_SOURCE)).toBe(false)
+    expect(sources.get('reference')).toBe(native)
+    expect(await native!.codec!.serialize('@README.md', request.signal)).toBe('@README.md')
   } finally {
     for (const dispose of disposers.reverse()) if (typeof dispose === 'function') await dispose()
   }
+  expect(sources.has('reference')).toBe(false)
 })

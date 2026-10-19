@@ -33,6 +33,29 @@ it('does not select a fast lower group before preceding groups settle', () => {
   expect(menu.getSnapshot().highlight).toEqual({ source: 'Files', index: 0 })
 })
 
+it.each([0, 1])('keeps native keyboard selection %i without a document keydown event', index => {
+  const { menu, open } = setup()
+  menu.set(open)
+  const before = menu.getSnapshot()
+  const highlight = { source: 'Agents', index }
+  // Native navigation changes the highlight while retaining the candidate groups.
+  menu.set({ ...before, highlight })
+  expect(menu.getSnapshot().highlight).toEqual(highlight)
+  menu.set({ ...menu.getSnapshot(), groups: [{ source: 'Files', status: 'ready', items: [{ name: 'README' }] }, open.groups[1]!] })
+  expect(menu.getSnapshot().highlight).toEqual(highlight)
+  menu.set({ ...open, open: false, hit: null, groups: [], highlight: null })
+  menu.set(open)
+  expect(menu.getSnapshot().highlight).toBeNull()
+})
+
+it('lets native navigation leave the first settled candidate without a DOM event', () => {
+  const { menu, open } = setup()
+  menu.set({ ...open, groups: [open.groups[1]!] })
+  expect(menu.getSnapshot().highlight).toEqual({ source: 'Agents', index: 0 })
+  menu.set({ ...menu.getSnapshot(), highlight: { source: 'Agents', index: 1 } })
+  expect(menu.getSnapshot().highlight).toEqual({ source: 'Agents', index: 1 })
+})
+
 it.each(['pointermove', 'pointerdown', 'wheel', 'touchmove', 'keydown'])('respects user interaction: %s', event => {
   const { menu, open } = setup()
   menu.set(open)

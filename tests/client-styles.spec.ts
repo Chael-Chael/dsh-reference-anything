@@ -99,6 +99,16 @@ describe('reference DOM customization', () => {
     finally { dispose() }
   })
 
+  it.each(['probe.txt', 'folder/', 'Codex·Imported task'])('preserves the native icon for an untyped reference chip: %s', label => {
+    document.body.innerHTML = `<div data-composer-card><span id="native" data-composer-chip="reference"><span><svg><path d="native"/></svg><span>${label}</span></span></span></div>`
+    const dispose = adoptReferenceIconProjection()
+    try {
+      const chip = document.getElementById('native')!
+      expect(chip.dataset.dshRefChipIcon).toBeUndefined()
+      expect(chip.querySelector('path')?.getAttribute('d')).toBe('native')
+    } finally { dispose() }
+  })
+
   it('places each agent description on its own row and allows wrapping', () => {
     adoptStyles()
     document.body.innerHTML = '<div class="dsh_ref_settings"><article class="dsh_ref_agent_provider"><div class="dsh_ref_provider_main"><div class="dsh_ref_provider_summary"><h4>Antigravity</h4><strong>34</strong><small>Discovered by chat import</small><small>Import only</small></div></div></article></div>'

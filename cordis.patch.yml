@@ -6,7 +6,8 @@
 - id: ui-reference
   # Reference Anything re-registers Files and DSH sessions as two independent
   # sources over the same official Remotes.  Disabling only this Client source
-  # keeps the official file/session services and canonical mention semantics.
+  # keeps the official file/session services. RA also owns the native
+  # "reference" codec and the newer Host's file/folder message renderers.
   disabled: true
 
 - insert:

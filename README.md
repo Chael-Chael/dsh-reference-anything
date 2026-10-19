@@ -77,7 +77,9 @@ Type `@`, search across enabled sources, and insert the selected reference into 
 
 ## 📰 News
 
-### 0.5.0 released · Feature demos
+### 0.5.0 Preview · Feature Demos
+
+This update also adds unified local pagination, resumable long-text reads and message/tool search, rechecks source switches on every read, and moves non-local tools to external_reference_list/read. See the [release and migration guide](./docs/release-v0.5.0.md). Version 0.5.0 is not yet published.
 
 #### Import Past Conversations into DSH and Pick Up Where You Left Off
 

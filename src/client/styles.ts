@@ -1233,6 +1233,11 @@ function projectComposerChips(
   for (const chip of chips) {
     const label = (chip.textContent ?? '').trim().replace(/^@/u, '')
     const referenceSource = chip.dataset.referenceSource ?? chip.dataset.composerChip
+    // Native references mix files, folders and sessions; older hosts expose no appearance here.
+    if (referenceSource === 'reference' && !chip.dataset.referenceAppearance) {
+      clearChipIcon(chip)
+      continue
+    }
     const appearance = chip.dataset.referenceAppearance ?? (referenceSource === 'Cloud drive files' || referenceSource === 'Files and folders' ? (label.endsWith('/') ? 'folder' : 'file') : 'session')
     if (appearance === 'session') {
       if (referenceSource === 'All local plugins') {

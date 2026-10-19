@@ -15,3 +15,5 @@
 | Agent 开发设施 | `scripts/agent/`, `AGENTS.md`, `docs/development/` | `tests/agent-workflow.spec.mjs` | 证据失效、失败退出码、指定环境刷新 |
 
 用 `rg --files tests` 和 `rg <函数名> src tests` 找所有相关调用方，表格不是测试枚举器。完整测试由 `npm run check` 执行。
+
+官方 UI 接管边界与版本差异见 [ui-reference 兼容审计](../development/tasks/native-reference-compatibility.md)。

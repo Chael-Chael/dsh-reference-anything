@@ -9,11 +9,11 @@
 - 来源目录扩展至 29 类，新增 Antigravity、Kilo Code、ChatGPT 导出、WorkBuddy、Qwen Code、Continue、Cline、Goose、DSH4、Zed、Crush、TeleAgent、Trae Work、Mistral Vibe 和 DSH。
 - 内置来自 Chat Import 0.26.1 的只读扫描与解析能力，统一发现更多格式的历史。无需安装独立 Chat Import 即可搜索和引用；导入与交接摘要才使用独立插件。
 - 本地引用在发送时自动附上正文预览，让模型开始回答前就能看到历史上下文；正文、工具记录、图片目录分开展示。
-- 重做本地会话工具协议：reference_read 使用 source/path/sessionId/revision 定位，按从 1 开始的消息编号 start/limit 补读，mode=body 或 tools 分别读取正文与关联工具记录。
-- 新增 reference_search，在已授权的单条本地会话正文中搜索关键词，返回消息编号、匹配片段及后续搜索位置；不混入工具输出。
+- 重做本地会话工具协议：reference_list 专门发现本地会话；reference_read 通过 ref 定位，使用 part=messages/tools/images 选择内容，以 from/maxItems 分页，返回统一的 revision/items/next。
+- 新增 reference_search，支持在本地会话正文或工具文本中按区分大小写的字面关键词搜索，每条记录返回首个匹配片段；命中位置可直接交给 reference_read 继续读取。
 - 新增 reference_image，按图片 ID 取回原生图片内容，模型可以直接看图；每次一张、最大 10 MiB，需要可恢复的图片数据及视觉模型。
-- 多条本地引用共享发送时的剩余上下文预算，计入历史、系统提示、工具定义和输出预留；优先保留压缩检查点及近期消息，空间不足则保留定位信息供后续读取。
-- 新增可读的 dsh-local 定位与完整 local-agent-reference 引用块，支持同机重启后继续读取、跨会话复制完整引用；仍检查授权、来源根目录和原文件是否存在。
+- 多条本地引用按预处理批次共享文本预算，默认 16 KiB，剩余上下文可进一步降低它；预览保留最近连续尾段，长消息提供可继续读取的前缀。每次本地工具文本结果另受默认 16 KiB 上限限制。
+- 新增可读的 dsh-local 定位与完整引用块，支持同机重启后续读和跨会话复制。每次读取检查当前来源开关、允许目录及会话身份，不再要求逐会话引用授权；关闭来源后旧引用也不能新读取，已注入的历史不会自动撤回。
 - Enter 引用，Tab 进入会话操作：通过 Chat Import 导入完整历史并打开目标会话，显示导入状态；操作失败在菜单中保留原因并支持重试。
 - Claude Code 与 Codex 新增实验性交接摘要，将历史工作的摘要放入当前输入框，便于接着做；默认关闭，不自动发送。
 - 新增“会话导入与交接”设置：导入入口、摘要入口及操作确认可分别配置，默认显示导入、关闭摘要并保留确认。
@@ -21,6 +21,10 @@
 - 新增离线可看的版本功能卡与 GIF 演示、上一页/下一页导航，以及首次进入该版本插件设置时的介绍；关闭介绍与隐藏菜单入口分别记录。
 
 ### 体验优化
+
+- 本地长记录使用明确的 next 接续位置，可跨消息内部继续读取；工具、图片列表可按所属消息过滤，列表版本与正文版本分开校验。
+- 每条用户消息后的多份本地引用合并为一个背景区块；固定工具说明不再逐页重复，显示元数据与正文分离。
+- 功能介绍卡片随界面语言显示中文或英文，未提供英文的卡片回退到原文。
 
 - DSH 会话候选区分当前任务的子 Agent 会话并优先展示，补齐冷会话标题信息、过滤已确认的空会话，改进时间与名称展示。
 - 文件浏览新增面包屑返回导航；下钻目录时隔离其他来源结果；文件引用支持通过宿主资源面板打开，目录继续保持 Tab 浏览、Enter 引用。
@@ -36,34 +40,38 @@
 - 修正 @ 菜单首次打开时的异步选中顺序，等待排在前面的来源完成；用户开始键鼠操作后不再自动改动选择。
 - 修正下钻操作与普通搜索缓存混用、重复点击导入/摘要以及菜单刷新影响操作状态的问题，保留错误和重试入口。
 - 完善 Codex 附件包装中的正文与图片、Codex/Claude 压缩检查点、Trae 消息分段，以及 Antigravity 类型化工具结果和异步结果的解析关联。
-- 防止宿主二次截断破坏有界本地工具结果，保留宿主拒绝/替换策略；明确标注省略范围、截断字节和未读取图片，来源变化后拒绝复用旧消息编号。
-- 加强真实路径、来源根目录、会话身份和引用授权验证；导入/摘要只接受当前扫描选择，原始记录缺失或权限失败时返回明确错误。
+- 精简本地工具返回，正文只保留一份结构化数据，直接调用和 run_code 使用一致内容；长文本按 Unicode 码点偏移续读，不把截断当作读完。保留宿主拒绝/替换策略，来源变化时拒绝旧位置并提示刷新。
+- 加强真实路径、来源开关、允许目录与会话身份校验；导入/摘要仍只接受扫描选择并保留确认流程。来源关闭、原始记录缺失、版本变化及参数错误分别返回明确错误，不放宽 DSH 沙箱。
 
 ### 其他变更
+
+- 网页/云盘等非本地来源的列表和读取工具改名为 external_reference_list 与 external_reference_read，仍使用其 URI 协议；reference_attachment_read 保持原名。
+- Chat Import 安装/升级只接受 npm 0.26.1 或更高版本，移除旧 GitHub 源码包回退；按需显式安装，不随启动自动安装。
 
 - 建立演示、亲测、Desktop、Agent 浏览器测试四环境分工，以及真实来源验收、官方 Session Log 诊断、tgz 安装矩阵、累计报告与文案审稿流程。
 
 #### 本地 Agent 工具协议迁移
 
-这是本次的重要兼容性变化，指的是**读取本地 Agent 历史的工具**，不是启动或远程控制另一个 Agent。
+本次重做的是历史读取接口，不是调用另一个 Agent 执行任务。旧参数不再兼容。
 
-| 调用方式 | 0.4.4 | 0.5.0 本地会话 |
+| 项目 | 远端 0.4.4 | 当前 0.5.0 |
 | --- | --- | --- |
-| 定位 | `uri` | `source`、`path`、`sessionId` |
-| 读取范围 | `cursor` / `before` 翻页 | 从 1 开始的 `start` + `limit` |
-| 内容选择 | `detail` | `mode: "body"` 或 `"tools"` |
-| 版本一致性 | 旧引用/翻页链 | 预览返回的 `revision` |
-| 搜索 / 图片 | 无本地专用工具 | `reference_search` / `reference_image` |
+| 本地发现 | 通用 reference_list | 本地专用 reference_list，条目提供 ref |
+| 本地读取 | uri / cursor / before / detail | ref / revision / part / from / maxItems |
+| 正文结果 | 旧消息窗口 | revision、items、next；正文只出现一次 |
+| 接续 | 旧 cursor | 原样将 next 放入同类操作的 from；null 表示当前范围结束 |
+| 搜索 | 无专用本地搜索 | reference_search，正文与工具记录均可搜索 |
+| 非本地来源 | reference_list/read | external_reference_list/read，继续使用 URI |
 
-例如，读取已选中的 Codex 会话（以下为结构示意，字段须原样复制实际预览，不能照抄占位符）：
+首次读取示意（ref 必须取自真实列表或引用；占位符不能直接执行）：
 
 ```json
-{"source":"codex","path":"<原始会话绝对路径>","sessionId":"<实际会话 ID>","revision":"<预览返回的 revision>","start":1,"limit":20,"mode":"body"}
+{"ref":{"source":"codex","path":"<原始绝对路径>","sessionId":"<实际 ID>"},"part":"messages","maxItems":20}
 ```
 
-将这组参数交给 `reference_read`；`mode: "tools"` 读取对应消息的工具记录。`reference_search` 使用同一定位与 revision 加 `query`；`reference_image` 使用同一定位与 revision 加预览目录中的 `imageId`。
+初次从头读取 messages 时省略 revision 和 from；后续使用返回的正文 revision，并完整复制 next 到 from。part=tools/images 分别返回工具记录或图片目录；查看像素另用 reference_image，并携带数字 imageId。reference_search 的 part 可为 messages/tools，query 为区分大小写的字面子串。
 
-**旧格式本地引用需重新从 @ 菜单选择。** 本地调用不再接受 `uri/cursor/before/detail`；原文件变化时先用 `reference_read` 省略 revision 刷新预览，再使用新编号。工具详情、搜索和图片调用须携带 revision。其他来源继续沿用其现有协议。
+上一开发草稿中的顶层 source/path/sessionId、start/limit/mode 也已删除。旧本地引用需重新选择；内容版本变化时从头刷新，不复用旧位置。列表 revision 只用于列表翻页，不能作为正文 revision。长文本 textOffset 按 Unicode 码点计数，建议复制返回位置，不自行计算。
 
 #### 演示与已知限制
 
@@ -80,11 +88,11 @@ This major update covers changes since `v0.4.4`, focusing on local Agent history
 - Expand the local-source catalog from 14 to 29 formats, adding Antigravity, Kilo Code, ChatGPT exports, WorkBuddy, Qwen Code, Continue, Cline, Goose, DSH4, Zed, Crush, TeleAgent, Trae Work, Mistral Vibe and DSH.
 - Bundle read-only scanners and parsers derived from Chat Import 0.26.1. Search and reference local history without installing the independent Chat Import plugin; imports and handoff summaries use that plugin separately.
 - Attach a body preview when a local reference is sent, so the model receives historical context before answering. Present body messages, tool records and image indexes separately.
-- Redesign local tool calls: reference_read uses source/path/sessionId/revision, 1-based start/limit message ranges, and mode=body or tools for body text or associated tool records.
-- Add reference_search for body-text search within a granted local conversation, returning message numbers, excerpts and a continuation position. Tool output is excluded.
+- Redesign local tools: reference_list discovers local sessions; reference_read takes a ref, selects messages/tools/images with part, paginates with from/maxItems and returns revision/items/next.
+- Add reference_search for case-sensitive literal search in local messages or tool text. Return the first match per record and positions that can be passed directly to reference_read.
 - Add reference_image to retrieve actual historical images by ID: one image per call, up to 10 MiB, with recoverable source bytes and a vision-capable model required.
-- Share the remaining send-time context budget across local references, accounting for history, system prompts, tool definitions and output reserves. Favor checkpoints and recent messages; retain locators when previews cannot fit.
-- Introduce readable dsh-local locators and complete local-agent-reference blocks for rereading after restarts and reuse across conversations on the same machine, with authorization, source-root and original-file checks.
+- Share a default 16 KiB text budget across local previews in a pre-step batch, reduced further by remaining context. Keep a contiguous recent tail and a resumable prefix for long messages. Local tool text results have a separate default 16 KiB cap.
+- Introduce readable dsh-local locators and complete reference blocks for reuse after restarts and across conversations on the same machine. Every read checks enabled sources, allowed roots and session identity; local references no longer require per-session grants. Disabling a source prevents new reads through old references but does not retract previously injected content.
 - Use Enter to reference and Tab to open conversation actions: import history through Chat Import, open the destination session and display import status. Keep actionable errors in the menu for retry.
 - Add experimental handoff summaries for Claude Code and Codex, placing the summary in the current composer. Disabled by default, with no automatic send.
 - Add separate settings for import actions, handoff summaries and confirmation. Defaults show imports, disable summaries and keep confirmation enabled.
@@ -92,6 +100,10 @@ This major update covers changes since `v0.4.4`, focusing on local Agent history
 - Add offline feature cards and GIF demonstrations, previous/next navigation and an introduction on the first visit to the installed version’s settings. Closing the dialog and dismissing its menu entry are separate actions.
 
 ### Improvements
+
+- Resume long records using explicit next positions, including offsets inside a message. Filter tool/image listings by owning message and validate list revisions separately from content revisions.
+- Aggregate local references into one background block after each user message, avoid repeating stable tool instructions on every page and separate display metadata from body text.
+- Show feature cards in Chinese or English according to the interface language, with fallback to the original text when an English translation is absent.
 
 - Prioritize and label subagent sessions belonging to the current task, refresh cold-session metadata, omit confirmed blank sessions and improve titles and timestamps.
 - Add breadcrumb navigation to file browsing, isolate folder drill-down results from other sources and open file references through the host resource panel. Keep Tab for browsing and Enter for referencing folders.
@@ -107,25 +119,30 @@ This major update covers changes since `v0.4.4`, focusing on local Agent history
 - Fix initial selection races between asynchronous @ groups; wait for earlier groups and stop automatic selection once the user interacts.
 - Separate drill-down actions from ordinary search caches, prevent duplicate import/summary requests and preserve action state and retry errors across menu refreshes.
 - Preserve Codex wrapper text and images, Codex/Claude compaction checkpoints and Trae message parts; correctly associate typed and asynchronous Antigravity tool results.
-- Preserve bounded local tool results through host rendering without overriding denial/replacement policies. Report omissions, shortened text and unread images, and reject stale message positions after source changes.
-- Strengthen canonical-path, source-root, session-identity and reference-authorization checks. Restrict imports/summaries to scanned selections and report missing sources or permission failures explicitly.
+- Keep one structured copy of local result text for direct tools and run_code. Resume long records by Unicode code-point offset instead of treating truncation as completion. Respect host denial/replacement policies and reject stale positions after source changes.
+- Strengthen enabled-source, canonical-path, allowed-root and session-identity checks. Imports/summaries still use scanned selections and confirmation. Report disabled sources, missing records, changed revisions and invalid parameters distinctly without relaxing the DSH sandbox.
 
 ### Chores
+
+- Rename non-local listing/reading tools to external_reference_list and external_reference_read while retaining their URI protocol; reference_attachment_read keeps its name.
+- Install/upgrade Chat Import from npm 0.26.1 or later only, removing the old GitHub source-package fallback. Installation remains explicit, not automatic at startup.
 
 - Establish separate demo, user-test, Desktop and Agent-browser environments, plus real-source acceptance, official Session Log diagnosis, tgz installation checks, cumulative reporting and editorial review.
 
 #### Local Agent tool protocol migration
 
-This changes tools that **read local Agent history**, not tools that launch or remotely control another Agent. Local `reference_read` moves from `uri/cursor/before/detail` to `source/path/sessionId/revision`, 1-based `start/limit`, and `mode: "body"` or `"tools"`. Copy locator fields from the actual preview rather than constructing them.
+This redesign reads history; it does not launch another Agent. Old arguments are not supported. Local reference_list now returns refs; reference_read accepts ref/revision/part/from/maxItems and returns revision/items/next. Non-local listing/reading moves to external_reference_list/read with its URI protocol intact.
 
 ```json
-{"source":"codex","path":"<absolute source path>","sessionId":"<actual session ID>","revision":"<revision from preview>","start":1,"limit":20,"mode":"body"}
+{"ref":{"source":"codex","path":"<absolute source path>","sessionId":"<actual ID>"},"part":"messages","maxItems":20}
 ```
 
-Use the same locator and revision with `query` for `reference_search`, or `imageId` from the preview for `reference_image`. **Reselect old local references from the @ menu.** If the source changes, omit revision in `reference_read` to refresh before using new positions. Tool-detail reads, searches and image calls require revision. Other sources retain their existing protocols.
+Copy ref from actual results. Omit revision/from only for the initial messages read. Continue with the content revision and copy the entire next into from for the same operation; null ends that scope, not necessarily all earlier history. Read tools or image listings with part=tools/images; reference_image retrieves pixels using a numeric imageId. reference_search supports messages/tools and case-sensitive literal queries.
+
+The previous development draft’s top-level source/path/sessionId and start/limit/mode are also removed. Reselect old local references. Restart from the beginning after content changes; list revisions cannot substitute for content revisions. textOffset counts Unicode code points; copy returned positions rather than calculating them.
 
 #### Demos and known limitations
 
 The GIFs above use fictional data in the real Web UI, including a simulated import; they are not live-service acceptance evidence. Catalog coverage does not mean every source has passed real-account testing. Handoff summaries are experimental. Context budgeting is conservative, large sources can still consume substantial memory, and later reads require the original files because body snapshots are not saved.
 
-Full Changelog: [v0.4.4…e2841ac](https://github.com/Chael-Chael/dsh-reference-anything/compare/v0.4.4...e2841acb7fff670f5fff687c827b300a2554701d). 远端基线已核对；本轮文案未提交，最终发布前更新为审核通过的最终提交或标签。 Remote baseline verified; this editorial revision is uncommitted. Update the comparison to the approved final commit or tag before publication.
+Full Changelog: [v0.4.4…1b8cf3e](https://github.com/Chael-Chael/dsh-reference-anything/compare/v0.4.4...1b8cf3e1dc09b5dbf9801c6ceb1c0f85618c45ed). 远端基线已核对；本轮文案未提交，最终发布前更新为审核通过的最终提交或标签。 Remote baseline verified; this editorial revision is uncommitted. Update the comparison to the approved final commit or tag before publication.

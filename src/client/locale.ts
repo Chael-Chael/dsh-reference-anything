@@ -3,6 +3,10 @@ import type { LocaleNamespaceMap } from '@deepseek-ai/dsh-client-ui-slots'
 export const REFERENCE_ANYTHING_NS = 'reference-anything'
 
 export const zh = {
+  'native.fileOpen.title': '无法打开文件',
+  'native.fileOpen.failed': '无法打开“{path}”，请重试或关闭此提示',
+  'native.fileOpen.close': '关闭',
+  'native.fileOpen.retry': '重试',
   'menu.dependencyUpdate': '依赖有更新',
   'menu.opencliUpdate': 'OpenCLI v{version} 可更新至 v{latest}',
   'menu.workspace': '工作区',
@@ -316,6 +320,10 @@ export const zh = {
 } as const
 
 export const en: Record<keyof typeof zh, string> = {
+  'native.fileOpen.title': 'Couldn’t open file',
+  'native.fileOpen.failed': 'Couldn’t open “{path}”. Try again or close this message.',
+  'native.fileOpen.close': 'Close',
+  'native.fileOpen.retry': 'Retry',
   'source.subagents': 'Subagents',
   'menu.dependencyUpdate': 'Dependency update available',
   'menu.opencliUpdate': 'OpenCLI v{version} can update to v{latest}',

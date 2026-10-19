@@ -3948,7 +3948,8 @@ function convertHermesJson(raw, args = {}) {
         role: m.role,
         content: m.content,
         ts: m.ts,
-        ...Array.isArray(m.toolCalls) ? { toolCalls: m.toolCalls } : {},
+        toolCalls: m.toolCalls ?? m.tool_calls,
+        toolCallId: m.toolCallId ?? m.tool_call_id,
         ...typeof m.reasoning === "string" && m.reasoning ? { reasoning: m.reasoning } : {}
       });
     }
@@ -3982,7 +3983,7 @@ function convertHermesJson(raw, args = {}) {
       }
       const ts = parseHermesTime(rec.timestamp ?? rec.ts ?? msg.timestamp ?? msg.ts);
       if (firstTs === null && ts !== void 0) firstTs = ts;
-      messages.push({ role, content: msg.content, ts });
+      messages.push({ role, content: msg.content, ts, toolCalls: msg.toolCalls ?? msg.tool_calls, toolCallId: msg.toolCallId ?? msg.tool_call_id });
     }
     if (createdAt === null) createdAt = firstTs;
   }
@@ -3994,7 +3995,10 @@ function convertHermesJson(raw, args = {}) {
   const callSteps = /* @__PURE__ */ new Map();
   let droppedToolResults = 0;
   let systemPrompt = null;
-  for (const m of messages) {
+  for (const message of messages) {
+    const m = message.role === "tool" ? { ...message, role: "user", content: [
+      { type: "tool_result", tool_call_id: message.toolCallId, content: message.content }
+    ] } : message;
     if (m.role === "system") {
       if (args.importSystemPrompt === true) {
         const text = contentText(m.content, { types: null, trim: true });
@@ -4023,7 +4027,7 @@ function convertHermesJson(raw, args = {}) {
           droppedToolResults++;
           continue;
         }
-        const inner = (Array.isArray(r.content) ? r.content : [r.content]).map(mapContentBlock).filter(Boolean);
+        const inner = (Array.isArray(r.content) ? r.content : [r.content]).map((block) => typeof block === "string" ? { type: "text", text: block } : mapContentBlock(block)).filter(Boolean);
         step.toolResults.push({
           toolCallId: callId,
           ...typeof m.ts === "number" ? { time: m.ts } : {},
@@ -4060,12 +4064,16 @@ function convertHermesJson(raw, args = {}) {
       }
       if (Array.isArray(m.toolCalls)) {
         for (const tc of m.toolCalls) {
-          if (!tc || typeof tc !== "object" || typeof tc.id !== "string" || typeof tc.name !== "string") continue;
+          if (!tc || typeof tc !== "object") continue;
+          const id = tc.id ?? tc.tool_call_id ?? tc.call_id;
+          const name = tc.name ?? tc.tool_name ?? tc.function?.name;
+          const input = tc.input ?? tc.arguments ?? tc.function?.arguments;
+          if (typeof id !== "string" || !id || typeof name !== "string" || !name) continue;
           const block = {
             type: "tool-call",
-            id: tc.id,
-            name: tc.name,
-            arguments: JSON.stringify(tc.input ?? {})
+            id,
+            name,
+            arguments: typeof input === "string" ? input : JSON.stringify(input ?? {})
           };
           step.content.push(block);
           step.toolCalls.push(block);
@@ -6770,55 +6778,74 @@ function conversationContent(out, options) {
   };
 }
 function structuredContent(out) {
-  const messages = [], tools = [], images = []
-  const events = (out.events || []).filter(event => ['user/message', 'assistant/message', 'tool/result'].includes(event.type)
-    && (event.data?.message || event.data)?.source?.plugin !== 'chat-import')
-  const calls = new Map()
+  const messages = [], tools = [], images = [];
+  const events = (out.events || []).filter((event) => ["user/message", "assistant/message", "tool/result"].includes(event.type) && (event.data?.message || event.data)?.source?.plugin !== "chat-import");
+  const calls = /* @__PURE__ */ new Map();
   for (const event of events) {
-    const message = event.data?.message || event.data
-    const content = Array.isArray(message?.content) ? message.content : []
-    const isTool = event.type === 'tool/result'
-    const body = content.filter(block => block.type === 'text').map(block => block.text || '').join('\n')
-    let owner
-    if (!isTool && (body || content.some(block => block.type === 'image'))) {
-      owner = messages.length + 1
-      const source = message.source
-      const checkpoint = source?.kind === 'compact-checkpoint' || source?.kind === 'plugin:compact'
-        || (source?.kind === 'plugin' && source.plugin === 'compact')
-      messages.push({ number: owner, role: event.type === 'assistant/message' ? 'assistant' : 'user', text: body,
-        checkpoint, images: [] })
+    const message = event.data?.message || event.data;
+    const content = Array.isArray(message?.content) ? message.content : [];
+    const isTool = event.type === "tool/result";
+    const body = content.filter((block) => block.type === "text").map((block) => block.text || "").join("\n");
+    let owner;
+    if (!isTool && (body || content.some((block) => block.type === "image"))) {
+      owner = messages.length + 1;
+      const source = message.source;
+      const checkpoint = source?.kind === "compact-checkpoint" || source?.kind === "plugin:compact" || source?.kind === "plugin" && source.plugin === "compact";
+      messages.push({
+        number: owner,
+        role: event.type === "assistant/message" ? "assistant" : "user",
+        text: body,
+        checkpoint,
+        images: []
+      });
     }
     const visit = (blocks, messageId = owner) => {
       for (const block of blocks) {
-        if (block.type === 'image') {
-          const id = `image-${images.length + 1}`
-          const name = block.attachment?.name || block.name
-          images.push({ id, ...(messageId ? { message: messageId } : {}), ...(typeof name === 'string' && name ? { name } : {}), block })
-          if (messageId) messages[messageId - 1].images.push(id)
-        } else if (block.type === 'tool-call') {
-          if (block.id) calls.set(block.id, { messageId, name: block.name, sourceId: !block.generatedId })
-          tools.push({ ...(messageId ? { message: messageId } : {}), kind: 'call', name: block.name || '',
-            ...(block.id && !block.generatedId ? { callId: block.id } : {}), text: typeof block.arguments === 'string' ? block.arguments : JSON.stringify(block.arguments) ?? '' })
-        } else if (block.type === 'tool-result') {
-          const callId = block.toolCallId || block.id
-          const linked = calls.get(callId)?.messageId ?? messageId
-          tools.push({ ...(linked ? { message: linked } : {}), kind: 'result', ...(callId && calls.get(callId)?.sourceId !== false ? { callId } : {}),
-            text: (block.content || []).filter(b => b.type === 'text').map(b => b.text || '').join('\n') })
-          visit((block.content || []).filter(b => b.type !== 'text'), linked)
+        if (block.type === "image") {
+          const id = `image-${images.length + 1}`;
+          const name = block.attachment?.name || block.name;
+          images.push({ id, ...messageId ? { message: messageId } : {}, ...typeof name === "string" && name ? { name } : {}, block });
+          if (messageId) messages[messageId - 1].images.push(id);
+        } else if (block.type === "tool-call") {
+          if (block.id) calls.set(block.id, { messageId, name: block.name, sourceId: !block.generatedId });
+          tools.push({
+            ...messageId ? { message: messageId } : {},
+            kind: "call",
+            name: block.name || "",
+            ...block.id && !block.generatedId ? { callId: block.id } : {},
+            text: typeof block.arguments === "string" ? block.arguments : JSON.stringify(block.arguments) ?? ""
+          });
+        } else if (block.type === "tool-result") {
+          const callId2 = block.toolCallId || block.id;
+          const linked2 = calls.get(callId2)?.messageId ?? messageId;
+          tools.push({
+            ...linked2 ? { message: linked2 } : {},
+            kind: "result",
+            ...callId2 && calls.get(callId2)?.sourceId !== false ? { callId: callId2 } : {},
+            text: (block.content || []).filter((b) => b.type === "text").map((b) => b.text || "").join("\n")
+          });
+          visit((block.content || []).filter((b) => b.type !== "text"), linked2);
         }
       }
-    }
-    const callId = message.toolCallId || message.source?.callId
-    const linked = calls.get(callId)?.messageId
-    if (isTool && body) tools.push({ ...(linked ? { message: linked } : {}), kind: 'result', ...(callId && calls.get(callId)?.sourceId !== false ? { callId } : {}), text: body })
-    if (isTool) owner = linked
-    visit(content)
+    };
+    const callId = message.toolCallId || message.source?.callId;
+    const linked = calls.get(callId)?.messageId;
+    if (isTool && body) tools.push({ ...linked ? { message: linked } : {}, kind: "result", ...callId && calls.get(callId)?.sourceId !== false ? { callId } : {}, text: body });
+    if (isTool) owner = linked;
+    visit(content);
   }
-  return { sessionId: out.meta?.sourceId || out.meta?.id || '', title: out.title || '', cwd: out.meta?.cwd || null,
-    revision: createHash('sha256').update(JSON.stringify({ messages, tools, images })).digest('hex'),
-    messages, tools, images, totalMessages: messages.length,
+  return {
+    sessionId: out.meta?.sourceId || out.meta?.id || "",
+    title: out.title || "",
+    cwd: out.meta?.cwd || null,
+    revision: createHash("sha256").update(JSON.stringify({ messages, tools, images })).digest("hex"),
+    messages,
+    tools,
+    images,
+    totalMessages: messages.length,
     partial: Boolean(out.trimmed || out.compacted || out.skipped || out.imagesDegraded),
-    confirmedEmpty: Boolean(!events.length && out.meta && !out.records && !out.skipped && !out.skipReason && !out.imagesDegraded) }
+    confirmedEmpty: Boolean(!events.length && out.meta && !out.records && !out.skipped && !out.skipReason && !out.imagesDegraded)
+  };
 }
 
 // .codex-tmp/vendor-pagination-upstream/lib/import-core.mjs
@@ -9631,9 +9658,10 @@ function readHermesDb(dbPath) {
     const timeCol = pickCol(mCols, "created_at", "timestamp");
     const toolCallsCol = pickCol(mCols, "tool_calls", "tool_call");
     const reasoningCol = pickCol(mCols, "reasoning");
+    const toolCallIdCol = pickCol(mCols, "tool_call_id", "call_id");
     const order = (timeCol || "rowid") + (mCols.has("id") ? ", id" : "");
     const messagesOf = mCols.has("session_id") && mCols.has("role") ? db.prepare(
-      `SELECT role, ${mCols.has("content") ? "content" : "'' AS content"}, ${timeCol ? `${timeCol} AS ts` : "NULL AS ts"}, ${toolCallsCol ? `${toolCallsCol} AS tool_calls` : "NULL AS tool_calls"}, ${reasoningCol ? `${reasoningCol} AS reasoning` : "NULL AS reasoning"} FROM messages WHERE session_id = ? ORDER BY ${order}`
+      `SELECT role, ${mCols.has("content") ? "content" : "'' AS content"}, ${timeCol ? `${timeCol} AS ts` : "NULL AS ts"}, ${toolCallsCol ? `${toolCallsCol} AS tool_calls` : "NULL AS tool_calls"}, ${reasoningCol ? `${reasoningCol} AS reasoning` : "NULL AS reasoning"} , ${toolCallIdCol ? `${toolCallIdCol} AS tool_call_id` : "NULL AS tool_call_id"} FROM messages WHERE session_id = ? ORDER BY ${order}`
     ) : null;
     const sessions = [];
     for (const row of db.prepare("SELECT * FROM sessions ORDER BY rowid DESC").all()) {
@@ -9647,9 +9675,9 @@ function readHermesDb(dbPath) {
           const role = typeof m.role === "string" ? m.role : void 0;
           if (!role) continue;
           const content = hermesContent(m.content);
-          if (content === void 0) continue;
-          const msg = { role, content, ts: timeCol ? parseHermesTime(m.ts) : void 0 };
           const toolCalls = hermesToolCalls(m.tool_calls);
+          if (content === void 0 && !toolCalls && role !== "tool") continue;
+          const msg = { role, content: content ?? "", toolCallId: m.tool_call_id, ts: timeCol ? parseHermesTime(m.ts) : void 0 };
           const reasoning = hermesReasoning(m.reasoning);
           if (toolCalls !== void 0) msg.toolCalls = toolCalls;
           if (reasoning !== void 0) msg.reasoning = reasoning;
@@ -9705,10 +9733,10 @@ function hermesToolCalls(raw) {
   const out = [];
   for (const t of arr) {
     if (!t || typeof t !== "object") continue;
-    const id = typeof t.id === "string" ? t.id : typeof t.tool_call_id === "string" ? t.tool_call_id : void 0;
-    const name = typeof t.name === "string" ? t.name : typeof t.tool_name === "string" ? t.tool_name : void 0;
-    if (!id || !name) continue;
-    out.push({ id, name, input: t.arguments ?? t.input });
+    const id = typeof t.id === "string" ? t.id : typeof t.tool_call_id === "string" ? t.tool_call_id : t.call_id;
+    const name = typeof t.name === "string" ? t.name : typeof t.tool_name === "string" ? t.tool_name : t.function?.name;
+    if (typeof id !== "string" || !id || typeof name !== "string" || !name) continue;
+    out.push({ id, name, input: t.arguments ?? t.input ?? t.function?.arguments });
   }
   return out.length > 0 ? out : void 0;
 }
@@ -11127,7 +11155,7 @@ async function readConversation(fs, input, signal) {
     const page2 = selected[0];
     return page2.totalMessages ? "readable" : page2.confirmedEmpty ? "empty" : "unknown";
   }
-  if (selected.length !== 1 || (!selected[0].totalMessages && !(input.structured && (selected[0].confirmedEmpty || selected[0].tools?.length || selected[0].images?.length)))) {
+  if (selected.length !== 1 || !selected[0].totalMessages && !(input.structured && (selected[0].confirmedEmpty || selected[0].tools?.length || selected[0].images?.length))) {
     throw new Error("Conversation could not be read: " + entries.map((entry) => entry.error || entry.skipReason || "").filter(Boolean).join("; "));
   }
   const page = selected[0];

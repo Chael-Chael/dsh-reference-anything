@@ -25,6 +25,7 @@ import { createAutoDismissNotice } from './notice.ts'
 import { filterAgentCandidates, filterDriveCandidates } from './selection.ts'
 import { createUpdateSource, SettingsReleaseIntro } from './update-menu.tsx'
 import { pickDirectoryWithError } from './directory-picker.ts'
+import { registerNativeReferenceText } from './native-reference-text.tsx'
 
 declare module '@deepseek-ai/dsh-api-session-controller/client' {
   interface SessionReferenceSourceMap {
@@ -37,7 +38,7 @@ declare module '@deepseek-ai/dsh-api-session-controller/client' {
 // the input-trigger menu then removes the Commands group as a failed source.
 export const inject = [
   'inputTriggers', 'remote', 'remote.commands', 'remote.skills', 'remote.fileReferences', 'remote.sessionReferenceResolver',
-  'slots', 'locale', 'sessions', 'uiWorkspace', 'sidebarRight',
+  'slots', 'locale', 'sessions', 'uiWorkspace', 'sidebarRight', 'uiConversation',
 ]
 
 export function apply(ctx: ClientContext): void {
@@ -262,6 +263,18 @@ export function apply(ctx: ClientContext): void {
 
   const inputTriggers = ctx.get('inputTriggers') as InputTriggerServiceContract
   const sessions = (ctx as unknown as { sessions: ISessions }).sessions
+  const filePreview = { sessions, openResource: (address: string) => {
+    (ctx as unknown as { sidebarRight: { openResource(address: string): void } }).sidebarRight.openResource(address)
+  } }
+  // Native Desktop drops/pastes keep this owner even when file candidates are hidden.
+  const nativeReference = createFileSource(async () => [], t, undefined, filePreview)
+  ctx.effect(() => inputTriggers.registerSource({
+    trigger: '@', name: 'reference', candidates: async () => [], onPick: () => undefined,
+    codec: nativeReference.codec, openReference: nativeReference.openReference,
+  }), 'reference-anything.client.native-reference')
+  registerNativeReferenceText(ctx, (sessionId, path) => {
+    nativeReference.openReference!({ sessionId }, { ref: `@${path}`, appearance: 'file' })
+  }, t)
   const referenceCandidates = <T,>(sessionId: SessionId, signal: AbortSignal, lookup: () => Promise<T>): Promise<T> => {
     if (sessions.binding(sessionId) === undefined) throw new Error(`reference candidates require a retained session "${sessionId}"`)
     return sessions.using(sessionId, { source: 'referenceCandidates', signal }, async reference => {
@@ -378,9 +391,7 @@ export function apply(ctx: ClientContext): void {
     if (picker.files.enabled) disposers.push(inputTriggers.registerSource(createFileSource(async (sessionId, query, signal) => {
       const result = await referenceCandidates(sessionId, signal, () => ctx.remote.fileReferences.list(sessionId, query, signal))
       return result.ok ? result.value : []
-    }, t, optionsFor('files'), { sessions, openResource: address => {
-      (ctx as unknown as { sidebarRight: { openResource(address: string): void } }).sidebarRight.openResource(address)
-    } })))
+    }, t, optionsFor('files'), filePreview)))
     if (picker.sessions.enabled) disposers.push(inputTriggers.registerSource(createSessionSource(async (sessionId, query, signal) => {
       const result = await referenceCandidates(sessionId, signal, () => ctx.remote.sessionReferenceResolver.candidates(sessionId, query, signal))
       return result.ok ? result.value : []

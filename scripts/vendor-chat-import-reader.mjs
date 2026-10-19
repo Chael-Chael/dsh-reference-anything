@@ -62,6 +62,34 @@ const result = await build({
         source = replace(source, 'args.fullHistory !== true', '(args.fullHistory !== true || args.referenceProjection)')
         source = replace(source, 'shadowedTurns = shadowTurns(turns, shadowedTurns)', 'if (!args.referenceProjection) shadowedTurns = shadowTurns(turns, shadowedTurns)')
       }
+      if (file === 'lib/sources/hermes.mjs') {
+        source = replace(source, "const reasoningCol = pickCol(mCols, 'reasoning')", "const reasoningCol = pickCol(mCols, 'reasoning')\n    const toolCallIdCol = pickCol(mCols, 'tool_call_id', 'call_id')")
+        source = replace(source, "`FROM messages WHERE session_id = ? ORDER BY ${order}`", "`, ${toolCallIdCol ? `${toolCallIdCol} AS tool_call_id` : 'NULL AS tool_call_id'} FROM messages WHERE session_id = ? ORDER BY ${order}`")
+        source = replace(source, 'if (content === undefined) continue // 空内容消息跳过（cc-switch 同款）', "const toolCalls = hermesToolCalls(m.tool_calls)\n          if (content === undefined && !toolCalls && role !== 'tool') continue")
+        source = replace(source, 'const msg = { role, content, ts: timeCol ? parseHermesTime(m.ts) : undefined }\n          const toolCalls = hermesToolCalls(m.tool_calls)', 'const msg = { role, content: content ?? \'\', toolCallId: m.tool_call_id, ts: timeCol ? parseHermesTime(m.ts) : undefined }')
+        source = replace(source, "(typeof t.tool_call_id === 'string' ? t.tool_call_id : undefined)", "(typeof t.tool_call_id === 'string' ? t.tool_call_id : t.call_id)")
+        source = replace(source, "(typeof t.tool_name === 'string' ? t.tool_name : undefined)", "(typeof t.tool_name === 'string' ? t.tool_name : t.function?.name)")
+        source = replace(source, 'if (!id || !name) continue', "if (typeof id !== 'string' || !id || typeof name !== 'string' || !name) continue")
+        source = replace(source, 'input: t.arguments ?? t.input', 'input: t.arguments ?? t.input ?? t.function?.arguments')
+      }
+      if (file === 'lib/convert/hermes.mjs') {
+        source = replace(source, '.map(mapContentBlock)', ".map(block => typeof block === 'string' ? { type: 'text', text: block } : mapContentBlock(block))")
+        source = replace(source, '...(Array.isArray(m.toolCalls) ? { toolCalls: m.toolCalls } : {}),', 'toolCalls: m.toolCalls ?? m.tool_calls, toolCallId: m.toolCallId ?? m.tool_call_id,')
+        source = replace(source, 'messages.push({ role, content: msg.content, ts })', 'messages.push({ role, content: msg.content, ts, toolCalls: msg.toolCalls ?? msg.tool_calls, toolCallId: msg.toolCallId ?? msg.tool_call_id })')
+        // Reuse the existing ID-based result association; never pair parallel results by order.
+        source = replace(source, 'for (const m of messages) {', `for (const message of messages) {
+    const m = message.role === 'tool' ? { ...message, role: 'user', content: [
+      { type: 'tool_result', tool_call_id: message.toolCallId, content: message.content },
+    ] } : message`)
+        source = replace(source, "if (!tc || typeof tc !== 'object' || typeof tc.id !== 'string' || typeof tc.name !== 'string') continue", `if (!tc || typeof tc !== 'object') continue
+          const id = tc.id ?? tc.tool_call_id ?? tc.call_id
+          const name = tc.name ?? tc.tool_name ?? tc.function?.name
+          const input = tc.input ?? tc.arguments ?? tc.function?.arguments
+          if (typeof id !== 'string' || !id || typeof name !== 'string' || !name) continue`)
+        source = replace(source, 'id: tc.id,', 'id,')
+        source = replace(source, 'name: tc.name,', 'name,')
+        source = replace(source, 'arguments: JSON.stringify(tc.input ?? {}),', "arguments: typeof input === 'string' ? input : JSON.stringify(input ?? {}),")
+      }
       if (file === 'lib/convert/antigravity.mjs') {
         // IDE transcripts use typed result records; match names before consuming parallel calls.
         source = `const RESULT_TOOL_NAMES = {

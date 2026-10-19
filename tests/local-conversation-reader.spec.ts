@@ -84,6 +84,50 @@ it('reads a Vibe session directory and rejects a source root', async () => {
   await expect(read('vibe', root)).rejects.toThrow('Select one conversation')
 })
 
+it.each(['db', 'jsonl'])('preserves Hermes parallel tool calls and results from %s without changing the source', async extension => {
+  const path = join(await temporary(), `state.${extension}`)
+  const records = [
+    { role: 'user', content: 'inspect the two files' },
+    { role: 'assistant', content: null, tool_calls: [
+      { id: 'one', type: 'function', function: { name: 'read_file', arguments: '{"path":"one.txt"}' } },
+      { id: 'two', type: 'function', function: { name: 'read_file', arguments: '{"path":"two.txt"}' } },
+    ] },
+    { role: 'tool', content: 'second result', tool_call_id: 'two' },
+    { role: 'tool', content: 'first result', tool_call_id: 'one' },
+    { role: 'assistant', content: '', tool_calls: [{ id: 'legacy', name: 'list_files', input: { path: '.' } }] },
+    { role: 'tool', content: 'legacy result', tool_call_id: 'legacy' },
+    { role: 'tool', content: 'unrelated result', tool_call_id: 'missing' },
+    { role: 'assistant', content: 'finished' },
+  ]
+  if (extension === 'db') {
+    const db = new DatabaseSync(path)
+    try {
+      db.exec('CREATE TABLE sessions (id TEXT PRIMARY KEY, title TEXT); CREATE TABLE messages (id INTEGER PRIMARY KEY, session_id TEXT, role TEXT, content TEXT, tool_calls TEXT, tool_call_id TEXT, timestamp INTEGER)')
+      db.prepare('INSERT INTO sessions VALUES (?, ?)').run('sample', 'Example')
+      db.prepare('INSERT INTO sessions VALUES (?, ?)').run('other', 'Other')
+      const insert = db.prepare('INSERT INTO messages VALUES (?, ?, ?, ?, ?, ?, ?)')
+      records.forEach((r, i) => insert.run(i, 'sample', r.role, r.content, r.tool_calls ? JSON.stringify(r.tool_calls) : null, r.tool_call_id ?? null, i))
+      insert.run(99, 'other', 'user', 'private other session', null, null, 99)
+    } finally { db.close() }
+  } else {
+    await writeFile(path, jsonl([{ type: 'session', id: 'sample' }, ...records]))
+  }
+  const before = await readFile(path)
+  const result = await readLocalConversation({ format: 'hermes', path, sessionId: 'sample', limit: 100, detail: 'full', structured: true }) as {
+    messages: Array<{ text: string }>; tools: Array<{ kind: string; callId: string; name: string; text: string }>
+  }
+  expect(result.tools.filter(t => t.kind === 'call').map(t => [t.callId, t.name, t.text])).toEqual([
+    ['one', 'read_file', '{"path":"one.txt"}'], ['two', 'read_file', '{"path":"two.txt"}'], ['legacy', 'list_files', '{"path":"."}'],
+  ])
+  expect(result.tools.filter(t => t.kind === 'result').map(t => [t.callId, t.text])).toEqual([
+    ['one', 'first result'], ['two', 'second result'], ['legacy', 'legacy result'],
+  ])
+  expect(JSON.stringify(result)).not.toContain('unrelated result')
+  expect(JSON.stringify(result)).not.toContain('private other session')
+  expect(result.messages.at(-1)?.text).toBe('finished')
+  expect(await readFile(path)).toEqual(before)
+})
+
 it('preserves typed Antigravity tool results and matches their tool names', async () => {
   const generated = join(await temporary(), 'brain', 'sample', '.system_generated')
   await mkdir(join(generated, 'logs'), { recursive: true })
