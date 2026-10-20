@@ -23,7 +23,7 @@
 
 由 Agent 操作，用户在聊天中审稿并明确批准发布。版本号以下以 `0.6.0` 为例，不能直接拿示例发布。
 
-1. 将最终源码和 `docs/release-v0.6.0.md`（UTF-8、LF）提交，确认工作区干净；文案先按现有模板完成。候选提交须为启动工作流时的 main HEAD，确保 provenance 指向该候选提交。验收期间冻结该版本提交，后续变更需要重新准备。
+1. 将最终源码和 `docs/release/0.6.0/README.md`（UTF-8、LF）提交，确认工作区干净；文案先按现有模板完成。候选提交须为启动工作流时的 main HEAD，确保 provenance 指向该候选提交。验收期间冻结该版本提交，后续变更需要重新准备。
 2. 按[发版规程](../testing/npm-release-checklist.md)执行 prepare、全部真实验收、用户最终文字审核和 gate。审批记录、完整报告和私人日志保留本地。
 3. 执行 `node scripts/agent/release-ci.mjs export`。它重新执行 gate，并导出到 `.codex-tmp/agent-workflow/ci-0.6.0/`：
    - `candidate.tgz`：已验收的原包，不重建。

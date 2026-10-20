@@ -1,14 +1,16 @@
-# 新功能介绍卡片
+# 发布说明与功能素材
 
-每个版本使用一个与 `package.json` 版本号完全一致的目录（不带 `v`）：
+版本正文、功能卡和媒体统一放在这里。每个版本使用一个与 `package.json` 版本号完全一致的目录（不带 `v`）：
 
 ```text
-release-notes/
+docs/release/
   0.4.4/
+    README.md
     features.json
-    files.png
-    commands.png
+    demos/
 ```
+
+`README.md` 是双语发布正文，也是发布 CI 读取的唯一原文；`features.json` 是应用内功能卡，媒体路径相对于版本目录。现有版本：[0.4.4](0.4.4/README.md)、[0.5.0](0.5.0/README.md)。发布及审稿流程见[发布素材](../development/release-materials.md)。
 
 `features.json` 是按展示顺序排列的卡片数组。每张卡片包含：
 

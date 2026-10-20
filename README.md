@@ -79,7 +79,7 @@ Type `@`, search across enabled sources, and insert the selected reference into 
 
 ### 0.5.0 Preview · Feature Demos
 
-This update also adds unified local pagination, resumable long-text reads and message/tool search, rechecks source switches on every read, and moves non-local tools to external_reference_list/read. See the [release and migration guide](./docs/release-v0.5.0.md). Version 0.5.0 is not yet published.
+This update also adds unified local pagination, resumable long-text reads and message/tool search, rechecks source switches on every read, and moves non-local tools to external_reference_list/read. See the [release and migration guide](./docs/release/0.5.0/README.md). Version 0.5.0 is not yet published.
 
 #### Import Past Conversations into DSH and Pick Up Where You Left Off
 
@@ -91,7 +91,7 @@ Now, when you find a local session in the `@` menu, you have two ways to use it:
 
 > 💡 **Note**: Importing requires `dsh-chat-import` v0.26.1 or a compatible newer version to be installed and enabled.
 
-![Press Enter to reference a session, or Tab to open the action menu and import history; uses mock data.](./release-notes/0.5.0/demos/agent-import.gif)
+![Press Enter to reference a session, or Tab to open the action menu and import history; uses mock data.](./docs/release/0.5.0/demos/agent-import.gif)
 
 #### One-Click Upgrade for `dsh-chat-import` Right from the Menu
 
@@ -99,7 +99,7 @@ If an outdated version of `dsh-chat-import` prevents you from using chat import 
 
 Simply click the **upgrade prompt** right inside the menu to update to v0.26.1 or later. If prompted after the upgrade, restart DSH to apply the changes.
 
-![Upgrade dsh-chat-import from the menu and view the simulated restart prompt in settings.](./release-notes/0.5.0/demos/chat-import-upgrade.gif)
+![Upgrade dsh-chat-import from the menu and view the simulated restart prompt in settings.](./docs/release/0.5.0/demos/chat-import-upgrade.gif)
 
 #### Type `@plugin:` to Reference Installed Plugins Directly
 
@@ -107,7 +107,7 @@ Want your Agent to troubleshoot a plugin issue or inspect its source code? Diggi
 
 Now you can simply type `@plugin:`, search for the plugin name, and press `Enter` to pass its installation directory straight to the Agent (supports all plugins currently installed in your DSH environment).
 
-![Filter local plugins in the @plugin: menu and press Enter to insert the plugin directory reference.](./release-notes/0.5.0/demos/local-plugins.gif)
+![Filter local plugins in the @plugin: menu and press Enter to insert the plugin directory reference.](./docs/release/0.5.0/demos/local-plugins.gif)
 
 #### Custom Shortcuts to Narrow Down Your Search Scope Instantly
 
@@ -117,7 +117,7 @@ You can now assign **custom shortcuts** to different chat sources in Settings (m
 - **Search across a combined group**: Not sure where a conversation happened? Assign the same shortcut (e.g., `chat`) to both Local Agents and Web Chats, then type `@chat:` to narrow your search exclusively to those sources;
 - **Target a specific source**: When you know exactly where to look, use a dedicated shortcut like `@codex:` to filter exclusively for Codex sessions.
 
-![Configure shared shortcuts in settings, then search sessions using both shared and source-specific shortcuts.](./release-notes/0.5.0/demos/shortcuts.gif)
+![Configure shared shortcuts in settings, then search sessions using both shared and source-specific shortcuts.](./docs/release/0.5.0/demos/shortcuts.gif)
 
 #### Browse Folders Directly in the `@` Menu — No Need to Type Full Paths
 
@@ -128,7 +128,7 @@ You can now navigate folder hierarchies directly inside the `@` file menu:
 - **Go back**: Use the breadcrumb navigation bar at the top of the menu;
 - **Insert reference**: Press `Enter` on your target folder to insert it directly into your chat.
 
-![Press Tab in the file menu to enter subdirectories, navigate back, and press Enter to reference a folder.](./release-notes/0.5.0/demos/folders.gif)
+![Press Tab in the file menu to enter subdirectories, navigate back, and press Enter to reference a folder.](./docs/release/0.5.0/demos/folders.gif)
 
 - **2026-10-12 · v0.4.4** — Added local plugin discovery to the `@` menu, configurable source and provider shortcuts, improved picker icons and folder insertion, and added the `model` command entry.
 

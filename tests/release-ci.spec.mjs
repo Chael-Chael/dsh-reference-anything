@@ -55,7 +55,7 @@ describe('CI release handoff', () => {
     const run = (command, args) => execFileSync(command, args, { cwd: directory, encoding: 'utf8', windowsHide: true })
     try {
       mkdirSync(join(directory, 'scripts/agent'), { recursive: true })
-      mkdirSync(join(directory, 'docs'))
+      mkdirSync(join(directory, 'docs/release/1.0.0'), { recursive: true })
       mkdirSync(join(directory, 'package'))
       mkdirSync(join(directory, 'candidate'))
       for (const name of ['release-ci.mjs', 'workflow.mjs']) {
@@ -64,7 +64,7 @@ describe('CI release handoff', () => {
       const pkg = { name: 'dsh-reference-anything', version: '1.0.0' }
       for (const path of ['package.json', 'package/package.json']) writeFileSync(join(directory, path), JSON.stringify(pkg))
       const notes = Buffer.from('Reviewed 中文 / English\n')
-      writeFileSync(join(directory, 'docs/release-v1.0.0.md'), notes)
+      writeFileSync(join(directory, 'docs/release/1.0.0/README.md'), notes)
       run('git', ['init', '-q'])
       run('git', ['-c', 'core.autocrlf=false', 'add', '.'])
       run('git', ['-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.invalid', '-c', 'commit.gpgsign=false', 'commit', '-qm', 'fixture'])

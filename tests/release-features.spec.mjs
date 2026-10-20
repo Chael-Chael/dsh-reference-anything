@@ -41,11 +41,11 @@ describe('release feature assets', () => {
   })
 
   it('validates and packages the checked-in release content', () => {
-    const bilingual = loadReleaseFeatures(resolve('release-notes'))['0.5.0']
+    const bilingual = loadReleaseFeatures(resolve('docs/release'))['0.5.0']
     expect(bilingual).toHaveLength(6)
     expect(bilingual.every(card => card.en.title && card.en.description)).toBe(true)
     expect(bilingual.slice(0, 5).every(card => card.en.alt && card.media.startsWith('data:image/gif;base64,'))).toBe(true)
-    const cards = loadReleaseFeatures(resolve('release-notes'))['0.4.4']
+    const cards = loadReleaseFeatures(resolve('docs/release'))['0.4.4']
     expect(cards).toHaveLength(6)
     expect(cards.slice(0, 5).every(card => card.media.startsWith('data:image/gif;base64,'))).toBe(true)
     expect(cards.at(-1)).toMatchObject({ title: '未来更新预告' })
