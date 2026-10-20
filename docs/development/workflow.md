@@ -31,6 +31,8 @@
 
 准备[发布素材](release-materials.md) → release:prepare → 全功能及安装升级验收 → 用户审核最终文字 → release:gate → 按已有授权发布同一 tgz。字段、状态与报告要求统一见[发版规程](../testing/npm-release-checklist.md)。
 
+GitHub Actions 接入、候选导出及默认不发布的演练入口见 [GitHub 自动发布](github-release.md)。Action 使用已验收的同一 tgz 和审核后的正文；发布仍需用户授权。
+
 ## 文档和记录
 
 - 上传：用户文档、有效契约、开发规则、可复用诊断方法、合成 fixtures，以及脱敏版本摘要。
