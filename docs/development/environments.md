@@ -45,6 +45,6 @@ Desktop 欢迎页报认证失败时，可查阅 [本地认证 Cookie 累积导�
 
 ## 构建与刷新
 
-两个 profile 均保持 link:D:/dsh-reference-anything，共用 lib/。每次 build 后运行 npm run agent:sync，刷新测试 Web 和 Desktop，再刷新浏览器并实际验收；仅文档修改无需构建或重启。Desktop profile 由 Electron 管理，不使用 dsh plugin --profile desktop 安装或刷新。
+2026-10-20 用户要求解除 Desktop 的本地链接，自行安装线上版本；已移除 Desktop 的本地依赖、bundle 加载项和 junction，保留源码与插件设置。后续不得自动恢复 Desktop 本地链接。`agent-browser-test` 继续使用 link:D:/dsh-reference-anything；本地 build 不再更新 Desktop 的插件版本。Desktop profile 由 Electron 管理，不使用 dsh plugin --profile desktop 安装或刷新。
 
 刷新脚本会先尝试关闭 Desktop 窗口，再结束仍存活的同一可执行文件的托盘进程。不要在进行中的用户任务期间强行刷新，应先确认运行状态并说明阻塞。它不会修改 profile 或关闭其他 Web 实例。
