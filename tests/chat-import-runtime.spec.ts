@@ -16,7 +16,7 @@ beforeEach(async () => {
   vi.resetAllMocks()
   vi.mocked(resolveLocalPlugins).mockResolvedValue([])
   installBundle.mockResolvedValue({ application: 'restart-required' })
-  vi.stubGlobal('fetch', vi.fn(async () => Response.json({ name: 'dsh-chat-import', version: '0.26.1' })))
+  vi.stubGlobal('fetch', vi.fn(async () => Response.json({ name: 'dsh-chat-import', version: '0.26.2' })))
   directory = await mkdtemp(join(tmpdir(), 'reference-import-runtime-'))
   ctx = new Context()
   await ctx.plugin(Loader, { baseUrl: pathToFileURL(directory).href + '/' })
@@ -76,7 +76,7 @@ it('uses the actual API state after live activation rather than requiring a rest
 it('does not override an installation disabled during the registry lookup', async () => {
   vi.mocked(fetch).mockImplementationOnce(async () => {
     await writeFile(join(directory, 'package.json'), JSON.stringify({ dependencies: { 'dsh-chat-import': '0.25.2' }, dsh: { profile: { bundles: [] } } }))
-    return Response.json({ name: 'dsh-chat-import', version: '0.26.1' })
+    return Response.json({ name: 'dsh-chat-import', version: '0.26.2' })
   })
   await ensureChatImport(ctx)
   expect(installBundle).not.toHaveBeenCalled()

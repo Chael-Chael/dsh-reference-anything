@@ -61,7 +61,7 @@ export const LOCAL_AGENT_ICON_MARKER = {
   'claude-code': '\uE118', codex: '\uE119', cursor: '\uE11A', qoder: '\uE11B',
   openclaw: '\uE11C', kimi: '\uE11D', grokbuild: '\uE11E', hermes: '\uE11F',
   'gemini-cli': '\uE120', pi: '\uE121', opencode: '\uE122', mimocode: '\uE123', zcode: '\uE124',
-  chatgpt: '\uE125',
+  chatgpt: '\uE125', omp: '\uE140',
   reasonix: '\uE131', antigravity: '\uE132', kilocode: '\uE133', workbuddy: '\uE134',
   qwen: '\uE135', continue: '\uE136', cline: '\uE137', goose: '\uE138', dsh4: '\uE139',
   zed: '\uE13A', crush: '\uE13B', teleagent: '\uE13C', trae: '\uE13D', vibe: '\uE13E', dsh: '\uE13F',

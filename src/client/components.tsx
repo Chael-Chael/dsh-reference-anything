@@ -5,7 +5,7 @@ import { Button, Checkbox, Input, Menu, Switch } from '@deepseek-ai/dsh-client-u
 import { useEffect, useId, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import ReactMarkdown from 'react-markdown'
 import Sortable from 'sortablejs'
-import { ALL_PROVIDERS, ALL_LOCAL_AGENTS, READABLE_LOCAL_AGENTS, LOCAL_AGENT_LABEL, defaultPickerSettings, type ChatProvider, type LocalAgent, type PickerSettings, type PickerSource, type SettingsRecord } from '../wire.ts'
+import { ALL_PROVIDERS, ALL_LOCAL_AGENTS, LOCAL_AGENT_LABEL, defaultPickerSettings, type ChatProvider, type LocalAgent, type PickerSettings, type PickerSource, type SettingsRecord } from '../wire.ts'
 import { syncProgressFraction, type AgentStats, type BrowsePage, type BrowserProfile, type Health, type OpenListDriver, type OpenListMount, type OpenListStatus, type PackageUpdateStatus, type ProviderStats, type StorageStats, type SyncStatus } from './remote.ts'
 import { AgentLogo, PickerSourceLogo, ProviderLogo } from './provider-icons.tsx'
 import { type REFERENCE_ANYTHING_NS } from './locale.ts'
@@ -48,6 +48,7 @@ export interface SettingsInjected {
   openListRemoveMount?(id: string): Promise<void>
   openListReindex?(id: string): Promise<{ supported: boolean; reason?: string }>
   pickCloudDriveDownloadDirectory?(): Promise<string | null>
+  rescanAgent?(agent: LocalAgent): Promise<void>
   pickAgentDirectory?(agent: LocalAgent): Promise<void>
   openCloudDriveDownloadDirectory?(): Promise<void>
 }
@@ -122,7 +123,7 @@ function SourceAliasIcon({ source, keyName }: { source: PickerSource; keyName: s
 }
 const REFERENCE_ANYTHING_LOGO = '__REFERENCE_ANYTHING_LOGO_DATA_URI__'
 const GITHUB_REPOSITORY_URL = 'https://github.com/Chael-Chael/dsh-reference-anything'
-export function ConversationSettings({ useScope, save, sync, cancel, refresh, refreshOpenList = async () => undefined, quickRefreshOnOpen, setupAll, discoverOpenCli, installOpenCli, useProfile, install, restartDaemon, checkUpdate, installUpdate, refreshChatImport, upgradeChatImport, browse, deleteConversation, clearProvider, clearRemoteMissing, clearOldAccounts, refreshStats, openListInstall = async () => undefined, openListUpgrade = async () => undefined, openListConnectExternal = async () => undefined, openListDisconnect = async () => undefined, openListCreateMount = async () => undefined, openListDisableMount = async () => undefined, openListRemoveMount = async () => undefined, openListReindex = async () => ({ supported: false }), pickCloudDriveDownloadDirectory, pickAgentDirectory, openCloudDriveDownloadDirectory, releaseIntro, t }: SettingsProps) {
+export function ConversationSettings({ useScope, save, sync, cancel, refresh, refreshOpenList = async () => undefined, quickRefreshOnOpen, setupAll, discoverOpenCli, installOpenCli, useProfile, install, restartDaemon, checkUpdate, installUpdate, refreshChatImport, upgradeChatImport, browse, deleteConversation, clearProvider, clearRemoteMissing, clearOldAccounts, refreshStats, openListInstall = async () => undefined, openListUpgrade = async () => undefined, openListConnectExternal = async () => undefined, openListDisconnect = async () => undefined, openListCreateMount = async () => undefined, openListDisableMount = async () => undefined, openListRemoveMount = async () => undefined, openListReindex = async () => ({ supported: false }), pickCloudDriveDownloadDirectory, pickAgentDirectory, rescanAgent, openCloudDriveDownloadDirectory, releaseIntro, t }: SettingsProps) {
   const state = useScope(value => value)
   const settings = state.settings
   const picker = settings.picker ?? defaultPickerSettings()
@@ -347,7 +348,7 @@ export function ConversationSettings({ useScope, save, sync, cancel, refresh, re
           <label className="dsh_ref_toggle"><DshSwitch checked={!picker.agents.skipConfirmation} label={t('settings.agentConfirmation')} onChange={confirmation => { savePicker({ ...picker, agents: { ...picker.agents, skipConfirmation: !confirmation } }) }} /><b>{t('settings.agentConfirmation')}</b></label>
           </div>
         </section>
-        <AgentSelectionCards enabledAgents={enabledAgents} stats={state.agentStats} directories={settings.agentDirectories} onEnabled={setAgentEnabled} onPickDirectory={pickAgentDirectory} t={t} />
+        <AgentSelectionCards enabledAgents={enabledAgents} stats={state.agentStats} directories={settings.agentDirectories} onEnabled={setAgentEnabled} onPickDirectory={pickAgentDirectory} onRescan={rescanAgent} t={t} />
       </section>
     </SettingsDisclosure>
     <SettingsDisclosure className="dsh_ref_drive_section" title={t('cloud.title')} description={t('cloud.detail')} open={Boolean(openSections.drive)} onToggle={() => { setOpenSections(current => ({ ...current, drive: !current.drive })) }}>
@@ -859,9 +860,9 @@ export function ProviderCard({ provider, progress, stats, busy, syncDisabled = f
   </article>
 }
 
-export function AgentSelectionCards({ enabledAgents, stats, directories, onEnabled, onPickDirectory, t }: { enabledAgents: ReadonlySet<LocalAgent>; stats?: readonly AgentStats[]; directories?: Partial<Record<LocalAgent, string>>; onEnabled(agent: LocalAgent, value: boolean): void; onPickDirectory?(agent: LocalAgent): Promise<void>; t: T }) {
+export function AgentSelectionCards({ enabledAgents, stats, directories, onEnabled, onPickDirectory, onRescan, t }: { enabledAgents: ReadonlySet<LocalAgent>; stats?: readonly AgentStats[]; directories?: Partial<Record<LocalAgent, string>>; onEnabled(agent: LocalAgent, value: boolean): void; onPickDirectory?(agent: LocalAgent): Promise<void>; onRescan?(agent: LocalAgent): Promise<void>; t: T }) {
   return <div className="dsh_ref_reference_choices dsh_ref_agent_choices">
-    <div className="dsh_ref_provider_grid dsh_ref_agent_grid dsh_ref_selection_grid">{ALL_LOCAL_AGENTS.map((agent, index) => <AgentCard key={agent} agent={agent} index={index} enabled={enabledAgents.has(agent)} conversations={stats?.find(row => row.agent === agent)?.conversations} status={stats?.find(row => row.agent === agent)} directory={directories?.[agent]} onEnabled={value => { onEnabled(agent, value) }} onPickDirectory={onPickDirectory} t={t} />)}</div>
+    <div className="dsh_ref_provider_grid dsh_ref_agent_grid dsh_ref_selection_grid">{ALL_LOCAL_AGENTS.map((agent, index) => <AgentCard key={agent} agent={agent} index={index} enabled={enabledAgents.has(agent)} conversations={stats?.find(row => row.agent === agent)?.conversations} status={stats?.find(row => row.agent === agent)} directory={directories?.[agent]} onEnabled={value => { onEnabled(agent, value) }} onPickDirectory={onPickDirectory} onRescan={onRescan} t={t} />)}</div>
   </div>
 }
 
@@ -879,12 +880,24 @@ const DEFAULT_AGENT_PATHS: Readonly<Partial<Record<LocalAgent, string>>> = {
   'claude-code': '~/.claude/projects', codex: '~/.codex/sessions', cursor: '~/.cursor/projects', qoder: '~/.qoder/projects',
   reasonix: '~/.reasonix/sessions', openclaw: '~/.openclaw/agents', kimi: '~/.kimi/sessions · ~/.kimi-code/sessions',
   grokbuild: '~/.grok/sessions · ~/.grok/archived_sessions', hermes: '~/.hermes/sessions', 'gemini-cli': '~/.gemini/history',
-  pi: '~/.pi/agent/sessions', opencode: '~/.local/share/opencode', mimocode: '~/.local/share/mimocode', zcode: '~/.zcode/cli/db',
+  pi: '~/.pi/agent/sessions', omp: '~/.omp/agent/sessions', opencode: '~/.local/share/opencode', mimocode: '~/.local/share/mimocode', zcode: '~/.zcode/cli/db',
 }
 
-function AgentCard({ agent, enabled, conversations, status, directory, onEnabled, onPickDirectory, index, t }: { agent: LocalAgent; enabled: boolean; conversations?: number; status?: AgentStats; directory?: string; onEnabled(value: boolean): void; onPickDirectory?(agent: LocalAgent): Promise<void>; index: number; t: T }) {
+function AgentCard({ agent, enabled, conversations, status, directory, onEnabled, onPickDirectory, onRescan, index, t }: { agent: LocalAgent; enabled: boolean; conversations?: number; status?: AgentStats; directory?: string; onEnabled(value: boolean): void; onPickDirectory?(agent: LocalAgent): Promise<void>; onRescan?(agent: LocalAgent): Promise<void>; index: number; t: T }) {
+  const [scanning, setScanning] = useState(false)
+  const [scanResult, setScanResult] = useState<string>()
+  const [scanError, setScanError] = useState<string>()
+  const scanningRef = useRef(false)
+  const rescan = async () => {
+    if (!onRescan || scanningRef.current || !enabled) return
+    scanningRef.current = true
+    setScanning(true); setScanResult(undefined); setScanError(undefined)
+    try { await onRescan(agent); setScanResult(t('settings.agentScanComplete')) }
+    catch (error) { setScanError(error instanceof Error ? error.message : String(error)) }
+    finally { scanningRef.current = false; setScanning(false) }
+  }
   const locations = status?.paths?.length ? status.paths : [directory ?? DEFAULT_AGENT_PATHS[agent] ?? (agent === 'chatgpt' ? t('settings.agentExportLocation') : t('settings.agentAutoDiscovery'))]
-  return <article className="dsh_ref_provider dsh_ref_agent_provider" data-local-agent={agent} style={{ '--dsh-ref-index': index } as CSSProperties}><div className="dsh_ref_provider_main"><span className="dsh_ref_provider_mark"><AgentLogo agent={agent} /></span><div className="dsh_ref_provider_content"><div className="dsh_ref_provider_summary"><h4>{LOCAL_AGENT_LABEL[agent]}</h4>{status?.unavailable ? <small>{t('settings.agentApiRequired')}</small> : status?.error ? <small title={status.error}>{t('settings.agentScanFailed')}</small> : conversations === undefined ? <small>{t('settings.agentScanning')}</small> : <strong>{conversations}<span>{t('provider.localConversations')}</span></strong>}<details className="dsh_ref_agent_paths"><summary>{t('settings.agentLocations')}</summary>{locations.map(location => <div key={location}>{location}</div>)}</details>{!(status?.readable ?? READABLE_LOCAL_AGENTS.some(kind => kind === agent)) && <small>{t('settings.agentImportOnly')}</small>}</div></div></div><div className="dsh_ref_provider_foot"><div className="dsh_ref_provider_controls"><label className="dsh_ref_toggle"><DshSwitch checked={enabled} label={t('provider.enabled')} onChange={onEnabled} /><b>{t('provider.enabled')}</b></label><Button type="button" onClick={() => { void onPickDirectory?.(agent) }}>{t('settings.agentCustomDirectory')}</Button></div></div></article>
+  return <article className="dsh_ref_provider dsh_ref_agent_provider" data-local-agent={agent} style={{ '--dsh-ref-index': index } as CSSProperties}><div className="dsh_ref_provider_main"><span className="dsh_ref_provider_mark"><AgentLogo agent={agent} /></span><div className="dsh_ref_provider_content"><div className="dsh_ref_provider_summary"><h4>{LOCAL_AGENT_LABEL[agent]}</h4>{status?.unavailable ? <small>{t('settings.agentApiRequired')}</small> : status?.error ? <small>{t('settings.agentScanFailed')}</small> : conversations === undefined ? <small>{t('settings.agentScanning')}</small> : <strong>{conversations}<span>{t('provider.localConversations')}</span></strong>}<details className="dsh_ref_agent_paths"><summary>{t('settings.agentLocations')}</summary>{locations.map(location => <div key={location}>{location}</div>)}</details>{(scanError || status?.error) && <details open className="dsh_ref_agent_paths"><summary>{t('settings.agentScanErrors')}</summary><div role="alert" style={{ whiteSpace: 'pre-wrap' }}>{scanError || status?.error}</div></details>}{scanResult && <small role="status">{scanResult}</small>}{status?.readable === false && <small>{t('settings.agentImportOnly')}</small>}</div></div></div><div className="dsh_ref_provider_foot"><div className="dsh_ref_provider_controls"><label className="dsh_ref_toggle"><DshSwitch checked={enabled} label={t('provider.enabled')} onChange={onEnabled} /><b>{t('provider.enabled')}</b></label>{onRescan && <Button className="dsh_ref_agent_rescan" type="button" aria-label={t(scanning ? 'settings.agentRescanning' : 'settings.agentRescan')} title={t('settings.agentRescan')} aria-busy={scanning} disabled={!enabled || scanning} onClick={() => { void rescan() }}><PickerSourceLogo kind="refresh" size={16} /></Button>}<Button type="button" disabled={scanning} onClick={() => { void onPickDirectory?.(agent) }}>{t('settings.agentCustomDirectory')}</Button></div></div></article>
 }
 
 function formatBytes(bytes: number): string {

@@ -147,6 +147,7 @@ export const REFERENCE_ANYTHING_INVOCATIONS: readonly InvocationDescriptor[] = [
   descriptor('agentImport', [agentLookup, { name: 'input', wire: 'input', source: 'json', codec: strict('AgentImportInput', z.object({ id: z.string().min(1) }).strict().readonly()) }], strict('ImportedSessionId', z.string().min(1)), true),
   descriptor('agentSearch', [agentLookup, { name: 'input', wire: 'input', source: 'json', codec: strict('AgentSearchInput', z.object({ query: z.string(), limit: z.number().int().min(1).max(100), kind: localAgentSchema.optional() }).readonly()) }], strict('AgentCandidate[]', z.array(agentCandidateSchema)), true),
   descriptor('agentStats', [], strict('AgentStats[]', z.array(agentStatsSchema)), true),
+  descriptor('agentRescan', [{ name: 'input', wire: 'input', source: 'json', codec: strict('AgentRescanInput', z.object({ kind: localAgentSchema }).strict().readonly()) }], strict('AgentStats[]', z.array(agentStatsSchema)), true),
   // No session lookup, unlike `agentSearch`: a drive is the same drive from
   // every workspace, so there is nothing to scope the query to.
   descriptor('driveSearch', [{ name: 'input', wire: 'input', source: 'json', codec: strict('DriveSearchInput', z.object({ query: z.string(), limit: z.number().int().min(1).max(100) }).readonly()) }], strict('DriveCandidate[]', z.array(driveCandidateSchema)), true),

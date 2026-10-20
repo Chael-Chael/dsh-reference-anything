@@ -180,7 +180,17 @@ export class ReferenceAnythingRemote extends TypertRemoteService {
     }
   }
 
-  async agentStats(signal: AbortSignal) {
+  async agentRescan(input: { kind: LocalAgent }, signal: AbortSignal) {
+    signal.throwIfAborted()
+    const agents = this.ctx.get('referenceLocalAgents')
+    if (!agents) throw new Error('Local agent conversations are unavailable.')
+    if (!this.ctx.referenceChatHistory.getSettings().enabledAgents.includes(input.kind)) throw new Error('This local agent source is disabled.')
+    agents.scanner.clear()
+    this.agentScans.clear()
+    return this.agentStats(signal, input.kind)
+  }
+
+  async agentStats(signal: AbortSignal, onlyKind?: LocalAgent) {
     signal.throwIfAborted()
     const agents = this.ctx.get('referenceLocalAgents')
     if (agents === undefined) return []
@@ -188,12 +198,15 @@ export class ReferenceAnythingRemote extends TypertRemoteService {
     agents.setAgentDirectories(settings.agentDirectories ?? {})
     const rows: import('./client/remote.ts').AgentStats[] = []
     for (const kind of ALL_LOCAL_AGENTS) {
+      if (onlyKind && kind !== onlyKind) continue
       const format = scanFormat(kind)
       signal.throwIfAborted()
       const sessions = new Set<string>()
       const errors: string[] = []
       const custom = expandRoot(settings.agentDirectories?.[kind] ?? '', homedir())
-      for (const path of custom ? [undefined, custom] : [undefined]) {
+      const configured = agents.discoveryPolicy().roots.filter(root => root.kind === kind).map(root => root.path)
+      for (const path of new Set([undefined, ...configured, ...custom ? [custom] : []])) {
+        if (onlyKind && !this.ctx.referenceChatHistory.getSettings().enabledAgents.includes(onlyKind)) throw new Error('This local agent source is disabled.')
         try {
           const result = discoverySchema.parse(await agents.scanner.scanDiscover({ format, ...(path ? { path } : {}) }, signal))
           for (const row of result.sessions) {
@@ -211,7 +224,8 @@ export class ReferenceAnythingRemote extends TypertRemoteService {
     return rows.map(row => {
       const root = roots?.[scanFormat(row.agent)]
       const custom = settings.agentDirectories?.[row.agent]
-      const paths = [...new Set([...(Array.isArray(root) ? root : root ? [root] : []), ...(custom ? [custom] : [])])]
+      const configured = agents.discoveryPolicy().roots.filter(root => root.kind === row.agent).map(root => root.path)
+      const paths = [...new Set([...(Array.isArray(root) ? root : root ? [root] : []), ...configured, ...(custom ? [custom] : [])])]
       return { ...row, ...(roots ? { paths } : {}), readable: true }
     })
   }

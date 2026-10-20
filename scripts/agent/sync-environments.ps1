@@ -9,14 +9,18 @@ $workspace = Join-Path $repo '.codex-tmp\agent-browser-test\workspace'
 $logs = Join-Path $repo '.codex-tmp\agent-workflow'
 
 # Validate everything before stopping either environment.
-foreach ($profileName in @('agent-browser-test', 'desktop')) {
+foreach ($profileName in @('agent-browser-test')) {
     $profile = Join-Path $dshRoot "profiles\$profileName"
     $link = Get-Item -LiteralPath (Join-Path $profile 'node_modules\dsh-reference-anything')
     if (-not $link.LinkType -or [IO.Path]::GetFullPath($link.Target[0]) -ne $repo) {
         throw "$profileName does not link to $repo"
     }
 }
-foreach ($required in @($cli, $desktopExe, (Join-Path $repo 'lib\index.js'))) {
+# Desktop may use an online package after the user removes the local link.
+$desktopLink = Get-Item -LiteralPath (Join-Path $dshRoot 'profiles/desktop/node_modules/dsh-reference-anything') -ErrorAction SilentlyContinue
+$refreshDesktop = $desktopLink -and $desktopLink.LinkType -and [IO.Path]::GetFullPath($desktopLink.Target[0]) -eq $repo
+if ($refreshDesktop -and -not (Test-Path -LiteralPath $desktopExe)) { throw "Missing required file: $desktopExe" }
+foreach ($required in @($cli, (Join-Path $repo 'lib\index.js'))) {
     if (-not (Test-Path -LiteralPath $required)) { throw "Missing required file: $required" }
 }
 $testProfile = Join-Path $dshRoot 'profiles\agent-browser-test'
@@ -34,7 +38,7 @@ $listeners = @(Get-NetTCPConnection -LocalPort 3081 -State Listen -ErrorAction S
 foreach ($listener in $listeners) {
     if ($listener.OwningProcess -notin $testProcesses.ProcessId) { throw 'Port 3081 belongs to another process; will not stop it' }
 }
-$desktopProcesses = @(Get-Process | Where-Object { $_.Path -eq $desktopExe })
+$desktopProcesses = @(if ($refreshDesktop) { Get-Process | Where-Object { $_.Path -eq $desktopExe } })
 if ($InspectOnly) {
     [pscustomobject]@{ Repository = $repo; TestPids = $testProcesses.ProcessId; DesktopPids = $desktopProcesses.Id; Port = 3081 } | ConvertTo-Json
     exit 0
@@ -51,7 +55,7 @@ $stamp = Get-Date -Format 'yyyyMMdd-HHmmss-fff'
 $stdout = Join-Path $logs "web-$stamp.stdout.log"
 $stderr = Join-Path $logs "web-$stamp.stderr.log"
 $web = Start-Process -FilePath $nodeExe -ArgumentList "`"$cli`" --profile agent-browser-test --host 127.0.0.1 --port 3081 --no-open" -WorkingDirectory $workspace -WindowStyle Hidden -RedirectStandardOutput $stdout -RedirectStandardError $stderr -PassThru
-$desktop = Start-Process -FilePath $desktopExe -WindowStyle Hidden -RedirectStandardOutput (Join-Path $logs "desktop-$stamp.stdout.log") -RedirectStandardError (Join-Path $logs "desktop-$stamp.stderr.log") -PassThru
+$desktop = if ($refreshDesktop) { Start-Process -FilePath $desktopExe -WindowStyle Hidden -RedirectStandardOutput (Join-Path $logs "desktop-$stamp.stdout.log") -RedirectStandardError (Join-Path $logs "desktop-$stamp.stderr.log") -PassThru }
 $ready = $false
 for ($attempt = 0; $attempt -lt 45; $attempt++) {
     $web.Refresh()
@@ -65,6 +69,6 @@ for ($attempt = 0; $attempt -lt 45; $attempt++) {
     }
 }
 if (-not $ready) { throw "Web did not become ready: inspect $stderr" }
-if (-not (Get-Process | Where-Object { $_.Path -eq $desktopExe })) { throw 'Desktop did not remain running' }
+if ($refreshDesktop -and -not (Get-Process | Where-Object { $_.Path -eq $desktopExe })) { throw 'Desktop did not remain running' }
 [pscustomobject]@{ WebPid = $web.Id; DesktopPid = $desktop.Id; Url = 'http://127.0.0.1:3081/'; LoginLog = $stdout; ErrorLog = $stderr; Acceptance = 'NOT_RUN' } | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $logs 'instances.json') -Encoding utf8
-Write-Output "Both processes refreshed. Refresh browser and perform real UI acceptance. Login URL remains in local log: $stdout"
+Write-Output "Linked environments refreshed (Desktop linked: $refreshDesktop). Refresh browser and perform real UI acceptance. Login URL remains in local log: $stdout"

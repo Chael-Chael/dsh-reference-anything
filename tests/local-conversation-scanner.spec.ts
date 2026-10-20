@@ -11,6 +11,21 @@ import { FORMATS } from '../vendor/chat-import-reader/scanners.mjs'
 let scanner = new LocalConversationScanner()
 afterEach(() => { scanner.dispose(); scanner = new LocalConversationScanner() })
 
+it('explicit rescan discovers newly created files immediately without modifying the source', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'rescan-'))
+  const input = { format: 'codex', path: dir }
+  try {
+    expect((await scanner.scanDiscover(input)).sessions).toEqual([])
+    const body = await readFile(resolve('tests/fixtures/chat-import-reader/codex-simple.jsonl'))
+    const path = join(dir, 'rollout-new.jsonl')
+    await writeFile(path, body)
+    expect((await scanner.scanDiscover(input)).sessions).toEqual([])
+    scanner.clear()
+    expect((await scanner.scanDiscover(input)).sessions.length).toBeGreaterThan(0)
+    expect(await readFile(path)).toEqual(body)
+  } finally { await rm(dir, { recursive: true, force: true }) }
+})
+
 it('bundles all sources without plugin lifecycle or mutation code', async () => {
   expect([...FORMATS].sort()).toEqual(ALL_LOCAL_AGENTS.map(scanFormat).sort())
   const bundle = await readFile(resolve('vendor/chat-import-reader/scanners.mjs'), 'utf8')
@@ -20,7 +35,7 @@ it('bundles all sources without plugin lifecycle or mutation code', async () => 
 it.each([
   ['claude', 'sess-simple-001.jsonl'], ['codex', 'codex-simple.jsonl'], ['cursor', 'cursor-simple.jsonl'],
   ['gemini', 'gemini-simple.json'], ['reasonix', 'reasonix-v1.jsonl'], ['qoder', 'qoder-simple.jsonl'],
-  ['pi', 'pi-simple.jsonl'], ['chatgpt', 'chatgpt-export.json'],
+  ['pi', 'pi-simple.jsonl'], ['omp', 'omp-simple.jsonl'], ['chatgpt', 'chatgpt-export.json'],
 ])('scans a real upstream %s fixture without Chat Import', async (format, fixture) => {
   const before = await readFile(resolve('tests/fixtures/chat-import-reader', fixture))
   const dir = await mkdtemp(join(tmpdir(), 'scan-layout-'))

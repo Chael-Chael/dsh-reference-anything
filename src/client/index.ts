@@ -55,6 +55,8 @@ export function apply(ctx: ClientContext): void {
   let lastSyncFinishedAt: string | undefined
   let poll: ReturnType<typeof setInterval> | undefined
   let activeConversationSource: RefreshablePickerSource | undefined
+  let activeAgentSource: RefreshablePickerSource | undefined
+  let agentStatsGeneration = 0
   let activeDriveSource: RefreshablePickerSource | undefined
   let refreshGeneration = 0
   const t = ctx.locale.bind(REFERENCE_ANYTHING_NS)
@@ -92,7 +94,8 @@ export function apply(ctx: ClientContext): void {
   }
   const refreshAgentStats = async (): Promise<void> => {
     if (!remote) return
-    try { const agentStats = unwrap(await remote.agentStats()); scope.set({ ...scope.getSnapshot(), agentStats }) } catch { /* Optional local-agent source. */ }
+    const generation = agentStatsGeneration
+    try { const agentStats = unwrap(await remote.agentStats()); if (generation === agentStatsGeneration) scope.set({ ...scope.getSnapshot(), agentStats }) } catch { /* Optional local-agent source. */ }
   }
   /** Refresh settings and local mirror figures without starting OpenCLI. */
   const refreshLocal = async (): Promise<void> => {
@@ -396,7 +399,9 @@ export function apply(ctx: ClientContext): void {
       const result = await referenceCandidates(sessionId, signal, () => ctx.remote.sessionReferenceResolver.candidates(sessionId, query, signal))
       return result.ok ? result.value : []
     }, t, optionsFor('sessions'), sessions)))
-    if (picker.agents.enabled) disposers.push(inputTriggers.registerSource(createLocalAgentSource((sessionId, query, signal, limit, kind) =>
+    activeAgentSource = undefined
+    if (picker.agents.enabled) {
+      const source = createLocalAgentSource((sessionId, query, signal, limit, kind) =>
       agentSearch.run(query, signal, async () => {
         // Re-read after the debounce, as the conversation source does above.
         if (!remote) return []
@@ -425,7 +430,10 @@ export function apply(ctx: ClientContext): void {
           scope.set({ ...scope.getSnapshot(), chatImport, chatImportError: undefined })
           notices.show(t(`chatImport.${chatImport.state}`, { version: chatImport.version }))
         },
-      })))
+      })
+      activeAgentSource = source
+      disposers.push(inputTriggers.registerSource(source))
+    }
     if (picker.drives.enabled) {
       const source = createCloudDriveSource((query, signal, limit) =>
         driveSearch.run(query, signal, async () => {
@@ -541,6 +549,19 @@ export function apply(ctx: ClientContext): void {
       hooks: { scope }, close: () => undefined, save, sync: startSync, refresh, quickRefreshOnOpen,
       browse, deleteConversation, clearProvider, clearRemoteMissing, clearOldAccounts, refreshStats,
       refreshOpenList, refreshChatImport,
+      rescanAgent: async (kind: LocalAgent) => {
+        ++agentStatsGeneration
+        try {
+          if (!remote) throw new Error(t('menu.updateDisconnected'))
+          const rows = unwrap(await remote.agentRescan({ kind }))
+          const current = scope.getSnapshot()
+          scope.set({ ...current, agentStats: [...(current.agentStats ?? []).filter(row => row.agent !== kind), ...rows] })
+          await activeAgentSource?.refreshCachedMenu({ refetch: true })
+        } catch (error) {
+          scope.set({ ...scope.getSnapshot(), error: message(error) })
+          throw error
+        } finally { ++agentStatsGeneration }
+      },
       upgradeChatImport: async () => {
         try {
           if (!remote) throw new Error(t('menu.updateDisconnected'))

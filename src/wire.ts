@@ -6,14 +6,14 @@ export type ChatProvider = z.infer<typeof providerSchema>
 export const ALL_PROVIDERS: readonly ChatProvider[] = providerSchema.options
 
 export const READABLE_LOCAL_AGENTS = ['claude-code', 'codex', 'cursor', 'qoder', 'reasonix', 'openclaw', 'kimi', 'grokbuild', 'hermes', 'gemini-cli', 'pi', 'opencode', 'mimocode', 'zcode'] as const
-export const IMPORT_ONLY_AGENTS = ['antigravity', 'kilocode', 'chatgpt', 'workbuddy', 'qwen', 'continue', 'cline', 'goose', 'dsh4', 'zed', 'crush', 'teleagent', 'trae', 'vibe', 'dsh'] as const
+export const IMPORT_ONLY_AGENTS = ['antigravity', 'kilocode', 'chatgpt', 'workbuddy', 'qwen', 'continue', 'cline', 'goose', 'dsh4', 'zed', 'crush', 'teleagent', 'trae', 'vibe', 'dsh', 'omp'] as const
 export const localAgentSchema = z.enum([...READABLE_LOCAL_AGENTS, ...IMPORT_ONLY_AGENTS])
 export type LocalAgent = z.infer<typeof localAgentSchema>
 export const ALL_LOCAL_AGENTS: readonly LocalAgent[] = localAgentSchema.options
 export const LOCAL_AGENT_LABEL: Readonly<Record<LocalAgent, string>> = {
   'claude-code': 'Claude Code', codex: 'Codex', cursor: 'Cursor', qoder: 'Qoder', reasonix: 'Reasonix',
   openclaw: 'OpenClaw', kimi: 'Kimi', grokbuild: 'Grok Build', hermes: 'Hermes', 'gemini-cli': 'Gemini CLI',
-  pi: 'Pi', opencode: 'opencode', mimocode: 'mimocode', zcode: 'zcode',
+  pi: 'Pi', omp: 'oh-my-pi', opencode: 'opencode', mimocode: 'mimocode', zcode: 'zcode',
   antigravity: 'Antigravity', kilocode: 'Kilo Code', chatgpt: 'ChatGPT', workbuddy: 'WorkBuddy', qwen: 'Qwen Code',
   continue: 'Continue', cline: 'Cline', goose: 'Goose', dsh4: 'DSH4', zed: 'Zed', crush: 'Crush', teleagent: 'TeleAgent', trae: 'Trae Work', vibe: 'Mistral Vibe', dsh: 'DSH',
 }
@@ -54,7 +54,7 @@ export const pickerSettingsSchema = z.object({
   // a saved record that has `picker` but predates this key would fail the whole
   // parse without it, and the medium — every setting in it — would be rejected.
   // Any key added here from now on needs the same treatment.
-  agents: pickerSourceSettingsSchema.extend(agentActionsSchema.shape).default({ showImport: true, showSummary: false, skipConfirmation: false, enabled: true, order: 25, limit: 6, maxCandidates: 50, sort: 'updated', shortcut: '', aliases: ['agent', 'cc', 'claude-code', 'codex', 'cursor', 'gemini-cli', 'qoder', 'reasonix', 'openclaw', 'hermes', 'pi', 'grokbuild', 'grok-build', 'kimi-cli', 'kimi-code', 'opencode', 'mimocode', 'mimo', 'zcode'] }),
+  agents: pickerSourceSettingsSchema.extend(agentActionsSchema.shape).default({ showImport: true, showSummary: false, skipConfirmation: false, enabled: true, order: 25, limit: 6, maxCandidates: 50, sort: 'updated', shortcut: '', aliases: ['agent', 'cc', 'claude-code', 'codex', 'cursor', 'gemini-cli', 'qoder', 'reasonix', 'openclaw', 'hermes', 'pi', 'omp', 'grokbuild', 'grok-build', 'kimi-cli', 'kimi-code', 'opencode', 'mimocode', 'mimo', 'zcode'] }),
   conversations: pickerSourceSettingsSchema,
   // Defaulted for the same reason as `agents` above: it arrived later still.
   drives: pickerSourceSettingsSchema.default({ enabled: true, order: 35, limit: 6, maxCandidates: 50, sort: 'updated', shortcut: '', aliases: ['drive'] }),
@@ -76,7 +76,7 @@ export function defaultPickerSettings(): PickerSettings {
     skills: { enabled: true, order: 5, limit: 6, maxCandidates: 50, sort: 'updated', shortcut: '', aliases: ['skill'] },
     files: { enabled: true, order: 10, limit: 6, maxCandidates: 50, sort: 'updated', shortcut: '', aliases: ['file'] },
     sessions: { enabled: true, order: 20, limit: 6, maxCandidates: 50, sort: 'updated', shortcut: '', aliases: ['session'] },
-    agents: { showImport: true, showSummary: false, skipConfirmation: false, enabled: true, order: 25, limit: 6, maxCandidates: 50, sort: 'updated', shortcut: '', aliases: ['agent', 'cc', 'claude-code', 'codex', 'cursor', 'gemini-cli', 'qoder', 'reasonix', 'openclaw', 'hermes', 'pi', 'grokbuild', 'grok-build', 'kimi-cli', 'kimi-code', 'opencode', 'mimocode', 'mimo', 'zcode'] },
+    agents: { showImport: true, showSummary: false, skipConfirmation: false, enabled: true, order: 25, limit: 6, maxCandidates: 50, sort: 'updated', shortcut: '', aliases: ['agent', 'cc', 'claude-code', 'codex', 'cursor', 'gemini-cli', 'qoder', 'reasonix', 'openclaw', 'hermes', 'pi', 'omp', 'grokbuild', 'grok-build', 'kimi-cli', 'kimi-code', 'opencode', 'mimocode', 'mimo', 'zcode'] },
     conversations: { enabled: true, order: 30, limit: 6, maxCandidates: 50, sort: 'updated', shortcut: '', aliases: ['chat'] },
     drives: { enabled: true, order: 35, limit: 6, maxCandidates: 50, sort: 'updated', shortcut: '', aliases: ['drive'] },
     plugins: { enabled: true, order: 40, limit: 6, maxCandidates: 50, sort: 'updated', shortcut: '', aliases: ['plugin'], onlyLive: false, showDeepSeek: true },

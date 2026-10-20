@@ -13,6 +13,8 @@ export class LocalConversationScanner {
   private pending = new Map<number, { resolve(value: unknown): void; reject(error: Error): void; timer: ReturnType<typeof setTimeout> }>()
   private cache = new AgentScanCache(30_000)
 
+  clear(): void { this.cache.clear() }
+
   async scanDiscover(input: Input, signal = new AbortController().signal): Promise<Snapshot> {
     const result = await this.cache.read(this, '', JSON.stringify([input.format, input.path]), () => this.scan(input), signal)
     const query = input.query?.trim().toLowerCase()

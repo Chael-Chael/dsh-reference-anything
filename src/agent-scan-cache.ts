@@ -11,6 +11,8 @@ export class AgentScanCache {
   private owner: unknown
   private policy = ''
 
+  clear(): void { this.entries.clear() }
+
   async read(owner: unknown, policy: string, key: string, scan: () => Promise<unknown>, signal: AbortSignal): Promise<Snapshot> {
     signal.throwIfAborted()
     if (owner !== this.owner || policy !== this.policy) {

@@ -16,7 +16,7 @@ describe('external conversation Remote availability', () => {
       })) : [], warnings: path === '/broken' ? [{ format, target: path, error: 'Permission denied' }] : [],
     }))
     ctx.provide('referenceLocalAgents', {
-      scanner: { scanDiscover }, conversationAvailability: { visible: async ({ sessionId }: { sessionId: string }) => sessionId !== 'empty' },
+      scanner: { scanDiscover, clear: vi.fn() }, conversationAvailability: { visible: async ({ sessionId }: { sessionId: string }) => sessionId !== 'empty' },
       setAgentDirectories: vi.fn(), discoveryPolicy: () => ({ roots: [{ kind: 'codex', path: '/custom' }], scope: 'workspace' }),
       referenceForDiscovered: async (kind: string, path: string, id: string) => `${kind}:chat-import:${id}`,
     })
@@ -31,6 +31,20 @@ describe('external conversation Remote availability', () => {
     expect(rows.map(row => row.label)).toEqual(['read-error', 'readable'])
     expect(rows.every(row => !row.importStatus && row.referenceId)).toBe(true)
     expect((await remote.agentStats(signal)).find(row => row.agent === 'codex')).toMatchObject({ conversations: 2, readable: true })
+  })
+  it('rescans only the selected enabled source and returns directory errors alongside counts', async () => {
+    const { ctx, settings, scanDiscover, remote, signal } = setup()
+    settings.agentDirectories.codex = '/broken'
+    const rows = await remote.agentRescan({ kind: 'codex' }, signal)
+    expect(rows).toHaveLength(1)
+    expect(rows[0]).toMatchObject({ agent: 'codex', conversations: 2, error: '/broken: Permission denied' })
+    expect(scanDiscover.mock.calls.map(([input]) => input)).toEqual([{ format: 'codex' }, { format: 'codex', path: '/custom' }, { format: 'codex', path: '/broken' }])
+    expect(ctx.get('referenceLocalAgents')!.scanner.clear).toHaveBeenCalledOnce()
+    scanDiscover.mockClear()
+    await expect(remote.agentRescan({ kind: 'trae' }, signal)).rejects.toThrow('disabled')
+    const aborted = AbortSignal.abort(new Error('cancelled'))
+    await expect(remote.agentRescan({ kind: 'codex' }, aborted)).rejects.toThrow('cancelled')
+    expect(scanDiscover).not.toHaveBeenCalled()
   })
   it('filters category before scanning, deduplicates custom paths and respects disabled sources', async () => {
     const { scanDiscover, remote, signal, agent } = setup()

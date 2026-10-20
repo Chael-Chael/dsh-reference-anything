@@ -108,6 +108,7 @@ export interface ReferenceAnythingRemoteFace {
   agentImport(agentId: string, input: { id: string }, signal?: AbortSignal): Promise<RemoteResult<string>>
   agentSearch(agentId: string, input: { query: string; limit: number; kind?: LocalAgent }, signal?: AbortSignal): Promise<RemoteResult<readonly AgentCandidate[]>>
   agentStats(signal?: AbortSignal): Promise<RemoteResult<readonly AgentStats[]>>
+  agentRescan(input: { kind: LocalAgent }, signal?: AbortSignal): Promise<RemoteResult<readonly AgentStats[]>>
   driveSearch(input: { query: string; limit: number }, signal?: AbortSignal): Promise<RemoteResult<readonly DriveCandidate[]>>
   search(input: { query: string; provider?: ChatProvider; limit: number }, signal?: AbortSignal): Promise<RemoteResult<readonly SearchResult[]>>
   health(signal?: AbortSignal): Promise<RemoteResult<Health>>
