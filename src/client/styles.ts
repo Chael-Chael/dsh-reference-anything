@@ -732,6 +732,15 @@ export function adoptMenuGroupTitleProjection(t: TranslateNS<typeof REFERENCE_AN
         if (key !== undefined && heading.textContent !== t(key)) heading.textContent = t(key)
       }
       for (const option of Array.from(menu.querySelectorAll<HTMLElement>('[role="option"]'))) {
+        const workspace = option.querySelector<HTMLElement>('[data-dsh-ref-workspace]')?.dataset.dshRefWorkspace
+        const description = option.querySelector<HTMLElement>('[class*="itemDescription"]')
+        if (description && workspace) {
+          description.title = workspace
+          description.dataset.dshRefWorkspaceTitle = ''
+        } else if (description?.hasAttribute('data-dsh-ref-workspace-title')) {
+          description.removeAttribute('title')
+          delete description.dataset.dshRefWorkspaceTitle
+        }
         if (actionLabels.has(normalizeLabel(option.textContent ?? ''))) option.dataset.dshRefMenuAction = ''
         else delete option.dataset.dshRefMenuAction
       }

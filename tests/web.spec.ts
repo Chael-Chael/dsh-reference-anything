@@ -15,8 +15,9 @@ describe('external conversation Remote availability', () => {
         format, sessionId: id, title: id, sourcePath: `/test/${id}`, cwd: '/project', lastActiveAt: 3 - index,
       })) : [], warnings: path === '/broken' ? [{ format, target: path, error: 'Permission denied' }] : [],
     }))
+    const summaries = new Map<string, unknown>()
     ctx.provide('referenceLocalAgents', {
-      scanner: { scanDiscover, clear: vi.fn() }, conversationAvailability: { visible: async ({ sessionId }: { sessionId: string }) => sessionId !== 'empty' },
+      scanner: { scanDiscover, clear: vi.fn(), summary: (key: string) => summaries.get(key), rememberSummary: async (key: string, value: unknown) => { summaries.set(key, value) } }, conversationAvailability: { visible: async ({ sessionId }: { sessionId: string }) => sessionId !== 'empty' },
       setAgentDirectories: vi.fn(), discoveryPolicy: () => ({ roots: [{ kind: 'codex', path: '/custom' }], scope: 'workspace' }),
       referenceForDiscovered: async (kind: string, path: string, id: string) => `${kind}:chat-import:${id}`,
     })
@@ -30,7 +31,22 @@ describe('external conversation Remote availability', () => {
     const rows = await remote.agentSearch(agent, { query: '', kind: 'codex', limit: 2 }, signal)
     expect(rows.map(row => row.label)).toEqual(['read-error', 'readable'])
     expect(rows.every(row => !row.importStatus && row.referenceId)).toBe(true)
+    await remote.agentRescan({ kind: 'codex' }, signal)
     expect((await remote.agentStats(signal)).find(row => row.agent === 'codex')).toMatchObject({ conversations: 2, readable: true })
+  })
+  it('returns saved statistics without scanning and hides disabled or differently configured sources', async () => {
+    const { remote, signal, scanDiscover, settings } = setup()
+    expect(await remote.agentStats(signal)).toEqual([])
+    expect(scanDiscover).not.toHaveBeenCalled()
+    await remote.agentRescan({ kind: 'codex' }, signal)
+    scanDiscover.mockClear()
+    expect(await remote.agentStats(signal)).toEqual([expect.objectContaining({ agent: 'codex', conversations: 2, scannedAt: expect.any(Number) })])
+    expect(scanDiscover).not.toHaveBeenCalled()
+    settings.agentDirectories.codex = '/different'
+    expect(await remote.agentStats(signal)).toEqual([])
+    settings.agentDirectories.codex = '/custom'
+    settings.enabledAgents = []
+    expect(await remote.agentStats(signal)).toEqual([])
   })
   it('rescans only the selected enabled source and returns directory errors alongside counts', async () => {
     const { ctx, settings, scanDiscover, remote, signal } = setup()
@@ -45,6 +61,19 @@ describe('external conversation Remote availability', () => {
     const aborted = AbortSignal.abort(new Error('cancelled'))
     await expect(remote.agentRescan({ kind: 'codex' }, aborted)).rejects.toThrow('cancelled')
     expect(scanDiscover).not.toHaveBeenCalled()
+  })
+  it('ranks exact workspace before unknown and other directories, then by activity before limiting', async () => {
+    const { ctx, scanDiscover, remote, signal, agent } = setup()
+    ctx.get('referenceLocalAgents')!.discoveryPolicy = () => ({ roots: [], scope: 'all' }) as never
+    scanDiscover.mockImplementation(async ({ format }) => ({ sessions: [
+      ['elsewhere', '/other', 100], ['unknown', '', 90], ['nested', '/project/sub', 80],
+      ['same-old', '/project', 1], ['same-new', '/project', 2],
+    ].map(([id, cwd, time]) => ({ format, sessionId: String(id), title: String(id), sourcePath: `/test/${id}`, cwd: String(cwd), lastActiveAt: Number(time) })), warnings: [] }))
+    const rows = await remote.agentSearch(agent, { query: '', kind: 'codex', limit: 5 }, signal)
+    expect(rows.map(row => row.label)).toEqual(['same-new', 'same-old', 'unknown', 'elsewhere', 'nested'])
+    expect(rows[0]?.cwd).toBe('/project')
+    expect(rows[2]?.cwd).toBeUndefined()
+    expect((await remote.agentSearch(agent, { query: '', kind: 'codex', limit: 1 }, signal))[0]?.label).toBe('same-new')
   })
   it('filters category before scanning, deduplicates custom paths and respects disabled sources', async () => {
     const { scanDiscover, remote, signal, agent } = setup()

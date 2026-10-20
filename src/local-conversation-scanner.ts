@@ -1,6 +1,8 @@
 import { spawn, type ChildProcess } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 import { AgentScanCache } from './agent-scan-cache.ts'
+import type { Domain } from '@deepseek-ai/dsh-storage-domain'
+import { scanDomainSpec } from './local-scan-store.ts'
 import { discoverySchema } from './chat-import-discovery.ts'
 
 type Input = { format: string; path?: string; query?: string }
@@ -13,10 +15,37 @@ export class LocalConversationScanner {
   private pending = new Map<number, { resolve(value: unknown): void; reject(error: Error): void; timer: ReturnType<typeof setTimeout> }>()
   private cache = new AgentScanCache(30_000)
 
-  clear(): void { this.cache.clear() }
+  private storage?: Domain<typeof scanDomainSpec>
+  private generations = new Map<string, number>()
+  attachStorage(storage: Domain<typeof scanDomainSpec>): void { this.storage = storage }
+  summary(key: string) { return this.storage?.table('summaries').get(key) }
+  async rememberSummary(key: string, value: { conversations: number; scannedAt: number; error?: string }) {
+    await this.storage?.table('summaries').put(key, value)
+  }
+  clear(format?: string): void {
+    this.cache.clear(format)
+    const formats = format ? [format] : [...this.generations.keys()]
+    for (const kind of formats) this.generations.set(kind, (this.generations.get(kind) ?? 0) + 1)
+  }
 
-  async scanDiscover(input: Input, signal = new AbortController().signal): Promise<Snapshot> {
-    const result = await this.cache.read(this, '', JSON.stringify([input.format, input.path]), () => this.scan(input), signal)
+  async scanDiscover(input: Input, signal = new AbortController().signal, fresh = false): Promise<Snapshot> {
+    signal.throwIfAborted()
+    const key = JSON.stringify([input.format, input.path])
+    const saved = this.storage?.table('snapshots').get(key)
+    const generation = this.generations.get(input.format) ?? 0
+    this.generations.set(input.format, generation)
+    const refresh = () => this.cache.read(this, '', key, async () => {
+      const snapshot = discoverySchema.parse(await this.scan(input))
+      if ((this.generations.get(input.format) ?? 0) === generation) {
+        await this.storage?.table('snapshots').put(key, { snapshot, scannedAt: Date.now() })
+      }
+      return snapshot
+    }, signal)
+    let result: Snapshot
+    if (saved && !fresh) {
+      result = saved.snapshot
+      if (Date.now() - saved.scannedAt >= 30_000) void refresh().catch(() => { /* Explicit scans report errors; keep the last snapshot. */ })
+    } else result = await refresh()
     const query = input.query?.trim().toLowerCase()
     return query ? { ...result, sessions: result.sessions.filter(row => [row.title, row.project, row.sourcePath].some(s => s?.toLowerCase().includes(query))) } : result
   }

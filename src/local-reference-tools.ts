@@ -5,7 +5,7 @@ import { defineTool } from '@deepseek-ai/dsh-tools'
 import { AttachmentId, type ImageMediaType } from '@deepseek-ai/dsh-attachment'
 import { z } from 'zod'
 import { localLocatorFromId } from './local-locator.ts'
-import { inWorkspace } from './sources/local-agent/path.ts'
+import { workspaceRank } from './sources/local-agent/path.ts'
 import { loadLocalReference, localImage, readLocalPage, renderLocalData, localBytes, localError, shortLabel,
   selectLocalRows, recordKey, positionFor, SOURCE_NOTICE, assertLocalScope, assertLocalSourceEnabled, type LocalFrom } from './local-reference.ts'
 
@@ -126,16 +126,16 @@ export function registerLocalReferenceTools(ctx: Context, budget: number, timeou
       const directory=await service.referenceDirectory(cwd,args.source,exec.signal)
       if(args.source&&directory.warnings.length)throw localError('SOURCE_UNAVAILABLE','The requested source could not be fully listed.')
       const unavailable=[...new Set(directory.warnings.map(w=>w.split(':')[0]))].sort()
-      const candidates: Array<{ref:import('./local-locator.ts').LocalLocator;title:string;updatedAt:number|null;workspace:boolean}>=[]
+      const candidates: Array<{ref:import('./local-locator.ts').LocalLocator;title:string;updatedAt:number|null;workspace:number}>=[]
       for(const item of directory.items){
         const ref=localLocatorFromId(item.ref.id)
         if(args.source&&ref.source!==args.source)continue
         try {await assertLocalScope(ctx,ref,exec.signal)} catch(error){exec.signal.throwIfAborted();if(error&&typeof error==='object'&&'code' in error&&['SOURCE_DISABLED','ACCESS_DENIED'].includes(String(error.code)))continue;unavailable.push(ref.source);continue}
         if(![item.label,ref.path,ref.sessionId].some(v=>v.includes(args.query)))continue
-        candidates.push({ref,title:item.label,updatedAt:item.updatedAt??null,workspace:!!item.cwd&&inWorkspace(item.cwd,cwd)})
+        candidates.push({ref,title:item.label,updatedAt:item.updatedAt??null,workspace:workspaceRank(item.cwd,cwd)})
       }
       const identity=(row:typeof candidates[number])=>JSON.stringify(row.ref)
-      candidates.sort((a,b)=>Number(b.workspace)-Number(a.workspace)||(b.updatedAt??-Infinity)-(a.updatedAt??-Infinity)||(identity(a)<identity(b)?-1:identity(a)>identity(b)?1:0))
+      candidates.sort((a,b)=>a.workspace-b.workspace||(b.updatedAt??-Infinity)-(a.updatedAt??-Infinity)||(identity(a)<identity(b)?-1:identity(a)>identity(b)?1:0))
       const failures=[...new Set(unavailable)].sort()
       const settings=ctx.get('referenceChatHistory')?.getSettings()
       const policy={discovery:service.discoveryPolicy(),enabled:settings?.enabledAgents,directories:settings?.agentDirectories}

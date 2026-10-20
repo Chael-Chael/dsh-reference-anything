@@ -11,11 +11,13 @@ import { ALL_LOCAL_AGENTS, ALL_PROVIDERS, defaultPickerSettings, settingsRecordS
 it('removes and restores the plugin source immediately through the settings save action', async () => {
   let settings = settingsRecordSchema.parse({
     opencliPath: 'opencli', profile: '', detailConcurrency: 2, autoSync: false,
-    autoSyncMinutes: 60, historyMode: 'metadata-only', picker: defaultPickerSettings(),
+    autoSyncMinutes: 60, historyMode: 'metadata-only', enabledAgents: ['codex', 'claude-code'], picker: defaultPickerSettings(),
   })
   settings.picker!.agents.sourceAliases = { 'claude-code': ['cc'], codex: [], cursor: [] }
   settings.picker!.conversations.sourceAliases = { claude: ['webclaude'], chatgpt: [] }
   const ok = <T,>(value: T) => ({ ok: true, value })
+  const cached = [{ agent: 'codex', conversations: 7, scannedAt: 123 }, { agent: 'claude-code', conversations: 9, scannedAt: 123 }]
+  const finishScans: Array<(value: unknown) => void> = []
   const remote = {
     settingsGet: async () => ok(settings),
     settingsUpdate: vi.fn(async (value: SettingsRecord) => ok(settings = settingsRecordSchema.parse(value))),
@@ -23,7 +25,8 @@ it('removes and restores the plugin source immediately through the settings save
     health: vi.fn(async () => ok({ version: '2.0.0', extensionUpdateAvailable: true, latestExtensionVersion: '2.1.0' })),
     search: vi.fn(async () => ok([])),
     agentSearch: vi.fn(async () => ok([])),
-    storageStats: async () => ok({}), stats: async () => ok([]), agentStats: async () => ok([]),
+    storageStats: async () => ok({}), stats: async () => ok([]), agentStats: async () => ok(cached),
+    agentRescan: vi.fn((_input: unknown) => new Promise(resolve => { finishScans.push(resolve) })),
     chatImportStatus: async () => ok({ state: 'incompatible', version: '0.25.2', missing: ['importPath'], canUpgrade: true }),
     openListStatus: async () => ok({}), updateStatus: async () => ok({ updateAvailable: false }),
     localPlugins: vi.fn(async () => ok([{ id: 'local', name: 'local', label: 'local', status: 'live' }])),
@@ -67,7 +70,17 @@ it('removes and restores the plugin source immediately through the settings save
   const disposers = await Promise.all(effects)
   try {
     await vi.waitFor(() => expect(snapshot().chatImport).toMatchObject({ state: 'incompatible', canUpgrade: true }))
-    expect(snapshot().agentStats).toEqual([])
+    await vi.waitFor(() => expect(remote.agentRescan).toHaveBeenCalledExactlyOnceWith({ kind: 'codex' }))
+    expect(snapshot().agentStats).toContainEqual({ ...cached[0], scanning: true })
+    expect(snapshot().agentStats).toContainEqual(cached[1])
+    finishScans[0]!(ok([{ ...cached[0], conversations: 8, scannedAt: 456 }]))
+    await vi.waitFor(() => expect(remote.agentRescan).toHaveBeenCalledTimes(2))
+    expect(remote.agentRescan).toHaveBeenLastCalledWith({ kind: 'claude-code' })
+    expect(snapshot().agentStats).toContainEqual({ ...cached[0], conversations: 8, scannedAt: 456 })
+    expect(snapshot().agentStats).toContainEqual({ ...cached[1], scanning: true })
+    finishScans[1]!(ok([{ ...cached[1], conversations: 10, scannedAt: 456 }]))
+    await vi.waitFor(() => expect(snapshot().agentStats?.every(row => !row.scanning)).toBe(true))
+    expect(remote.agentRescan).toHaveBeenCalledTimes(2)
     await vi.waitFor(() => expect(remote.quickHealth).toHaveBeenCalledOnce())
     const web = sources.get(CONVERSATION_SOURCE)!
     const session = { sessionId: 'health-test' as never }

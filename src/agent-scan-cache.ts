@@ -11,7 +11,10 @@ export class AgentScanCache {
   private owner: unknown
   private policy = ''
 
-  clear(): void { this.entries.clear() }
+  clear(format?: string): void {
+    if (!format) this.entries.clear()
+    else for (const key of this.entries.keys()) if (key.startsWith(JSON.stringify([format]).slice(0, -1) + ',')) this.entries.delete(key)
+  }
 
   async read(owner: unknown, policy: string, key: string, scan: () => Promise<unknown>, signal: AbortSignal): Promise<Snapshot> {
     signal.throwIfAborted()

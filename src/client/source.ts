@@ -594,8 +594,8 @@ export function createLocalAgentSource(
         const available = availableActions(row.id)
         return {
           name: title,
-          description: [describeAgentRow(row, t), row.importStatus ? t(`agent.status.${row.importStatus}`) : '', row.importOnly ? t('agent.importOnly') : ''].filter(Boolean).join(' · '),
-          icon: candidateIcon(LOCAL_AGENT_ICON_MARKER[row.kind as keyof typeof LOCAL_AGENT_ICON_MARKER] ?? AGENT_ICON_MARKER),
+          description: [row.provider || t('source.agents'), row.cwd ? row.cwd.replace(/[\\/]+$/u, '').split(/[\\/]/u).pop() || row.cwd : t('agent.noWorkspace'), row.updatedAt === undefined ? '' : formatDate(new Date(row.updatedAt).toISOString(), t), row.importStatus ? t(`agent.status.${row.importStatus}`) : '', row.importOnly ? t('agent.importOnly') : ''].filter(Boolean).join(' · '),
+          icon: candidateIcon(LOCAL_AGENT_ICON_MARKER[row.kind as keyof typeof LOCAL_AGENT_ICON_MARKER] ?? AGENT_ICON_MARKER, row.cwd),
           ...(available.length === 0 ? {} : { drill: true, hint: t(available.length > 1 ? 'agent.actions' : available[0] === 'agent-import' ? 'agent.importHint' : 'settings.agentSummary') }),
           value: encodeCandidate({ kind: 'agent', reference: { id: row.referenceId ?? row.id, label, ...(row.importOnly ? { importOnly: true } : {}) } }),
         }
@@ -669,11 +669,7 @@ export function createLocalAgentSource(
 }
 
 /** The dimmed second line: which agent wrote it, and when it last moved. */
-function describeAgentRow(row: AgentCandidate, t: T): string {
-  const provider = row.provider || t('source.agents')
-  if (row.updatedAt === undefined) return provider
-  return t('conversation.description', { provider, date: formatDate(new Date(row.updatedAt).toISOString(), t) })
-}
+
 
 function encodeAgentReference(reference: AgentReference): string { return JSON.stringify(reference) }
 function decodeAgentReference(value: string): AgentReference {
@@ -1143,6 +1139,7 @@ function formatDate(value: string, t: T): string {
 const fallback: T = (key, params) => {
   const dictionary: Record<string, string> = {
     'source.subagents': 'Subagents',
+    'agent.noWorkspace': 'No workspace recorded',
     'plugin.status.live': 'Running', 'plugin.status.disabled': 'Disabled', 'plugin.status.inert': 'Not running',
     'source.conversations': 'External conversations', 'source.files': 'Files and folders', 'source.sessions': 'DSH sessions', 'source.agents': 'Local agent conversations', 'source.drives': 'Cloud drive files', 'source.commands': 'Commands', 'source.skills': 'Skills', 'source.plugins': 'All local plugins',
     'conversation.description': '{provider} · {date}', 'drive.description': '{provider} · {path}', 'drive.searchIncomplete': 'Results may be incomplete', 'drive.searchAction': 'Search cloud drive files…', 'drive.searchActionDetail': 'Select, then type a filename, for example @drive:notes', 'drive.parentFolder': 'Parent folder', 'conversation.unknownDate': 'unknown date', 'skill.userOnly': 'user-only · ',

@@ -279,7 +279,8 @@ export function AgentLogo({ agent, size = 22 }: { agent: LocalAgent; size?: numb
 
 /** RC2 accepts icon components; keep the existing projection markers in a node. */
 const candidateIcons = new Map<string, NonNullable<InputTriggerCandidate['icon']>>()
-export function candidateIcon(marker: string): NonNullable<InputTriggerCandidate['icon']> {
+export function candidateIcon(marker: string, workspace?: string): NonNullable<InputTriggerCandidate['icon']> {
+  if (workspace) return () => createElement('span', { 'data-dsh-ref-workspace': workspace }, marker)
   const cached = candidateIcons.get(marker)
   if (cached) return cached
   const icon = marker as unknown as NonNullable<InputTriggerCandidate['icon']>

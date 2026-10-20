@@ -624,3 +624,16 @@ describe('reference DOM customization', () => {
 function rect(top: number, bottom: number): DOMRect {
   return { top, bottom, left: 0, right: 100, x: 0, y: top, width: 100, height: bottom - top, toJSON: () => ({}) }
 }
+
+it('keeps the full workspace in the description tooltip and clears it when a row is reused', async () => {
+  document.body.innerHTML = `<div data-composer-card><div role="listbox"><button role="option"><span data-dsh-ref-workspace="D:/work/project"></span><span>Task</span><span class="itemDescription_test">Codex · project · today</span></button></div></div>`
+  const dispose = adoptMenuGroupTitleProjection(((key: keyof typeof en) => en[key]) as never)
+  try {
+    const description = document.querySelector<HTMLElement>('.itemDescription_test')!
+    expect(description.title).toBe('D:/work/project')
+    expect(description.textContent).toBe('Codex · project · today')
+    document.querySelector('[data-dsh-ref-workspace]')!.remove()
+    await new Promise(resolve => setTimeout(resolve, 0))
+    expect(description.hasAttribute('title')).toBe(false)
+  } finally { dispose() }
+})

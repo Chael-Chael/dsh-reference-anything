@@ -20,7 +20,7 @@ import { join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 import { Context } from '@deepseek-ai/cordis'
 import type { Domain, DomainSpec, KvTable } from '@deepseek-ai/dsh-storage-domain'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import ReferenceRuntime from '../src/index.ts'
 import { COMPACTION_MARKER } from '../src/sources/local-agent/adapters/shared.ts'
 import { isBackgroundSession } from '../src/sources/local-agent/adapters/opencode.ts'
@@ -201,6 +201,7 @@ async function mount(
     directoryTtlMs: 0,
     ...over,
   })
+  await vi.waitFor(() => expect(ctx.get('referenceLocalAgents')).toBeDefined())
   return { ctx, dispose: () => fiber.dispose() }
 }
 

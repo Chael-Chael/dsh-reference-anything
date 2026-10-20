@@ -11,8 +11,8 @@ import { localAgentSchema, providerSchema, settingsRecordSchema } from './wire.t
  * absolute path adds nothing a menu row can use and everything a screen-share
  * leaks.
  */
-export const agentCandidateSchema = z.object({ id: z.string(), kind: z.string(), label: z.string(), provider: z.string(), updatedAt: z.number().optional(), referenceId: z.string().optional(), importOnly: z.boolean().optional(), importStatus: z.enum(['imported', 'partial', 'not-imported', 'archived']).optional(), warning: z.string().optional() }).readonly()
-export const agentStatsSchema = z.object({ agent: localAgentSchema, conversations: z.number().int().nonnegative(), error: z.string().optional(), unavailable: z.boolean().optional(), paths: z.array(z.string()).optional(), readable: z.boolean().optional() }).readonly()
+export const agentCandidateSchema = z.object({ cwd: z.string().optional(), id: z.string(), kind: z.string(), label: z.string(), provider: z.string(), updatedAt: z.number().optional(), referenceId: z.string().optional(), importOnly: z.boolean().optional(), importStatus: z.enum(['imported', 'partial', 'not-imported', 'archived']).optional(), warning: z.string().optional() }).readonly()
+export const agentStatsSchema = z.object({ scannedAt: z.number().optional(), agent: localAgentSchema, conversations: z.number().int().nonnegative(), error: z.string().optional(), unavailable: z.boolean().optional(), paths: z.array(z.string()).optional(), readable: z.boolean().optional() }).readonly()
 // `origin` is the drive's own display path, shown under the candidate. It is
 // never a download URL: those are signed with the account's credential and
 // must not cross this wire.

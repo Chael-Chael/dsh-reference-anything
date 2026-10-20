@@ -15,8 +15,8 @@ export interface SearchResult extends ConversationRow {
   snippet?: string
 }
 /** One local-agent transcript offered by the `@` menu; `id` is source-scoped, not a URI. */
-export interface AgentCandidate { id: string; kind: string; label: string; provider: string; updatedAt?: number; referenceId?: string; importOnly?: boolean; importStatus?: 'imported' | 'partial' | 'not-imported' | 'archived'; warning?: string }
-export interface AgentStats { agent: LocalAgent; conversations: number; error?: string; unavailable?: boolean; paths?: string[]; readable?: boolean }
+export interface AgentCandidate { cwd?: string; id: string; kind: string; label: string; provider: string; updatedAt?: number; referenceId?: string; importOnly?: boolean; importStatus?: 'imported' | 'partial' | 'not-imported' | 'archived'; warning?: string }
+export interface AgentStats { scannedAt?: number; scanning?: boolean; agent: LocalAgent; conversations: number; error?: string; unavailable?: boolean; paths?: string[]; readable?: boolean }
 /** One cloud-drive file offered by the `@` menu; `origin` is a display path, never a URL. */
 export interface DriveCandidate { id: string; label: string; provider: string; origin?: string; updatedAt?: number; searchIncomplete?: boolean; isDirectory?: boolean }
 export interface LocalPluginCandidate {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { inWorkspace, joinLocalPath } from '../src/sources/local-agent/path.ts'
+import { inWorkspace, joinLocalPath, workspaceRank } from '../src/sources/local-agent/path.ts'
 import { AGENT_ADAPTERS, expandRoot } from '../src/sources/local-agent/registry.ts'
 
 describe('local-agent path dialects', () => {
@@ -33,4 +33,12 @@ describe('local-agent path dialects', () => {
     expect(inWorkspace('C:\\work\\app', '/work/app')).toBe(false)
     expect(inWorkspace('D:\\work\\app', 'C:\\work\\app')).toBe(false)
   })
+})
+
+it('uses exact workspace affinity without treating descendants as the same directory', () => {
+  expect(workspaceRank('/project', '/project')).toBe(0)
+  expect(workspaceRank(undefined, '/project')).toBe(1)
+  expect(workspaceRank('', '/project')).toBe(1)
+  expect(workspaceRank('/project/sub', '/project')).toBe(2)
+  expect(workspaceRank('/other', '/project')).toBe(2)
 })

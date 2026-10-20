@@ -10,7 +10,7 @@ import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import { createSnapshotStore } from '@deepseek-ai/dsh-client-store'
 import { createElement } from 'react'
 import type { InputTriggerServiceContract } from '@deepseek-ai/dsh-client-ui-input-trigger/client'
-import { ALL_LOCAL_AGENTS, ALL_PROVIDERS, defaultPickerSettings, samePickerSettings, pickerSourceSchema, type ChatProvider, type LocalAgent, type PickerSettings, type SettingsRecord } from '../wire.ts'
+import { DEFAULT_ENABLED_AGENTS, ALL_LOCAL_AGENTS, ALL_PROVIDERS, defaultPickerSettings, samePickerSettings, pickerSourceSchema, type ChatProvider, type LocalAgent, type PickerSettings, type SettingsRecord } from '../wire.ts'
 import { REFERENCE_ANYTHING_REMOTE, type AgentCandidate, type DriveCandidate, type ReferenceAnythingRemoteFace, type SearchResult, type SyncStatus } from './remote.ts'
 import { createCloudDriveSource, createCommandSource, createConversationSource, createFileSource, createLocalAgentSource, createPluginSource, createSearchDebounce, createSessionSource, createSkillSource, type RefreshablePickerSource } from './source.ts'
 import { ConversationSettings, PAGE_SIZE, type SettingsSnapshot } from './components.tsx'
@@ -49,7 +49,7 @@ export function apply(ctx: ClientContext): void {
   ctx.effect(() => adoptReferenceIconProjection(), 'reference-anything.client.icon-projection')
   let remote: ReferenceAnythingRemoteFace | undefined
   const scope = createSnapshotStore<SettingsSnapshot>({
-    settings: { opencliPath: 'opencli', profile: '', detailConcurrency: 8, autoSync: false, syncOnStartup: false, autoSyncMinutes: 60, historyMode: 'metadata-only', syncHistoryDays: null, enabledProviders: [...ALL_PROVIDERS], enabledAgents: [...ALL_LOCAL_AGENTS], maxReadTurns: 10, inputRenderMode: 'pill', cloudDriveDownloadDirectory: '' }, loading: true,
+    settings: { opencliPath: 'opencli', profile: '', detailConcurrency: 8, autoSync: false, syncOnStartup: false, autoSyncMinutes: 60, historyMode: 'metadata-only', syncHistoryDays: null, enabledProviders: [...ALL_PROVIDERS], enabledAgents: [...DEFAULT_ENABLED_AGENTS], maxReadTurns: 10, inputRenderMode: 'pill', cloudDriveDownloadDirectory: '' }, loading: true,
   })
   let currentJob = ''
   let lastSyncFinishedAt: string | undefined
@@ -92,10 +92,45 @@ export function apply(ctx: ClientContext): void {
     try { const chatImport = unwrap(await remote.chatImportStatus()); scope.set({ ...scope.getSnapshot(), chatImport, chatImportError: undefined }) }
     catch (error) { scope.set({ ...scope.getSnapshot(), chatImportError: message(error) }) }
   }
+  const scanningAgents = new Map<LocalAgent, Promise<void>>()
+  const rescanAgent = (kind: LocalAgent): Promise<void> => {
+    const existing = scanningAgents.get(kind)
+    if (existing) return existing
+    const activeRemote = remote
+    if (!activeRemote) return Promise.reject(new Error(t('menu.updateDisconnected')))
+    ++agentStatsGeneration
+    const current = scope.getSnapshot()
+    const previous = current.agentStats?.find(row => row.agent === kind)
+    scope.set({ ...current, agentStats: [...(current.agentStats ?? []).filter(row => row.agent !== kind), { agent: kind, conversations: 0, ...previous, scanning: true }] })
+    const pending = (async () => {
+      try {
+        const rows = unwrap(await activeRemote.agentRescan({ kind }))
+        if (remote !== activeRemote) return
+        const state = scope.getSnapshot()
+        scope.set({ ...state, agentStats: [...(state.agentStats ?? []).filter(row => row.agent !== kind), ...rows] })
+        await activeAgentSource?.refreshCachedMenu({ refetch: true })
+      } catch (error) {
+        const state = scope.getSnapshot()
+        scope.set({ ...state, agentStats: state.agentStats?.map(row => row.agent === kind ? { ...row, scanning: false, error: message(error) } : row) })
+        throw error
+      } finally { scanningAgents.delete(kind); ++agentStatsGeneration }
+    })()
+    scanningAgents.set(kind, pending)
+    return pending
+  }
+  let backgroundScan: Promise<void> | undefined
+  const refreshEnabledAgents = (): Promise<void> => backgroundScan ??= (async () => {
+    for (const kind of scope.getSnapshot().settings.enabledAgents) {
+      if (!remote) break
+      if (!scope.getSnapshot().settings.enabledAgents.includes(kind)) continue
+      try { await rescanAgent(kind) } catch { /* Keep each source's error visible and continue. */ }
+    }
+  })().finally(() => { backgroundScan = undefined })
   const refreshAgentStats = async (): Promise<void> => {
     if (!remote) return
     const generation = agentStatsGeneration
     try { const agentStats = unwrap(await remote.agentStats()); if (generation === agentStatsGeneration) scope.set({ ...scope.getSnapshot(), agentStats }) } catch { /* Optional local-agent source. */ }
+    void refreshEnabledAgents()
   }
   /** Refresh settings and local mirror figures without starting OpenCLI. */
   const refreshLocal = async (): Promise<void> => {
@@ -491,9 +526,13 @@ export function apply(ctx: ClientContext): void {
   const save = async (settings: SettingsRecord): Promise<boolean> => {
     if (!remote) return false
     try {
+      const before = scope.getSnapshot().settings
       const value = unwrap(await remote.settingsUpdate(settings))
       applySources?.(value.picker)
       notices.show(t('notice.settingsSaved'), { settings: value, error: undefined })
+      for (const kind of value.enabledAgents) {
+        if (!before.enabledAgents.includes(kind) || before.agentDirectories?.[kind] !== value.agentDirectories?.[kind]) void rescanAgent(kind).catch(() => {})
+      }
       return true
     } catch (error) { scope.set({ ...scope.getSnapshot(), error: message(error), notice: undefined }); return false }
   }
@@ -549,19 +588,7 @@ export function apply(ctx: ClientContext): void {
       hooks: { scope }, close: () => undefined, save, sync: startSync, refresh, quickRefreshOnOpen,
       browse, deleteConversation, clearProvider, clearRemoteMissing, clearOldAccounts, refreshStats,
       refreshOpenList, refreshChatImport,
-      rescanAgent: async (kind: LocalAgent) => {
-        ++agentStatsGeneration
-        try {
-          if (!remote) throw new Error(t('menu.updateDisconnected'))
-          const rows = unwrap(await remote.agentRescan({ kind }))
-          const current = scope.getSnapshot()
-          scope.set({ ...current, agentStats: [...(current.agentStats ?? []).filter(row => row.agent !== kind), ...rows] })
-          await activeAgentSource?.refreshCachedMenu({ refetch: true })
-        } catch (error) {
-          scope.set({ ...scope.getSnapshot(), error: message(error) })
-          throw error
-        } finally { ++agentStatsGeneration }
-      },
+      rescanAgent,
       upgradeChatImport: async () => {
         try {
           if (!remote) throw new Error(t('menu.updateDisconnected'))

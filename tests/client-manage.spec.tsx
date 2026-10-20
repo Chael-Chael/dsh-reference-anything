@@ -737,3 +737,11 @@ it('does not offer rescanning a disabled source', () => {
   expect(Array.from(el.querySelectorAll('button')).filter(b => b.getAttribute('aria-label') === 'Check and rescan').every(b => b.disabled)).toBe(true)
   expect(el.querySelector('[data-local-agent="omp"]')?.textContent).not.toContain('Import only')
 })
+
+it('shows the persisted scan timestamp and keeps cached counts visible during a background scan', () => {
+  const el = renderSettings({ settings, agentStats: [{ agent: 'codex', conversations: 12, scannedAt: 1792500000000, scanning: true }] }, { rescanAgent: vi.fn() })
+  const card = el.querySelector<HTMLElement>('[data-local-agent="codex"]')!
+  expect(card.textContent).toContain('Last scanned:')
+  expect(card.querySelector('strong')?.textContent).toContain('12')
+  expect(card.querySelector<HTMLButtonElement>('[aria-busy="true"]')?.disabled).toBe(true)
+})

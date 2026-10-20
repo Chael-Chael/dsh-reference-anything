@@ -1,4 +1,6 @@
-import { afterEach, expect, it } from 'vitest'
+import type { Domain } from '@deepseek-ai/dsh-storage-domain'
+import { scanDomainSpec } from '../src/local-scan-store.ts'
+import { afterEach, expect, it, vi } from 'vitest'
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
@@ -71,4 +73,40 @@ it('cancellation does not destroy another caller sharing the scan', async () => 
   controller.abort(new Error('cancelled'))
   await expect(cancelled).rejects.toThrow('cancelled')
   expect((await other).sessions.length).toBeGreaterThan(0)
+})
+
+it('restores persisted metadata after restart, serves stale results immediately and forces a fresh scan', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'persistent-scans-'))
+  const file = join(dir, 'cache.json')
+  const input = { format: 'codex', path: dir }
+  const old = { sessions: [{ format: 'codex', sourcePath: '/old', sessionId: 'old', title: 'Old' }], warnings: [] }
+  const latest = { sessions: [{ format: 'codex', sourcePath: '/new', sessionId: 'new', title: 'New' }], warnings: [] }
+  const storage = (data: Record<string, Record<string, unknown>>) => ({
+    table(name: string) { return {
+      get: (key: string) => data[name]?.[key],
+      put: async (key: string, value: unknown) => { (data[name] ??= {})[key] = value; await writeFile(file, JSON.stringify(data)) },
+    } },
+  }) as unknown as Domain<typeof scanDomainSpec>
+  try {
+    scanner.attachStorage(storage({}))
+    vi.spyOn(scanner as unknown as { scan(): Promise<unknown> }, 'scan').mockResolvedValue(old)
+    expect(await scanner.scanDiscover(input)).toEqual(old)
+    await scanner.rememberSummary('codex', { conversations: 1, scannedAt: 123 })
+    scanner.dispose()
+    const disk = JSON.parse(await readFile(file, 'utf8'))
+    disk.snapshots[JSON.stringify(['codex', dir])].scannedAt = 1
+    scanner = new LocalConversationScanner()
+    scanner.attachStorage(storage(disk))
+    expect(scanner.summary('codex')).toEqual({ conversations: 1, scannedAt: 123 })
+    let finish!: (value: unknown) => void
+    const scan = vi.spyOn(scanner as unknown as { scan(): Promise<unknown> }, 'scan').mockReturnValueOnce(new Promise(resolve => { finish = resolve })).mockResolvedValue(latest)
+    expect(await scanner.scanDiscover(input)).toEqual(old)
+    expect(scan).toHaveBeenCalledOnce()
+    scanner.clear('codex')
+    expect(await scanner.scanDiscover(input, undefined, true)).toEqual(latest)
+    finish(old)
+    await new Promise(resolve => setTimeout(resolve, 10))
+    expect(await scanner.scanDiscover(input)).toEqual(latest)
+    expect(JSON.parse(await readFile(file, 'utf8')).snapshots[JSON.stringify(['codex', dir])].snapshot).toEqual(latest)
+  } finally { await rm(dir, { recursive: true, force: true }) }
 })

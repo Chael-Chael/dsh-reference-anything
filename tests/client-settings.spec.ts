@@ -54,7 +54,8 @@ describe('settings source registration guard', () => {
     expect(value).toMatchObject({ syncOnStartup: false, syncHistoryDays: null, maxReadTurns: 10, inputRenderMode: 'pill', cloudDriveDownloadDirectory: '' })
     expect(value).not.toHaveProperty('referenceUiMode')
     expect(value.enabledProviders).toEqual(['chatgpt', 'claude', 'gemini', 'deepseek', 'grok', 'kimi'])
-    expect(value.enabledAgents).toEqual(ALL_LOCAL_AGENTS)
+    expect(value.enabledAgents).toEqual(ALL_LOCAL_AGENTS.filter(kind => kind !== 'dsh' && kind !== 'dsh4'))
+    expect(settingsRecordSchema.parse({ ...value, enabledAgents: ['dsh', 'dsh4'] }).enabledAgents).toEqual(['dsh', 'dsh4'])
     expect(settingsRecordSchema.parse({ ...value, enabledAgents: ['codex'], agentDirectories: { trae: 'D:/extra' } })).toMatchObject({ enabledAgents: ['codex'], agentDirectories: { trae: 'D:/extra' } })
   })
 

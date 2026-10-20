@@ -10,7 +10,7 @@ import { ReferenceAnythingError } from './errors.ts'
 import { localConversationRoots, readLocalConversation } from './local-conversation-reader.ts'
 import { validateLocalLocator, type LocalLocator } from './local-locator.ts'
 import { agentKind, scanFormat } from './chat-import-discovery.ts'
-import { ALL_LOCAL_AGENTS } from './wire.ts'
+import { DEFAULT_ENABLED_AGENTS, ALL_LOCAL_AGENTS } from './wire.ts'
 import { referenceImageSchema } from './chat-import-reader.ts'
 import { stringifyTagSafeJson } from './serialize.ts'
 import type {} from './sources/local-agent/index.ts'
@@ -65,7 +65,7 @@ export function assertLocalSourceEnabled(ctx: Context, source: string): void {
   const history = ctx.get('referenceChatHistory')
   const settings = history?.getSettings?.() ?? history?.store.settings
   if (!ctx.get('referenceLocalAgents') || settings?.picker?.agents.enabled === false
-    || !(settings?.enabledAgents ?? ALL_LOCAL_AGENTS).includes(agentKind(source) as typeof ALL_LOCAL_AGENTS[number])) {
+    || !(settings?.enabledAgents ?? DEFAULT_ENABLED_AGENTS).includes(agentKind(source) as typeof ALL_LOCAL_AGENTS[number])) {
     throw new ReferenceAnythingError(`Local conversation source ${source} is disabled. Enable it in Reference Anything settings before reading; previous references do not bypass this setting.`, 'SOURCE_DISABLED')
   }
 }

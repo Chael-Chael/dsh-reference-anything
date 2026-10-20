@@ -10,6 +10,7 @@ export const IMPORT_ONLY_AGENTS = ['antigravity', 'kilocode', 'chatgpt', 'workbu
 export const localAgentSchema = z.enum([...READABLE_LOCAL_AGENTS, ...IMPORT_ONLY_AGENTS])
 export type LocalAgent = z.infer<typeof localAgentSchema>
 export const ALL_LOCAL_AGENTS: readonly LocalAgent[] = localAgentSchema.options
+export const DEFAULT_ENABLED_AGENTS: readonly LocalAgent[] = ALL_LOCAL_AGENTS.filter(kind => kind !== 'dsh' && kind !== 'dsh4')
 export const LOCAL_AGENT_LABEL: Readonly<Record<LocalAgent, string>> = {
   'claude-code': 'Claude Code', codex: 'Codex', cursor: 'Cursor', qoder: 'Qoder', reasonix: 'Reasonix',
   openclaw: 'OpenClaw', kimi: 'Kimi', grokbuild: 'Grok Build', hermes: 'Hermes', 'gemini-cli': 'Gemini CLI',
@@ -111,7 +112,7 @@ export const settingsRecordSchema = z.object({
   /** Null keeps all web-chat history; old settings default to that upgrade-safe behavior. */
   syncHistoryDays: z.number().int().min(1).max(36500).nullable().default(null),
   enabledProviders: z.array(providerSchema).default([...ALL_PROVIDERS]),
-  enabledAgents: z.array(localAgentSchema).default([...ALL_LOCAL_AGENTS]),
+  enabledAgents: z.array(localAgentSchema).default([...DEFAULT_ENABLED_AGENTS]),
   /** One optional additional transcript root per local Agent. */
   agentDirectories: z.partialRecord(localAgentSchema, z.string().max(4096)).optional(),
   /**
