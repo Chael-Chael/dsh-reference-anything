@@ -1,6 +1,6 @@
 # 发布素材与用户审稿
 
-全功能介绍片的现有工程与续作记录见 [介绍片任务记录](tasks/intro-film.md)。
+全功能介绍片的现有工程与续作记录见 本地记录 `docs/development/tasks/intro-film.md`（不上传；文字分镜先审核，再制作画面）。
 
 用户于 2026-10-18 要求：README 更新、发布说明、新功能 GIF 由 Agent 主动完成，最终文字交用户审核。此流程是 Agent 工作流，不是仅凭一次 shell 命令就能自动理解所有新功能的生成器。
 
@@ -16,7 +16,7 @@
 
 ## 最终审稿包
 
-在 `docs/testing/releases/<version>-editorial-review.md` 汇总并在对话中给用户可直接审阅的内容，不能只丢目录让用户自行寻找：
+在 `.codex-tmp/release-check/<version>/editorial-review.md` 汇总并在对话中给用户可直接审阅的内容，不能只丢目录让用户自行寻找：
 
 - 中英文 README 的改动段落与文件链接（避免把整篇未变内容塞进对话）。
 - 完整发布说明、功能卡标题和描述。

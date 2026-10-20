@@ -1,4 +1,4 @@
-# 引用工具与 pre-hook：当前汇总草案
+# 引用工具与 pre-hook：当前契约
 
 日期：2026-10-19。状态：本地代码已重构；自动检查及真实 Codex 长会话、图片、协议矩阵通过。OpenCode 旧任务产物缺失已复核，引用读取正常；多引用回答验收未完成，尚未整体放行。累计证据和用户澄清后的判定修正见[开发任务](../development/tasks/local-reference-protocol.md)。官方源码调研与旧样例测量见[调研记录](reference-protocol-redesign.md)，本文是当前工具字段的唯一详细定义。
 

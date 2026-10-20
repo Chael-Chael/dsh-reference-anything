@@ -1,6 +1,6 @@
 # Agent 工作入口
 
-先读本文件与 [LESSONS.md](LESSONS.md)，再按任务读取对应文档，不一次性加载整个仓库。
+先读本文件；开发或排障再读 [LESSONS.md](LESSONS.md)，按任务读取对应文档，不一次性加载整个仓库。
 
 | 当前任务 | 必读入口 |
 | --- | --- |
@@ -10,8 +10,9 @@
 | 规划网页 AI 引用改进 | [未来方案：网页 AI 引用](docs/ideas/web-chat-reference.md)（待实施；阅读不代表授权开发） |
 | 查看待实现功能记录 | [功能待办](docs/ideas/feature-backlog.md)（仅记录，待实施） |
 | 启动、build、浏览器测试、Desktop 同步 | [四环境约定](docs/development/environments.md) |
-| 修改 UI | [设计规范](design.md)、[浏览器验收](docs/testing/npm-release-checklist.md) |
+| 修改 UI | [设计规范](design.md)、[日常验收流程](docs/development/workflow.md) |
 | 功能测试失败 | [官方 Session Log 诊断](docs/testing/session-log-diagnosis.md)：导出失败会话、分析事件链、修复并保留复测证据 |
+| 查看版本当前结论 | [0.5.0 验收摘要](docs/testing/releases/0.5.0-summary.md)；完整逐项证据保留本地，见摘要中的路径 |
 | npm 发布 | [发版规程](docs/testing/npm-release-checklist.md)，使用 agent:release:prepare / agent:release:gate |
 | 输出/更新验收报告 | [累计完整报告要求](docs/testing/npm-release-checklist.md#累计完整报告必需)：交付本版本全部记录，不能只报本轮增量 |
 | README、发布说明、新功能 GIF | [发布素材与用户审稿](docs/development/release-materials.md)、[Release 正文模板](docs/development/release-notes-template.md)；Agent 完成初稿和录制，最终文字必须交用户审核 |

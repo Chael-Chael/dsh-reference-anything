@@ -9,3 +9,16 @@ social/
 ppt/
 .workbuddy
 demo-recordings/
+# Local execution records; keep files on disk, publish only the summary.
+/docs/testing/releases/*
+!/docs/testing/releases/0.5.0-summary.md
+/artifacts/
+/docs/testing/DSH-0.1.2-rc.1-verification.md
+/docs/testing/cloud-drive-download-directory.tdd.md
+/docs/development/tasks/chat-import-api-notice.md
+/docs/development/tasks/conversation-availability.md
+/docs/development/tasks/intro-film.md
+/docs/development/tasks/local-reference-preview.md
+/docs/development/tasks/shared-reference-budget.md
+/docs/development/tasks/vendored-scanning.md
+/docs/development/tasks/version-0.5.0.md
