@@ -6,6 +6,7 @@ socials/
 *.log
 .DS_Store
 .codex-tmp
+.claude
 ppt/
 .workbuddy
 demo-recordings/
