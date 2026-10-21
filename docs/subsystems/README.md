@@ -8,7 +8,7 @@
 | 客户端菜单与设置 | `src/client/index.ts`, `source.ts`, `components.tsx`, `styles.ts` | `tests/client-*.spec.*` + Browser Use | 来源覆盖、键盘语义、异步结果、主题 |
 | 本地 Agent | `src/sources/local-agent/`, `agent-scan-cache.ts`, `local-scan-store.ts`, `local-conversation-scanner.ts`, `local-reference.ts`, `local-reference-tools.ts` | `tests/local-agent-*.spec.ts`, `local-reference.spec.ts`, `agent-scan-cache.spec.ts` | 多格式、来源开关与真实路径校验；本地 ref/revision/part/from/maxItems → items/next，搜索 hits.position；next 保留消息范围，长文本按码点补读；附属记录只保留可靠关联 |
 | 会话读取和导入 | `src/chat-import-*.ts`, `local-conversation-reader.ts`, `vendor/chat-import-reader/` | `tests/chat-import-*.spec.ts`, `local-conversation-reader.spec.ts`, 合成 fixtures | 导入确认、版本兼容、插件生命周期 |
-| 网页会话/OpenCLI | `src/opencli.ts`, `src/sync/`, `src/sources/web-chat/`, `opencli-plugin/` | `tests/opencli*.spec.ts`, `sync.spec.ts`, `provider-*.spec.ts` | 账号范围、认证、增量、超时 |
+| 网页会话/OpenCLI | `src/opencli.ts`, `src/web-chat-token*.ts`, `src/sync/`, `src/sources/web-chat/`, `opencli-plugin/` | `tests/opencli*.spec.ts`, `web-chat-token*.spec.ts`, `sync.spec.ts`, `provider-*.spec.ts` | 账号范围、认证、增量、超时 |
 | 云盘/OpenList | `src/openlist/`, `src/sources/cloud-drive/` | `tests/openlist*.spec.ts`, `cloud-drive-source.spec.ts`, `download-directory.spec.ts` | URL 校验、下载目标、凭据 |
 | 宿主/Remote | `src/host.ts`, `web.ts`, `contract.ts`, `typert.ts` | `tests/web.spec.ts`, `runtime.spec.ts` | 服务契约、不同 profile |
 | 构建/发版/升级 | `build.mjs`, `package.json`, `cordis.patch.yml`, `src/update.ts`, `docs/release/` | `tests/update.spec.ts`, `release-features.spec.mjs`, 发版规程 | npm 文件完整性、SDK、版本 |
@@ -17,3 +17,5 @@
 用 `rg --files tests` 和 `rg <函数名> src tests` 找所有相关调用方，表格不是测试枚举器。完整测试由 `npm run check` 执行。
 
 官方 UI 接管边界与版本差异见 [ui-reference 兼容审计](../development/tasks/native-reference-compatibility.md)。
+
+DeepSeek/Kimi 系统密钥库与后台读取边界见 [token 接入记录](../development/tasks/web-chat-token.md)。

@@ -19,7 +19,7 @@ import { defineTool } from '@deepseek-ai/dsh-tools'
 import { AttachmentId, type ImageMediaType } from '@deepseek-ai/dsh-attachment'
 import { appendDownloadDirectoryPrefix, validateDownloadDirectory } from './download-directory.ts'
 import { ReferenceAnythingError } from './errors.ts'
-import { DEFAULT_OPENCLI_MAX_STDOUT_BYTES, OpenCliError, OpenCliRunner } from './opencli.ts'
+import { OpenCliError } from './opencli.ts'
 import { addUnavailableAttachmentNotices, continuationFooter, frameReferenceBlock } from './render.ts'
 import { retainConversation } from './retain.ts'
 import { encodeReferenceUri } from './uri.ts'
@@ -679,11 +679,7 @@ export function apply(ctx: Context, config: Config = {}): void {
       beginTempRootOperation(root)
       try {
         const localPath = attachmentLocalPath(root, attachment.name)
-        const settings = service.store.settings
-        const runner = new OpenCliRunner({
-          executable: settings.opencliPath, profile: settings.profile, timeoutMs,
-          maxStdoutBytes: DEFAULT_OPENCLI_MAX_STDOUT_BYTES,
-        })
+        const runner = service.runner()
         await runner.attachment(
           conversation.provider, attachment.locator, localPath, MAX_ATTACHMENT_BYTES, exec.signal, conversation.accountScope,
         )

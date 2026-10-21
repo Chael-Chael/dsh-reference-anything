@@ -122,6 +122,7 @@ export interface ReferenceAnythingRemoteFace {
   checkUpdate(signal?: AbortSignal): Promise<RemoteResult<PackageUpdateStatus>>
   installUpdate(signal?: AbortSignal): Promise<RemoteResult<PackageUpdateResult>>
   stats(): Promise<RemoteResult<readonly ProviderStats[]>>
+  tokenConnect(input: { provider: 'deepseek' | 'kimi'; disconnect: boolean }): Promise<RemoteResult<SettingsRecord>>
   syncStart(input: { providers: ChatProvider[]; mode: 'incremental' | 'full' }): Promise<RemoteResult<string>>
   syncStatus(input: { jobId: string }): Promise<RemoteResult<SyncStatus | undefined>>
   syncCancel(input: { jobId: string }): Promise<RemoteResult<boolean>>

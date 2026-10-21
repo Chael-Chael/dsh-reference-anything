@@ -586,6 +586,13 @@ export function apply(ctx: ClientContext): void {
     name: 'settings.section', id: 'reference-anything', order: 56, label: () => t('settings.title'), locale: REFERENCE_ANYTHING_NS,
     inject: () => ({
       hooks: { scope }, close: () => undefined, save, sync: startSync, refresh, quickRefreshOnOpen,
+      tokenConnect: async (provider: 'deepseek' | 'kimi', disconnect: boolean) => {
+        if (!remote) return
+        try {
+          const settings = unwrap(await remote.tokenConnect({ provider, disconnect }))
+          scope.set({ ...scope.getSnapshot(), settings, error: undefined })
+        } catch (error) { scope.set({ ...scope.getSnapshot(), error: message(error) }) }
+      },
       browse, deleteConversation, clearProvider, clearRemoteMissing, clearOldAccounts, refreshStats,
       refreshOpenList, refreshChatImport,
       rescanAgent,

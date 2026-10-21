@@ -163,6 +163,7 @@ export const REFERENCE_ANYTHING_INVOCATIONS: readonly InvocationDescriptor[] = [
   descriptor('checkUpdate', [], strict('PackageUpdateStatus', packageUpdateStatusSchema), true),
   descriptor('installUpdate', [], strict('PackageUpdateResult', packageUpdateResultSchema), true),
   descriptor('stats', [], strict('ProviderStats[]', z.array(providerStatsSchema))),
+  descriptor('tokenConnect', [{ name: 'input', wire: 'input', source: 'json', codec: strict('TokenConnect', z.object({ provider: z.enum(['deepseek', 'kimi']), disconnect: z.boolean() }).strict()) }], strict('SettingsRecord', settingsRecordSchema), true),
   descriptor('syncStart', [{ name: 'input', wire: 'input', source: 'json', codec: strict('SyncStart', syncStartSchema) }], strict('JobId', z.string())),
   descriptor('syncStatus', [{ name: 'input', wire: 'input', source: 'json', codec: strict('JobInput', jobInputSchema) }], strict('SyncStatus?', syncStatusSchema.optional())),
   descriptor('syncCancel', [{ name: 'input', wire: 'input', source: 'json', codec: strict('JobInput', jobInputSchema) }], strict('Boolean', z.boolean())),

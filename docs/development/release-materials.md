@@ -2,6 +2,8 @@
 
 全功能介绍片的现有工程与续作记录见 本地记录 `docs/development/tasks/intro-film.md`（不上传；文字分镜先审核，再制作画面）。
 
+2026-10-21 独立的问题—解决式全功能介绍片见 [本地新项目](../../social/reference-anything-problem-solution/README.md)（`social/` 不上传；方案 C 已完成，128 秒 MP4 与可编辑工程，交付检查见项目记录）。
+
 用户于 2026-10-18 要求：README 更新、发布说明、新功能 GIF 由 Agent 主动完成，最终文字交用户审核。此流程是 Agent 工作流，不是仅凭一次 shell 命令就能自动理解所有新功能的生成器。
 
 ## Agent 自主完成，先交付可审结果

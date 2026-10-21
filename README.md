@@ -75,6 +75,8 @@ Type `@`, search across enabled sources, and insert the selected reference into 
 > [!NOTE]
 > DSH is currently in Beta, so its underlying capabilities and interfaces may change as it evolves. This plugin will adapt alongside those changes. Because of some current DSH limitations, parts of the implementation may not yet be ideal; we will continue to follow DSH updates and improve the plugin over time. See the relevant sections below for specific limitations and usage notes.
 
+DeepSeek and Kimi offer **Connect account** in their source cards. The first connection reads the signed-in webpage token through OpenCLI and saves it in the OS keyring using pinned `@napi-rs/keyring@2.1.2`. The Host then reads history, messages and same-origin attachments without keeping a browser open. Reconnect after expiry; deleting the saved credential keeps the conversation index. Windows uses Credential Manager, macOS uses Keychain, and Linux requires an unlocked Secret Service. There is no plaintext fallback. An OS keyring does not guarantee isolation from all malicious software running as the same user.
+
 ## 📰 News
 
 ### 0.5.0 Preview · Feature Demos

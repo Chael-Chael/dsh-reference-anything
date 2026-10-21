@@ -381,6 +381,7 @@ body[data-ds-dark-theme] .dsh_ref_agent_logo{filter:brightness(0) invert(1);opac
 .dsh_ref_settings .dsh_ref_provider_main .dsh_ref_provider_summary>small{grid-column:1 / -1;grid-row:2}
 .dsh_ref_settings .dsh_ref_agent_provider .dsh_ref_provider_main .dsh_ref_provider_summary>small{grid-row:auto;white-space:normal;overflow-wrap:anywhere}
 .dsh_ref_settings .dsh_ref_provider_foot{display:flex;align-items:center;margin-top:auto;min-height:68px;padding:16px;border-top:.5px solid var(--dsw-alias-border-l2);background:transparent}
+.dsh_ref_settings .dsh_ref_token_controls{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:0 16px 14px}.dsh_ref_settings .dsh_ref_token_controls>small{flex:1 1 180px;line-height:1.5}
 .dsh_ref_settings .dsh_ref_provider_foot .dsh_ref_provider_controls{display:flex;align-items:center;justify-content:space-between;gap:12px;width:100%;min-width:0}
 .dsh_ref_settings .dsh_ref_provider_foot .dsh_ref_provider_actions{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:8px}
 .dsh_ref_settings .dsh_ref_agent_provider .dsh_ref_provider_controls>button{font-size:14px!important;line-height:22px!important}

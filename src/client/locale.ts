@@ -3,6 +3,12 @@ import type { LocaleNamespaceMap } from '@deepseek-ai/dsh-client-ui-slots'
 export const REFERENCE_ANYTHING_NS = 'reference-anything'
 
 export const zh = {
+  'provider.tokenSaved': '凭据已保存到系统密钥库，可在浏览器关闭后读取。',
+  'provider.tokenHint': '连接网页账号，将凭据保存到系统密钥库以后台读取。',
+  'provider.tokenConnect': '连接账号',
+  'provider.tokenReconnect': '重新连接',
+  'provider.tokenDisconnect': '删除已存凭据',
+  'provider.tokenWorking': '处理中…',
   'native.fileOpen.title': '无法打开文件',
   'native.fileOpen.failed': '无法打开“{path}”，请重试或关闭此提示',
   'native.fileOpen.close': '关闭',
@@ -327,6 +333,12 @@ export const zh = {
 } as const
 
 export const en: Record<keyof typeof zh, string> = {
+  'provider.tokenSaved': 'Credential saved in the OS keyring. Reads work with the browser closed.',
+  'provider.tokenHint': 'Connect your web account to save its credential in the OS keyring for background reads.',
+  'provider.tokenConnect': 'Connect account',
+  'provider.tokenReconnect': 'Reconnect',
+  'provider.tokenDisconnect': 'Delete saved credential',
+  'provider.tokenWorking': 'Working…',
   'native.fileOpen.title': 'Couldn’t open file',
   'native.fileOpen.failed': 'Couldn’t open “{path}”. Try again or close this message.',
   'native.fileOpen.close': 'Close',

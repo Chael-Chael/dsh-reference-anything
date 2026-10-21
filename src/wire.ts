@@ -102,6 +102,8 @@ export function samePickerSettings(left: PickerSettings, right: PickerSettings):
 export const settingsRecordSchema = z.object({
   opencliPath: z.string(),
   profile: z.string(),
+  /** Opaque OS-keyring entry IDs; changed only by connect/disconnect. */
+  tokenAccounts: z.object({ deepseek: z.string().uuid().optional(), kimi: z.string().uuid().optional() }).optional(),
   /** Empty keeps the original system-temporary-directory behavior. */
   cloudDriveDownloadDirectory: z.string().max(4096).default(''),
   detailConcurrency: z.number().int().min(1).max(8),

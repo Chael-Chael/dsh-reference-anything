@@ -140,6 +140,23 @@ export interface BrowserProfile { id: string; alias?: string; connected: boolean
 export interface ProviderIndex { accountScope: string; sinceApplied: string; rows: ProviderConversationRow[] }
 
 export class OpenCliRunner {
+  tokenRequest?: (provider: ChatProvider, operation: string, args: string[], signal?: AbortSignal) => Promise<Record<string, unknown>[] | undefined>
+  hasToken?: (provider: ChatProvider) => boolean
+
+  async captureToken(provider: 'deepseek' | 'kimi', signal?: AbortSignal): Promise<string> {
+    try {
+      const profiles = (await this.profiles(signal)).filter(profile => profile.connected)
+      const selected = this.profile ? profiles.find(profile => profile.id === this.profile || profile.alias === this.profile)
+        : profiles.find(profile => profile.isDefault) ?? (profiles.length === 1 ? profiles[0] : undefined)
+      if (!selected) throw new Error('Select a connected browser profile')
+      const { captureWebChatToken } = await import('./web-chat-token-capture.ts')
+      const token = await captureWebChatToken(provider, selected.id, signal)
+      return token
+    } catch {
+      // Provider or bridge errors may contain credentials; keep this boundary generic.
+      throw new OpenCliError('Could not connect the webpage account; check login and the browser connection', 'PROVIDER_NOT_LOGGED_IN')
+    }
+  }
   readonly executable: string
   readonly profile: string
   readonly prefixArgs: readonly string[]
@@ -357,6 +374,13 @@ export class OpenCliRunner {
   }
 
   private async json(site: string, operation: string, args: string[], signal?: AbortSignal): Promise<Record<string, unknown>[]> {
+    if (this.tokenRequest) {
+      const provider = Object.entries(SITE).find(([, value]) => value === site)?.[0] as ChatProvider | undefined
+      if (provider) {
+        const result = await this.tokenRequest(provider, operation, args, signal)
+        if (result !== undefined) return result
+      }
+    }
     // Match the sync-index lifecycle: every command gets its own temporary
     // background tab, so providers and detail workers can run independently.
     const stdout = await this.raw([
