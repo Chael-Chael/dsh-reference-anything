@@ -1,0 +1,112 @@
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing approved release tag
+        required: true
+        type: string
+      sha256:
+        description: SHA-256 of the approved candidate.tgz release asset
+        required: true
+        type: string
+      publish:
+        description: Publish the verified package to npm
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ inputs.tag }}
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      TAG: ${{ inputs.tag }}
+      SHA256: ${{ inputs.sha256 }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Verify the approved release and package
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$GITHUB_REF" == refs/heads/main ]]
+          [[ "$TAG" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]
+          [[ "$SHA256" =~ ^[0-9a-f]{64}$ ]]
+          head="$(git rev-parse --verify "refs/tags/$TAG^{commit}")"
+          git merge-base --is-ancestor "$head" origin/main
+          mkdir -p "$RUNNER_TEMP/candidate"
+          gh release download "$TAG" --dir "$RUNNER_TEMP/candidate" --pattern candidate.tgz
+          echo "$SHA256  $RUNNER_TEMP/candidate/candidate.tgz" | sha256sum --check
+          git checkout --detach "$head"
+          tar -xOf "$RUNNER_TEMP/candidate/candidate.tgz" package/package.json > "$RUNNER_TEMP/candidate/package.json"
+          node --input-type=module -e 'import fs from "node:fs"; const p=JSON.parse(fs.readFileSync("package.json")); const t=JSON.parse(fs.readFileSync(process.env.RUNNER_TEMP+"/candidate/package.json")); if(p.name!=="dsh-reference-anything"||t.name!==p.name||t.version!==p.version||process.env.TAG!=="v"+p.version) throw Error("Package identity mismatch")'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm install --global pnpm@11.22.0
+      - run: pnpm install --frozen-lockfile
+      - run: npm run check
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-candidate
+          path: ${{ runner.temp }}/candidate/candidate.tgz
+          if-no-files-found: error
+          retention-days: 7
+
+  publish:
+    if: ${{ inputs.publish }}
+    needs: validate
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: npm-release
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      TAG: ${{ inputs.tag }}
+      SHA256: ${{ inputs.sha256 }}
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org
+      - run: npm install --global npm@11.16.0
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-candidate
+          path: ${{ runner.temp }}/candidate
+      - name: Publish the accepted bytes with trusted publishing
+        working-directory: ${{ runner.temp }}/candidate
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "$SHA256  candidate.tgz" | sha256sum --check
+          export EXPECTED_INTEGRITY="sha512-$(openssl dgst -sha512 -binary candidate.tgz | openssl base64 -A)"
+          lookup() {
+            node --input-type=module -e 'const r=await fetch("https://registry.npmjs.org/dsh-reference-anything/"+process.env.TAG.slice(1)); if(r.status===404){console.log("missing")}else{if(!r.ok)throw Error("Registry HTTP "+r.status);const p=await r.json();if(p.dist?.integrity!==process.env.EXPECTED_INTEGRITY)throw Error("Published package mismatch");console.log("exists")}'
+          }
+          if [[ "$(lookup)" == missing ]]; then
+            npm publish candidate.tgz --access public --provenance --tag latest || {
+              sleep 10
+              [[ "$(lookup)" == exists ]]
+            }
+          fi
+          for attempt in {1..6}; do
+            [[ "$(lookup)" == exists ]] && break
+            sleep 10
+          done
+          [[ "$(lookup)" == exists ]]
+          [[ "$(npm view dsh-reference-anything dist-tags.latest)" == "${TAG#v}" ]]
