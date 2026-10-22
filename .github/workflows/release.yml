@@ -52,7 +52,7 @@ jobs:
           gh release download "$TAG" --dir "$RUNNER_TEMP/candidate" --pattern candidate.tgz
           echo "$SHA256  $RUNNER_TEMP/candidate/candidate.tgz" | sha256sum --check
           git checkout --detach "$head"
-          tar -xOf "$RUNNER_TEMP/candidate/candidate.tgz" package/package.json > "$RUNNER_TEMP/candidate/package.json"
+          (cd "$RUNNER_TEMP/candidate" && tar -xOf candidate.tgz package/package.json > package.json)
           node --input-type=module -e 'import fs from "node:fs"; const p=JSON.parse(fs.readFileSync("package.json")); const t=JSON.parse(fs.readFileSync(process.env.RUNNER_TEMP+"/candidate/package.json")); if(p.name!=="dsh-reference-anything"||t.name!==p.name||t.version!==p.version||process.env.TAG!=="v"+p.version) throw Error("Package identity mismatch")'
       - uses: actions/setup-node@v4
         with:
