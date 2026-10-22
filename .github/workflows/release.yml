@@ -1,10 +1,11 @@
 name: Release
 
+# An explicit dispatch keeps source pushes and draft uploads separate from publication.
 on:
   workflow_dispatch:
     inputs:
       tag:
-        description: Existing approved release tag
+        description: 'Existing approved tag, e.g. v0.6.0'
         required: true
         type: string
       sha256:
@@ -12,7 +13,7 @@ on:
         required: true
         type: string
       publish:
-        description: Publish the verified package to npm
+        description: 'Publish the approved candidate to npm and make the Release public'
         default: false
         type: boolean
 
@@ -25,9 +26,17 @@ concurrency:
 
 jobs:
   validate:
-    # v0.5.1's existing Linux failures were explicitly waived; validate the approved Windows target.
-    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
     timeout-minutes: 30
+    outputs:
+      head: ${{ steps.candidate.outputs.head }}
     env:
       TAG: ${{ inputs.tag }}
       SHA256: ${{ inputs.sha256 }}
@@ -37,33 +46,38 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
-      - name: Verify the approved release and package
-        env:
-          GH_TOKEN: ${{ github.token }}
+      - name: Select a release commit on main
+        id: candidate
         shell: bash
         run: |
-          set -euo pipefail
-          [[ "$GITHUB_REF" == refs/heads/main ]]
-          [[ "$TAG" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]
-          [[ "$SHA256" =~ ^[0-9a-f]{64}$ ]]
+          [[ "$GITHUB_REF" == refs/heads/main ]] || { echo "Run this workflow from main"; exit 1; }
+          [[ "$SHA256" =~ ^[0-9a-f]{64}$ ]] || exit 1
+          [[ "$TAG" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z.-]+)?$ ]] || exit 1
           head="$(git rev-parse --verify "refs/tags/$TAG^{commit}")"
           git merge-base --is-ancestor "$head" origin/main
-          mkdir -p "$RUNNER_TEMP/candidate"
-          gh release download "$TAG" --dir "$RUNNER_TEMP/candidate" --pattern candidate.tgz
-          echo "$SHA256  $RUNNER_TEMP/candidate/candidate.tgz" | sha256sum --check
           git checkout --detach "$head"
-          (cd "$RUNNER_TEMP/candidate" && tar -xOf candidate.tgz package/package.json > package.json)
-          node --input-type=module -e 'import fs from "node:fs"; const p=JSON.parse(fs.readFileSync("package.json")); const t=JSON.parse(fs.readFileSync(process.env.RUNNER_TEMP+"/candidate/package.json")); if(p.name!=="dsh-reference-anything"||t.name!==p.name||t.version!==p.version||process.env.TAG!=="v"+p.version) throw Error("Package identity mismatch")'
+          echo "head=$head" >> "$GITHUB_OUTPUT"
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+      - name: Download approved draft assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/candidate"
+          gh release download "$TAG" --dir "$RUNNER_TEMP/candidate" \
+            --pattern candidate.tgz --pattern release-notes.md --pattern release-manifest.json
+          (cd "$RUNNER_TEMP/candidate" && echo "$SHA256  candidate.tgz" | sha256sum --check)
+          node scripts/agent/release-ci.mjs verify "$RUNNER_TEMP/candidate" "$TAG"
       - run: npm install --global pnpm@11.22.0
       - run: pnpm install --frozen-lockfile
       - run: npm run check
-      - uses: actions/upload-artifact@v4
+      - name: Preserve exactly the verified candidate
+        if: runner.os == 'Windows'
+        uses: actions/upload-artifact@v4
         with:
           name: release-candidate
-          path: ${{ runner.temp }}/candidate/candidate.tgz
+          path: ${{ runner.temp }}/candidate/
           if-no-files-found: error
           retention-days: 7
 
@@ -74,12 +88,17 @@ jobs:
     timeout-minutes: 15
     environment: npm-release
     permissions:
-      contents: read
+      contents: write
       id-token: write
     env:
       TAG: ${{ inputs.tag }}
       SHA256: ${{ inputs.sha256 }}
+      GH_REPO: ${{ github.repository }}
     steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.validate.outputs.head }}
+          persist-credentials: false
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -89,25 +108,33 @@ jobs:
         with:
           name: release-candidate
           path: ${{ runner.temp }}/candidate
-      - name: Publish the accepted bytes with trusted publishing
-        working-directory: ${{ runner.temp }}/candidate
+      - name: Recheck candidate and publish the accepted tarball
         shell: bash
         run: |
-          set -euo pipefail
-          echo "$SHA256  candidate.tgz" | sha256sum --check
-          export EXPECTED_INTEGRITY="sha512-$(openssl dgst -sha512 -binary candidate.tgz | openssl base64 -A)"
-          lookup() {
-            node --input-type=module -e 'const r=await fetch("https://registry.npmjs.org/dsh-reference-anything/"+process.env.TAG.slice(1)); if(r.status===404){console.log("missing")}else{if(!r.ok)throw Error("Registry HTTP "+r.status);const p=await r.json();if(p.dist?.integrity!==process.env.EXPECTED_INTEGRITY)throw Error("Published package mismatch");console.log("exists")}'
-          }
-          if [[ "$(lookup)" == missing ]]; then
-            npm publish candidate.tgz --access public --provenance --tag latest || {
-              sleep 10
-              [[ "$(lookup)" == exists ]]
+          directory="$RUNNER_TEMP/candidate"
+          (cd "$directory" && echo "$SHA256  candidate.tgz" | sha256sum --check)
+          node scripts/agent/release-ci.mjs verify "$directory" "$TAG"
+          state="$(node scripts/agent/release-ci.mjs registry "$directory")"
+          dist_tag=latest
+          [[ "$TAG" != *-* ]] || dist_tag=next
+          if [[ "$state" == missing ]]; then
+            # Publish the accepted bytes; validation already ran check in the preceding job.
+            (cd "$directory" && npm publish candidate.tgz --access public --provenance --tag "$dist_tag") || {
+              node scripts/agent/release-ci.mjs confirm "$directory"
             }
           fi
-          for attempt in {1..6}; do
-            [[ "$(lookup)" == exists ]] && break
-            sleep 10
-          done
-          [[ "$(lookup)" == exists ]]
-          [[ "$(npm view dsh-reference-anything dist-tags.latest)" == "${TAG#v}" ]]
+          node scripts/agent/release-ci.mjs confirm "$directory"
+          version="${TAG#v}"
+          actual="$(npm view dsh-reference-anything "dist-tags.$dist_tag")"
+          [[ "$actual" == "$version" ]] || { echo "dist-tag mismatch; inspect npm before changing tags"; exit 1; }
+      - name: Publish the reviewed Release notes verbatim
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          prerelease=false
+          latest=true
+          if [[ "$TAG" == *-* ]]; then prerelease=true; latest=false; fi
+          gh release edit "$TAG" --draft=false --title "$TAG" \
+            --prerelease="$prerelease" --latest="$latest" \
+            --notes-file "$RUNNER_TEMP/candidate/release-notes.md"
