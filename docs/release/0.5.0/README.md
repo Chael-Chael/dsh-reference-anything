@@ -75,9 +75,9 @@
 
 #### 演示与已知限制
 
-![真实 Web 中插入 Codex 与 Claude Code 的虚构历史引用；未发送模型请求。](../release-notes/0.5.0/demos/local-references.gif)
+![真实 Web 中插入 Codex 与 Claude Code 的虚构历史引用；未发送模型请求。](./demos/local-references.gif)
 
-![Enter 引用、Tab 打开确认并模拟导入虚构历史。](../release-notes/0.5.0/demos/agent-import.gif)
+![Enter 引用、Tab 打开确认并模拟导入虚构历史。](./demos/agent-import.gif)
 
 来源目录覆盖不等于全部来源均通过真实账号验收；交接摘要为实验功能。预算是保守估计，大记录解析仍可能消耗较多内存；不保存本地正文快照，后续读取依赖原文件。GIF 使用隔离演示数据，不是服务验收证据。
 

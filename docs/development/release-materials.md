@@ -1,6 +1,6 @@
 # 发布素材与用户审稿
 
-全功能介绍片的现有工程与续作记录见 [介绍片任务记录](tasks/intro-film.md)。
+全功能介绍片的现有工程与续作记录见 本地记录 `docs/development/tasks/intro-film.md`（不上传；文字分镜先审核，再制作画面）。
 
 用户于 2026-10-18 要求：README 更新、发布说明、新功能 GIF 由 Agent 主动完成，最终文字交用户审核。此流程是 Agent 工作流，不是仅凭一次 shell 命令就能自动理解所有新功能的生成器。
 
@@ -8,7 +8,7 @@
 
 1. 对照上一发布版本、实际 diff 和验收结果列出功能变化。区分新增、修复、行为变化、兼容性/迁移说明；没有证据的能力不写成已支持。
 2. 直接在本地更新 `README.md` 与 `README_zh-CN.md`：用法、安装入口、截图/GIF 引用和限制保持一致，保留开头展示区。无相关变化时记录核对结果，不凑修改。
-3. 按用户指定的 [Release 正文模板](release-notes-template.md) 更新 `docs/release-v<version>.md`、`release-notes/<version>/features.json` 及实际需要的外部发布草稿。Release 正文采用中英双语导航、分类条目和 Full Changelog；功能卡保持现有 JSON 格式，不把 Markdown 模板塞入 JSON。解释用户能做什么和如何使用，已知限制不能隐瞒。不要自行发布 GitHub Release 或社交消息。
+3. 按用户指定的 [Release 正文模板](release-notes-template.md) 更新 `docs/release/<version>/README.md`、`docs/release/<version>/features.json` 及实际需要的外部发布草稿。Release 正文采用中英双语导航、分类条目和 Full Changelog；功能卡保持现有 JSON 格式，不把 Markdown 模板塞入 JSON。解释用户能做什么和如何使用，已知限制不能隐瞒。不要自行发布 GitHub Release 或社交消息。
 4. 为需要展示的新功能设计最小完整场景，复用 `scripts/web-demos/` 的真实 Web 录制流程：更新场景/样例 → build → 双环境同步 → 停止演示实例 → prepare → 启动演示实例 → record → 检查 MP4/GIF/manifest。只重录新增或受影响片段，不破坏旧 HTML/GIF 备份。
 5. 录制脚本中新增明确场景分支及关键断言，不借旧场景兜底。字幕、按键说明、标题、alt 文本准确且可读；检查无遮挡、隐私泄漏、错误操作或假成功。演示替身不是功能验收证据。
 6. 纯内部修复不必强造 GIF；`demos` 仍须 PASS，证据写明评估结论和无需新增的原因。有可演示的新功能则必须有本次新媒体和预览。
@@ -16,7 +16,7 @@
 
 ## 最终审稿包
 
-在 `docs/testing/releases/<version>-editorial-review.md` 汇总并在对话中给用户可直接审阅的内容，不能只丢目录让用户自行寻找：
+在 `.codex-tmp/release-check/<version>/editorial-review.md` 汇总并在对话中给用户可直接审阅的内容，不能只丢目录让用户自行寻找：
 
 - 中英文 README 的改动段落与文件链接（避免把整篇未变内容塞进对话）。
 - 完整发布说明、功能卡标题和描述。

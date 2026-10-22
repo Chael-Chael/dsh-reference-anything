@@ -75,7 +75,7 @@
     "cordis.patch.yml",
     "locale/*.json",
     "images/agents",
-    "release-notes",
+    "docs/release",
     "images/logo.png",
     "images/logo-icon.png",
     "images/logo-mono.png",

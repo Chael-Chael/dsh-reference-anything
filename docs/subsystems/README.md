@@ -11,8 +11,8 @@
 | 网页会话/OpenCLI | `src/opencli.ts`, `src/sync/`, `src/sources/web-chat/`, `opencli-plugin/` | `tests/opencli*.spec.ts`, `sync.spec.ts`, `provider-*.spec.ts` | 账号范围、认证、增量、超时 |
 | 云盘/OpenList | `src/openlist/`, `src/sources/cloud-drive/` | `tests/openlist*.spec.ts`, `cloud-drive-source.spec.ts`, `download-directory.spec.ts` | URL 校验、下载目标、凭据 |
 | 宿主/Remote | `src/host.ts`, `web.ts`, `contract.ts`, `typert.ts` | `tests/web.spec.ts`, `runtime.spec.ts` | 服务契约、不同 profile |
-| 构建/发版/升级 | `build.mjs`, `package.json`, `cordis.patch.yml`, `src/update.ts`, `release-notes/` | `tests/update.spec.ts`, `release-features.spec.mjs`, 发版规程 | npm 文件完整性、SDK、版本 |
-| Agent 开发设施 | `scripts/agent/`, `AGENTS.md`, `docs/development/` | `tests/agent-workflow.spec.mjs` | 证据失效、失败退出码、指定环境刷新 |
+| 构建/发版/升级 | `build.mjs`, `package.json`, `cordis.patch.yml`, `src/update.ts`, `docs/release/` | `tests/update.spec.ts`, `release-features.spec.mjs`, 发版规程 | npm 文件完整性、SDK、版本 |
+| Agent 开发设施 | `scripts/agent/`, `AGENTS.md`, `docs/development/` | `tests/agent-workflow.spec.mjs`, `tests/release-ci.spec.mjs` | 证据失效、失败退出码、指定环境刷新 |
 
 用 `rg --files tests` 和 `rg <函数名> src tests` 找所有相关调用方，表格不是测试枚举器。完整测试由 `npm run check` 执行。
 

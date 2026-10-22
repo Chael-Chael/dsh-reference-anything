@@ -1,4 +1,4 @@
-import { readFileSync, readdirSync, realpathSync } from 'node:fs'
+import { existsSync, readFileSync, readdirSync, realpathSync } from 'node:fs'
 import { extname, isAbsolute, relative, resolve } from 'node:path'
 import { z } from 'zod'
 
@@ -12,7 +12,7 @@ const cardsSchema = z.array(z.object({
 const mediaTypes = { '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.gif': 'image/gif', '.webp': 'image/webp' }
 
 export function loadReleaseFeatures(directory) {
-  return Object.fromEntries(readdirSync(directory, { withFileTypes: true }).filter(entry => entry.isDirectory()).map(entry => {
+  return Object.fromEntries(readdirSync(directory, { withFileTypes: true }).filter(entry => entry.isDirectory() && existsSync(resolve(directory, entry.name, 'features.json'))).map(entry => {
     const folder = realpathSync(resolve(directory, entry.name))
     const cards = cardsSchema.parse(JSON.parse(readFileSync(resolve(folder, 'features.json'), 'utf8')))
     return [entry.name, cards.map(card => {
