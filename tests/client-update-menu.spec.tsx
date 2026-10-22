@@ -3,6 +3,7 @@ import { act, createElement } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createUpdateSource, SettingsReleaseIntro, UpdateDialog } from '../src/client/update-menu.tsx'
+import { releaseFeaturesFor } from '../src/client/release-features.ts'
 import type { SettingsSnapshot } from '../src/client/components.tsx'
 import { en } from '../src/client/locale.ts'
 import type { PackageUpdateStatus } from '../src/client/remote.ts'
@@ -29,6 +30,14 @@ afterEach(() => {
 const available = (): PackageUpdateStatus => ({ currentVersion: '0.4.4', latestVersion: '0.4.5', updateAvailable: true, checkedAt: Date.now(), releaseNotes: '## Changes\nFixed search.' })
 
 describe('update menu', () => {
+  it('reuses the 0.5.0 cards and media for 0.5.1 in both languages', () => {
+    vi.stubGlobal('__REFERENCE_RELEASE_FEATURES__', {
+      '0.5.0': [{ title: '中文', description: '说明', media: 'demo.gif', alt: '演示', en: { title: 'English', description: 'Description', alt: 'Demo' } }],
+    })
+    expect(releaseFeaturesFor('0.5.1')).toBe(releaseFeaturesFor('0.5.0'))
+    expect(releaseFeaturesFor('0.5.1', 'en')).toEqual(releaseFeaturesFor('0.5.0', 'en'))
+    expect(releaseFeaturesFor('0.5.2')).toEqual([])
+  })
   it('switches card title, Markdown and alt live with the DSH locale', () => {
     vi.stubGlobal('__REFERENCE_RELEASE_FEATURES__', {
       '0.4.5': [{ title: '中文', description: '**中文说明**', media: 'demo.gif', alt: '中文图', en: { title: 'English', description: '**English copy**', alt: 'English image' } }],

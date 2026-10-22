@@ -79,7 +79,7 @@ Type `@`, search across enabled sources, and insert the selected reference into 
 
 ### 0.5.0 Preview · Feature Demos
 
-This update also adds unified local pagination, resumable long-text reads and message/tool search, rechecks source switches on every read, and moves non-local tools to external_reference_list/read. See the [release and migration guide](./docs/release-v0.5.0.md). Version 0.5.0 is not yet published.
+This update also adds unified local pagination, resumable long-text reads and message/tool search, rechecks source switches on every read, and moves non-local tools to external_reference_list/read. See the [release and migration guide](./docs/release-v0.5.0.md). See also the [v0.5.1 compatibility fixes](./docs/release-v0.5.1.md).
 
 #### Import Past Conversations into DSH and Pick Up Where You Left Off
 
@@ -158,13 +158,13 @@ You can now navigate folder hierarchies directly inside the `@` file menu:
 
 ## 📦 Installation
 
-The released version is **v0.5.0**, with a declared minimum DSH SDK version of **`0.2.0-rc.2`**.
+The released version is **v0.5.1**, with a declared minimum DSH SDK version of **`0.2.0-rc.2`**.
 
 ### Official desktop app
 
 Reference Anything handles native references by default. If you explicitly enable the official `ui-reference` plugin in your profile, restart DSH and reload the page: the official plugin handles native references, and RA hides its duplicate file and DSH session candidates. Previously inserted RA file/session references still work; other RA sources are unaffected.
 
-Official file and session sections retain RA's collapsed item counts and expand/collapse actions, including arrow-key, Enter, and Tab navigation. The official plugin still handles reference insertion, copying, and previews. Select “No collapse (native)” to show the full list; unsupported candidate formats also fall back to the full list.
+Official file and session sections follow RA's visibility switches and independent ordering, and retain its collapsed item counts and expand/collapse actions, including arrow-key, Enter, and Tab navigation. The official plugin still handles reference insertion, copying, and previews. Select “No collapse (native)” to show the full list; unsupported candidate formats also fall back to the full list.
 
 After Tab enters a file directory, RA pauses searches in other sources and the menu shows only files. Returning to the root restores other sources. Expand/collapse actions use gray text.
 
@@ -186,7 +186,7 @@ dsh plugin --profile web add dshmarket
 dsh plugin --profile web add dsh-reference-anything
 ```
 
-The installed version depends on the selected channel; this README describes v0.5.0.
+The installed version depends on the selected channel; this README describes v0.5.1.
 
 ### Optional: Connect web AI chats
 
