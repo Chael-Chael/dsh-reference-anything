@@ -1,5 +1,7 @@
 # 禁用官方 ui-reference 后的兼容审计
 
+后续共存修复见 [Issue #13：原生引用注册归属](issue-13-reference-ownership.md)：默认继续由 RA 接管，显式启用官方插件时让出原生注册并隐藏重复候选。
+
 日期：2026-10-19（Asia/Shanghai）。用户选择方案 A：保留 bundle 对 `ui-reference` 的禁用，在 RA 内补齐兼容能力。没有合并 PR #12，没有升级 Desktop 或发布包。
 
 ## 审计基线与范围

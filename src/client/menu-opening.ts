@@ -1,7 +1,13 @@
+import { OFFICIAL_SESSION_GROUP } from './official-reference-menu.ts'
 import type { InputTriggerServiceContract, MenuState } from '@deepseek-ai/dsh-client-ui-input-trigger/client'
 
 /** Hold the initial selection until every preceding source has settled. */
 export function openingHighlight(state: MenuState): MenuState['highlight'] {
+  const official = state.groups.some(group => ['reference', OFFICIAL_SESSION_GROUP].includes(group.source) && group.status === 'ready' && group.items.length)
+  if (official) {
+    const first = state.groups.find(group => group.source !== 'reference-anything-update' && group.status === 'ready' && group.items.length)
+    if (first) return { source: first.source, index: 0 }
+  }
   for (const group of state.groups) {
     if (group.status !== 'ready') return null
     if (group.items.length) return { source: group.source, index: 0 }
@@ -27,6 +33,14 @@ export function adoptMenuOpening(inputTriggers: InputTriggerServiceContract): ()
       if (opening) {
         const highlight = openingHighlight(next)
         next = { ...next, highlight: highlight?.source === before.highlight?.source && highlight?.index === before.highlight?.index ? before.highlight : highlight }
+      }
+      if (next.open && next.hit?.trigger === '@') {
+        const actions = next.groups.find(group => group.source === 'Local agent conversations'
+          && group.items.some(row => row.value === '{"kind":"agent-back"}'))
+        if (actions) next = {
+          ...next, groups: next.groups.length === 1 ? next.groups : [actions],
+          highlight: next.highlight?.source === actions.source ? next.highlight : { source: actions.source, index: 0 },
+        }
       }
       set.call(menu, next)
     }

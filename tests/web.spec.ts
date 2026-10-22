@@ -40,6 +40,16 @@ describe('external conversation Remote availability', () => {
     expect(await remote.agentSearch(agent, { query: '', kind: 'trae', limit: 2 }, signal)).toEqual([])
     expect(scanDiscover).not.toHaveBeenCalled()
   })
+  it('does not rescan import status for formats with no matching references', async () => {
+    const { ctx, remote, signal, agent } = setup()
+    const scanDiscover = vi.fn(async (_input: { format: string }) => ({ sessions: [], warnings: [] }))
+    ctx.provide('chatImport', { scanDiscover })
+    expect(await remote.agentSearch(agent, { query: 'no-match/file/', limit: 100 }, signal)).toEqual([])
+    expect(scanDiscover).not.toHaveBeenCalled()
+    await remote.agentSearch(agent, { query: 'readable', limit: 100 }, signal)
+    expect(scanDiscover.mock.calls).toHaveLength(1)
+    expect(scanDiscover.mock.calls[0]![0]).toEqual({ format: 'codex', path: '/custom' })
+  })
   it('enriches exact local matches from the API and keeps import selection session-bound', async () => {
     const { ctx, remote, signal, agent } = setup()
     const importPath = vi.fn(async () => ({ mode: 'single', status: 'imported', sessionId: 'new-session' }))

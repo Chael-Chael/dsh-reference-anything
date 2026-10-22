@@ -161,6 +161,12 @@
 
 ### 官方桌面端
 
+默认由 Reference Anything 接管原生引用。如果你在 Profile 中显式启用官方 `ui-reference`，重启 DSH 并重新加载页面后，原生引用交由官方处理，RA 自动隐藏重复的文件、DSH 会话候选；此前插入的 RA 文件和会话引用仍可使用，其他 RA 来源不受影响。
+
+官方文件和会话分组仍支持 RA 的折叠显示条数与展开/收起，包括方向键、Enter 和 Tab 操作；引用插入、复制与预览继续由官方处理。选择“不折叠（原生）”可显示完整列表；遇到不支持的候选格式时也会退回完整列表。
+
+Tab 进入文件目录后，RA 暂停其他来源搜索，菜单只显示文件；返回根级后恢复其他来源。展开/收起操作使用灰色文字。
+
 从 [DeepSeek Harness 官网](https://www.deepseek.com/en/harness/) 下载官方桌面端，打开 **插件（Plugins）→ 添加插件（Add plugin）**，输入 `dsh-reference-anything` 并按提示安装、启用。完成后重启 DSH（如有提示），再打开 **设置 → Reference Anything**。
 
 桌面端使用独立的插件 Profile；Web Profile 中安装的插件不会自动启用到桌面端。详见[官方桌面端说明](https://github.com/deepseek-ai/deepseek-harness/blob/master/apps/desktop/README.md)。

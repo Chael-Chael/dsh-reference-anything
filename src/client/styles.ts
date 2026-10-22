@@ -719,6 +719,8 @@ export function adoptMenuGroupTitleProjection(t: TranslateNS<typeof REFERENCE_AN
   }
   const normalizeLabel = (value: string): string => value.replace(/\s/gu, '')
   const actionLabels = new Set([
+    normalizeLabel(t('menu.collapse')),
+    ...Array.from({ length: 5 }, (_, index) => normalizeLabel(t('menu.showMore', { count: index + 1 }))),
     normalizeLabel(`${t('menu.collapse')}${t('menu.collapseDetail')}`),
     ...Array.from({ length: 5 }, (_, index) => normalizeLabel(`${t('menu.showMore', { count: index + 1 })}${t('menu.showMoreDetail')}`)),
   ])
@@ -763,11 +765,19 @@ export function adoptMenuGroupTitleProjection(t: TranslateNS<typeof REFERENCE_AN
   }
   project(document)
   const observer = new MutationObserver(records => {
-    for (const record of records) {
-      if (record.type === 'childList' && record.target instanceof Element) project(record.target)
-      if (record.type === 'characterData' && record.target.parentElement !== null) project(record.target.parentElement)
-      for (const node of Array.from(record.addedNodes)) if (node instanceof Element) project(node)
+    const menus = new Set<Element>()
+    const collect = (node: Node): void => {
+      const element = node instanceof Element ? node : node.parentElement
+      if (!element) return
+      const menu = element.closest('[data-composer-card] [role="listbox"]')
+      if (menu) menus.add(menu)
+      else for (const nested of Array.from(element.querySelectorAll('[data-composer-card] [role="listbox"]'))) menus.add(nested)
     }
+    for (const record of records) {
+      collect(record.target)
+      for (const node of Array.from(record.addedNodes)) collect(node)
+    }
+    for (const menu of menus) if (menu.isConnected) project(menu)
   })
   observer.observe(document.body, { childList: true, subtree: true, characterData: true })
   return () => { observer.disconnect() }

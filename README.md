@@ -162,6 +162,12 @@ The released version is **v0.5.0**, with a declared minimum DSH SDK version of *
 
 ### Official desktop app
 
+Reference Anything handles native references by default. If you explicitly enable the official `ui-reference` plugin in your profile, restart DSH and reload the page: the official plugin handles native references, and RA hides its duplicate file and DSH session candidates. Previously inserted RA file/session references still work; other RA sources are unaffected.
+
+Official file and session sections retain RA's collapsed item counts and expand/collapse actions, including arrow-key, Enter, and Tab navigation. The official plugin still handles reference insertion, copying, and previews. Select “No collapse (native)” to show the full list; unsupported candidate formats also fall back to the full list.
+
+After Tab enters a file directory, RA pauses searches in other sources and the menu shows only files. Returning to the root restores other sources. Expand/collapse actions use gray text.
+
 Download the official desktop app from the [DeepSeek Harness website](https://www.deepseek.com/en/harness/), open **Plugins → Add plugin**, enter `dsh-reference-anything`, and follow the prompts to install and enable it. Restart DSH if asked, then open **Settings → Reference Anything**.
 
 Desktop uses a separate plugin profile; plugins installed in the Web profile are not automatically enabled in Desktop. See the [official desktop documentation](https://github.com/deepseek-ai/deepseek-harness/blob/master/apps/desktop/README.md).

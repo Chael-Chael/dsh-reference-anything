@@ -460,6 +460,19 @@ describe('reference DOM customization', () => {
     dispose()
   })
 
+  it('scans a menu once for a batch of row mutations', async () => {
+    document.body.innerHTML = '<div data-composer-card><div role="listbox"><div role="option">a</div><div role="option">b</div></div></div>'
+    const dispose = adoptMenuGroupTitleProjection(((key: string) => key) as never)
+    const menu = document.querySelector('[role="listbox"]')!
+    const scan = vi.spyOn(menu, 'querySelectorAll')
+    try {
+      menu.children[0]!.textContent = 'updated a'
+      menu.children[1]!.textContent = 'updated b'
+      await Promise.resolve()
+      expect(scan.mock.calls.filter(([selector]) => selector === '[role="option"]')).toHaveLength(1)
+    } finally { scan.mockRestore(); dispose() }
+  })
+
   it('shows expand and collapse as one muted label without their detail copy', async () => {
     adoptStyles()
     document.body.innerHTML = `
@@ -467,6 +480,8 @@ describe('reference DOM customization', () => {
         <button id="expand" role="option"><span>Show 5 more</span><span>Expand this group</span></button>
         <button id="collapse" role="option"><span>Collapse</span><span>Show the compact group</span></button>
         <button id="ordinary" role="option"><span>Regular row</span><span>Description</span></button>
+        <button id="official-expand" role="option"><span>Show 5 more</span></button>
+        <button id="official-collapse" role="option"><span>Collapse</span></button>
       </div></div>
     `
     const t = ((key: string, params?: { count?: number }) => ({
@@ -483,6 +498,9 @@ describe('reference DOM customization', () => {
     expect(expand.dataset.dshRefMenuAction).toBe('')
     expect(collapse.dataset.dshRefMenuAction).toBe('')
     expect(ordinary.dataset.dshRefMenuAction).toBeUndefined()
+    expect(document.getElementById('official-expand')!.dataset.dshRefMenuAction).toBe('')
+    expect(document.getElementById('official-collapse')!.dataset.dshRefMenuAction).toBe('')
+    expect(getComputedStyle(document.getElementById('official-expand')!.firstElementChild!).display).not.toBe('none')
     expect(getComputedStyle(expand.lastElementChild!).display).toBe('none')
     expect(getComputedStyle(collapse.lastElementChild!).display).toBe('none')
     expand.replaceChildren(document.createElement('span'), document.createElement('span'))

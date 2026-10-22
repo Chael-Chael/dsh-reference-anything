@@ -19,6 +19,7 @@ import {
 } from './styles.ts'
 import { createPickerMenuActionGuard, createPickerMenuUpdater } from './menu-update.ts'
 import { adoptMenuOpening } from './menu-opening.ts'
+import { adoptOfficialReferenceMenu } from './official-reference-menu.ts'
 import { en, REFERENCE_ANYTHING_NS, zh } from './locale.ts'
 import { runSetupSequence, setupReady, type SetupStage } from './health.ts'
 import { createAutoDismissNotice } from './notice.ts'
@@ -262,19 +263,25 @@ export function apply(ctx: ClientContext): void {
   }, 'reference-anything.client.remote')
 
   const inputTriggers = ctx.get('inputTriggers') as InputTriggerServiceContract
+  // The boot roster includes entries whose apply() has not run yet; registration order cannot decide ownership.
+  const loader = ctx.get('loader') as { internal?: { manifest?: { plugins: { id: string }[] } } } | undefined
+  const officialReferences = loader?.internal?.manifest?.plugins.some(row => row.id === '@deepseek-ai/dsh-client-ui-reference') === true
+  if (officialReferences) ctx.effect(() => adoptOfficialReferenceMenu(inputTriggers, () => scope.getSnapshot().settings.picker ?? defaultPickerSettings(), t), 'reference-anything.client.official-reference-menu')
   const sessions = (ctx as unknown as { sessions: ISessions }).sessions
   const filePreview = { sessions, openResource: (address: string) => {
     (ctx as unknown as { sidebarRight: { openResource(address: string): void } }).sidebarRight.openResource(address)
   } }
   // Native Desktop drops/pastes keep this owner even when file candidates are hidden.
   const nativeReference = createFileSource(async () => [], t, undefined, filePreview)
-  ctx.effect(() => inputTriggers.registerSource({
-    trigger: '@', name: 'reference', candidates: async () => [], onPick: () => undefined,
-    codec: nativeReference.codec, openReference: nativeReference.openReference,
-  }), 'reference-anything.client.native-reference')
-  registerNativeReferenceText(ctx, (sessionId, path) => {
-    nativeReference.openReference!({ sessionId }, { ref: `@${path}`, appearance: 'file' })
-  }, t)
+  if (!officialReferences) {
+    ctx.effect(() => inputTriggers.registerSource({
+      trigger: '@', name: 'reference', candidates: async () => [], onPick: () => undefined,
+      codec: nativeReference.codec, openReference: nativeReference.openReference,
+    }), 'reference-anything.client.native-reference')
+    registerNativeReferenceText(ctx, (sessionId, path) => {
+      nativeReference.openReference!({ sessionId }, { ref: `@${path}`, appearance: 'file' })
+    }, t)
+  }
   const referenceCandidates = <T,>(sessionId: SessionId, signal: AbortSignal, lookup: () => Promise<T>): Promise<T> => {
     if (sessions.binding(sessionId) === undefined) throw new Error(`reference candidates require a retained session "${sessionId}"`)
     return sessions.using(sessionId, { source: 'referenceCandidates', signal }, async reference => {
@@ -350,6 +357,11 @@ export function apply(ctx: ClientContext): void {
       displayMode: picker.displayMode,
       updateMenu,
       guardMenuActions,
+      fileBrowsing: (sessionId: SessionId) => {
+        if (!officialReferences) return false
+        const actx = sessions.scope(sessionId)
+        return actx !== undefined && (inputTriggers.sessionOf(actx as ClientContext).headers.getSnapshot().get('reference')?.length ?? 0) > 1
+      },
     })
     const source = createConversationSource((query, provider, signal, limit) =>
       conversationSearch.run(query, signal, async () => {
@@ -388,11 +400,18 @@ export function apply(ctx: ClientContext): void {
         if (!result.ok) throw new Error(`${result.error.code}: ${result.error.message}`)
         return result.value.skills
       }, t, optionsFor('skills'))))
-    if (picker.files.enabled) disposers.push(inputTriggers.registerSource(createFileSource(async (sessionId, query, signal) => {
-      const result = await referenceCandidates(sessionId, signal, () => ctx.remote.fileReferences.list(sessionId, query, signal))
-      return result.ok ? result.value : []
-    }, t, optionsFor('files'), filePreview)))
-    if (picker.sessions.enabled) disposers.push(inputTriggers.registerSource(createSessionSource(async (sessionId, query, signal) => {
+    if (picker.files.enabled || officialReferences) {
+      const files = createFileSource(async (sessionId, query, signal) => {
+        // Keep saved RA chips readable while the official source owns candidate discovery.
+        if (officialReferences) return []
+        const result = await referenceCandidates(sessionId, signal, () => ctx.remote.fileReferences.list(sessionId, query, signal))
+        return result.ok ? result.value : []
+      }, t, optionsFor('files'), filePreview)
+      if (officialReferences) delete files.header
+      disposers.push(inputTriggers.registerSource(files))
+    }
+    if (picker.sessions.enabled || officialReferences) disposers.push(inputTriggers.registerSource(createSessionSource(async (sessionId, query, signal) => {
+      if (officialReferences) return []
       const result = await referenceCandidates(sessionId, signal, () => ctx.remote.sessionReferenceResolver.candidates(sessionId, query, signal))
       return result.ok ? result.value : []
     }, t, optionsFor('sessions'), sessions)))

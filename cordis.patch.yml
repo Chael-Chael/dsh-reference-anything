@@ -8,6 +8,8 @@
   # sources over the same official Remotes.  Disabling only this Client source
   # keeps the official file/session services. RA also owns the native
   # "reference" codec and the newer Host's file/folder message renderers.
+  # If a profile explicitly enables ui-reference, RA defers those registrations
+  # and hides its duplicate file/session candidates (saved RA chips still work).
   disabled: true
 
 - insert:

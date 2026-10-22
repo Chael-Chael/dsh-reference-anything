@@ -124,6 +124,7 @@ export class ReferenceAnythingRemote extends TypertRemoteService {
       const owner = agent.session.header.id
       // Scope before scanning and deduplicate explicit roots repeated by settings.
       const scannedRequests = new Set<string>()
+      const matchingRequests = new Set<string>()
       for (const request of requests) {
         const kind = agentKind(request.format) as LocalAgent
         if ((input.kind && kind !== input.kind) || !(settings.enabledAgents ?? ALL_LOCAL_AGENTS).includes(kind)) continue
@@ -140,6 +141,7 @@ export class ReferenceAnythingRemote extends TypertRemoteService {
             const key = JSON.stringify([row.format, row.sourcePath, row.sessionId])
             if ((input.kind && agentKind(row.format) !== input.kind) || seen.has(key) || (policy.scope === 'workspace' && !inWorkspace(row.cwd ?? '', agent.session.header.cwd ?? process.cwd()))) continue
             seen.add(key)
+            matchingRequests.add(requestKey)
             discovered.push({ ...row })
           }
         } catch (error) {
@@ -149,7 +151,8 @@ export class ReferenceAnythingRemote extends TypertRemoteService {
       }
       if (importer?.scanDiscover) {
         const statuses = new Map<string, z.infer<typeof discoverySchema>['sessions'][number]['importStatus']>()
-        await Promise.all([...scannedRequests].map(async key => {
+        // Import status is only needed for matched references; avoid competing corpus scans on every keystroke.
+        await Promise.all([...matchingRequests].map(async key => {
           const [format, path] = JSON.parse(key) as [string, string | null]
           try {
             const result = await this.agentScans.read(importer, '', key,

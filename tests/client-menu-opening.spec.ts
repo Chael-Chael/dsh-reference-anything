@@ -33,6 +33,12 @@ it('does not select a fast lower group before preceding groups settle', () => {
   expect(menu.getSnapshot().highlight).toEqual({ source: 'Files', index: 0 })
 })
 
+it('makes ready official references selectable while RA sources are pending', () => {
+  const { menu, open } = setup()
+  menu.set({ ...open, groups: [open.groups[0]!, { source: 'reference', status: 'ready', items: [{ name: 'file' }] }] })
+  expect(menu.getSnapshot().highlight).toEqual({ source: 'reference', index: 0 })
+})
+
 it.each([0, 1])('keeps native keyboard selection %i without a document keydown event', index => {
   const { menu, open } = setup()
   menu.set(open)
@@ -86,4 +92,24 @@ it('uses the first nonempty settled group and leaves slash menus alone', () => {
   menu.set({ ...open, open: false, hit: null })
   menu.set({ ...open, hit: { ...open.hit!, trigger: '/' } })
   expect(menu.getSnapshot().highlight).toEqual(open.highlight)
+})
+
+it('isolates agent actions from official and RA groups until returning to the list', () => {
+  const { menu, open } = setup()
+  const agent = { source: 'Local agent conversations', status: 'ready' as const, items: [
+    { name: 'Confirm import', value: JSON.stringify({ kind: 'agent-import' }) },
+    { name: 'Back', value: JSON.stringify({ kind: 'agent-back' }) },
+  ] }
+  const others = [{ source: 'reference', status: 'ready' as const, items: [{ name: 'file' }] }, ...open.groups]
+  const nested = { ...open, hit: { ...open.hit!, query: 'agents:' }, groups: [...others, agent] }
+  menu.set(nested)
+  expect(menu.getSnapshot().groups).toEqual([agent])
+  expect(menu.getSnapshot().highlight).toEqual({ source: agent.source, index: 0 })
+  // Late results and background refreshes cannot bring another source back.
+  menu.set({ ...nested, highlight: { source: agent.source, index: 1 } })
+  expect(menu.getSnapshot().groups).toEqual([agent])
+  expect(menu.getSnapshot().highlight?.index).toBe(1)
+  const list = { ...agent, items: [{ name: 'Conversation', value: JSON.stringify({ kind: 'agent' }) }] }
+  menu.set({ ...nested, generation: 2, groups: [...others, list] })
+  expect(menu.getSnapshot().groups).toEqual([...others, list])
 })

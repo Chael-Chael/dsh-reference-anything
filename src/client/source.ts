@@ -111,6 +111,8 @@ export interface PickerSourceOptions {
   updateMenu?: PickerMenuUpdater
   /** Prevents native handled picks for this source from unmounting the menu. */
   guardMenuActions?: PickerMenuActionGuard
+  /** The official file source publishes breadcrumbs before requesting other groups. */
+  fileBrowsing?: (sessionId: SessionId) => boolean
 }
 
 export interface RefreshablePickerSource extends InputTriggerSource {
@@ -992,6 +994,10 @@ function withDisplayPolicy(
   return {
     ...source,
     async candidates(session, request) {
+      if (source.name !== FILE_SOURCE && request.drilled && request.query !== '' && options.fileBrowsing?.(session.sessionId)) {
+        caches.delete(session.sessionId)
+        return []
+      }
       const directory = fileBrowseDirectories.get(session.sessionId)
       if (!request.drilled || !request.query.startsWith(directory ?? '\0')) fileBrowseDirectories.delete(session.sessionId)
       else if (source.name !== FILE_SOURCE) {

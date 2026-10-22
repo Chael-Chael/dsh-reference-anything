@@ -295,6 +295,22 @@ describe('native @ sources', () => {
     expect(load).toHaveBeenCalledOnce()
   })
 
+  it('skips every unrelated loader during official file browsing and resumes at root', async () => {
+    let browsing = true
+    const opts = options({ fileBrowsing: () => browsing })
+    const load = vi.fn(async () => [])
+    const sources = [createCommandSource(load, undefined, opts), createSkillSource(load, undefined, opts),
+      createSessionSource(load, undefined, opts), createConversationSource(load, undefined, opts),
+      createLocalAgentSource(load, undefined, opts), createPluginSource(load, undefined, opts), createCloudDriveSource(load, undefined, opts)]
+    for (const source of sources) expect(await source.candidates(session, { ...request('docs/nested/read'), drilled: true })).toEqual([])
+    expect(load).not.toHaveBeenCalled()
+    await sources[0]!.candidates(session, { ...request(), drilled: true })
+    expect(load).toHaveBeenCalledOnce()
+    browsing = false
+    await sources[0]!.candidates(session, request())
+    expect(load).toHaveBeenCalledTimes(2)
+  })
+
   it('classifies official file candidates for menu logo projection', () => {
     expect(workspaceIconKind({ path: 'assets/hero.PNG', kind: 'file' })).toBe('image')
     expect(workspaceIconKind({ path: 'src/index.ts', kind: 'file' })).toBe('code')
