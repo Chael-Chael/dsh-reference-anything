@@ -25,7 +25,8 @@ concurrency:
 
 jobs:
   validate:
-    runs-on: ubuntu-latest
+    # v0.5.1's existing Linux failures were explicitly waived; validate the approved Windows target.
+    runs-on: windows-latest
     timeout-minutes: 30
     env:
       TAG: ${{ inputs.tag }}
