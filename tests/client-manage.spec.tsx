@@ -61,6 +61,7 @@ type SettingsActions = {
   checkUpdate?: () => Promise<void>; installUpdate?: () => Promise<void>
   quickRefreshOnOpen?: () => Promise<void>
   pickCloudDriveDownloadDirectory?: () => Promise<string | null>
+  rescanAgent?: (agent: LocalAgent) => Promise<void>
   pickAgentDirectory?: (agent: LocalAgent) => Promise<void>
   openCloudDriveDownloadDirectory?: () => Promise<void>
 }
@@ -72,7 +73,7 @@ function settingsElement(current: SettingsSnapshot, actions: SettingsActions = {
     setupAll={actions.setupAll ?? noop} discoverOpenCli={actions.discoverOpenCli ?? noop} installOpenCli={actions.installOpenCli ?? noop}
     useProfile={actions.useProfile ?? noop} install={actions.install ?? noop} restartDaemon={noop} checkUpdate={actions.checkUpdate ?? noop} installUpdate={actions.installUpdate ?? noop} browse={noop} deleteConversation={noop}
     clearProvider={noop} refreshStats={noop} pickCloudDriveDownloadDirectory={actions.pickCloudDriveDownloadDirectory}
-    pickAgentDirectory={actions.pickAgentDirectory} openCloudDriveDownloadDirectory={actions.openCloudDriveDownloadDirectory} t={t} />
+    rescanAgent={actions.rescanAgent} pickAgentDirectory={actions.pickAgentDirectory} openCloudDriveDownloadDirectory={actions.openCloudDriveDownloadDirectory} t={t} />
 }
 function renderSettings(current: SettingsSnapshot, actions: SettingsActions = {}): HTMLElement {
   return render(settingsElement(current, actions))
@@ -253,13 +254,13 @@ describe('cloud-drive download directory', () => {
 })
 
 describe('local agent settings', () => {
-  it('renders all 29 agents beside provider settings and saves an individual toggle', async () => {
+  it('renders all 30 agents beside provider settings and saves an individual toggle', async () => {
     const save = vi.fn(async (_value: SettingsRecord) => {})
     const el = renderSettings({ settings }, { save })
     const cards = el.querySelectorAll('[data-local-agent]')
-    expect(cards).toHaveLength(29)
+    expect(cards).toHaveLength(30)
     for (const card of Array.from(cards)) expect(card.querySelector('img')?.getAttribute('src')).toMatch(/^data:image\/svg\+xml,/)
-    expect(el.querySelector('[data-local-agent=trae]')?.textContent).toContain('Import only')
+    expect(el.querySelector('[data-local-agent=trae]')?.textContent).not.toContain('Import only')
     expect(Array.from(cards).map(card => card.getAttribute('data-local-agent'))).toContain('codex')
     const codex = el.querySelector('[data-local-agent="codex"] button[role="switch"]') as HTMLButtonElement
     await act(async () => { codex.click() })
@@ -344,10 +345,10 @@ describe('local agent source selection', () => {
     const saved: SettingsRecord[] = []
     const el = renderSettings({ settings }, { save: async value => { saved.push(value) } })
     const choices = el.querySelector('.dsh_ref_agent_choices .dsh_ref_selection_grid')!.querySelectorAll<HTMLButtonElement>('button[role="switch"]')
-    expect(choices).toHaveLength(29)
+    expect(choices).toHaveLength(30)
     await act(async () => { choices[0]!.click() })
     expect(saved.at(-1)?.enabledAgents).not.toContain('claude-code')
-    expect(saved.at(-1)?.enabledAgents).toHaveLength(28)
+    expect(saved.at(-1)?.enabledAgents).toHaveLength(29)
   })
 
   it('places Agent and cloud-drive details in separate cards above external conversations', async () => {
@@ -360,7 +361,7 @@ describe('local agent source selection', () => {
     const agentCard = el.querySelector('.dsh_ref_agent_sources')!
     const driveCard = el.querySelector('.dsh_ref_drive_sources')!
     const cloudSetup = el.querySelector('.dsh_ref_cloud')!
-    expect(agentCard.querySelectorAll('[data-local-agent]')).toHaveLength(29)
+    expect(agentCard.querySelectorAll('[data-local-agent]')).toHaveLength(30)
     expect(agentCard.compareDocumentPosition(driveCard) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0)
     expect(driveCard.compareDocumentPosition(providerGrid) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0)
     expect(driveCard.contains(cloudSetup)).toBe(true)
@@ -713,3 +714,34 @@ function setNativeValue(element: HTMLInputElement | HTMLSelectElement, value: st
   const descriptor = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(element), 'value')
   descriptor?.set?.call(element, value)
 }
+
+it('shows index errors, disables duplicate rescans, and allows retry after a failure', async () => {
+  const pending = deferred<void>()
+  const rescan = vi.fn().mockReturnValueOnce(pending.promise).mockResolvedValue(undefined)
+  const el = renderSettings({ settings, agentStats: [{ agent: 'codex', conversations: 2, error: '/broken: invalid database' }] }, { rescanAgent: rescan })
+  const card = el.querySelector<HTMLElement>('[data-local-agent="codex"]')!
+  expect(card.querySelector('[role="alert"]')?.textContent).toContain('/broken: invalid database')
+  const button = Array.from(card.querySelectorAll('button')).find(b => b.getAttribute('aria-label') === 'Check and rescan')!
+  act(() => { button.click(); button.click() })
+  expect(button.disabled).toBe(true)
+  expect(rescan).toHaveBeenCalledExactlyOnceWith('codex')
+  await act(async () => { pending.reject(new Error('disconnected')); await Promise.resolve() })
+  expect(button.disabled).toBe(false)
+  expect(card.querySelector('[role="alert"]')?.textContent).toBe('disconnected')
+  await act(async () => { button.click() })
+  expect(rescan).toHaveBeenCalledTimes(2)
+  expect(card.querySelector('[role="status"]')?.textContent).toContain('Rescan finished')
+})
+it('does not offer rescanning a disabled source', () => {
+  const el = renderSettings({ settings: { ...settings, enabledAgents: [] } }, { rescanAgent: vi.fn() })
+  expect(Array.from(el.querySelectorAll('button')).filter(b => b.getAttribute('aria-label') === 'Check and rescan').every(b => b.disabled)).toBe(true)
+  expect(el.querySelector('[data-local-agent="omp"]')?.textContent).not.toContain('Import only')
+})
+
+it('shows the persisted scan timestamp and keeps cached counts visible during a background scan', () => {
+  const el = renderSettings({ settings, agentStats: [{ agent: 'codex', conversations: 12, scannedAt: 1792500000000, scanning: true }] }, { rescanAgent: vi.fn() })
+  const card = el.querySelector<HTMLElement>('[data-local-agent="codex"]')!
+  expect(card.textContent).toContain('Last scanned:')
+  expect(card.querySelector('strong')?.textContent).toContain('12')
+  expect(card.querySelector<HTMLButtonElement>('[aria-busy="true"]')?.disabled).toBe(true)
+})

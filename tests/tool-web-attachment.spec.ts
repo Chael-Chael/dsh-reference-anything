@@ -41,6 +41,7 @@ async function mount(accountScope = expectedScope) {
   await ctx.plugin(ReferenceRuntime, {})
   ctx.references.registerSource(source())
   const history = {
+    runner: () => ({ attachment: runnerAttachment }),
     store: {
       settings: { historyMode: 'full', opencliPath: 'opencli', profile: '' },
       conversations: new Map([[conversationId, {

@@ -16,10 +16,10 @@ import { resolveLocalPlugins } from './local-plugins.ts'
 import { z } from 'zod'
 import { randomUUID } from 'node:crypto'
 import { discoverySchema, scanFormat, agentKind } from './chat-import-discovery.ts'
-import { ALL_LOCAL_AGENTS, LOCAL_AGENT_LABEL, type LocalAgent } from './wire.ts'
+import { DEFAULT_ENABLED_AGENTS, ALL_LOCAL_AGENTS, LOCAL_AGENT_LABEL, type LocalAgent } from './wire.ts'
 import { expandRoot } from './sources/local-agent/registry.ts'
 import { homedir } from 'node:os'
-import { inWorkspace } from './sources/local-agent/path.ts'
+import { inWorkspace, workspaceRank } from './sources/local-agent/path.ts'
 import type { AgentCandidate } from './client/remote.ts'
 import { chatImportCompatibility, upgradeChatImport } from './chat-import-compatibility.ts'
 
@@ -110,7 +110,7 @@ export class ReferenceAnythingRemote extends TypertRemoteService {
       const requests: Array<{ format: string; path?: string }> = policy.roots.map(root => ({ format: scanFormat(root.kind), path: root.path }))
       {
         for (const kind of ALL_LOCAL_AGENTS) {
-          if (!(settings.enabledAgents ?? ALL_LOCAL_AGENTS).includes(kind)) continue
+          if (!(settings.enabledAgents ?? DEFAULT_ENABLED_AGENTS).includes(kind)) continue
           const format = scanFormat(kind)
           requests.push({ format })
           const custom = expandRoot(settings.agentDirectories?.[kind] ?? '', homedir())
@@ -127,7 +127,7 @@ export class ReferenceAnythingRemote extends TypertRemoteService {
       const matchingRequests = new Set<string>()
       for (const request of requests) {
         const kind = agentKind(request.format) as LocalAgent
-        if ((input.kind && kind !== input.kind) || !(settings.enabledAgents ?? ALL_LOCAL_AGENTS).includes(kind)) continue
+        if ((input.kind && kind !== input.kind) || !(settings.enabledAgents ?? DEFAULT_ENABLED_AGENTS).includes(kind)) continue
         const requestKey = JSON.stringify([request.format, request.path ?? null])
         if (scannedRequests.has(requestKey)) continue
         scannedRequests.add(requestKey)
@@ -162,7 +162,9 @@ export class ReferenceAnythingRemote extends TypertRemoteService {
         }))
         for (const row of discovered) row.importStatus = statuses.get(JSON.stringify([row.format, row.sourcePath, row.sessionId]))
       }
-      discovered.sort((a, b) => (b.lastActiveAt ?? 0) - (a.lastActiveAt ?? 0))
+      discovered.sort((a, b) => workspaceRank(a.cwd, agent.session.header.cwd) - workspaceRank(b.cwd, agent.session.header.cwd)
+        || (b.lastActiveAt ?? 0) - (a.lastActiveAt ?? 0)
+        || JSON.stringify([a.format, a.sourcePath, a.sessionId]).localeCompare(JSON.stringify([b.format, b.sourcePath, b.sessionId])))
       for (const row of discovered) {
         signal.throwIfAborted()
         if (candidates.length >= input.limit) break
@@ -177,13 +179,23 @@ export class ReferenceAnythingRemote extends TypertRemoteService {
         }
         candidates.push({ id, kind, label: row.title || row.sessionId, provider: LOCAL_AGENT_LABEL[kind as LocalAgent] ?? row.format,
           ...(referenceId ? { referenceId } : { importOnly: true }), importStatus: row.importStatus,
-          ...(row.lastActiveAt == null ? {} : { updatedAt: row.lastActiveAt }) })
+          ...(row.cwd ? { cwd: row.cwd } : {}), ...(row.lastActiveAt == null ? {} : { updatedAt: row.lastActiveAt }) })
       }
       return [...warnings, ...candidates]
     }
   }
 
-  async agentStats(signal: AbortSignal) {
+  async agentRescan(input: { kind: LocalAgent }, signal: AbortSignal) {
+    signal.throwIfAborted()
+    const agents = this.ctx.get('referenceLocalAgents')
+    if (!agents) throw new Error('Local agent conversations are unavailable.')
+    if (!this.ctx.referenceChatHistory.getSettings().enabledAgents.includes(input.kind)) throw new Error('This local agent source is disabled.')
+    agents.scanner.clear(scanFormat(input.kind))
+    this.agentScans.clear()
+    return this.agentStats(signal, input.kind)
+  }
+
+  async agentStats(signal: AbortSignal, onlyKind?: LocalAgent) {
     signal.throwIfAborted()
     const agents = this.ctx.get('referenceLocalAgents')
     if (agents === undefined) return []
@@ -191,14 +203,24 @@ export class ReferenceAnythingRemote extends TypertRemoteService {
     agents.setAgentDirectories(settings.agentDirectories ?? {})
     const rows: import('./client/remote.ts').AgentStats[] = []
     for (const kind of ALL_LOCAL_AGENTS) {
+      if ((onlyKind && kind !== onlyKind) || !settings.enabledAgents.includes(kind)) continue
       const format = scanFormat(kind)
       signal.throwIfAborted()
       const sessions = new Set<string>()
       const errors: string[] = []
       const custom = expandRoot(settings.agentDirectories?.[kind] ?? '', homedir())
-      for (const path of custom ? [undefined, custom] : [undefined]) {
+      const configured = agents.discoveryPolicy().roots.filter(root => root.kind === kind).map(root => root.path)
+      const paths = [...new Set([undefined, ...configured, ...custom ? [custom] : []])]
+      const cacheKey = JSON.stringify([kind, paths])
+      if (!onlyKind) {
+        const cached = agents.scanner.summary(cacheKey)
+        if (cached) rows.push({ agent: kind, ...cached })
+        continue
+      }
+      for (const path of paths) {
+        if (onlyKind && !this.ctx.referenceChatHistory.getSettings().enabledAgents.includes(onlyKind)) throw new Error('This local agent source is disabled.')
         try {
-          const result = discoverySchema.parse(await agents.scanner.scanDiscover({ format, ...(path ? { path } : {}) }, signal))
+          const result = discoverySchema.parse(await agents.scanner.scanDiscover({ format, ...(path ? { path } : {}) }, signal, true))
           for (const row of result.sessions) {
             if (await agents.conversationAvailability.visible({ format: row.format, path: row.sourcePath, sessionId: row.sessionId })) sessions.add(JSON.stringify([row.sourcePath, row.sessionId]))
           }
@@ -208,13 +230,17 @@ export class ReferenceAnythingRemote extends TypertRemoteService {
           errors.push(error instanceof Error ? error.message : String(error))
         }
       }
-      rows.push({ agent: kind, conversations: sessions.size, ...(errors.length ? { error: errors.join('\n') } : {}) })
+      if (!this.ctx.referenceChatHistory.getSettings().enabledAgents.includes(kind)) throw new Error('This local agent source is disabled.')
+      const summary = { conversations: sessions.size, scannedAt: Date.now(), ...(errors.length ? { error: errors.join('\n') } : {}) }
+      await agents.scanner.rememberSummary(cacheKey, summary)
+      rows.push({ agent: kind, ...summary })
     }
     const roots = localConversationRoots()
     return rows.map(row => {
       const root = roots?.[scanFormat(row.agent)]
       const custom = settings.agentDirectories?.[row.agent]
-      const paths = [...new Set([...(Array.isArray(root) ? root : root ? [root] : []), ...(custom ? [custom] : [])])]
+      const configured = agents.discoveryPolicy().roots.filter(root => root.kind === row.agent).map(root => root.path)
+      const paths = [...new Set([...(Array.isArray(root) ? root : root ? [root] : []), ...configured, ...(custom ? [custom] : [])])]
       return { ...row, ...(roots ? { paths } : {}), readable: true }
     })
   }
@@ -264,8 +290,11 @@ export class ReferenceAnythingRemote extends TypertRemoteService {
   checkUpdate(signal: AbortSignal) { return this.ctx.referenceChatHistory.checkUpdate(signal) }
   installUpdate(signal: AbortSignal) { return this.ctx.referenceChatHistory.installUpdate(signal) }
   stats() { return this.ctx.referenceChatHistory.stats() }
+  tokenConnect(input: { provider: 'deepseek' | 'kimi'; disconnect: boolean }, signal: AbortSignal) {
+    return this.ctx.referenceChatHistory.connectToken(input.provider, input.disconnect, signal)
+  }
   async syncStart(input: { providers: ChatProvider[]; mode: SyncMode }): Promise<string> {
-    await this.ctx.referenceChatHistory.ensureBrowser()
+    if (input.providers.some(provider => !this.ctx.referenceChatHistory.hasToken?.(provider))) await this.ctx.referenceChatHistory.ensureBrowser()
     return this.ctx.referenceChatHistory.sync.start(input.providers, input.mode)
   }
   syncStatus(input: { jobId: string }) { return this.ctx.referenceChatHistory.sync.status(input.jobId) }

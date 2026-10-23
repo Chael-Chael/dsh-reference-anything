@@ -44,7 +44,7 @@ Use one `@` menu to reference:
 - 🧩 DSH commands and Skills
 - 📁 Workspace files and folders
 - 💬 DSH session history
-- 🖥️ **Local Agent conversations:** bundled scanning and read-only parsers for 29 source formats, including Claude Code, Codex and Cursor; optional import into DSH through Chat Import. Live acceptance coverage is recorded separately.
+- 🖥️ **Local Agent conversations:** bundled scanning and read-only parsers for 30 source formats, including Claude Code, Codex and Cursor; optional import into DSH through Chat Import. Live acceptance coverage is recorded separately.
 - ✨ **Added by this plugin — highlight: Historical conversations from web chatbots including ChatGPT, Claude, Gemini, DeepSeek, Grok, and Kimi**
 - ☁️ **Added by this plugin: Files from cloud drives connected through OpenList**
 - 🧩 **Added by this plugin: Installed and configured local DSH plugins, without repeatedly hunting through directories**
@@ -75,6 +75,8 @@ Type `@`, search across enabled sources, and insert the selected reference into 
 > [!NOTE]
 > DSH is currently in Beta, so its underlying capabilities and interfaces may change as it evolves. This plugin will adapt alongside those changes. Because of some current DSH limitations, parts of the implementation may not yet be ideal; we will continue to follow DSH updates and improve the plugin over time. See the relevant sections below for specific limitations and usage notes.
 
+DeepSeek and Kimi offer **Connect account** in their source cards. The first connection reads the signed-in webpage token through OpenCLI and saves it in the OS keyring using pinned `@napi-rs/keyring@2.1.2`. The Host then reads history, messages and same-origin attachments without keeping a browser open. Reconnect after expiry; deleting the saved credential keeps the conversation index. Windows uses Credential Manager, macOS uses Keychain, and Linux requires an unlocked Secret Service. There is no plaintext fallback. An OS keyring does not guarantee isolation from all malicious software running as the same user.
+
 ## 📰 News
 
 ### 0.5.0 Preview · Feature Demos
@@ -89,7 +91,7 @@ Now, when you find a local session in the `@` menu, you have two ways to use it:
 - **Reference as context (`Enter`)**: Insert the session directly as a reference;
 - **Import and continue chatting (`Tab`)**: Open the action menu, select **Import**, and confirm to bring the entire conversation history into DSH and keep chatting seamlessly! (Prefer a faster workflow? You can disable the confirmation prompt in Settings.)
 
-> 💡 **Note**: Importing requires `dsh-chat-import` v0.26.1 or a compatible newer version to be installed and enabled.
+> 💡 **Note**: Importing requires `dsh-chat-import` v0.26.2 or a compatible newer version to be installed and enabled.
 
 ![Press Enter to reference a session, or Tab to open the action menu and import history; uses mock data.](./docs/release/0.5.0/demos/agent-import.gif)
 
@@ -97,7 +99,7 @@ Now, when you find a local session in the `@` menu, you have two ways to use it:
 
 If an outdated version of `dsh-chat-import` prevents you from using chat import or handoff summaries, you no longer need to update it manually.
 
-Simply click the **upgrade prompt** right inside the menu to update to v0.26.1 or later. If prompted after the upgrade, restart DSH to apply the changes.
+Simply click the **upgrade prompt** right inside the menu to update to v0.26.2 or later. If prompted after the upgrade, restart DSH to apply the changes.
 
 ![Upgrade dsh-chat-import from the menu and view the simulated restart prompt in settings.](./docs/release/0.5.0/demos/chat-import-upgrade.gif)
 
@@ -274,7 +276,7 @@ Selected sessions use DSH's canonical `dsh-session:` mention and native session 
 
 Type `@agent:` to search and reference conversations saved by other local agent tools.
 
-All 29 sources use bundled read-only scanners and parsers derived from dsh-chat-import. Scanning and references work without installing Chat Import. Source switches, additional directories and workspace scope still apply; settings show source paths, counts and scan errors. Enter inserts a reference, including recoverable images through DSH attachments; viewing images requires a vision-capable model. Confirmed empty conversations are hidden; read errors remain visible. Local references now store a readable source, path and session ID; reselect references created with the old local URI protocol.
+All 30 sources use bundled read-only scanners and parsers derived from dsh-chat-import. Scanning and references work without installing Chat Import. Source switches, additional directories and workspace scope still apply; settings show source paths, counts and scan errors. Enter inserts a reference, including recoverable images through DSH attachments; viewing images requires a vision-capable model. Confirmed empty conversations are hidden; read errors remain visible. Local references now store a readable source, path and session ID; reselect references created with the old local URI protocol.
 
 When you send local references, the plugin appends one aggregated background after each user message. The model reads `ref: {source, path, sessionId}` with a content `revision`. `reference_list` discovers local sessions; `reference_read` reads `messages`, `tools` or `images`; `reference_search` searches message/tool text; `reference_image` returns actual pixels.
 
@@ -285,6 +287,8 @@ Use `from` for both scope and starting position: `messages` uses `messageId`; `t
 Every new read checks the enabled source, allowed real path and session identity; no per-session grant is needed for local references. After a version change, restart `reference_read` with the same `ref`, `part: "messages"`, and omit both `revision` and `from`. No full-text snapshots or cross-call parsed-body caches are saved. Other sources retain their existing URI-based protocol under `external_reference_list` and `external_reference_read`.
 
 Import status, session import and handoff summaries use the optional Chat Import API. Install or upgrade the independent plugin from settings when needed; Reference Anything does not install it on startup. An unavailable API leaves import status unknown and does not stop local scanning or reference reading. Tab retains the configured import and summary actions and confirmation flow.
+
+In Settings → Reference Anything → Local Agent conversations, use **Check and rescan** on an enabled source to bypass its metadata cache, refresh counts and menu candidates, and inspect expanded index errors. Local Agent suggestions show their workspace folder name (hover for the full path) and rank exact workspace matches first, missing workspaces second, and other workspaces last; each group uses latest activity first. DSH and DSH4 are disabled by default as local Agent sources; you can enable them manually. Existing saved source selections are preserved. Scan metadata and statistics persist in the current DSH profile. Startup shows cached results first, then refreshes enabled sources one at a time, displaying each source’s last scan time. The refresh icon forces a fresh scan of that source. This checks discovery, not every transcript body. The bundled 0.26.2 snapshot also supports **oh-my-pi (`@omp:`)** from `~/.omp/agent/sessions`; importing requires Chat Import 0.26.2 or newer.
 
 The scanner runs in a separate process and caches metadata for 30 seconds. Parsing a reference may still read its complete source before returning a page. Source code and icons retain their MIT licenses (see `vendor/chat-import-reader/` and `images/agents/LICENSE`). Maintainers update both snapshots with `npm run vendor:sync -- <built-dsh-chat-import-directory>`; see the vendor README for checks before shipping.
 

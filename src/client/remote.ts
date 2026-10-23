@@ -15,8 +15,8 @@ export interface SearchResult extends ConversationRow {
   snippet?: string
 }
 /** One local-agent transcript offered by the `@` menu; `id` is source-scoped, not a URI. */
-export interface AgentCandidate { id: string; kind: string; label: string; provider: string; updatedAt?: number; referenceId?: string; importOnly?: boolean; importStatus?: 'imported' | 'partial' | 'not-imported' | 'archived'; warning?: string }
-export interface AgentStats { agent: LocalAgent; conversations: number; error?: string; unavailable?: boolean; paths?: string[]; readable?: boolean }
+export interface AgentCandidate { cwd?: string; id: string; kind: string; label: string; provider: string; updatedAt?: number; referenceId?: string; importOnly?: boolean; importStatus?: 'imported' | 'partial' | 'not-imported' | 'archived'; warning?: string }
+export interface AgentStats { scannedAt?: number; scanning?: boolean; agent: LocalAgent; conversations: number; error?: string; unavailable?: boolean; paths?: string[]; readable?: boolean }
 /** One cloud-drive file offered by the `@` menu; `origin` is a display path, never a URL. */
 export interface DriveCandidate { id: string; label: string; provider: string; origin?: string; updatedAt?: number; searchIncomplete?: boolean; isDirectory?: boolean }
 export interface LocalPluginCandidate {
@@ -108,6 +108,7 @@ export interface ReferenceAnythingRemoteFace {
   agentImport(agentId: string, input: { id: string }, signal?: AbortSignal): Promise<RemoteResult<string>>
   agentSearch(agentId: string, input: { query: string; limit: number; kind?: LocalAgent }, signal?: AbortSignal): Promise<RemoteResult<readonly AgentCandidate[]>>
   agentStats(signal?: AbortSignal): Promise<RemoteResult<readonly AgentStats[]>>
+  agentRescan(input: { kind: LocalAgent }, signal?: AbortSignal): Promise<RemoteResult<readonly AgentStats[]>>
   driveSearch(input: { query: string; limit: number }, signal?: AbortSignal): Promise<RemoteResult<readonly DriveCandidate[]>>
   search(input: { query: string; provider?: ChatProvider; limit: number }, signal?: AbortSignal): Promise<RemoteResult<readonly SearchResult[]>>
   health(signal?: AbortSignal): Promise<RemoteResult<Health>>
@@ -121,6 +122,7 @@ export interface ReferenceAnythingRemoteFace {
   checkUpdate(signal?: AbortSignal): Promise<RemoteResult<PackageUpdateStatus>>
   installUpdate(signal?: AbortSignal): Promise<RemoteResult<PackageUpdateResult>>
   stats(): Promise<RemoteResult<readonly ProviderStats[]>>
+  tokenConnect(input: { provider: 'deepseek' | 'kimi'; disconnect: boolean }): Promise<RemoteResult<SettingsRecord>>
   syncStart(input: { providers: ChatProvider[]; mode: 'incremental' | 'full' }): Promise<RemoteResult<string>>
   syncStatus(input: { jobId: string }): Promise<RemoteResult<SyncStatus | undefined>>
   syncCancel(input: { jobId: string }): Promise<RemoteResult<boolean>>

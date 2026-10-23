@@ -1,7 +1,7 @@
 # Bundled conversation scanners and readers
 
 Derived from [dsh-chat-import](https://github.com/Nwflower/dsh-chat-import), npm
-0.26.1 (MIT). `upstream-sha256.json` records the exact version and source hashes.
+0.26.2 (MIT). `upstream-sha256.json` records the exact version and source hashes.
 Both generated bundles include fzstd (MIT); `LICENSE` and `LICENSE.fzstd` ship
 with the package. Upstream paths in comments are not runtime dependencies.
 

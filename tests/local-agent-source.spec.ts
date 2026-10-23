@@ -151,6 +151,7 @@ async function mount(over: Config = {}, enabledAgents?: readonly string[]): Prom
     directoryTtlMs: 0,
     ...over,
   })
+  await vi.waitFor(() => expect(ctx.get('referenceLocalAgents')).toBeDefined())
   return { ctx, dispose: () => fiber.dispose() }
 }
 

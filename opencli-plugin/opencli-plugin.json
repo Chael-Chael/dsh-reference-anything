@@ -1,6 +1,6 @@
 {
   "name": "dsh-chat-history",
-  "version": "0.2.3",
+  "version": "0.2.4",
   "opencli": ">=2.0.0",
   "description": "Full-history read adapters used by dsh-reference-anything"
 }

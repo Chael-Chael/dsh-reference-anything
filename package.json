@@ -207,7 +207,8 @@
     "fflate": "0.8.2",
     "react-markdown": "^10.1.0",
     "sortablejs": "^1.15.7",
-    "zod": "^4.4.3"
+    "zod": "^4.4.3",
+    "@napi-rs/keyring": "2.1.2"
   },
   "devDependencies": {
     "@deepseek-ai/cordis": "^4.0.1",

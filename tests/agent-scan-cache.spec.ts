@@ -1,6 +1,21 @@
 import { afterEach, expect, it, vi } from 'vitest'
 import { AgentScanCache } from '../src/agent-scan-cache.ts'
 const snapshot = { sessions: [], warnings: [] }
+it('clearing during an old scan does not let its late result replace a fresh scan', async () => {
+  const cache = new AgentScanCache(), owner = {}, signal = new AbortController().signal
+  let finish!: (value: typeof snapshot) => void
+  const old = cache.read(owner, '', 'codex', () => new Promise(resolve => { finish = resolve }), signal)
+  await Promise.resolve()
+  cache.clear()
+  const fresh = { sessions: [], warnings: [{ format: 'codex', target: 'new', error: 'new issue' }] }
+  const scan = vi.fn(async () => fresh)
+  const refreshed = cache.read(owner, '', 'codex', scan, signal)
+  finish(snapshot)
+  await old
+  expect(await refreshed).toEqual(fresh)
+  expect(await cache.read(owner, '', 'codex', scan, signal)).toEqual(fresh)
+  expect(scan).toHaveBeenCalledOnce()
+})
 afterEach(() => vi.useRealTimers())
 it('shares concurrent reads, caches briefly and refreshes after expiry', async () => {
   vi.useFakeTimers()

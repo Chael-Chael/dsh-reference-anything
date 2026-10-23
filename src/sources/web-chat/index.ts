@@ -10,6 +10,8 @@ import { PACKAGE_NAME, PackageUpdateManager, type PackageUpdateResult, type Pack
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { isDeepStrictEqual } from 'node:util'
+import { randomUUID } from 'node:crypto'
+import { isTokenProvider, readToken, tokenEntry, WebChatTokenClient, type TokenProvider } from '../../web-chat-token.ts'
 import type { ProviderTurnRow } from '../../store/store.ts'
 import { ReferenceAnythingError } from '../../errors.ts'
 import { parseProviderQuery } from '../../search.ts'
@@ -77,6 +79,8 @@ export default class WebChatHistoryService extends Service implements ReferenceS
   private autoSyncInterval?: ReturnType<typeof setInterval>
   private autoSyncCatchUp?: ReturnType<typeof setTimeout>
   private settingsUpdateQueue: Promise<void> = Promise.resolve()
+  private tokenMutation = false
+  private readonly tokenControllers = new Map<string, AbortController>()
   private validateDownloadDirectoryValue = validateDownloadDirectory
   private readonly packageUpdates = new PackageUpdateManager({
     afterInstall: async (profileDir, _version, signal) => {
@@ -101,10 +105,7 @@ export default class WebChatHistoryService extends Service implements ReferenceS
     if (this.store.settings.syncHistoryDays !== null) {
       await this.store.removeOlderThan(this.store.settings.syncHistoryDays)
     }
-    this.syncValue = new ConversationSyncManager(this.storeValue, () => new OpenCliRunner({
-      executable: this.store.settings.opencliPath, profile: this.store.settings.profile,
-      timeoutMs: this.config.timeoutMs, maxStdoutBytes: this.config.maxStdoutBytes,
-    }), this.ctx.logger)
+    this.syncValue = new ConversationSyncManager(this.storeValue, () => this.runner(), this.ctx.logger)
     await this.store.collectExpired()
     const updateAbort = new AbortController()
     this.ctx.effect(() => () => { updateAbort.abort() }, 'reference-web-chat.updateCheckCleanup')
@@ -166,7 +167,7 @@ export default class WebChatHistoryService extends Service implements ReferenceS
     if (window.cursor !== undefined) end = decodeLiveCursor(window.cursor, conversationKey)
     let rows: ProviderTurnRow[]
     try {
-      await this.ensureBrowser(signal)
+      if (!this.hasToken(conversation.provider)) await this.ensureBrowser(signal)
       rows = await this.runner().detail(conversation.provider, conversation.externalId, signal, conversation.accountScope)
     } catch (error) {
       if (signal?.aborted) throw signal.reason
@@ -178,7 +179,9 @@ export default class WebChatHistoryService extends Service implements ReferenceS
         )
       }
       throw new ReferenceAnythingError(
-        `could not fetch the conversation from ${conversation.provider}; ask the user to confirm the browser connection and login, sync ${conversation.provider}, and then retry`,
+        this.hasToken(conversation.provider)
+          ? `could not fetch the conversation from ${conversation.provider}; ask the user to unlock the system keyring or reconnect this account, sync it, and retry`
+          : `could not fetch the conversation from ${conversation.provider}; ask the user to confirm the browser connection and login, sync ${conversation.provider}, and then retry`,
         'REFERENCE_READ_FAILED',
         { cause: error },
       )
@@ -306,6 +309,7 @@ export default class WebChatHistoryService extends Service implements ReferenceS
     // by the snapshot captured before that await.
     const current = this.store.settings
     let settings = mergeSettingsUpdate(submittedAgainst, current, submitted)
+    settings = { ...settings, tokenAccounts: current.tokenAccounts }
     if (directoryChanged) settings = { ...settings, cloudDriveDownloadDirectory: validatedDirectory }
     const enteringMetadataOnly = settings.historyMode === 'metadata-only' && current.historyMode !== 'metadata-only'
     const historyRangeChanged = settings.syncHistoryDays !== current.syncHistoryDays
@@ -348,10 +352,61 @@ export default class WebChatHistoryService extends Service implements ReferenceS
     if (after) await this.store.setSettings({ ...settings, profile: after.alias || after.id })
   }
 
-  private runner(): OpenCliRunner {
+  hasToken(provider: ChatProvider): boolean {
+    return isTokenProvider(provider) && Boolean(this.store.settings.tokenAccounts?.[provider])
+  }
+
+  async connectToken(provider: TokenProvider, disconnect: boolean, signal?: AbortSignal): Promise<SettingsRecord> {
+    if (!isTokenProvider(provider)) throw new Error('Unsupported token provider')
+    if (this.tokenMutation || this.sync.isRunning()) throw new Error('Wait for the current account operation or sync to finish')
+    this.tokenMutation = true
+    try {
+      const previousId = this.store.settings.tokenAccounts?.[provider]
+      if (disconnect) {
+        this.tokenControllers.get(provider)?.abort()
+        if (previousId) {
+          try { await (await tokenEntry(previousId)).deletePassword() }
+          catch { throw new Error('Could not remove the credential from the system keyring; unlock it and retry') }
+        }
+        const tokenAccounts = { ...this.store.settings.tokenAccounts }
+        delete tokenAccounts[provider]
+        await this.store.setSettings({ ...this.store.settings, tokenAccounts })
+      } else {
+        const id = previousId ?? randomUUID()
+        const entry = await tokenEntry(id)
+        await this.ensureBrowser(signal)
+        const token = await this.runner().captureToken(provider, signal)
+        const { accountScope } = await new WebChatTokenClient(provider, token).identity(signal)
+        signal?.throwIfAborted()
+        try { await entry.setPassword(JSON.stringify({ token, accountScope })) }
+        catch { throw new Error('Could not save the credential to the system keyring; no plaintext copy was saved') }
+        this.tokenControllers.get(provider)?.abort()
+        try { await this.store.setSettings({ ...this.store.settings, tokenAccounts: { ...this.store.settings.tokenAccounts, [provider]: id } }) }
+        catch (error) { if (!previousId) await entry.deletePassword(); throw error }
+      }
+      this.tokenControllers.set(provider, new AbortController())
+      return this.store.settings
+    } finally { this.tokenMutation = false }
+  }
+
+  runner(): OpenCliRunner {
     const settings = this.store.settings
-    return new OpenCliRunner({ executable: settings.opencliPath, profile: settings.profile,
+    const runner = new OpenCliRunner({ executable: settings.opencliPath, profile: settings.profile,
       timeoutMs: this.config.timeoutMs, maxStdoutBytes: this.config.maxStdoutBytes })
+    runner.hasToken = provider => this.hasToken(provider)
+    runner.tokenRequest = async (provider, operation, args, signal) => {
+      if (!isTokenProvider(provider)) return undefined
+      const id = this.store.settings.tokenAccounts?.[provider]
+      if (!id) return undefined
+      if (this.tokenMutation) throw new Error('Account connection is changing; retry after it finishes')
+      let controller = this.tokenControllers.get(provider)
+      if (!controller) { controller = new AbortController(); this.tokenControllers.set(provider, controller) }
+      const combined = AbortSignal.any([controller.signal, ...(signal ? [signal] : [])])
+      const { token, accountScope } = await readToken(id)
+      combined.throwIfAborted()
+      return new WebChatTokenClient(provider, token).run(operation, args, accountScope, combined)
+    }
+    return runner
   }
 
   async installAdapter(signal?: AbortSignal): Promise<boolean> {

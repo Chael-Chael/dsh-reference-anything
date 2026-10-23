@@ -1,3 +1,4 @@
+import { scanDomainSpec } from '../../local-scan-store.ts'
 import { LocalConversationScanner } from '../../local-conversation-scanner.ts'
 import { assertLocalScope, assertLocalSourceEnabled } from '../../local-reference.ts'
 /**
@@ -34,7 +35,7 @@ import type {
 } from '../../types.ts'
 import { DEFAULT_CONVERT_OPTIONS } from './adapters/shared.ts'
 import { cursorExpired, cursorStillValid, decodeAgentCursor, encodeAgentCursor } from './page.ts'
-import { inWorkspace } from './path.ts'
+import { inWorkspace, workspaceRank } from './path.ts'
 import {
   AGENT_ADAPTERS,
   AGENT_KINDS,
@@ -63,7 +64,7 @@ import { sliceTurns } from '../../window.ts'
 import { chatImportReference, chatImportTarget, readChatImport } from '../../chat-import-reader.ts'
 import { scanFormat, discoverySchema, agentKind } from '../../chat-import-discovery.ts'
 import { ConversationAvailability } from '../../conversation-availability.ts'
-import { ALL_LOCAL_AGENTS, LOCAL_AGENT_LABEL, type LocalAgent } from '../../wire.ts'
+import { DEFAULT_ENABLED_AGENTS, ALL_LOCAL_AGENTS, LOCAL_AGENT_LABEL, type LocalAgent } from '../../wire.ts'
 import type {} from '../../index.ts'
 
 /** Cordis plugin name used by loader diagnostics. */
@@ -209,6 +210,9 @@ export class LocalAgentService extends Service implements ReferenceSource {
     this.ctx.effect(() => () => domain.close(), 'reference-local-agent.domainClose')
     this.ctx.effect(() => () => this.scanner.dispose(), 'reference-local-agent.scannerClose')
     this.ctx.effect(() => () => this.conversationAvailability.dispose(), 'reference-local-agent.availabilityClose')
+    const scans = await this.ctx.storageDomain.open(scanDomainSpec)
+    this.scanner.attachStorage(scans)
+    this.ctx.effect(() => () => scans.close(), 'reference-local-agent.scansClose')
     this.store = new AgentBookmarkStore(domain)
     this.ctx.effect(() => this.ctx.references.registerSource(this), 'reference-local-agent.registerSource()')
   }
@@ -311,7 +315,7 @@ export class LocalAgentService extends Service implements ReferenceSource {
       const settings = this.ctx.get('referenceChatHistory')?.getSettings()
       const found = new Map<string, ReferenceSummary>()
       const failures: string[] = []
-      for (const kind of settings ? settings.enabledAgents ?? ALL_LOCAL_AGENTS : this.settings.agents) {
+      for (const kind of settings ? settings.enabledAgents ?? DEFAULT_ENABLED_AGENTS : this.settings.agents) {
         if (directory?.source && scanFormat(kind) !== directory.source) continue
         const custom = settings?.agentDirectories?.[kind]
         const paths = new Set<string | undefined>([undefined, ...this.roots.filter(root => root.kind === kind).map(root => root.path)])
@@ -339,7 +343,7 @@ export class LocalAgentService extends Service implements ReferenceSource {
       for (const failure of failures) this.ctx.logger.warn(`reference local discovery: ${failure}`)
       if (directory) directory.warnings.push(...failures)
       else if (!found.size && failures.length) throw new Error(failures.join('; '))
-      return [...found.values()].sort((a, b) => (b.updatedAt ?? 0) - (a.updatedAt ?? 0)).slice(0, limit)
+      return [...found.values()].sort((a, b) => workspaceRank(a.cwd, cwd) - workspaceRank(b.cwd, cwd) || (b.updatedAt ?? 0) - (a.updatedAt ?? 0) || a.ref.id.localeCompare(b.ref.id)).slice(0, limit)
     }
 
     const enabled = this.enabledAgentKinds()
@@ -366,6 +370,8 @@ export class LocalAgentService extends Service implements ReferenceSource {
     }
 
     ranked.sort((left, right) => {
+      const affinity = workspaceRank(left.summary.cwd, cwd) - workspaceRank(right.summary.cwd, cwd)
+      if (affinity) return affinity
       if (left.match !== undefined && right.match !== undefined) {
         const byMatch = compareMatches(left.match, right.match)
         if (byMatch !== 0) return byMatch

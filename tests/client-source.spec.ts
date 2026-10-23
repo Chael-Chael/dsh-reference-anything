@@ -517,6 +517,14 @@ describe('local agent conversations', () => {
     }
   })
 
+  it('shows the recorded workspace without changing the reference target', async () => {
+    const source = createLocalAgentSource(async () => [agentRow({ cwd: 'D:/work/project' })])
+    const rows = await source.candidates(session, request('agents:'))
+    expect(rows[0]?.description).toContain(' · project · ')
+    expect(rows[0]?.description).not.toContain('D:/work')
+    expect(rows[0]?.description).not.toContain('Workspace:')
+    expect(rows[0]?.name).toBe('Refactor the scan probe')
+  })
   it('names the writing agent on the row and numbers transcripts that share a title', async () => {
     const source = createLocalAgentSource(async () => [
       agentRow(),
@@ -530,7 +538,7 @@ describe('local agent conversations', () => {
     expect(candidates[0]?.description).toContain('Codex')
     // A transcript whose mtime the host could not report still gets a row; the
     // date is the only part that goes missing.
-    expect(candidates[2]?.description).toBe('Claude Code')
+    expect(candidates[2]?.description).toBe('Claude Code · No workspace recorded')
   })
 
   it('inserts a native session chip while serializing the canonical mention on send', async () => {

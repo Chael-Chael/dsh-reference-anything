@@ -6,6 +6,7 @@ import { resolveLocalPlugins } from './local-plugins.ts'
 import { compareVersions } from './update.ts'
 
 const PACKAGE = 'dsh-chat-import'
+const MIN_VERSION = '0.26.2'
 export const CHAT_IMPORT_APIS = ['scanDiscover', 'importPath', 'resumeSummary'] as const
 export interface ChatImportCompatibility {
   state: 'ready' | 'incompatible' | 'unavailable' | 'disabled' | 'installing' | 'restart-required'
@@ -45,10 +46,12 @@ export async function chatImportCompatibility(ctx: Context): Promise<ChatImportC
   const missing = missingChatImportApis(ctx.get('chatImport'))
   const operation = installation(ctx)
   const manager = ctx.get('pluginManager')
+  const outdated = Boolean(installed?.version && compareVersions(installed.version, MIN_VERSION) < 0)
+  const incompatible = missing.length > 0 || outdated
   return {
-    state: operation.pending ? 'installing' : operation.restart ? 'restart-required' : !missing.length ? 'ready' : disabled ? 'disabled' : installed?.status === 'live' ? 'incompatible' : 'unavailable',
+    state: operation.pending ? 'installing' : operation.restart ? 'restart-required' : disabled ? 'disabled' : !incompatible ? 'ready' : installed?.status === 'live' ? 'incompatible' : 'unavailable',
     version: installed?.version ?? '', missing,
-    canUpgrade: Boolean(manager) && !disabled && missing.length > 0 && !operation.pending && !operation.restart,
+    canUpgrade: Boolean(manager) && !disabled && incompatible && !operation.pending && !operation.restart,
     ...(operation.error ? { error: operation.error } : !manager && missing.length ? { error: 'DSH Plugin Manager is unavailable. Install Chat Import through DSH or upgrade DSH.' } : {}),
   }
 }
@@ -57,7 +60,7 @@ export async function chatImportUpgradeTarget(signal?: AbortSignal): Promise<{ s
   if (!response.ok) throw new Error(`Chat Import update lookup failed (${response.status})`)
   const latest = await response.json() as { name?: string; version?: string }
   if (latest.name !== PACKAGE || !latest.version || !/^\d+\.\d+\.\d+$/.test(latest.version)) throw new Error('Invalid Chat Import registry response')
-  if (compareVersions(latest.version, '0.26.1') < 0) throw new Error('dsh-chat-import 0.26.1 or newer is required; no compatible npm release is available.')
+  if (compareVersions(latest.version, MIN_VERSION) < 0) throw new Error(`dsh-chat-import ${MIN_VERSION} or newer is required; no compatible npm release is available.`)
   return { spec: `${PACKAGE}@${latest.version}`, version: latest.version }
 }
 /** Auto-install only absent providers; explicit requests can upgrade incompatible providers. */
@@ -66,7 +69,7 @@ export function ensureChatImport(ctx: Context, upgrade = false, signal?: AbortSi
   if (operation.pending) return operation.pending
   operation.pending = (async () => {
     const current = await provider(ctx)
-    if (current.disabled || operation.restart || (!upgrade && current.present) || !missingChatImportApis(ctx.get('chatImport')).length) return
+    if (current.disabled || operation.restart || (!upgrade && (current.present || !missingChatImportApis(ctx.get('chatImport')).length))) return
     const manager = ctx.get('pluginManager')
     if (!manager) throw new Error('DSH Plugin Manager is unavailable. Install Chat Import through DSH or upgrade DSH.')
     const target = await chatImportUpgradeTarget(signal)

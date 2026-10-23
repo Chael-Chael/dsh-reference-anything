@@ -5,7 +5,7 @@ import { Button, Checkbox, Input, Menu, Switch } from '@deepseek-ai/dsh-client-u
 import { useEffect, useId, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import ReactMarkdown from 'react-markdown'
 import Sortable from 'sortablejs'
-import { ALL_PROVIDERS, ALL_LOCAL_AGENTS, READABLE_LOCAL_AGENTS, LOCAL_AGENT_LABEL, defaultPickerSettings, type ChatProvider, type LocalAgent, type PickerSettings, type PickerSource, type SettingsRecord } from '../wire.ts'
+import { ALL_PROVIDERS, ALL_LOCAL_AGENTS, LOCAL_AGENT_LABEL, defaultPickerSettings, type ChatProvider, type LocalAgent, type PickerSettings, type PickerSource, type SettingsRecord } from '../wire.ts'
 import { syncProgressFraction, type AgentStats, type BrowsePage, type BrowserProfile, type Health, type OpenListDriver, type OpenListMount, type OpenListStatus, type PackageUpdateStatus, type ProviderStats, type StorageStats, type SyncStatus } from './remote.ts'
 import { AgentLogo, PickerSourceLogo, ProviderLogo } from './provider-icons.tsx'
 import { type REFERENCE_ANYTHING_NS } from './locale.ts'
@@ -19,6 +19,7 @@ export interface SettingsInjected {
   hooks: { scope: ObservableSnapshot<SettingsSnapshot> }
   save(value: SettingsRecord): Promise<boolean | void>
   sync(providers: ChatProvider[], mode: 'incremental' | 'full'): Promise<void>
+  tokenConnect?(provider: 'deepseek' | 'kimi', disconnect: boolean): Promise<void>
   cancel(): Promise<void>
   refresh(): Promise<void>
   refreshOpenList?(): Promise<void>
@@ -48,6 +49,7 @@ export interface SettingsInjected {
   openListRemoveMount?(id: string): Promise<void>
   openListReindex?(id: string): Promise<{ supported: boolean; reason?: string }>
   pickCloudDriveDownloadDirectory?(): Promise<string | null>
+  rescanAgent?(agent: LocalAgent): Promise<void>
   pickAgentDirectory?(agent: LocalAgent): Promise<void>
   openCloudDriveDownloadDirectory?(): Promise<void>
 }
@@ -122,7 +124,7 @@ function SourceAliasIcon({ source, keyName }: { source: PickerSource; keyName: s
 }
 const REFERENCE_ANYTHING_LOGO = '__REFERENCE_ANYTHING_LOGO_DATA_URI__'
 const GITHUB_REPOSITORY_URL = 'https://github.com/Chael-Chael/dsh-reference-anything'
-export function ConversationSettings({ useScope, save, sync, cancel, refresh, refreshOpenList = async () => undefined, quickRefreshOnOpen, setupAll, discoverOpenCli, installOpenCli, useProfile, install, restartDaemon, checkUpdate, installUpdate, refreshChatImport, upgradeChatImport, browse, deleteConversation, clearProvider, clearRemoteMissing, clearOldAccounts, refreshStats, openListInstall = async () => undefined, openListUpgrade = async () => undefined, openListConnectExternal = async () => undefined, openListDisconnect = async () => undefined, openListCreateMount = async () => undefined, openListDisableMount = async () => undefined, openListRemoveMount = async () => undefined, openListReindex = async () => ({ supported: false }), pickCloudDriveDownloadDirectory, pickAgentDirectory, openCloudDriveDownloadDirectory, releaseIntro, t }: SettingsProps) {
+export function ConversationSettings({ useScope, save, sync, tokenConnect, cancel, refresh, refreshOpenList = async () => undefined, quickRefreshOnOpen, setupAll, discoverOpenCli, installOpenCli, useProfile, install, restartDaemon, checkUpdate, installUpdate, refreshChatImport, upgradeChatImport, browse, deleteConversation, clearProvider, clearRemoteMissing, clearOldAccounts, refreshStats, openListInstall = async () => undefined, openListUpgrade = async () => undefined, openListConnectExternal = async () => undefined, openListDisconnect = async () => undefined, openListCreateMount = async () => undefined, openListDisableMount = async () => undefined, openListRemoveMount = async () => undefined, openListReindex = async () => ({ supported: false }), pickCloudDriveDownloadDirectory, pickAgentDirectory, rescanAgent, openCloudDriveDownloadDirectory, releaseIntro, t }: SettingsProps) {
   const state = useScope(value => value)
   const settings = state.settings
   const picker = settings.picker ?? defaultPickerSettings()
@@ -347,7 +349,7 @@ export function ConversationSettings({ useScope, save, sync, cancel, refresh, re
           <label className="dsh_ref_toggle"><DshSwitch checked={!picker.agents.skipConfirmation} label={t('settings.agentConfirmation')} onChange={confirmation => { savePicker({ ...picker, agents: { ...picker.agents, skipConfirmation: !confirmation } }) }} /><b>{t('settings.agentConfirmation')}</b></label>
           </div>
         </section>
-        <AgentSelectionCards enabledAgents={enabledAgents} stats={state.agentStats} directories={settings.agentDirectories} onEnabled={setAgentEnabled} onPickDirectory={pickAgentDirectory} t={t} />
+        <AgentSelectionCards enabledAgents={enabledAgents} stats={state.agentStats} directories={settings.agentDirectories} onEnabled={setAgentEnabled} onPickDirectory={pickAgentDirectory} onRescan={rescanAgent} t={t} />
       </section>
     </SettingsDisclosure>
     <SettingsDisclosure className="dsh_ref_drive_section" title={t('cloud.title')} description={t('cloud.detail')} open={Boolean(openSections.drive)} onToggle={() => { setOpenSections(current => ({ ...current, drive: !current.drive })) }}>
@@ -377,9 +379,9 @@ export function ConversationSettings({ useScope, save, sync, cancel, refresh, re
         <div className="dsh_ref_install"><div><strong>{t('settings.serviceActions')}</strong><span>{t('settings.serviceActionsDetail')}</span></div><div className="dsh_ref_service_actions"><Button className="is_primary" type="button" disabled={state.loading || Boolean(busyAction)} onClick={() => { const opened = state.health?.extensionConnected ? true : openStore(); runAction('setup', () => setupAll(opened)) }}>{busyAction === 'setup' ? t('settings.settingUp') : t('settings.oneClickSetup')}</Button></div></div>
       </section>
       <div className="dsh_ref_chat_divider dsh_ref_provider_divider" />
-      <div className="dsh_ref_provider_grid">{PROVIDERS.map((provider, index) => <ProviderCard key={provider} provider={provider} index={index} progress={state.sync?.providerProgress.find(row => row.provider === provider)} stats={state.stats?.find(row => row.provider === provider)} busy={state.sync?.status === 'running'} syncDisabled={extensionIncompatible} autoSync={settings.autoSync} enabled={enabled.has(provider)} onEnabled={value => { setProviderEnabled(provider, value) }} onSync={(mode) => { void sync([provider], mode) }} onClear={() => { if (window.confirm(t('storage.clearProviderConfirm', { provider: PROVIDER_LABEL[provider] }))) void clearProvider(provider) }} t={t} />)}</div>
+      <div className="dsh_ref_provider_grid">{PROVIDERS.map((provider, index) => <ProviderCard key={provider} provider={provider} index={index} progress={state.sync?.providerProgress.find(row => row.provider === provider)} stats={state.stats?.find(row => row.provider === provider)} busy={state.sync?.status === 'running'} syncDisabled={extensionIncompatible && !settings.tokenAccounts?.[provider as 'deepseek' | 'kimi']} tokenConnected={Boolean(settings.tokenAccounts?.[provider as 'deepseek' | 'kimi'])} onTokenConnect={tokenConnect && (provider === 'deepseek' || provider === 'kimi') ? (disconnect => tokenConnect(provider, disconnect)) : undefined} autoSync={settings.autoSync} enabled={enabled.has(provider)} onEnabled={value => { setProviderEnabled(provider, value) }} onSync={(mode) => { void sync([provider], mode) }} onClear={() => { if (window.confirm(t('storage.clearProviderConfirm', { provider: PROVIDER_LABEL[provider] }))) void clearProvider(provider) }} t={t} />)}</div>
       {!state.loading && state.stats?.every(item => item.conversations === 0) && <div className="dsh_ref_empty">{t('settings.empty')}</div>}
-      <div className="dsh_ref_source_actions"><Button className="is_primary" type="button" disabled={extensionIncompatible || state.sync?.status === 'running' || settings.enabledProviders.length === 0} onClick={() => { void sync(settings.enabledProviders, 'incremental') }}>{t('settings.syncAll')}</Button><Button type="button" disabled={extensionIncompatible || state.sync?.status === 'running' || settings.enabledProviders.length === 0} onClick={() => { if (window.confirm(t('settings.fullConfirmAll'))) void sync(settings.enabledProviders, 'full') }}>{t('settings.fullRescanAll')}</Button>{state.sync?.status === 'running' && <Button className="is_danger" type="button" onClick={() => { void cancel() }}>{t('settings.cancel')}</Button>}</div>
+      <div className="dsh_ref_source_actions"><Button className="is_primary" type="button" disabled={(extensionIncompatible && settings.enabledProviders.some(provider => !settings.tokenAccounts?.[provider as 'deepseek' | 'kimi'])) || state.sync?.status === 'running' || settings.enabledProviders.length === 0} onClick={() => { void sync(settings.enabledProviders, 'incremental') }}>{t('settings.syncAll')}</Button><Button type="button" disabled={(extensionIncompatible && settings.enabledProviders.some(provider => !settings.tokenAccounts?.[provider as 'deepseek' | 'kimi'])) || state.sync?.status === 'running' || settings.enabledProviders.length === 0} onClick={() => { if (window.confirm(t('settings.fullConfirmAll'))) void sync(settings.enabledProviders, 'full') }}>{t('settings.fullRescanAll')}</Button>{state.sync?.status === 'running' && <Button className="is_danger" type="button" onClick={() => { void cancel() }}>{t('settings.cancel')}</Button>}</div>
       {state.sync?.error && <p className="dsh_ref_inline_error dsh_ref_source_error">{state.sync.error}</p>}
       <SettingsDisclosure className="dsh_ref_sync_settings_card" title={t('settings.syncSettings')} description={t('settings.syncSettingsDetail')} open={Boolean(openSections.sync)} onToggle={() => { setOpenSections(current => ({ ...current, sync: !current.sync })) }}>
       <div className="dsh_ref_sync_settings">
@@ -843,7 +845,8 @@ export function validPickerLimit(value: string): boolean {
   return Number.isInteger(parsed) && parsed >= 1 && parsed <= 50
 }
 
-export function ProviderCard({ provider, progress, stats, busy, syncDisabled = false, autoSync, enabled, onEnabled, onSync, onClear, index, t }: { provider: ChatProvider; progress?: SyncStatus['providerProgress'][number]; stats?: ProviderStats; busy: boolean; syncDisabled?: boolean; autoSync: boolean; enabled: boolean; onEnabled(value: boolean): void; onSync(mode: 'incremental' | 'full'): void; onClear(): void; index: number; t: T }) {
+export function ProviderCard({ provider, progress, stats, busy, syncDisabled = false, autoSync, enabled, onEnabled, onSync, onClear, tokenConnected, onTokenConnect, index, t }: { tokenConnected?: boolean; onTokenConnect?(disconnect: boolean): Promise<void>; provider: ChatProvider; progress?: SyncStatus['providerProgress'][number]; stats?: ProviderStats; busy: boolean; syncDisabled?: boolean; autoSync: boolean; enabled: boolean; onEnabled(value: boolean): void; onSync(mode: 'incremental' | 'full'): void; onClear(): void; index: number; t: T }) {
+  const [connecting, setConnecting] = useState(false)
   const label = PROVIDER_LABEL[provider]
   const date = stats?.lastSyncedAt ? new Date(stats.lastSyncedAt).toLocaleString() : t('provider.neverSynced')
   const phase = progress && !busy && (progress.phase === 'listing' || progress.phase === 'syncing') ? 'cancelled' : progress?.phase
@@ -855,13 +858,14 @@ export function ProviderCard({ provider, progress, stats, busy, syncDisabled = f
       <span className="dsh_ref_card_progress_status" role="progressbar" aria-label={label} aria-valuemin={0} aria-valuemax={100} aria-valuenow={phase === 'listing' ? undefined : Math.round(percent)} aria-valuetext={progressText}>{progressText}</span>
     </>}
     <div className="dsh_ref_provider_main"><span className="dsh_ref_provider_mark"><ProviderLogo provider={provider} /></span><div className="dsh_ref_provider_content"><div className="dsh_ref_provider_summary"><h4>{label}</h4><strong>{stats?.conversations ?? 0}<span>{t('provider.localConversations')}</span></strong><small>{t('provider.lastUpdated', { date })}</small></div>{progress?.error && <em className="dsh_ref_provider_error">{progress.error}</em>}</div></div>
+    {onTokenConnect && <div className="dsh_ref_provider_controls dsh_ref_token_controls"><small>{t(tokenConnected ? 'provider.tokenSaved' : 'provider.tokenHint')}</small><Button type="button" disabled={busy || connecting} onClick={() => { setConnecting(true); void onTokenConnect(false).finally(() => { setConnecting(false) }) }}>{t(connecting ? 'provider.tokenWorking' : tokenConnected ? 'provider.tokenReconnect' : 'provider.tokenConnect')}</Button>{tokenConnected && <Button type="button" disabled={busy || connecting} onClick={() => { setConnecting(true); void onTokenConnect(true).finally(() => { setConnecting(false) }) }}>{t('provider.tokenDisconnect')}</Button>}</div>}
     <div className="dsh_ref_provider_foot"><div className="dsh_ref_provider_controls"><label className="dsh_ref_toggle"><DshSwitch checked={enabled} label={t('provider.enabled')} onChange={onEnabled} /><b>{t('provider.enabled')}</b></label><div className="dsh_ref_provider_actions"><Button type="button" disabled={busy || syncDisabled} onClick={() => { onSync('incremental') }}>{t('provider.syncNow')}</Button><Button type="button" disabled={busy || syncDisabled} onClick={() => { if (window.confirm(t('provider.fullConfirm', { provider: label }))) onSync('full') }}>{t('provider.fullResync')}</Button><Button className="is_danger" type="button" disabled={busy || !stats?.conversations} onClick={onClear}>{t('storage.clearProvider')}</Button></div></div></div>
   </article>
 }
 
-export function AgentSelectionCards({ enabledAgents, stats, directories, onEnabled, onPickDirectory, t }: { enabledAgents: ReadonlySet<LocalAgent>; stats?: readonly AgentStats[]; directories?: Partial<Record<LocalAgent, string>>; onEnabled(agent: LocalAgent, value: boolean): void; onPickDirectory?(agent: LocalAgent): Promise<void>; t: T }) {
+export function AgentSelectionCards({ enabledAgents, stats, directories, onEnabled, onPickDirectory, onRescan, t }: { enabledAgents: ReadonlySet<LocalAgent>; stats?: readonly AgentStats[]; directories?: Partial<Record<LocalAgent, string>>; onEnabled(agent: LocalAgent, value: boolean): void; onPickDirectory?(agent: LocalAgent): Promise<void>; onRescan?(agent: LocalAgent): Promise<void>; t: T }) {
   return <div className="dsh_ref_reference_choices dsh_ref_agent_choices">
-    <div className="dsh_ref_provider_grid dsh_ref_agent_grid dsh_ref_selection_grid">{ALL_LOCAL_AGENTS.map((agent, index) => <AgentCard key={agent} agent={agent} index={index} enabled={enabledAgents.has(agent)} conversations={stats?.find(row => row.agent === agent)?.conversations} status={stats?.find(row => row.agent === agent)} directory={directories?.[agent]} onEnabled={value => { onEnabled(agent, value) }} onPickDirectory={onPickDirectory} t={t} />)}</div>
+    <div className="dsh_ref_provider_grid dsh_ref_agent_grid dsh_ref_selection_grid">{ALL_LOCAL_AGENTS.map((agent, index) => <AgentCard key={agent} agent={agent} index={index} enabled={enabledAgents.has(agent)} conversations={stats?.find(row => row.agent === agent)?.conversations} status={stats?.find(row => row.agent === agent)} directory={directories?.[agent]} onEnabled={value => { onEnabled(agent, value) }} onPickDirectory={onPickDirectory} onRescan={onRescan} t={t} />)}</div>
   </div>
 }
 
@@ -879,12 +883,25 @@ const DEFAULT_AGENT_PATHS: Readonly<Partial<Record<LocalAgent, string>>> = {
   'claude-code': '~/.claude/projects', codex: '~/.codex/sessions', cursor: '~/.cursor/projects', qoder: '~/.qoder/projects',
   reasonix: '~/.reasonix/sessions', openclaw: '~/.openclaw/agents', kimi: '~/.kimi/sessions · ~/.kimi-code/sessions',
   grokbuild: '~/.grok/sessions · ~/.grok/archived_sessions', hermes: '~/.hermes/sessions', 'gemini-cli': '~/.gemini/history',
-  pi: '~/.pi/agent/sessions', opencode: '~/.local/share/opencode', mimocode: '~/.local/share/mimocode', zcode: '~/.zcode/cli/db',
+  pi: '~/.pi/agent/sessions', omp: '~/.omp/agent/sessions', opencode: '~/.local/share/opencode', mimocode: '~/.local/share/mimocode', zcode: '~/.zcode/cli/db',
 }
 
-function AgentCard({ agent, enabled, conversations, status, directory, onEnabled, onPickDirectory, index, t }: { agent: LocalAgent; enabled: boolean; conversations?: number; status?: AgentStats; directory?: string; onEnabled(value: boolean): void; onPickDirectory?(agent: LocalAgent): Promise<void>; index: number; t: T }) {
+function AgentCard({ agent, enabled, conversations, status, directory, onEnabled, onPickDirectory, onRescan, index, t }: { agent: LocalAgent; enabled: boolean; conversations?: number; status?: AgentStats; directory?: string; onEnabled(value: boolean): void; onPickDirectory?(agent: LocalAgent): Promise<void>; onRescan?(agent: LocalAgent): Promise<void>; index: number; t: T }) {
+  const [manualScanning, setScanning] = useState(false)
+  const scanning = manualScanning || status?.scanning === true
+  const [scanResult, setScanResult] = useState<string>()
+  const [scanError, setScanError] = useState<string>()
+  const scanningRef = useRef(false)
+  const rescan = async () => {
+    if (!onRescan || scanningRef.current || !enabled) return
+    scanningRef.current = true
+    setScanning(true); setScanResult(undefined); setScanError(undefined)
+    try { await onRescan(agent); setScanResult(t('settings.agentScanComplete')) }
+    catch (error) { setScanError(error instanceof Error ? error.message : String(error)) }
+    finally { scanningRef.current = false; setScanning(false) }
+  }
   const locations = status?.paths?.length ? status.paths : [directory ?? DEFAULT_AGENT_PATHS[agent] ?? (agent === 'chatgpt' ? t('settings.agentExportLocation') : t('settings.agentAutoDiscovery'))]
-  return <article className="dsh_ref_provider dsh_ref_agent_provider" data-local-agent={agent} style={{ '--dsh-ref-index': index } as CSSProperties}><div className="dsh_ref_provider_main"><span className="dsh_ref_provider_mark"><AgentLogo agent={agent} /></span><div className="dsh_ref_provider_content"><div className="dsh_ref_provider_summary"><h4>{LOCAL_AGENT_LABEL[agent]}</h4>{status?.unavailable ? <small>{t('settings.agentApiRequired')}</small> : status?.error ? <small title={status.error}>{t('settings.agentScanFailed')}</small> : conversations === undefined ? <small>{t('settings.agentScanning')}</small> : <strong>{conversations}<span>{t('provider.localConversations')}</span></strong>}<details className="dsh_ref_agent_paths"><summary>{t('settings.agentLocations')}</summary>{locations.map(location => <div key={location}>{location}</div>)}</details>{!(status?.readable ?? READABLE_LOCAL_AGENTS.some(kind => kind === agent)) && <small>{t('settings.agentImportOnly')}</small>}</div></div></div><div className="dsh_ref_provider_foot"><div className="dsh_ref_provider_controls"><label className="dsh_ref_toggle"><DshSwitch checked={enabled} label={t('provider.enabled')} onChange={onEnabled} /><b>{t('provider.enabled')}</b></label><Button type="button" onClick={() => { void onPickDirectory?.(agent) }}>{t('settings.agentCustomDirectory')}</Button></div></div></article>
+  return <article className="dsh_ref_provider dsh_ref_agent_provider" data-local-agent={agent} style={{ '--dsh-ref-index': index } as CSSProperties}><div className="dsh_ref_provider_main"><span className="dsh_ref_provider_mark"><AgentLogo agent={agent} /></span><div className="dsh_ref_provider_content"><div className="dsh_ref_provider_summary"><h4>{LOCAL_AGENT_LABEL[agent]}</h4>{status?.unavailable ? <small>{t('settings.agentApiRequired')}</small> : status?.error ? <small>{t('settings.agentScanFailed')}</small> : conversations === undefined || (scanning && !status?.scannedAt) ? <small>{t(enabled ? 'settings.agentScanning' : 'settings.agentNotScanned')}</small> : <strong>{conversations}<span>{t('provider.localConversations')}</span></strong>}<details className="dsh_ref_agent_paths"><summary>{t('settings.agentLocations')}</summary>{locations.map(location => <div key={location}>{location}</div>)}</details>{(scanError || status?.error) && <details open className="dsh_ref_agent_paths"><summary>{t('settings.agentScanErrors')}</summary><div role="alert" style={{ whiteSpace: 'pre-wrap' }}>{scanError || status?.error}</div></details>}{status?.scannedAt && <small>{t('settings.agentLastScan', { time: new Date(status.scannedAt).toLocaleString() })}</small>}{scanResult && <small role="status">{scanResult}</small>}{status?.readable === false && <small>{t('settings.agentImportOnly')}</small>}</div></div></div><div className="dsh_ref_provider_foot"><div className="dsh_ref_provider_controls"><label className="dsh_ref_toggle"><DshSwitch checked={enabled} label={t('provider.enabled')} onChange={onEnabled} /><b>{t('provider.enabled')}</b></label>{onRescan && <Button className="dsh_ref_agent_rescan" type="button" aria-label={t(scanning ? 'settings.agentRescanning' : 'settings.agentRescan')} title={t('settings.agentRescan')} aria-busy={scanning} disabled={!enabled || scanning} onClick={() => { void rescan() }}><PickerSourceLogo kind="refresh" size={16} /></Button>}<Button type="button" disabled={scanning} onClick={() => { void onPickDirectory?.(agent) }}>{t('settings.agentCustomDirectory')}</Button></div></div></article>
 }
 
 function formatBytes(bytes: number): string {

@@ -24,7 +24,7 @@ describe('settings source registration guard', () => {
   })
   it('keeps the durable local-agent enum identical to the runtime registry', () => {
     expect(READABLE_LOCAL_AGENTS).toEqual(AGENT_KINDS)
-    expect(ALL_LOCAL_AGENTS).toHaveLength(29)
+    expect(ALL_LOCAL_AGENTS).toHaveLength(30)
     for (const agent of ALL_LOCAL_AGENTS) {
       expect(AGENT_ICON_SVG[agent]).toContain('<svg')
       const mono = decodeURIComponent(AGENT_ICON_MONO_URI[agent]!)
@@ -54,7 +54,8 @@ describe('settings source registration guard', () => {
     expect(value).toMatchObject({ syncOnStartup: false, syncHistoryDays: null, maxReadTurns: 10, inputRenderMode: 'pill', cloudDriveDownloadDirectory: '' })
     expect(value).not.toHaveProperty('referenceUiMode')
     expect(value.enabledProviders).toEqual(['chatgpt', 'claude', 'gemini', 'deepseek', 'grok', 'kimi'])
-    expect(value.enabledAgents).toEqual(ALL_LOCAL_AGENTS)
+    expect(value.enabledAgents).toEqual(ALL_LOCAL_AGENTS.filter(kind => kind !== 'dsh' && kind !== 'dsh4'))
+    expect(settingsRecordSchema.parse({ ...value, enabledAgents: ['dsh', 'dsh4'] }).enabledAgents).toEqual(['dsh', 'dsh4'])
     expect(settingsRecordSchema.parse({ ...value, enabledAgents: ['codex'], agentDirectories: { trae: 'D:/extra' } })).toMatchObject({ enabledAgents: ['codex'], agentDirectories: { trae: 'D:/extra' } })
   })
 
@@ -71,7 +72,7 @@ describe('settings source registration guard', () => {
   // and takes every other setting with it. Any @ group added from now on needs
   // the same `.default()` and belongs in this list.
   it.each([
-    ['agents', { showImport: true, showSummary: false, skipConfirmation: false, enabled: true, order: 25, limit: 6, maxCandidates: 50, sort: 'updated', shortcut: '', aliases: ['agent', 'cc', 'claude-code', 'codex', 'cursor', 'gemini-cli', 'qoder', 'reasonix', 'openclaw', 'hermes', 'pi', 'grokbuild', 'grok-build', 'kimi-cli', 'kimi-code', 'opencode', 'mimocode', 'mimo', 'zcode'] }],
+    ['agents', { showImport: true, showSummary: false, skipConfirmation: false, enabled: true, order: 25, limit: 6, maxCandidates: 50, sort: 'updated', shortcut: '', aliases: ['agent', 'cc', 'claude-code', 'codex', 'cursor', 'gemini-cli', 'qoder', 'reasonix', 'openclaw', 'hermes', 'pi', 'omp', 'grokbuild', 'grok-build', 'kimi-cli', 'kimi-code', 'opencode', 'mimocode', 'mimo', 'zcode'] }],
     ['drives', { enabled: true, order: 35, limit: 6, maxCandidates: 50, sort: 'updated', shortcut: '', aliases: ['drive'] }],
     ['plugins', { enabled: true, order: 40, limit: 6, maxCandidates: 50, sort: 'updated', shortcut: '', aliases: ['plugin'], onlyLive: false, showDeepSeek: true }],
   ] as const)('fills in the %s picker key when it arrived after the record was written', (key, expected) => {

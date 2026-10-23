@@ -46,3 +46,8 @@ export function inWorkspace(cwd: string, workspace: string): boolean {
   return relative === ''
     || (!paths.isAbsolute(relative) && relative !== '..' && !relative.startsWith(`..${paths.sep}`))
 }
+
+/** Match DSH session affinity: exact cwd, unspecified cwd, then other workspaces. */
+export function workspaceRank(cwd: string | null | undefined, workspace: string | undefined): number {
+  return cwd && workspace && cwd === workspace ? 0 : !cwd ? 1 : 2
+}

@@ -1,3 +1,4 @@
+import omp from '../../images/agents/omp.svg?raw'
 import type { LocalAgent } from '../wire.ts'
 import antigravity from '../../images/agents/antigravity.svg?raw'
 import chatgpt from '../../images/agents/chatgpt.svg?raw'
@@ -58,6 +59,7 @@ export const AGENT_ICON_SVG: Readonly<Record<LocalAgent, string>> = {
   'zcode': zcode,
   'zed': zed,
   dsh4: dsh,
+  omp,
 }
 
 // Remove upstream tile backgrounds before applying a monochrome silhouette.

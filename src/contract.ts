@@ -11,8 +11,8 @@ import { localAgentSchema, providerSchema, settingsRecordSchema } from './wire.t
  * absolute path adds nothing a menu row can use and everything a screen-share
  * leaks.
  */
-export const agentCandidateSchema = z.object({ id: z.string(), kind: z.string(), label: z.string(), provider: z.string(), updatedAt: z.number().optional(), referenceId: z.string().optional(), importOnly: z.boolean().optional(), importStatus: z.enum(['imported', 'partial', 'not-imported', 'archived']).optional(), warning: z.string().optional() }).readonly()
-export const agentStatsSchema = z.object({ agent: localAgentSchema, conversations: z.number().int().nonnegative(), error: z.string().optional(), unavailable: z.boolean().optional(), paths: z.array(z.string()).optional(), readable: z.boolean().optional() }).readonly()
+export const agentCandidateSchema = z.object({ cwd: z.string().optional(), id: z.string(), kind: z.string(), label: z.string(), provider: z.string(), updatedAt: z.number().optional(), referenceId: z.string().optional(), importOnly: z.boolean().optional(), importStatus: z.enum(['imported', 'partial', 'not-imported', 'archived']).optional(), warning: z.string().optional() }).readonly()
+export const agentStatsSchema = z.object({ scannedAt: z.number().optional(), agent: localAgentSchema, conversations: z.number().int().nonnegative(), error: z.string().optional(), unavailable: z.boolean().optional(), paths: z.array(z.string()).optional(), readable: z.boolean().optional() }).readonly()
 // `origin` is the drive's own display path, shown under the candidate. It is
 // never a download URL: those are signed with the account's credential and
 // must not cross this wire.
@@ -147,6 +147,7 @@ export const REFERENCE_ANYTHING_INVOCATIONS: readonly InvocationDescriptor[] = [
   descriptor('agentImport', [agentLookup, { name: 'input', wire: 'input', source: 'json', codec: strict('AgentImportInput', z.object({ id: z.string().min(1) }).strict().readonly()) }], strict('ImportedSessionId', z.string().min(1)), true),
   descriptor('agentSearch', [agentLookup, { name: 'input', wire: 'input', source: 'json', codec: strict('AgentSearchInput', z.object({ query: z.string(), limit: z.number().int().min(1).max(100), kind: localAgentSchema.optional() }).readonly()) }], strict('AgentCandidate[]', z.array(agentCandidateSchema)), true),
   descriptor('agentStats', [], strict('AgentStats[]', z.array(agentStatsSchema)), true),
+  descriptor('agentRescan', [{ name: 'input', wire: 'input', source: 'json', codec: strict('AgentRescanInput', z.object({ kind: localAgentSchema }).strict().readonly()) }], strict('AgentStats[]', z.array(agentStatsSchema)), true),
   // No session lookup, unlike `agentSearch`: a drive is the same drive from
   // every workspace, so there is nothing to scope the query to.
   descriptor('driveSearch', [{ name: 'input', wire: 'input', source: 'json', codec: strict('DriveSearchInput', z.object({ query: z.string(), limit: z.number().int().min(1).max(100) }).readonly()) }], strict('DriveCandidate[]', z.array(driveCandidateSchema)), true),
@@ -162,6 +163,7 @@ export const REFERENCE_ANYTHING_INVOCATIONS: readonly InvocationDescriptor[] = [
   descriptor('checkUpdate', [], strict('PackageUpdateStatus', packageUpdateStatusSchema), true),
   descriptor('installUpdate', [], strict('PackageUpdateResult', packageUpdateResultSchema), true),
   descriptor('stats', [], strict('ProviderStats[]', z.array(providerStatsSchema))),
+  descriptor('tokenConnect', [{ name: 'input', wire: 'input', source: 'json', codec: strict('TokenConnect', z.object({ provider: z.enum(['deepseek', 'kimi']), disconnect: z.boolean() }).strict()) }], strict('SettingsRecord', settingsRecordSchema), true),
   descriptor('syncStart', [{ name: 'input', wire: 'input', source: 'json', codec: strict('SyncStart', syncStartSchema) }], strict('JobId', z.string())),
   descriptor('syncStatus', [{ name: 'input', wire: 'input', source: 'json', codec: strict('JobInput', jobInputSchema) }], strict('SyncStatus?', syncStatusSchema.optional())),
   descriptor('syncCancel', [{ name: 'input', wire: 'input', source: 'json', codec: strict('JobInput', jobInputSchema) }], strict('Boolean', z.boolean())),
