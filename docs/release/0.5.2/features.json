@@ -1,0 +1,26 @@
+[
+  {
+    "title": "新增四种本地会话来源",
+    "description": "使用 **@omp:**、**@copilot-vscode:**、**@copilot-cli:** 或 **@doubao:** 搜索历史会话，按 **Enter** 插入只读引用。扫描和引用无需安装 Chat Import。\n\n豆包仅能读取本地已缓存的正文；导入会话需要安装并启用 **Chat Import 0.26.3** 或更新兼容版本。",
+    "en": {
+      "title": "Four more local conversation sources",
+      "description": "Search with **@omp:**, **@copilot-vscode:**, **@copilot-cli:** or **@doubao:** and press **Enter** to insert a read-only reference. Scanning and references do not require Chat Import.\n\nDoubao reads locally cached bodies only. Importing requires **Chat Import 0.26.3** or a compatible newer version to be installed and enabled."
+    }
+  },
+  {
+    "title": "官方引用开启后，分类前缀仍可使用",
+    "description": "启用官方引用插件时，仍可输入 **@file:**、**@session:** 或对应自定义别名限定类别，搜索由官方接口完成。普通 **@** 查询继续使用官方来源。",
+    "en": {
+      "title": "Scoped prefixes work with official references",
+      "description": "With the official reference plugin enabled, use **@file:**, **@session:** or their custom aliases to scope official searches. Unscoped **@** queries continue to use the official sources."
+    }
+  },
+  {
+    "title": "演示 GIF 按需加载",
+    "description": "演示 GIF 不再内联到客户端或随 npm 包重复分发，仅打开对应卡片时从远程地址加载。首次观看需要网络；加载失败可重试，离线展示不作保证。",
+    "en": {
+      "title": "Load demo GIFs on demand",
+      "description": "Demo GIFs are no longer embedded in the client or duplicated in the npm package. They load from remote URLs when their card is opened. First viewing requires network access; failed downloads can be retried, and offline display is not guaranteed."
+    }
+  }
+]

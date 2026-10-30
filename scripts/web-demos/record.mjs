@@ -13,6 +13,7 @@ mkdirSync(output,{recursive:true})
 const font=readFileSync(join(root,'scripts/feature-demos/vendor/SourceHanSansSC-VF.otf')).toString('base64')
 const browser=await chromium.launch({channel:'msedge',headless:true})
 const names={'folders':'目录浏览与引用','agent-import':'会话引用与导入','chat-import-upgrade':'升级 Chat Import','local-plugins':'本地插件引用','shortcuts':'自定义与共享快捷词','local-references':'跨来源会话只读引用'}
+names['new-local-sources']='四种新增来源的只读引用'
 const ids=process.argv.slice(2).length?process.argv.slice(2):Object.keys(names)
 const results=[]
 let activePage
@@ -25,6 +26,8 @@ try{for(const id of ids){
  page.on('pageerror',e=>errors.push(e.message))
  page.setDefaultTimeout(20000)
  await page.goto(url)
+ const previewNotice=page.getByRole('button',{name:'继续',exact:true})
+ try{await previewNotice.waitFor({timeout:3000});await previewNotice.click()}catch{}
  const onboarding=page.getByRole('dialog',{name:'开始使用',exact:true})
  await onboarding.waitFor({state:'visible',timeout:5000}).catch(()=>{})
  if(await onboarding.isVisible())await onboarding.getByRole('button',{name:'关闭',exact:true}).click()
@@ -67,6 +70,14 @@ try{for(const id of ids){
   await type(' @claude-code:接口');await page.getByRole('option').filter({hasText:'接口重构方案'}).waitFor()
   await editor.press('Enter');await pause(1200);assert((await editor.innerText()).includes('接口重构方案'))
   await type(' 对照两段历史讨论，只读分析，不导入会话。');await pause(1800)
+ }else if(id==='new-local-sources'){
+  for(const [source,title] of [['omp','OMP 测试计划'],['copilot-vscode','Copilot 接口设计'],['copilot-cli','Copilot 命令行排查'],['doubao','豆包本地缓存笔记']]){
+   await click(editor);await type(`@${source}:`)
+   await page.getByRole('option').filter({hasText:title}).waitFor();await pause(700)
+   await editor.press('Enter');await pause(900);assert((await editor.innerText()).includes(title))
+   await editor.press('ControlOrMeta+A');await editor.press('Backspace')
+  }
+  await type('引用本地历史，不导入会话。');await pause(1000)
  }else if(id==='shortcuts'){
   await settings()
   for(const [source,label,value] of [['agents','本地 Agent 对话','agent, work'],['conversations','网页端 AI 对话','chat, work']]){

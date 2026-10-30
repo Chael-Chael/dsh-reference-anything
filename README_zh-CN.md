@@ -77,6 +77,13 @@
 
 ## 📰 新闻
 
+### v0.5.2（待发布）
+
+![四种新增来源的只读引用；使用虚构演示数据](./docs/release/0.5.2/demos/new-local-sources.gif)
+
+新增 oh-my-pi、Copilot VS Code、Copilot CLI 和豆包桌面版引用；修复官方引用开启后的文件/会话分类前缀；教程 GIF 改为远程按需加载。豆包需要本地缓存正文，导入需要 Chat Import 0.26.3 或更新兼容版本。[发布说明](./docs/release/0.5.2/README.md)。
+
+
 ### 0.5.0 预览 · 功能演示
 
 本轮还升级了本地工具的统一分页与长文本接续读取，正文和工具记录均可搜索；每次读取检查当前来源开关，非本地工具迁移到 external_reference_list/read。完整变更及调用示例见 [0.5.0 发布说明](./docs/release/0.5.0/README.md)。另见 [v0.5.1 兼容性修复](./docs/release/0.5.1/README.md)。
@@ -185,7 +192,7 @@ dsh plugin --profile web add dshmarket
 dsh plugin --profile web add dsh-reference-anything
 ```
 
-安装入口提供的版本以对应渠道为准；本文描述 v0.5.1 的功能。
+安装入口提供的版本以对应渠道为准；本文描述待发布的 v0.5.2 功能。
 
 ### 可选：连接网页 AI 对话
 

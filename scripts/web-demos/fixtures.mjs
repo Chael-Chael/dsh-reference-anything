@@ -10,6 +10,7 @@ let generation=0
 const mode=()=>{const path=new URL('../../mode.json',import.meta.url),next=statSync(path).mtimeMs;if(next!==generation){upgraded=false;generation=next}return JSON.parse(readFileSync(path,'utf8')).scene}
 const agents=[{id:localLocatorId({source:'codex',path:'C:/demo/history/cache.jsonl',sessionId:'demo-cache'}),kind:'codex',label:'缓存策略设计',provider:'Codex',importStatus:'not-imported'},{id:localLocatorId({source:'claude',path:'C:/demo/history/api.jsonl',sessionId:'demo-api'}),kind:'claude-code',label:'接口重构方案',provider:'Claude Code',importStatus:'imported'}]
 const health={version:'1.0.0',daemon:'demo',pluginInstalled:true,daemonRunning:false,extensionConnected:false,extensionState:'disconnected',opencliCompatible:true,daemonStale:false,connectivityOk:false,connectivityChecked:false,adapterCommandsReady:true,adapterCompatible:true,updateAvailable:false}
+for(const [kind,label,provider] of [['omp','OMP 测试计划','oh-my-pi'],['copilot-vscode','Copilot 接口设计','Copilot VS Code'],['copilot-cli','Copilot 命令行排查','Copilot CLI'],['doubao','豆包本地缓存笔记','Doubao']])agents.push({id:localLocatorId({source:kind,path:`C:/demo/history/${kind}.json`,sessionId:`demo-${kind}`}),kind,label,provider,importStatus:'not-imported'})
 Object.assign(ReferenceAnythingRemote.prototype,{
  async agentSearch(_agent,{query,limit,kind}){return agents.filter(row=>(!kind||row.kind===kind)&&(row.label.includes(query)||!query)).slice(0,limit)},
  async agentStats(){return [{agent:'codex',conversations:1,readable:true},{agent:'claude-code',conversations:1,readable:true}]},

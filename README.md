@@ -77,6 +77,13 @@ Type `@`, search across enabled sources, and insert the selected reference into 
 
 ## 📰 News
 
+### v0.5.2 (release candidate)
+
+![Four new local sources; synthetic demo data](./docs/release/0.5.2/demos/new-local-sources.gif)
+
+Adds oh-my-pi, Copilot VS Code, Copilot CLI and Doubao Desktop references, restores scoped file/session searches with official references, and loads tutorial GIFs remotely on demand. Doubao requires cached local bodies; importing requires Chat Import 0.26.3+. [Release notes](./docs/release/0.5.2/README.md).
+
+
 ### 0.5.0 Preview · Feature Demos
 
 This update also adds unified local pagination, resumable long-text reads and message/tool search, rechecks source switches on every read, and moves non-local tools to external_reference_list/read. See the [release and migration guide](./docs/release/0.5.0/README.md). See also the [v0.5.1 compatibility fixes](./docs/release/0.5.1/README.md).
@@ -186,7 +193,7 @@ dsh plugin --profile web add dshmarket
 dsh plugin --profile web add dsh-reference-anything
 ```
 
-The installed version depends on the selected channel; this README describes v0.5.1.
+The installed version depends on the selected channel; this README describes the v0.5.2 release candidate.
 
 ### Optional: Connect web AI chats
 

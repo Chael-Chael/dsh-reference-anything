@@ -42,6 +42,9 @@ describe('release feature assets', () => {
   })
 
   it('validates and packages the checked-in release content', () => {
+    const current = loadReleaseFeatures(resolve('docs/release'))['0.5.2']
+    expect(current).toHaveLength(3)
+    expect(current.every(card => card.en.title && card.en.description)).toBe(true)
     expect(loadReleaseFeatures(resolve('docs/release'))['0.5.1']).toBeUndefined()
     const bilingual = loadReleaseFeatures(resolve('docs/release'))['0.5.0']
     expect(bilingual).toHaveLength(6)
