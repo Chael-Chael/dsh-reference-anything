@@ -5,6 +5,7 @@ import assert from 'node:assert/strict'
 import {ReferenceAnythingRemote} from './host.js'
 import {localLocatorId} from './local-locator.js'
 assert(process.env.DSH_HOME?.includes('web-demos'), 'Fixtures require the isolated demo home')
+const currentVersion=JSON.parse(readFileSync(new URL('../package.json',import.meta.url),'utf8')).version
 let upgraded=false
 let generation=0
 const mode=()=>{const path=new URL('../../mode.json',import.meta.url),next=statSync(path).mtimeMs;if(next!==generation){upgraded=false;generation=next}return JSON.parse(readFileSync(path,'utf8')).scene}
@@ -14,11 +15,11 @@ for(const [kind,label,provider] of [['omp','OMP 测试计划','oh-my-pi'],['copi
 Object.assign(ReferenceAnythingRemote.prototype,{
  async agentSearch(_agent,{query,limit,kind}){return agents.filter(row=>(!kind||row.kind===kind)&&(row.label.includes(query)||!query)).slice(0,limit)},
  async agentStats(){return [{agent:'codex',conversations:1,readable:true},{agent:'claude-code',conversations:1,readable:true}]},
- async chatImportStatus(){const upgrade=mode()==='chat-import-upgrade';if(!upgrade)upgraded=false;return {state:upgrade?(upgraded?'restart-required':'incompatible'):'ready',version:upgraded?'0.26.0':'0.25.0',missing:upgrade&&!upgraded?['resumeSummary']:[],canUpgrade:upgrade&&!upgraded}},
+ async chatImportStatus(){const upgrade=mode()==='chat-import-upgrade';if(!upgrade)upgraded=false;return {state:upgrade?(upgraded?'restart-required':'incompatible'):'ready',version:!upgrade||upgraded?'0.26.3':'0.25.0',missing:upgrade&&!upgraded?['resumeSummary']:[],canUpgrade:upgrade&&!upgraded}},
  async chatImportUpgradeInstall(){assert.equal(mode(),'chat-import-upgrade');await new Promise(r=>setTimeout(r,1400));upgraded=true;return this.chatImportStatus()},
  async quickHealth(){return health},async health(){return health},async profiles(){return []},async stats(){return []},
  async search({query,provider}){return [{uriId:'demo-chatgpt',provider:'chatgpt',title:'缓存失效策略'},{uriId:'demo-claude',provider:'claude',title:'缓存命中率优化'}].filter(row=>(!provider||row.provider===provider)&&row.title.includes(query)).map(row=>({...row,url:'https://example.invalid/demo',updatedAt:'2026-10-17T08:00:00Z',syncedAt:'2026-10-17T08:00:00Z',turnCount:2,partial:false,matchedVia:'title'}))},
- async updateStatus(){return {currentVersion:'0.5.0',latestVersion:'0.4.4',updateAvailable:false,checkedAt:Date.now()}},
+ async updateStatus(){return {currentVersion,latestVersion:currentVersion,updateAvailable:false,checkedAt:Date.now()}},
  async checkUpdate(){return this.updateStatus()},
  async installUpdate(){throw Error('Real updates are disabled in the recording environment')},
  async installOpenCli(){throw Error('Installation disabled in demos')},

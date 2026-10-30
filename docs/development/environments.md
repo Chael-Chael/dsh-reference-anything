@@ -19,7 +19,7 @@ Desktop 欢迎页报认证失败时，可查阅 [本地认证 Cookie 累积导�
 
 - Profile：`C:/Users/27923/.dsh/profiles/agent-browser-test`。
 - `dsh-reference-anything` 使用 `link:D:/dsh-reference-anything`，测试当前本地构建产物。
-- `dsh-chat-import` 使用 npm 精确版本 `0.26.1`；两个插件都加入 profile 的 bundles。
+- `dsh-chat-import` 使用 npm 精确版本 `0.26.3`；两个插件都加入 profile 的 bundles。
 - `cordis.patch.yml` 必须同时将 `storage-json.config.root` 指向该 profile 的 `storages`，将 `session-persistence-jsonl.config.root` 指向该 profile 的 `sessions`。只改前者不能隔离实际会话。刷新脚本在启动前校验两项；工作区为仓库下 `.codex-tmp/agent-browser-test/workspace`。
 - 该环境仍使用真实本机插件和 Agent 数据源，不等于操作系统沙箱。导入测试使用明确的测试样例，不修改用户原始会话。
 - 日常启动（仓库根目录 PowerShell）：
