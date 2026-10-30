@@ -14,13 +14,15 @@ version=$(node -p "require('./package.json').version")
 tag="v$version"
 notes="docs/release/$version/README.md"
 test -s "$notes"
+target_args=(--target "$RELEASE_SHA")
 if git show-ref --verify --quiet "refs/tags/$tag"; then
   test "$(git rev-parse "refs/tags/$tag^{commit}")" = "$RELEASE_SHA"
+  target_args=(--verify-tag)
 fi
 asset="$RUNNER_TEMP/candidate/dsh-reference-anything-$tag.tgz"
 cp "$RUNNER_TEMP/candidate/candidate.tgz" "$asset"
 if ! gh release view "$tag" >/dev/null 2>&1; then
-  gh release create "$tag" --target "$RELEASE_SHA" --draft --title "$tag" --notes-file "$notes"
+  gh release create "$tag" "${target_args[@]}" --draft --title "$tag" --notes-file "$notes"
 fi
 gh release upload "$tag" "$asset" --clobber
 prerelease=false
