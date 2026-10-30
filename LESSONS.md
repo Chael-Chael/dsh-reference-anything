@@ -1,5 +1,10 @@
 # 项目复盘账本
 
+## L-053：本机 npm 认证失败不代表 CI 发布受阻
+
+- 2026-10-30：archive 分支保留 release.yml 与 OIDC 发布脚本，但当前 main 未包含它们。判断发布阻塞前检查归档分支、workflow 与 npm-release 环境；本机 E401 仅证明本机认证失败。
+- 恢复入口见 docs/development/workflow.md 的 GitHub Actions 发布；OIDC 是否有效仍须实际发布验证。
+
 ## L-052：跨平台清理与验收不能依赖 Windows 假设
 
 - 状态：观察中，2026-10-30。

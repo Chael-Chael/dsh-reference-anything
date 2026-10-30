@@ -1,0 +1,77 @@
+name: Release
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: npm-release
+  cancel-in-progress: false
+
+jobs:
+  check:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    steps:
+      - name: Require main
+        shell: bash
+        run: test "$GITHUB_REF" = refs/heads/main
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - uses: pnpm/action-setup@v4
+        with:
+          version: '11.22.0'
+          run_install: false
+      - run: pnpm install --frozen-lockfile
+      - run: npm run check
+      - name: Pack the checked Linux build
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          mkdir -p "$RUNNER_TEMP/candidate"
+          npm pack --ignore-scripts --json --pack-destination "$RUNNER_TEMP/candidate" > "$RUNNER_TEMP/candidate/pack.json"
+          mv "$RUNNER_TEMP/candidate/"*.tgz "$RUNNER_TEMP/candidate/candidate.tgz"
+      - uses: actions/upload-artifact@v4
+        if: runner.os == 'Linux'
+        with:
+          name: npm-candidate
+          path: ${{ runner.temp }}/candidate/
+          if-no-files-found: error
+          retention-days: 7
+
+  publish:
+    needs: check
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: npm-release
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          registry-url: https://registry.npmjs.org
+      - run: npm install --global npm@11.16.0
+      - uses: actions/download-artifact@v4
+        with:
+          name: npm-candidate
+          path: ${{ runner.temp }}/candidate
+      - name: Publish and verify registry integrity
+        working-directory: ${{ runner.temp }}/candidate
+        run: node "$GITHUB_WORKSPACE/scripts/agent/release-ci.mjs"

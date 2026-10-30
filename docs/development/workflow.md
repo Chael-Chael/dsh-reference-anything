@@ -79,3 +79,9 @@ CI 不含个人历史语料、外站账号、真实 Electron 窗口或发版安�
 ```
 
 没有自动常驻 agent、定时任务、远程 CI 或分支保护的隐含部署。需要这些能力时按用户授权新增，避免本地脚本对外发布或不断触发重启。
+
+## GitHub Actions 发布
+
+`test.yml` 保持 main push、PR 和手动触发。`release.yml` 仅从 main 手动触发，固定本次触发的 SHA，在 Windows/Linux/macOS 分别执行锁文件安装与完整 `npm run check`。三平台全部通过后，通过 npm-release 环境与 OIDC 发布 Linux 检查后打出的同一 tgz，核验 registry integrity 和 dist-tag（稳定版 latest，预发布 next）。已存在同版本且完整性不同则拒绝，不覆盖版本或自动更改 dist-tag。
+
+发布流程不读取本地验收 JSON、不同步 Desktop、不需要预上传草稿包，也不自动创建 GitHub Release。人工验收与文案审核仍独立记录。主流程已构建，打包用 --ignore-scripts 避免 prepare 重建；发布 tgz 不重复执行项目的 prepublishOnly。npm Trusted Publisher 必须匹配仓库、release.yml 和 npm-release 环境，本机 npm login 不是前提。手动运行 Release 即执行检查并发布，版本取 package.json；请先提交正确版本与已审核文案。
