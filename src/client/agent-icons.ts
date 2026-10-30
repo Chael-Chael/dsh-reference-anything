@@ -1,3 +1,6 @@
+import omp from '../../images/agents/omp.svg?raw'
+import copilot from '../../images/agents/copilot.svg?raw'
+import doubao from '../../images/agents/doubao.svg?raw'
 import type { LocalAgent } from '../wire.ts'
 import antigravity from '../../images/agents/antigravity.svg?raw'
 import chatgpt from '../../images/agents/chatgpt.svg?raw'
@@ -29,6 +32,7 @@ import zcode from '../../images/agents/zcode.svg?raw'
 import zed from '../../images/agents/zed.svg?raw'
 
 export const AGENT_ICON_SVG: Readonly<Record<LocalAgent, string>> = {
+  'copilot-vscode': copilot, 'copilot-cli': copilot, doubao,
   'antigravity': antigravity,
   'chatgpt': chatgpt,
   'claude-code': claude,
@@ -58,6 +62,7 @@ export const AGENT_ICON_SVG: Readonly<Record<LocalAgent, string>> = {
   'zcode': zcode,
   'zed': zed,
   dsh4: dsh,
+  omp,
 }
 
 // Remove upstream tile backgrounds before applying a monochrome silhouette.

@@ -33,6 +33,10 @@ const result = await build({
       let source = await readFile(args.path, 'utf8')
       const file = relative(root, args.path).replaceAll('\\', '/')
       inputs[file] = createHash('sha256').update(source).digest('hex')
+      if (file === 'lib/sources/chromium-indexeddb.mjs') {
+        source = "import { lstatSync } from 'node:fs'\n" + source
+        source = replace(source, '  const versions = new Map()', "  for (const name of names.filter(n => /\\.(ldb|log)$/.test(n))) {\n    if (!lstatSync(join(dir, name)).isFile()) throw new Error('LevelDB entries must be regular files')\n  }\n  const versions = new Map()")
+      }
       if (entry === 'entry' && file.startsWith('lib/discovery/')) source = source.replace(/^\s+scan: .*\r?\n/gm, '\n')
       if (file === 'lib/discovery/sqlite.mjs') {
         source = replace(source, "const { listTraeDatabases } = await import('../sources/trae.mjs')", '')
@@ -42,16 +46,13 @@ const result = await build({
       if (file === 'lib/tools/import-sources.mjs') {
         // Remove mutation callbacks before bundling so their imports disappear.
         source = source.replace(/^\s+(?:file|dir): .*\r?\n/gm, '\n')
-        source = source.replace(/io: sourceIo\(\[import\w+, import\w+, /g, 'io: sourceIo([undefined, undefined, ')
+        source = source.replace(/io: sourceIo\(\s*\[import\w+, import\w+, /g, 'io: sourceIo([undefined, undefined, ')
       }
       if (file === 'lib/import-core.mjs') {
         source = `import { READ_CONTENT, conversationContent } from ${JSON.stringify(resolve(snapshot, 'conversation-content.mjs').replaceAll('\\', '/'))}\n` + source
-        source = replace(source, 'function previewEntry(out)', 'function previewEntry(out, args = {})')
+        source = replace(source, 'function previewEntry(out, args)', 'function previewEntry(out, args = {})')
         source = replace(source, '  return entry\n', '  if (args[READ_CONTENT]) entry.conversation = conversationContent(out, args[READ_CONTENT])\n  return entry\n')
-        source = replace(source, 'previewEntry(applyCwdRemap(markTrimmedSource(out, args), args))', 'previewEntry(applyCwdRemap(markTrimmedSource(out, args), args), args)')
-        source = replace(source, '...previewEntry(out)', '...previewEntry(out, args)')
       }
-      if (file === 'lib/sources/codex.mjs') source = replace(source, 'previewEntry(out)', 'previewEntry(out, args)')
       if (file === 'lib/convert/codex.mjs') {
         source = replace(source, 'const text = stripCodexPageContext(block.text).trim()', "const stripped = stripCodexPageContext(block.text).trim()\n      const text = stripped.startsWith('# Files mentioned by the user:') && stripped.includes('## My request:') ? stripped.slice(stripped.indexOf('## My request:') + '## My request:'.length).trim() : stripped")
         source = replace(source, 'if (prompt) {', "if (prompt || codexUserImageBlocks(payload.content).length) {")
@@ -62,33 +63,8 @@ const result = await build({
         source = replace(source, 'args.fullHistory !== true', '(args.fullHistory !== true || args.referenceProjection)')
         source = replace(source, 'shadowedTurns = shadowTurns(turns, shadowedTurns)', 'if (!args.referenceProjection) shadowedTurns = shadowTurns(turns, shadowedTurns)')
       }
-      if (file === 'lib/sources/hermes.mjs') {
-        source = replace(source, "const reasoningCol = pickCol(mCols, 'reasoning')", "const reasoningCol = pickCol(mCols, 'reasoning')\n    const toolCallIdCol = pickCol(mCols, 'tool_call_id', 'call_id')")
-        source = replace(source, "`FROM messages WHERE session_id = ? ORDER BY ${order}`", "`, ${toolCallIdCol ? `${toolCallIdCol} AS tool_call_id` : 'NULL AS tool_call_id'} FROM messages WHERE session_id = ? ORDER BY ${order}`")
-        source = replace(source, 'if (content === undefined) continue // 空内容消息跳过（cc-switch 同款）', "const toolCalls = hermesToolCalls(m.tool_calls)\n          if (content === undefined && !toolCalls && role !== 'tool') continue")
-        source = replace(source, 'const msg = { role, content, ts: timeCol ? parseHermesTime(m.ts) : undefined }\n          const toolCalls = hermesToolCalls(m.tool_calls)', 'const msg = { role, content: content ?? \'\', toolCallId: m.tool_call_id, ts: timeCol ? parseHermesTime(m.ts) : undefined }')
-        source = replace(source, "(typeof t.tool_call_id === 'string' ? t.tool_call_id : undefined)", "(typeof t.tool_call_id === 'string' ? t.tool_call_id : t.call_id)")
-        source = replace(source, "(typeof t.tool_name === 'string' ? t.tool_name : undefined)", "(typeof t.tool_name === 'string' ? t.tool_name : t.function?.name)")
-        source = replace(source, 'if (!id || !name) continue', "if (typeof id !== 'string' || !id || typeof name !== 'string' || !name) continue")
-        source = replace(source, 'input: t.arguments ?? t.input', 'input: t.arguments ?? t.input ?? t.function?.arguments')
-      }
       if (file === 'lib/convert/hermes.mjs') {
         source = replace(source, '.map(mapContentBlock)', ".map(block => typeof block === 'string' ? { type: 'text', text: block } : mapContentBlock(block))")
-        source = replace(source, '...(Array.isArray(m.toolCalls) ? { toolCalls: m.toolCalls } : {}),', 'toolCalls: m.toolCalls ?? m.tool_calls, toolCallId: m.toolCallId ?? m.tool_call_id,')
-        source = replace(source, 'messages.push({ role, content: msg.content, ts })', 'messages.push({ role, content: msg.content, ts, toolCalls: msg.toolCalls ?? msg.tool_calls, toolCallId: msg.toolCallId ?? msg.tool_call_id })')
-        // Reuse the existing ID-based result association; never pair parallel results by order.
-        source = replace(source, 'for (const m of messages) {', `for (const message of messages) {
-    const m = message.role === 'tool' ? { ...message, role: 'user', content: [
-      { type: 'tool_result', tool_call_id: message.toolCallId, content: message.content },
-    ] } : message`)
-        source = replace(source, "if (!tc || typeof tc !== 'object' || typeof tc.id !== 'string' || typeof tc.name !== 'string') continue", `if (!tc || typeof tc !== 'object') continue
-          const id = tc.id ?? tc.tool_call_id ?? tc.call_id
-          const name = tc.name ?? tc.tool_name ?? tc.function?.name
-          const input = tc.input ?? tc.arguments ?? tc.function?.arguments
-          if (typeof id !== 'string' || !id || typeof name !== 'string' || !name) continue`)
-        source = replace(source, 'id: tc.id,', 'id,')
-        source = replace(source, 'name: tc.name,', 'name,')
-        source = replace(source, 'arguments: JSON.stringify(tc.input ?? {}),', "arguments: typeof input === 'string' ? input : JSON.stringify(input ?? {}),")
       }
       if (file === 'lib/convert/antigravity.mjs') {
         // IDE transcripts use typed result records; match names before consuming parallel calls.

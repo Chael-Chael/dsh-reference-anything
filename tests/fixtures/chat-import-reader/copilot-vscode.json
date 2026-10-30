@@ -1,0 +1,111 @@
+{
+  "version": 3,
+  "sessionId": "copilot-example",
+  "customTitle": "Named example",
+  "creationDate": 1786000000000,
+  "requests": [
+    {
+      "requestId": "request-one",
+      "timestamp": 1786000000100,
+      "responseTimestamp": 1786000000110,
+      "modelId": "example-model",
+      "message": {
+        "text": "Inspect example",
+        "parts": [
+          {
+            "kind": "text",
+            "text": "Inspect example"
+          }
+        ]
+      },
+      "response": [
+        {
+          "value": "First "
+        },
+        {
+          "value": "look."
+        },
+        {
+          "kind": "thinking",
+          "value": [
+            "Read the example."
+          ]
+        },
+        {
+          "kind": "prepareToolInvocation",
+          "toolCallId": "read-one",
+          "toolId": "readFile"
+        },
+        {
+          "kind": "toolInvocationSerialized",
+          "toolCallId": "read-one",
+          "toolId": "readFile",
+          "isComplete": true,
+          "isConfirmed": true,
+          "startedAt": 1786000000120,
+          "completedAt": 1786000000130,
+          "toolSpecificData": {
+            "kind": "input",
+            "rawInput": {
+              "path": "example.txt"
+            }
+          },
+          "resultDetails": {
+            "input": "{\"path\":\"example.txt\"}",
+            "output": [
+              {
+                "type": "embed",
+                "isText": true,
+                "value": "example output"
+              }
+            ]
+          }
+        },
+        {
+          "value": "Done."
+        },
+        {
+          "kind": "inlineReference",
+          "inlineReference": {
+            "name": "example.txt"
+          }
+        }
+      ]
+    },
+    {
+      "requestId": "request-two",
+      "timestamp": 1786000000200,
+      "message": "Explain the result",
+      "response": [
+        {
+          "kind": "thinking",
+          "value": "Check the stored result."
+        },
+        {
+          "value": "Explanation."
+        }
+      ]
+    },
+    {
+      "requestId": "request-three",
+      "timestamp": 1786000000300,
+      "message": {
+        "parts": [
+          {
+            "kind": "text",
+            "text": "Keep "
+          },
+          {
+            "kind": "text",
+            "text": "the context"
+          }
+        ]
+      },
+      "response": [
+        {
+          "value": "Ready."
+        }
+      ]
+    }
+  ]
+}

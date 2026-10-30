@@ -1,4 +1,4 @@
-import { readFileSync, readdirSync, realpathSync } from 'node:fs'
+import { existsSync, readFileSync, readdirSync, realpathSync } from 'node:fs'
 import { extname, isAbsolute, relative, resolve } from 'node:path'
 import { z } from 'zod'
 
@@ -10,9 +10,11 @@ const cardsSchema = z.array(z.object({
   en: z.object({ title: z.string().trim().min(1), description: z.string().trim().min(1), alt: z.string().trim().min(1).optional() }).strict().optional(),
 }).strict().refine(card => !card.media || Boolean(card.alt), 'Media requires alt text')).min(1)
 const mediaTypes = { '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.gif': 'image/gif', '.webp': 'image/webp' }
+// shortcut: pinned public media until DSH 0.2.2 stable provides cross-platform plugin assets.
+const mediaBase = 'https://raw.githubusercontent.com/Chael-Chael/dsh-reference-anything/c0c8ad5ec72b4e8fa0cd97a7721ff3e62e735586/docs/release/'
 
 export function loadReleaseFeatures(directory) {
-  return Object.fromEntries(readdirSync(directory, { withFileTypes: true }).filter(entry => entry.isDirectory()).map(entry => {
+  return Object.fromEntries(readdirSync(directory, { withFileTypes: true }).filter(entry => entry.isDirectory() && existsSync(resolve(directory, entry.name, 'features.json'))).map(entry => {
     const folder = realpathSync(resolve(directory, entry.name))
     const cards = cardsSchema.parse(JSON.parse(readFileSync(resolve(folder, 'features.json'), 'utf8')))
     return [entry.name, cards.map(card => {
@@ -23,7 +25,7 @@ export function loadReleaseFeatures(directory) {
       if (isAbsolute(local) || local === '..' || local.startsWith('../') || local.startsWith('..\\') || !mime) {
         throw new Error(`Invalid release media: ${entry.name}/${card.media}`)
       }
-      return { ...card, media: `data:${mime};base64,${readFileSync(path).toString('base64')}` }
+      return { ...card, media: mediaBase + [entry.name, ...local.split(/[\\/]/)].map(encodeURIComponent).join('/') }
     })]
   }))
 }

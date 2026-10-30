@@ -52,7 +52,24 @@
 - 验证：Red/Green 与 1151 项测试通过；稳定 Web 连续查询已测，未声称消除所有重载停顿。
 - 晋升：未达到三个独立日期，暂不晋升。
 
+## L-007：功能卡按页渲染不等于媒体按需加载
+
+- 状态：观察中
+- 规则：检查构建产物和 npm 包，不能仅凭 UI 每次只渲染一张图片就判断启动时未携带全部媒体。
+- 原因：0.5.1 构建将所有卡片 GIF 编成 data URI，客户端达到 34,825,059 bytes；按页渲染没有消除这部分 JS 载荷。
+- 证据：[Issue 15 验证记录](docs/development/tasks/issue-15-release-media.md)；远程 URL 后客户端为 2,889,956 bytes，实际包中无 GIF。
+- 观察日期：2026-10-28，Seen 1。
+- 验证：完整 check 通过，全部远程图片内容哈希一致；真实双端 UI 和运行时内存对照仍未完成，不将文件缩小等同于已测内存收益。
+- 晋升：未达到三个独立日期。
+
 ## 新条目模板
+
+### 2026-10-29 验收补记
+
+- 跨分支测试应独立 storage/session：main 新增 provider 数据会使旧基线 schema 拒绝，不能把这种环境污染归因于候选补丁。
+- 前缀验收先核对引用入口 owner：测试 profile 显式启用官方 ui-reference 时，文件搜索由官方入口处理。每条查询使用新页面并等待目标候选，不能用固定短等待或上一查询残留项判定结果。
+- DSH 会话 zstd 文件可包含多个 frame；只解压首帧只能看到 metadata，不能据此判断消息丢失。逐帧解压并与真实 UI 对照。
+- 证据：[Issue 15 累计验收](docs/testing/releases/0.5.1-issue15-20261029.md)。本次观察，不晋升通用规范。
 
 ## L-003：宣传卡文字核对不能替代布局验收
 
@@ -76,3 +93,12 @@
 ```
 
 允许记录 Done right，不为了凑数量编造历史。晋升后保留证据并链接唯一规则，不复制两份规则正文。
+
+## L-0263：新增来源要测目录发现及多文件版本
+- 状态：观察中。
+- 规则：升级上游扫描器时同时测试显式文件和实际目录布局；目录型数据库的版本必须包含子文件，不能只看目录 mtime。
+- 原因：Copilot VS Code 显式 JSON 可读取，但目录发现只接受 chatSessions 布局；豆包 LevelDB 的已有文件更新不一定改变目录时间。
+- 证据：`tests/local-conversation-scanner.spec.ts`、`tests/local-conversation-reader.spec.ts`、`docs/development/tasks/chat-import-0263-sources.md`。
+- 观察日期：2026-10-30，Seen 1。
+- 验证：两种 Copilot 的目录发现、豆包子文件变更使旧 revision 失效、非普通文件拒绝读取均已回归。
+- 晋升：未达到三个独立日期，暂不晋升。

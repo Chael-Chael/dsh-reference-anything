@@ -48,7 +48,7 @@ try {
   assert(changed>total*.35,`${scene.id}: animation is too static`)
   const mp4=join(output,scene.id+'.mp4')
   execFileSync('ffmpeg',['-y','-v','error','-framerate','30','-i',join(frames,'%04d.png'),'-frames:v',String(total),'-c:v','libx264','-crf','18','-pix_fmt','yuv420p','-movflags','+faststart',mp4])
-  const gif=resolve('release-notes/0.4.4/demos',scene.id+'.gif')
+  const gif=resolve('docs/release/0.4.4/demos',scene.id+'.gif')
   if(existsSync(gif))copyFileSync(gif,join(backup,scene.id+'.gif'))
   execFileSync('ffmpeg',['-y','-v','error','-i',mp4,'-filter_complex','[0:v]fps=20,split[a][b];[a]palettegen=stats_mode=diff[p];[b][p]paletteuse=dither=bayer:bayer_scale=4','-loop','0',gif])
   const info=JSON.parse(execFileSync('ffprobe',['-v','error','-select_streams','v:0','-show_entries','stream=nb_frames,width,height:format=duration','-of','json',gif],{encoding:'utf8'}))
@@ -58,5 +58,5 @@ try {
   console.log(`${scene.id}: ${total} frames, ${changed} changing frames, GIF verified`)
  }
  assert.deepEqual(errors,[])
- writeFileSync(join(output,'gallery.html'),`<!doctype html><html lang="zh-CN"><meta charset="utf-8"><title>DSH 动效预览</title><style>@font-face{font-family:DemoSourceHan;src:url(../../scripts/feature-demos/vendor/SourceHanSansSC-VF.otf)}body{font:16px DemoSourceHan;margin:30px;background:#f4f5f8;color:#242832}main{max-width:1000px;margin:auto}video{width:100%;border-radius:16px}section{margin-bottom:44px}a{color:#4263de}</style><main><h1>DSH 新功能演示</h1><p>30 fps 视频预览 · GIF 已接入功能卡片。导入和升级使用示例数据。</p>${scenes.map(s=>`<section><h2>${s.title}</h2><video src="${s.id}.mp4" controls loop muted playsinline></video><p><a href="../../release-notes/0.4.4/demos/${s.id}.gif">查看 GIF</a></p></section>`).join('')}</main></html>`)
+ writeFileSync(join(output,'gallery.html'),`<!doctype html><html lang="zh-CN"><meta charset="utf-8"><title>DSH 动效预览</title><style>@font-face{font-family:DemoSourceHan;src:url(../../scripts/feature-demos/vendor/SourceHanSansSC-VF.otf)}body{font:16px DemoSourceHan;margin:30px;background:#f4f5f8;color:#242832}main{max-width:1000px;margin:auto}video{width:100%;border-radius:16px}section{margin-bottom:44px}a{color:#4263de}</style><main><h1>DSH 新功能演示</h1><p>30 fps 视频预览 · GIF 已接入功能卡片。导入和升级使用示例数据。</p>${scenes.map(s=>`<section><h2>${s.title}</h2><video src="${s.id}.mp4" controls loop muted playsinline></video><p><a href="../../docs/release/0.4.4/demos/${s.id}.gif">查看 GIF</a></p></section>`).join('')}</main></html>`)
 } finally {await browser.close()}

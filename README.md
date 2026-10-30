@@ -44,7 +44,7 @@ Use one `@` menu to reference:
 - 🧩 DSH commands and Skills
 - 📁 Workspace files and folders
 - 💬 DSH session history
-- 🖥️ **Local Agent conversations:** bundled scanning and read-only parsers for 29 source formats, including Claude Code, Codex and Cursor; optional import into DSH through Chat Import. Live acceptance coverage is recorded separately.
+- 🖥️ **Local Agent conversations:** bundled scanning and read-only parsers for 33 source formats, including Claude Code, Codex and Cursor; optional import into DSH through Chat Import. Live acceptance coverage is recorded separately.
 - ✨ **Added by this plugin — highlight: Historical conversations from web chatbots including ChatGPT, Claude, Gemini, DeepSeek, Grok, and Kimi**
 - ☁️ **Added by this plugin: Files from cloud drives connected through OpenList**
 - 🧩 **Added by this plugin: Installed and configured local DSH plugins, without repeatedly hunting through directories**
@@ -79,7 +79,7 @@ Type `@`, search across enabled sources, and insert the selected reference into 
 
 ### 0.5.0 Preview · Feature Demos
 
-This update also adds unified local pagination, resumable long-text reads and message/tool search, rechecks source switches on every read, and moves non-local tools to external_reference_list/read. See the [release and migration guide](./docs/release-v0.5.0.md). See also the [v0.5.1 compatibility fixes](./docs/release-v0.5.1.md).
+This update also adds unified local pagination, resumable long-text reads and message/tool search, rechecks source switches on every read, and moves non-local tools to external_reference_list/read. See the [release and migration guide](./docs/release/0.5.0/README.md). See also the [v0.5.1 compatibility fixes](./docs/release/0.5.1/README.md).
 
 #### Import Past Conversations into DSH and Pick Up Where You Left Off
 
@@ -89,17 +89,17 @@ Now, when you find a local session in the `@` menu, you have two ways to use it:
 - **Reference as context (`Enter`)**: Insert the session directly as a reference;
 - **Import and continue chatting (`Tab`)**: Open the action menu, select **Import**, and confirm to bring the entire conversation history into DSH and keep chatting seamlessly! (Prefer a faster workflow? You can disable the confirmation prompt in Settings.)
 
-> 💡 **Note**: Importing requires `dsh-chat-import` v0.26.1 or a compatible newer version to be installed and enabled.
+> 💡 **Note**: Importing requires `dsh-chat-import` v0.26.3 or a compatible newer version to be installed and enabled.
 
-![Press Enter to reference a session, or Tab to open the action menu and import history; uses mock data.](./release-notes/0.5.0/demos/agent-import.gif)
+![Press Enter to reference a session, or Tab to open the action menu and import history; uses mock data.](./docs/release/0.5.0/demos/agent-import.gif)
 
 #### One-Click Upgrade for `dsh-chat-import` Right from the Menu
 
 If an outdated version of `dsh-chat-import` prevents you from using chat import or handoff summaries, you no longer need to update it manually.
 
-Simply click the **upgrade prompt** right inside the menu to update to v0.26.1 or later. If prompted after the upgrade, restart DSH to apply the changes.
+Simply click the **upgrade prompt** right inside the menu to update to v0.26.3 or later. If prompted after the upgrade, restart DSH to apply the changes.
 
-![Upgrade dsh-chat-import from the menu and view the simulated restart prompt in settings.](./release-notes/0.5.0/demos/chat-import-upgrade.gif)
+![Upgrade dsh-chat-import from the menu and view the simulated restart prompt in settings.](./docs/release/0.5.0/demos/chat-import-upgrade.gif)
 
 #### Type `@plugin:` to Reference Installed Plugins Directly
 
@@ -107,7 +107,7 @@ Want your Agent to troubleshoot a plugin issue or inspect its source code? Diggi
 
 Now you can simply type `@plugin:`, search for the plugin name, and press `Enter` to pass its installation directory straight to the Agent (supports all plugins currently installed in your DSH environment).
 
-![Filter local plugins in the @plugin: menu and press Enter to insert the plugin directory reference.](./release-notes/0.5.0/demos/local-plugins.gif)
+![Filter local plugins in the @plugin: menu and press Enter to insert the plugin directory reference.](./docs/release/0.5.0/demos/local-plugins.gif)
 
 #### Custom Shortcuts to Narrow Down Your Search Scope Instantly
 
@@ -117,7 +117,7 @@ You can now assign **custom shortcuts** to different chat sources in Settings (m
 - **Search across a combined group**: Not sure where a conversation happened? Assign the same shortcut (e.g., `chat`) to both Local Agents and Web Chats, then type `@chat:` to narrow your search exclusively to those sources;
 - **Target a specific source**: When you know exactly where to look, use a dedicated shortcut like `@codex:` to filter exclusively for Codex sessions.
 
-![Configure shared shortcuts in settings, then search sessions using both shared and source-specific shortcuts.](./release-notes/0.5.0/demos/shortcuts.gif)
+![Configure shared shortcuts in settings, then search sessions using both shared and source-specific shortcuts.](./docs/release/0.5.0/demos/shortcuts.gif)
 
 #### Browse Folders Directly in the `@` Menu — No Need to Type Full Paths
 
@@ -128,7 +128,7 @@ You can now navigate folder hierarchies directly inside the `@` file menu:
 - **Go back**: Use the breadcrumb navigation bar at the top of the menu;
 - **Insert reference**: Press `Enter` on your target folder to insert it directly into your chat.
 
-![Press Tab in the file menu to enter subdirectories, navigate back, and press Enter to reference a folder.](./release-notes/0.5.0/demos/folders.gif)
+![Press Tab in the file menu to enter subdirectories, navigate back, and press Enter to reference a folder.](./docs/release/0.5.0/demos/folders.gif)
 
 - **2026-10-12 · v0.4.4** — Added local plugin discovery to the `@` menu, configurable source and provider shortcuts, improved picker icons and folder insertion, and added the `model` command entry.
 
@@ -216,6 +216,8 @@ For web chats, complete the connection steps above, then choose platforms, brows
 
 The default **Read bodies on demand** mode stores only the title index locally and uses the browser when an agent needs the conversation. Choose **Store full bodies locally** for offline reading and full-text search. The plugin checks for new versions when it loads; release notes are available in Settings, and installed updates take effect after restarting DSH.
 
+Release-card demo images load from GitHub only when their card is displayed. They require network access; text and navigation remain available if an image fails to load.
+
 > [!NOTE]
 > OpenCLI may open or reuse browser windows while syncing web chats or reading bodies. Keep them available until the operation finishes. Sync speed depends on the platform, history size, and browser connection.
 
@@ -270,11 +272,15 @@ Type `@session:` to browse DSH sessions through the official session-reference R
 
 Selected sessions use DSH's canonical `dsh-session:` mention and native session appearance. Snapshot preparation and resolution remain owned by DSH rather than this plugin.
 
+The bundled 0.26.3 reader also supports **oh-my-pi (`@omp:`)** from `~/.omp/agent/sessions`; importing requires Chat Import 0.26.3 or newer.
+
 #### 🖥️ @Local agent conversations — transcripts from local agent CLIs
 
 Type `@agent:` to search and reference conversations saved by other local agent tools.
 
-All 29 sources use bundled read-only scanners and parsers derived from dsh-chat-import. Scanning and references work without installing Chat Import. Source switches, additional directories and workspace scope still apply; settings show source paths, counts and scan errors. Enter inserts a reference, including recoverable images through DSH attachments; viewing images requires a vision-capable model. Confirmed empty conversations are hidden; read errors remain visible. Local references now store a readable source, path and session ID; reselect references created with the old local URI protocol.
+New sources: **Copilot VS Code (`@copilot-vscode:`)**, **Copilot CLI (`@copilot-cli:`)** and **Doubao Desktop (`@doubao:`)**. Doubao can only reference conversations whose bodies are cached locally; open the conversation in Doubao first if it is missing.
+
+All 33 sources use bundled read-only scanners and parsers derived from dsh-chat-import. Scanning and references work without installing Chat Import. Source switches, additional directories and workspace scope still apply; settings show source paths, counts and scan errors. Enter inserts a reference, including recoverable images through DSH attachments; viewing images requires a vision-capable model. Confirmed empty conversations are hidden; read errors remain visible. Local references now store a readable source, path and session ID; reselect references created with the old local URI protocol.
 
 When you send local references, the plugin appends one aggregated background after each user message. The model reads `ref: {source, path, sessionId}` with a content `revision`. `reference_list` discovers local sessions; `reference_read` reads `messages`, `tools` or `images`; `reference_search` searches message/tool text; `reference_image` returns actual pixels.
 

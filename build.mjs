@@ -39,7 +39,7 @@ await build({
   target: ['es2022'],
   sourcemap: false,
   jsx: 'automatic',
-  define: { __REFERENCE_RELEASE_FEATURES__: JSON.stringify(loadReleaseFeatures(resolve('release-notes'))) },
+  define: { __REFERENCE_RELEASE_FEATURES__: JSON.stringify(loadReleaseFeatures(resolve('docs/release'))) },
   loader: { '.svg': 'text' },
   external: clientExternals.filter(name => name !== 'react-dom'),
   // Bundle the small react-dom/client entry shim; the host seeds only react-dom.

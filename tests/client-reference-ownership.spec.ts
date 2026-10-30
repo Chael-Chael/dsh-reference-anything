@@ -35,6 +35,8 @@ it.each(['official-first', 'ra-first', 'official-disabled', 'ra-picker-hidden'] 
     settings.picker!.files.enabled = false
     settings.picker!.sessions.enabled = false
   }
+  settings.picker!.files.aliases = ['file', '文档']
+  settings.picker!.sessions.aliases = ['session', '聊天']
   const remote = {
     settingsGet: async () => ok(settings), settingsUpdate: async () => ok(settings),
     quickHealth: async () => ok({}), updateStatus: async () => ok({}),
@@ -84,6 +86,22 @@ it.each(['official-first', 'ra-first', 'official-disabled', 'ra-picker-hidden'] 
     if (officialEnabled) {
       expect(fileList).not.toHaveBeenCalled(); expect(candidates).not.toHaveBeenCalled()
       expect(sources.get(FILE_SOURCE)!.header).toBeUndefined()
+    }
+    for (const [name, prefixes, load] of [[FILE_SOURCE, ['file', '文档'], fileList], [SESSION_SOURCE, ['session', '聊天'], candidates]] as const) {
+      const source = sources.get(name)!
+      for (const prefix of prefixes) {
+        load.mockClear()
+        if (officialEnabled) {
+          expect(await source.candidates(session, { ...request, query: prefix })).toEqual([])
+          expect(load).not.toHaveBeenCalled()
+        }
+        for (const colon of [':', '：']) {
+          const rows = await source.candidates(session, { ...request, query: `${prefix}${colon}needle` })
+          expect(rows.length).toBe(order === 'ra-picker-hidden' ? 0 : 1)
+          if (order === 'ra-picker-hidden') expect(load).not.toHaveBeenCalled()
+          else expect(load).toHaveBeenLastCalledWith('test', 'needle', request.signal)
+        }
+      }
     }
     expect(sources.get(FILE_SOURCE)!.openReference!(session, { ref: '@readme.md', appearance: 'file' })).toBe(true)
     expect(openResource).toHaveBeenCalledWith('dsh-resource://file/session/test/readme.md')

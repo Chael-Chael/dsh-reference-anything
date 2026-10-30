@@ -30,6 +30,33 @@ afterEach(() => {
 const available = (): PackageUpdateStatus => ({ currentVersion: '0.4.4', latestVersion: '0.4.5', updateAvailable: true, checkedAt: Date.now(), releaseNotes: '## Changes\nFixed search.' })
 
 describe('update menu', () => {
+  it('loads only the visible remote image and supports failure, retry, navigation and disposal', async () => {
+    vi.stubGlobal('__REFERENCE_RELEASE_FEATURES__', {
+      '0.4.5': [
+        { title: 'First', description: 'First explanation', media: 'https://example.com/first.gif', alt: 'First demo' },
+        { title: 'Second', description: 'Second explanation', media: 'https://example.com/second.gif', alt: 'Second demo' },
+      ],
+    })
+    source = createUpdateSource(async () => available(), vi.fn(), () => true, t)
+    const [candidate] = await source.candidates(session, request)
+    expect(document.querySelector('img')).toBeNull()
+    act(() => { source!.onPick({ candidate: candidate!, session, position: 'inline', via: 'menu', action: 'pick', span: { start: 0, end: 1, draftRev: 1 } }) })
+    const button = (label: string) => Array.from(document.querySelectorAll('button')).find(node => node.textContent === label)!
+    expect(document.querySelectorAll('img')).toHaveLength(1)
+    expect(document.querySelector('img')?.src).toBe('https://example.com/first.gif')
+    expect(document.querySelector('img')?.getAttribute('referrerpolicy')).toBe('no-referrer')
+    act(() => { document.querySelector('img')!.dispatchEvent(new Event('error')) })
+    expect(document.querySelector('img')).toBeNull()
+    expect(document.querySelector('[role="status"]')?.textContent).toBe(en['release.mediaUnavailable'])
+    expect(document.body.textContent).toContain('First explanation')
+    act(() => { button('Retry image').click() })
+    expect(document.querySelector('img')?.src).toBe('https://example.com/first.gif')
+    act(() => { document.querySelector('img')!.dispatchEvent(new Event('error')); button('Next').click() })
+    expect(document.querySelectorAll('img')).toHaveLength(1)
+    expect(document.querySelector('img')?.src).toBe('https://example.com/second.gif')
+    act(() => { source!.dispose() })
+    expect(document.querySelector('img')).toBeNull()
+  })
   it('reuses the 0.5.0 cards and media for 0.5.1 in both languages', () => {
     vi.stubGlobal('__REFERENCE_RELEASE_FEATURES__', {
       '0.5.0': [{ title: '中文', description: '说明', media: 'demo.gif', alt: '演示', en: { title: 'English', description: 'Description', alt: 'Demo' } }],

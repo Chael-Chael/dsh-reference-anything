@@ -1,0 +1,2 @@
+# Release CI compares reviewed notes with their committed bytes.
+docs/release/*/README.md text eol=lf

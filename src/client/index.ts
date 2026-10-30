@@ -402,19 +402,19 @@ export function apply(ctx: ClientContext): void {
       }, t, optionsFor('skills'))))
     if (picker.files.enabled || officialReferences) {
       const files = createFileSource(async (sessionId, query, signal) => {
-        // Keep saved RA chips readable while the official source owns candidate discovery.
-        if (officialReferences) return []
+        // Disabled sources still register codecs for saved RA chips.
+        if (!picker.files.enabled) return []
         const result = await referenceCandidates(sessionId, signal, () => ctx.remote.fileReferences.list(sessionId, query, signal))
         return result.ok ? result.value : []
-      }, t, optionsFor('files'), filePreview)
+      }, t, { ...optionsFor('files'), prefixOnly: officialReferences }, filePreview)
       if (officialReferences) delete files.header
       disposers.push(inputTriggers.registerSource(files))
     }
     if (picker.sessions.enabled || officialReferences) disposers.push(inputTriggers.registerSource(createSessionSource(async (sessionId, query, signal) => {
-      if (officialReferences) return []
+      if (!picker.sessions.enabled) return []
       const result = await referenceCandidates(sessionId, signal, () => ctx.remote.sessionReferenceResolver.candidates(sessionId, query, signal))
       return result.ok ? result.value : []
-    }, t, optionsFor('sessions'), sessions)))
+    }, t, { ...optionsFor('sessions'), prefixOnly: officialReferences }, sessions)))
     if (picker.agents.enabled) disposers.push(inputTriggers.registerSource(createLocalAgentSource((sessionId, query, signal, limit, kind) =>
       agentSearch.run(query, signal, async () => {
         // Re-read after the debounce, as the conversation source does above.

@@ -15,7 +15,8 @@ export async function readConversation(fs, input, signal) {
   const target = await fs.resolve(input.path)
   const info = await fs.stat(target)
   if (!info) throw new Error('Conversation source not found: ' + input.path)
-  if (info.type === 'directory' && !(await spec.io?.dirSingle?.(ctx, target))) {
+  if (info.type === 'directory' && !(await spec.io?.dirSingle?.(ctx, target))
+    && !(input.format === 'doubao' && input.path.endsWith('.indexeddb.leveldb'))) {
     throw new Error('Select one conversation, not a source directory')
   }
   const args = {

@@ -136,6 +136,15 @@ function UpdateIcon({ label, dismiss }: { label: string; dismiss(): void }) {
   </span>
 }
 
+function ReleaseMedia({ src, alt, t }: { src: string; alt?: string; t: T }) {
+  const [failed, setFailed] = useState(false)
+  return <div className="dsh_ref_release_media">
+    {failed ? <div><p role="status">{t('release.mediaUnavailable')}</p>
+      <Button onClick={() => setFailed(false)}>{t('release.retry')}</Button></div>
+      : <img src={src} alt={alt} referrerPolicy="no-referrer" onError={() => setFailed(true)} />}
+  </div>
+}
+
 export function UpdateDialog({ update, install, close, t, locale }: {
   update: PackageUpdateStatus; install(): Promise<PackageUpdateResult>; close(): void; t: T; locale?: ReleaseLocale
 }) {
@@ -163,7 +172,7 @@ export function UpdateDialog({ update, install, close, t, locale }: {
       </nav>}
     </div>}>
     {feature ? <article className="dsh_ref_release_feature" aria-label={feature.title}>
-      {feature.media && <div className="dsh_ref_release_media"><img key={feature.media} src={feature.media} alt={feature.alt} /></div>}
+      {feature.media && <ReleaseMedia key={feature.media} src={feature.media} alt={feature.alt} t={t} />}
       <div className="dsh_ref_release_description"><ReactMarkdown disallowedElements={['img']}
         components={{ a: ({ node: _node, ...props }) => <a {...props} target="_blank" rel="noreferrer" /> }}>
         {feature.description}

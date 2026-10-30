@@ -104,6 +104,8 @@ export interface PickerSourceOptions {
   shortcut?: string
   /** All configured shortcuts, so one source cannot treat another's token as a free query. */
   shortcuts?: Readonly<Record<string, SourceScope | readonly SourceScope[]>>
+  /** Leave unscoped discovery to the official reference source. */
+  prefixOnly?: boolean
   /** Source-specific aliases mapped back to the concrete provider/kind. */
   sourceAliasTargets?: Readonly<Record<string, string>>
   displayMode: PickerDisplayMode
@@ -340,7 +342,7 @@ export function createFileSource(
     trigger: '@', name: FILE_SOURCE, order: options.order,
     header(_session, { query, quoted, drilled }) {
       if (!drilled) return undefined
-      const scoped = scopedQuery(query, 'files', options.shortcut, options.shortcuts)
+      const scoped = scopedQuery(query, 'files', options.shortcut, options.shortcuts, options.prefixOnly)
       if (scoped === undefined) return undefined
       const path = scoped.replaceAll('\\', '/')
       const directory = path.slice(0, path.lastIndexOf('/') + 1)
@@ -356,7 +358,7 @@ export function createFileSource(
       ]
     },
     async candidates(session, { query, quoted, signal }) {
-      const scoped = scopedQuery(query, 'files', options.shortcut, options.shortcuts)
+      const scoped = scopedQuery(query, 'files', options.shortcut, options.shortcuts, options.prefixOnly)
       if (scoped === undefined) return []
       const rows = await load(session.sessionId, scoped, signal)
       return rows.flatMap((row): InputTriggerCandidate[] => {
@@ -422,7 +424,7 @@ export function createSessionSource(
     trigger: '@', name: SESSION_SOURCE, order: options.order, showGroupTitle: false,
     async candidates(session, { query, quoted, signal }) {
       if (quoted === true) return []
-      const scoped = scopedQuery(query, 'sessions', options.shortcut, options.shortcuts)
+      const scoped = scopedQuery(query, 'sessions', options.shortcut, options.shortcuts, options.prefixOnly)
       if (scoped === undefined) return []
       const rows = await search(session.sessionId, scoped, signal)
       // The host lists cold sessions before it knows their blank/title projections.
@@ -1126,15 +1128,15 @@ export function disambiguate(rows: readonly InputTriggerCandidate[]): InputTrigg
 }
 
 /** Route `type:name` autocomplete syntax to one @ source and strip its prefix. */
-export function scopedQuery(value: string, scope: SourceScope, shortcut?: string, shortcuts?: Readonly<Record<string, SourceScope | readonly SourceScope[]>>): string | undefined {
+export function scopedQuery(value: string, scope: SourceScope, shortcut?: string, shortcuts?: Readonly<Record<string, SourceScope | readonly SourceScope[]>>, prefixOnly = false): string | undefined {
   const prefixes = scopedPrefixes(scope, shortcut, shortcuts)
   const matchesScope = (requested: SourceScope | readonly SourceScope[] | undefined): boolean => requested === scope || (Array.isArray(requested) && requested.includes(scope))
   const trimmed = value.replaceAll('：', ':').trim()
   const match = trimmed.match(/^([^@:\s/]+):(.*)$/u)
-  if (!match) return trimmed
+  if (!match) return prefixOnly ? undefined : trimmed
   const prefix = match[1]!.toLocaleLowerCase()
   const requested = prefixes[prefix] ?? COLON_PREFIX_SCOPE[prefix]
-  if (requested === undefined) return trimmed
+  if (requested === undefined) return prefixOnly ? undefined : trimmed
   return matchesScope(requested) ? (match[2] ?? '').trim() : undefined
 }
 
