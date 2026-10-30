@@ -1,5 +1,10 @@
 # 项目复盘账本
 
+## L-054：npm 接受上传与版本公开是两个阶段
+
+- 2026-10-30：Actions 41050564137 的 npm publish 返回成功并提示处理中，随后约五分钟查不到版本使整个发布 job 失败。上传与核验拆成独立 job，核验增加等待；重跑失败 job 不重复上传。GitHub Release 必须显式创建，不会随 npm 自动同步。
+- 入口：docs/development/workflow.md 的 GitHub Actions 发布。
+
 ## L-053：本机 npm 认证失败不代表 CI 发布受阻
 
 - 2026-10-30：archive 分支保留 release.yml 与 OIDC 发布脚本，但当前 main 未包含它们。判断发布阻塞前检查归档分支、workflow 与 npm-release 环境；本机 E401 仅证明本机认证失败。

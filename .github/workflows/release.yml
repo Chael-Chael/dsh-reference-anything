@@ -50,7 +50,7 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
-  publish:
+  upload:
     needs: check
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -72,6 +72,69 @@ jobs:
         with:
           name: npm-candidate
           path: ${{ runner.temp }}/candidate
-      - name: Publish and verify registry integrity
+      - name: Upload npm package once
         working-directory: ${{ runner.temp }}/candidate
-        run: node "$GITHUB_WORKSPACE/scripts/agent/release-ci.mjs"
+        run: node "$GITHUB_WORKSPACE/scripts/agent/release-ci.mjs" upload
+
+  verify:
+    needs: upload
+    runs-on: ubuntu-latest
+    timeout-minutes: 65
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - uses: actions/download-artifact@v4
+        with:
+          name: npm-candidate
+          path: ${{ runner.temp }}/candidate
+      - name: Wait for npm processing and verify integrity
+        working-directory: ${{ runner.temp }}/candidate
+        run: node "$GITHUB_WORKSPACE/scripts/agent/release-ci.mjs" verify
+
+  github-release:
+    needs: verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - uses: actions/download-artifact@v4
+        with:
+          name: npm-candidate
+          path: ${{ runner.temp }}/candidate
+      - name: Publish reviewed notes and the verified tarball
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        shell: bash
+        run: |
+          version=$(node -p "require('./package.json').version")
+          tag="v$version"
+          notes="docs/release/$version/README.md"
+          test -s "$notes"
+          if git show-ref --verify --quiet "refs/tags/$tag"; then
+            test "$(git rev-parse "refs/tags/$tag^{commit}")" = "$GITHUB_SHA"
+          fi
+          asset="$RUNNER_TEMP/candidate/dsh-reference-anything-$tag.tgz"
+          cp "$RUNNER_TEMP/candidate/candidate.tgz" "$asset"
+          if ! gh release view "$tag" >/dev/null 2>&1; then
+            gh release create "$tag" --target "$GITHUB_SHA" --draft --title "$tag" --notes-file "$notes"
+          fi
+          gh release upload "$tag" "$asset" --clobber
+          prerelease=false
+          latest=true
+          if [[ "$version" == *-* ]]; then prerelease=true; latest=false; fi
+          gh release edit "$tag" --draft=false --title "$tag" --notes-file "$notes" --prerelease="$prerelease" --latest="$latest"
