@@ -28,7 +28,7 @@ describe('npm release verification', () => {
     }
     let attempts = 0
     await expect(waitForRegistry(manifest, async () => { attempts++; return { status: 404 } }, async () => {})).rejects.toThrow('not visible yet')
-    expect(attempts).toBe(60)
+    expect(attempts).toBe(7)
   })
   it('only treats HTTP 404 as an absent npm version', async () => {
     expect(await registryVersion('pkg', '1.0.0', async () => ({ status: 404 }))).toBeNull()

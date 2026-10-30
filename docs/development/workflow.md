@@ -86,7 +86,7 @@ CI 不含个人历史语料、外站账号、真实 Electron 窗口或发版安�
 
 发布流程不读取本地验收 JSON、不同步 Desktop、不需要预上传草稿包。人工验收与文案审核仍独立记录。主流程已构建，打包用 --ignore-scripts 避免 prepare 重建；发布 tgz 不重复执行项目的 prepublishOnly。npm Trusted Publisher 必须匹配仓库、release.yml 和 npm-release 环境，本机 npm login 不是前提。手动运行 Release 即执行检查并发布，版本取 package.json；请先提交正确版本与已审核文案。
 
-发布分为 upload → verify → github-release 三个 job。upload 成功表示 npm 已接受上传；verify 每 30 秒查询，最多 60 次（约 30 分钟，网络请求耗时另计），404/429/5xx/临时网络错误重试，身份或完整性不一致立即失败。超时使用 Actions 的 Re-run failed jobs，只恢复验证，不重跑成功的上传 job；不要选择 Re-run all jobs。旧版把上传和验证合在一个 job 的运行不适用这个重试保证。
+发布分为 upload → verify → github-release 三个 job。upload 成功表示 npm 已接受上传；verify 立即查询一次，此后每 5 分钟查询，最多 7 次（约 30 分钟，网络请求耗时另计），404/429/5xx/临时网络错误重试，身份或完整性不一致立即失败。超时使用 Actions 的 Re-run failed jobs，只恢复验证，不重跑成功的上传 job；不要选择 Re-run all jobs。旧版把上传和验证合在一个 job 的运行不适用这个重试保证。
 
 npm 版本、完整性与 dist-tag 核验通过后，使用同一提交的 docs/release/<version>/README.md 创建 GitHub Release，并附上同一 artifact 的安装包，命名 dsh-reference-anything-v<version>.tgz。已有 tag 必须指向本次 SHA；稳定版标 latest，预发布标 prerelease。GitHub 步骤失败可单独重跑，不重新发布 npm。artifact 保留 7 天，过期后不能直接恢复失败 job。
 

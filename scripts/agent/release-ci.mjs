@@ -18,17 +18,17 @@ export function assertRegistry(remote, manifest) {
   }
 }
 
-export async function waitForRegistry(manifest, request = fetch, pause = () => new Promise(resolve => setTimeout(resolve, 30000))) {
-  for (let attempt = 0; attempt < 60; attempt++) {
+export async function waitForRegistry(manifest, request = fetch, pause = () => new Promise(resolve => setTimeout(resolve, 300000))) {
+  for (let attempt = 0; attempt < 7; attempt++) {
     let remote
     try {
       remote = await registryVersion(manifest.name, manifest.version, request)
     } catch (error) {
       if (!(error.status === 429 || error.status >= 500 || error instanceof TypeError || error.name === 'TimeoutError')) throw error
-      if (attempt === 59) throw error
+      if (attempt === 6) throw error
     }
     if (remote) { assertRegistry(remote, manifest); return }
-    if (attempt < 59) await pause()
+    if (attempt < 6) await pause()
   }
   throw new Error('Upload accepted, but published version not visible yet; re-run failed jobs to verify without uploading again')
 }
