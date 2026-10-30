@@ -15,6 +15,8 @@
 
 ### 问题修复
 
+- 下载附件清理增加文件创建时间核对，避免文件系统复用 inode 后将同名替换文件误认作临时附件。
+
 - 官方 `ui-reference` 启用时，`@file:`、`@session:` 及对应自定义别名仍可限定搜索类别，并调用官方搜索接口；普通 `@` 查询继续由官方来源处理。
 
 ### 其他变更
@@ -36,6 +38,8 @@ Based on v0.5.1, this release adds local conversation sources and fixes feature-
 - Load feature-card GIFs from remote URLs only when their card is opened, instead of embedding them in client JavaScript or duplicating them in the npm package. First viewing requires a network connection. Failed downloads can be retried; offline display is not guaranteed.
 
 ### Bug Fixes
+
+- Check file creation time during attachment cleanup to avoid mistaking a replacement file for a temporary attachment when the filesystem reuses its inode.
 
 - Keep `@file:`, `@session:` and their custom aliases working when the official `ui-reference` plugin is enabled, using official search APIs. Unscoped `@` queries remain handled by the official sources.
 

@@ -22,6 +22,8 @@ import { describe, expect, it } from 'vitest'
 import ReferenceRuntime from '../src/index.ts'
 import * as localAgent from '../src/sources/local-agent/index.ts'
 import type { Config } from '../src/sources/local-agent/index.ts'
+import { codexAdapter } from '../src/sources/local-agent/adapters/codex.ts'
+import { claudeCodeAdapter } from '../src/sources/local-agent/adapters/claude-code.ts'
 
 class Table<V> implements KvTable<string, V> {
   private readonly data = new Map<string, V>()
@@ -132,9 +134,14 @@ describe.skipIf(!enabled)('real corpora on this machine', () => {
   })
 
   it('reads the largest transcript on the machine without materializing it', async () => {
-    const files = [...await walk(join(home, '.codex', 'sessions')), ...await walk(join(home, '.claude', 'projects'))]
+    // This exercises the native streaming adapters, not the bundled compressed reader.
+    const files = [
+      ...(await walk(join(home, '.codex', 'sessions'))).filter(file => codexAdapter.matches(file.path)),
+      ...(await walk(join(home, '.claude', 'projects'))).filter(file => claudeCodeAdapter.matches(file.path)),
+    ]
     const largest = files.sort((a, b) => b.size - a.size)[0]
-    if (largest === undefined) return
+    expect(largest, 'no transcript supported by the native adapters').toBeDefined()
+    if (largest === undefined) throw new Error('No supported transcript')
     const kind = largest.path.includes('.codex') ? 'codex' : 'claude-code'
     const root = kind === 'codex' ? join(home, '.codex', 'sessions') : join(home, '.claude', 'projects')
     const id = `${kind}:${largest.path.slice(root.length + 1)}`

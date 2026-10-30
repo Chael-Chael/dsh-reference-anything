@@ -11,7 +11,7 @@ const cardsSchema = z.array(z.object({
 }).strict().refine(card => !card.media || Boolean(card.alt), 'Media requires alt text')).min(1)
 const mediaTypes = { '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.gif': 'image/gif', '.webp': 'image/webp' }
 // shortcut: pinned public media until DSH 0.2.2 stable provides cross-platform plugin assets.
-const mediaBase = 'https://raw.githubusercontent.com/Chael-Chael/dsh-reference-anything/c0c8ad5ec72b4e8fa0cd97a7721ff3e62e735586/docs/release/'
+const mediaBase = 'https://raw.githubusercontent.com/Chael-Chael/dsh-reference-anything/4fbaf7af069cd10658b6aadb019505127ecb420f/docs/release/'
 
 export function loadReleaseFeatures(directory) {
   return Object.fromEntries(readdirSync(directory, { withFileTypes: true }).filter(entry => entry.isDirectory() && existsSync(resolve(directory, entry.name, 'features.json'))).map(entry => {

@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 import { loadReleaseFeatures } from '../scripts/release-features.mjs'
 
 const roots = []
-const mediaBase = 'https://raw.githubusercontent.com/Chael-Chael/dsh-reference-anything/c0c8ad5ec72b4e8fa0cd97a7721ff3e62e735586/docs/release/'
+const mediaBase = 'https://raw.githubusercontent.com/Chael-Chael/dsh-reference-anything/4fbaf7af069cd10658b6aadb019505127ecb420f/docs/release/'
 afterEach(() => { for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true }) })
 function fixture(media = 'demo.gif') {
   const root = mkdtempSync(join(tmpdir(), 'release-features-')); roots.push(root)

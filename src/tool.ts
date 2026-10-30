@@ -52,14 +52,15 @@ export const MAX_ATTACHMENT_BYTES = 25 * 1024 * 1024
 /** Successful materializations remain usable for one hour. */
 export const ATTACHMENT_LIFETIME_MS = 60 * 60 * 1000
 
-type FileIdentity = { dev: number, ino: number }
+type FileIdentity = { dev: number, ino: number, birthtimeMs: number }
 
-function fileIdentity(stats: { dev: number, ino: number }): FileIdentity {
-  return { dev: stats.dev, ino: stats.ino }
+function fileIdentity(stats: FileIdentity): FileIdentity {
+  return { dev: stats.dev, ino: stats.ino, birthtimeMs: stats.birthtimeMs }
 }
 
 function sameFileIdentity(left: FileIdentity, right: FileIdentity): boolean {
-  return left.dev === right.dev && left.ino === right.ino
+  // Filesystems can reuse an inode immediately after unlinking a file.
+  return left.dev === right.dev && left.ino === right.ino && left.birthtimeMs === right.birthtimeMs
 }
 
 async function selectedBaseIdentity(path: string): Promise<FileIdentity> {

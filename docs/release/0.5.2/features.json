@@ -4,8 +4,11 @@
     "description": "使用 **@omp:**、**@copilot-vscode:**、**@copilot-cli:** 或 **@doubao:** 搜索历史会话，按 **Enter** 插入只读引用。扫描和引用无需安装 Chat Import。\n\n豆包仅能读取本地已缓存的正文；导入会话需要安装并启用 **Chat Import 0.26.3** 或更新兼容版本。",
     "en": {
       "title": "Four more local conversation sources",
-      "description": "Search with **@omp:**, **@copilot-vscode:**, **@copilot-cli:** or **@doubao:** and press **Enter** to insert a read-only reference. Scanning and references do not require Chat Import.\n\nDoubao reads locally cached bodies only. Importing requires **Chat Import 0.26.3** or a compatible newer version to be installed and enabled."
-    }
+      "description": "Search with **@omp:**, **@copilot-vscode:**, **@copilot-cli:** or **@doubao:** and press **Enter** to insert a read-only reference. Scanning and references do not require Chat Import.\n\nDoubao reads locally cached bodies only. Importing requires **Chat Import 0.26.3** or a compatible newer version to be installed and enabled.",
+      "alt": "Read-only references from four new sources; synthetic demo data"
+    },
+    "media": "demos/new-local-sources.gif",
+    "alt": "四种新增来源的只读引用；使用虚构演示数据"
   },
   {
     "title": "官方引用开启后，分类前缀仍可使用",
