@@ -77,7 +77,7 @@ Type `@`, search across enabled sources, and insert the selected reference into 
 
 ## 📰 News
 
-### v0.5.2 (release candidate)
+### v0.5.2
 
 ![Four new local sources; synthetic demo data](./docs/release/0.5.2/demos/new-local-sources.gif)
 
@@ -165,7 +165,7 @@ You can now navigate folder hierarchies directly inside the `@` file menu:
 
 ## 📦 Installation
 
-The released version is **v0.5.1**, with a declared minimum DSH SDK version of **`0.2.0-rc.2`**.
+This version is **v0.5.2**, with a declared minimum DSH SDK version of **`0.2.0-rc.2`**.
 
 ### Official desktop app
 
@@ -193,7 +193,7 @@ dsh plugin --profile web add dshmarket
 dsh plugin --profile web add dsh-reference-anything
 ```
 
-The installed version depends on the selected channel; this README describes the v0.5.2 release candidate.
+The installed version depends on the selected channel; this README describes v0.5.2.
 
 ### Optional: Connect web AI chats
 

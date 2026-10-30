@@ -77,7 +77,7 @@
 
 ## 📰 新闻
 
-### v0.5.2（待发布）
+### v0.5.2
 
 ![四种新增来源的只读引用；使用虚构演示数据](./docs/release/0.5.2/demos/new-local-sources.gif)
 
@@ -164,7 +164,7 @@
 
 ## 📦 安装
 
-当前发布版本为 **v0.5.1**，包声明的 DSH SDK 最低版本为 **`0.2.0-rc.2`**。
+当前版本为 **v0.5.2**，包声明的 DSH SDK 最低版本为 **`0.2.0-rc.2`**。
 
 ### 官方桌面端
 
@@ -192,7 +192,7 @@ dsh plugin --profile web add dshmarket
 dsh plugin --profile web add dsh-reference-anything
 ```
 
-安装入口提供的版本以对应渠道为准；本文描述待发布的 v0.5.2 功能。
+安装入口提供的版本以对应渠道为准；本文描述 v0.5.2 功能。
 
 ### 可选：连接网页 AI 对话
 
