@@ -120,21 +120,4 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
         shell: bash
-        run: |
-          version=$(node -p "require('./package.json').version")
-          tag="v$version"
-          notes="docs/release/$version/README.md"
-          test -s "$notes"
-          if git show-ref --verify --quiet "refs/tags/$tag"; then
-            test "$(git rev-parse "refs/tags/$tag^{commit}")" = "$GITHUB_SHA"
-          fi
-          asset="$RUNNER_TEMP/candidate/dsh-reference-anything-$tag.tgz"
-          cp "$RUNNER_TEMP/candidate/candidate.tgz" "$asset"
-          if ! gh release view "$tag" >/dev/null 2>&1; then
-            gh release create "$tag" --target "$GITHUB_SHA" --draft --title "$tag" --notes-file "$notes"
-          fi
-          gh release upload "$tag" "$asset" --clobber
-          prerelease=false
-          latest=true
-          if [[ "$version" == *-* ]]; then prerelease=true; latest=false; fi
-          gh release edit "$tag" --draft=false --title "$tag" --notes-file "$notes" --prerelease="$prerelease" --latest="$latest"
+        run: bash "$GITHUB_WORKSPACE/scripts/agent/github-release.sh"

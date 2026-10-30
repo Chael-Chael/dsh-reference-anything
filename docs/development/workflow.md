@@ -89,3 +89,9 @@ CI 不含个人历史语料、外站账号、真实 Electron 窗口或发版安�
 发布分为 upload → verify → github-release 三个 job。upload 成功表示 npm 已接受上传；verify 每 30 秒查询，最多 60 次（约 30 分钟，网络请求耗时另计），404/429/5xx/临时网络错误重试，身份或完整性不一致立即失败。超时使用 Actions 的 Re-run failed jobs，只恢复验证，不重跑成功的上传 job；不要选择 Re-run all jobs。旧版把上传和验证合在一个 job 的运行不适用这个重试保证。
 
 npm 版本、完整性与 dist-tag 核验通过后，使用同一提交的 docs/release/<version>/README.md 创建 GitHub Release，并附上同一 artifact 的安装包，命名 dsh-reference-anything-v<version>.tgz。已有 tag 必须指向本次 SHA；稳定版标 latest，预发布标 prerelease。GitHub 步骤失败可单独重跑，不重新发布 npm。artifact 保留 7 天，过期后不能直接恢复失败 job。
+
+### 已上传包的恢复入口
+
+手动运行 **Post npm publish**（post-npm-publish.yml），分支选择 main，run_id 填原 Release 的运行编号（例如 41050564137）。仅接受本仓库 main 上手动触发且已结束的 Release 运行；下载其 npm-candidate，不重建、不上传 npm。使用当前验证工具等待 registry 就绪，成功后从原运行 SHA 读取版本和发布说明、创建 tag/Release 并附上原 tgz。附件名称为 dsh-reference-anything-v<version>.tgz。与正常 Release 共用发布脚本和并发组，防止两个流程并行操作发布。
+
+npm 尚未公开时会等待；超时可重新运行失败 job。原 artifact 过期/缺失、包与源码身份不符或 registry 完整性不符时拒绝发布。该入口不会把 npm 的处理中状态绕过为已发布。
