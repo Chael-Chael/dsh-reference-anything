@@ -14,6 +14,8 @@ version=$(node -p "require('./package.json').version")
 tag="v$version"
 notes="docs/release/$version/README.md"
 test -s "$notes"
+node "$(dirname "${BASH_SOURCE[0]}")/release-notes.mjs" "$notes" "$GH_REPO" "$RELEASE_SHA" "$RUNNER_TEMP/release-notes.md"
+notes="$RUNNER_TEMP/release-notes.md"
 target_args=(--target "$RELEASE_SHA")
 if git show-ref --verify --quiet "refs/tags/$tag"; then
   test "$(git rev-parse "refs/tags/$tag^{commit}")" = "$RELEASE_SHA"

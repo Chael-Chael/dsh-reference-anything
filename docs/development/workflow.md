@@ -95,3 +95,5 @@ npm 版本、完整性与 dist-tag 核验通过后，使用同一提交的 docs/
 手动运行 **Post npm publish**（post-npm-publish.yml），分支选择 main，run_id 填原 Release 的运行编号（例如 41050564137）。仅接受本仓库 main 上手动触发且已结束的 Release 运行；下载其 npm-candidate，不重建、不上传 npm。使用当前验证工具等待 registry 就绪，成功后从原运行 SHA 读取版本和发布说明、创建 tag/Release 并附上原 tgz。附件名称为 dsh-reference-anything-v<version>.tgz。与正常 Release 共用发布脚本和并发组，防止两个流程并行操作发布。
 
 npm 尚未公开时会等待；超时可重新运行失败 job。原 artifact 过期/缺失、包与源码身份不符或 registry 完整性不符时拒绝发布。该入口不会把 npm 的处理中状态绕过为已发布。
+
+GitHub Release 正文发布前通过 scripts/agent/release-notes.mjs 将 Markdown 图片相对路径转换为原发布 SHA 的 raw.githubusercontent.com 绝对 URL；不改变文案或仓库 README。正常发布与恢复入口共用此转换，避免 Release 页把 demos/*.gif 解析为无效路径。

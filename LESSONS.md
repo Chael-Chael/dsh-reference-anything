@@ -1,5 +1,9 @@
 # 项目复盘账本
 
+## L-055：GitHub Release 图片不能沿用仓库相对路径
+
+- 2026-10-30：v0.5.2 正文直接复制仓库 README，demos/new-local-sources.gif 在 Release 页无法解析。发布前转换 Markdown 图片为原发布 SHA 对应的 raw.githubusercontent.com 绝对 URL；保留正文及仓库内相对链接。正常与恢复 workflow 共用转换脚本。
+
 ## L-054：npm 接受上传与版本公开是两个阶段
 
 - 2026-10-30：Actions 41050564137 的 npm publish 返回成功并提示处理中，随后约五分钟查不到版本使整个发布 job 失败。上传与核验拆成独立 job，核验增加等待；重跑失败 job 不重复上传。GitHub Release 必须显式创建，不会随 npm 自动同步。
