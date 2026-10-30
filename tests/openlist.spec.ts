@@ -621,12 +621,12 @@ describe('OpenList host controls', () => {
   })
   it('preserves existing config and jwt secret while securing it', async () => {
     const writes: unknown[][] = []; const secured: string[] = []
-    await writeManagedOpenListConfig('/data', 6000, { readFile: (async () => JSON.stringify({ jwt_secret: 'keep-me', arbitrary: 'preserved', scheme: { http_port: 1 } })) as never, mkdir: async () => undefined, writeFile: async (...args) => { writes.push(args); return undefined }, chmod: async () => undefined, securePermissions: async path => { secured.push(path) }, rename: async () => undefined })
+    await writeManagedOpenListConfig('/data', 6000, { readFile: (async () => JSON.stringify({ jwt_secret: 'keep-me', arbitrary: 'preserved', scheme: { http_port: 1 } })) as never, mkdir: async () => undefined, writeFile: async (...args) => { writes.push(args); return undefined }, chmod: async (path, mode) => { secured.push(String(path)); expect(mode).toBe(secured.length === 1 ? 0o700 : 0o600) }, securePermissions: async path => { secured.push(path) }, rename: async () => undefined })
     expect(JSON.parse(String(writes[0]?.[1]))).toMatchObject({ jwt_secret: 'keep-me', arbitrary: 'preserved', scheme: { address: '127.0.0.1', http_port: 6000 } })
     expect(secured).toHaveLength(2)
   })
-  it('fails closed if the credential ACL seam fails', async () => {
-    await expect(writeOpenListCredentials({ endpoint: 'http://localhost:5244', token: 'secret' }, '/data/credentials.json', { mkdir: async () => undefined, writeFile: async () => undefined, chmod: async () => undefined, securePermissions: async () => { throw new Error('acl') } })).rejects.toThrow(/Could not secure/)
+  it('fails closed if credential permissions cannot be secured', async () => {
+    await expect(writeOpenListCredentials({ endpoint: 'http://localhost:5244', token: 'secret' }, '/data/credentials.json', { mkdir: async () => undefined, writeFile: async () => undefined, chmod: async () => { throw new Error('chmod') }, securePermissions: async () => { throw new Error('acl') } })).rejects.toThrow(/Could not secure/)
   })
   it('rejects malformed existing config and leaves it unreplaced', async () => {
     const writes = vi.fn(async () => undefined)

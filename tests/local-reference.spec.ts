@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
-import { mkdtemp, writeFile, rm, symlink } from 'node:fs/promises'
+import { mkdtemp, writeFile, rm, symlink, readFile, mkdir } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { join, resolve } from 'node:path'
 import { Context } from '@deepseek-ai/cordis'
 import { Session, SessionId } from '@deepseek-ai/dsh-session'
 import { createUserMessage } from '@deepseek-ai/dsh-llm'
@@ -79,6 +79,20 @@ it('rechecks source settings for read, search, images, listing and hook without 
  }
  settings.picker.agents.enabled=true
  expect((await initial()).items.length).toBeGreaterThan(0)
+})
+
+it.each(['copilot-cli', 'copilot-vscode', 'doubao'])('reads %s through reference tools and enforces source switches',async source=>{
+ const file = source === 'doubao' ? 'doubao.leveldb-log' : source + (source === 'copilot-cli' ? '.jsonl' : '.json')
+ const path = source === 'doubao' ? join(root,'chrome_doubao-chat_0.indexeddb.leveldb') : join(root,file)
+ if(source === 'doubao') await mkdir(path)
+ await writeFile(source === 'doubao' ? join(path,'000001.log') : path,await readFile(resolve('tests/fixtures/chat-import-reader',file)))
+ locator={source,path,sessionId:source==='doubao'?'conv-1':source==='copilot-cli'?'11111111-2222-3333-4444-555555555555':'copilot-example'}
+ const settings={enabledAgents:[source],picker:{agents:{enabled:true}}}
+ ctx.provide('referenceChatHistory',{getSettings:()=>settings,store:{settings}} as never)
+ ctx.referenceLocalAgents.discoveryPolicy=()=>({roots:[{kind:source,path:root}],scope:'all'}) as never
+ expect((await initial()).items.length).toBeGreaterThan(0)
+ settings.enabledAgents=[]
+ expect(text(await call('reference_read',{ref:locator}))).toContain('disabled')
 })
 
 it('does not invent tool ownership, separates calls/results and returns actual image blocks',async()=>{

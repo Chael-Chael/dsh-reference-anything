@@ -68,6 +68,7 @@ node scripts/web-demos/start.mjs
 | `folders` | 输入 `@file:docs` → Tab → 输入 `testing` → Tab → 用顶部导航返回 docs → Enter | Tab 进入目录浏览；Enter 插入目录引用 |
 | `agent-import` | 输入 `@agent:` → Enter 引用 → 清除输入 → 再输入 `@agent:` → Tab → 点击确认导入 → 显示历史对话 | Enter 插入会话引用；Tab 打开导入选项，仍需确认导入 |
 | `local-references` | 输入 `@codex:缓存` → Enter → `@claude-code:接口` → Enter → 输入比较问题，不发送 | 多来源只读引用；虚构数据不作为真实模型读取证据 |
+| `new-local-sources` | 分别输入 `@omp:`、`@copilot-vscode:`、`@copilot-cli:`、`@doubao:` → Enter → 清空草稿 | 四种新增来源的只读引用；使用虚构候选，不代表真实数据读取验收 |
 | `chat-import-upgrade` | 切换到升级场景 → 输入 `@agent:` → 点击升级 Chat Import → 设置 → 引用万物 → 本地 Agent 对话查看状态 | 展示版本不兼容时的入口，以及模拟升级后的“需要重启”状态 |
 | `local-plugins` | 输入 `@plugin:dsh-reference-anything` → Enter | 插入真实插件列表中的插件引用 |
 | `shortcuts` | 设置 → 引用万物 → 将本地 Agent 快捷词设为 `agent, work`，网页对话设为 `chat, work` → 关闭设置 → 输入 `@work:缓存`，再试 `@codex:缓存` | 共享快捷词可匹配多个来源；具体提供方快捷词仍缩小范围 |
@@ -141,7 +142,7 @@ node scripts/web-demos/record.mjs folders agent-import
 2. 如需可重复的演示数据，在 fixtures.mjs 中添加最小的服务替身；真实界面、图标和交互继续来自 DSH。
 3. 在 record.mjs 的 names 和场景分支中加入 ID、操作步骤及关键结果断言；为按键补上准确的动作说明。新增场景应显式加分支，不能误落入现有 shortcuts 的兜底分支。
 4. 单独录制该 ID，先检查 MP4 和截图，再检查 GIF。
-5. Agent 可先在本地暂存本次发行说明的媒体引用，并汇总预览和字幕等最终文字交用户审核，批准后才能对外发布。录制脚本不会自动替换 `release-notes` 下的旧 GIF；历史 HTML、原 GIF 和之前实录版本继续保留。详见 `docs/development/release-materials.md`。
+5. Agent 可先在本地暂存本次发行说明的媒体引用，并汇总预览和字幕等最终文字交用户审核，批准后才能对外发布。录制脚本不会自动替换 `docs/release` 下的旧 GIF；历史 HTML、原 GIF 和之前实录版本继续保留。详见 `docs/development/release-materials.md`。
 
 ## 8. 真实与模拟的边界
 

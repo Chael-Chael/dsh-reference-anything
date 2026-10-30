@@ -1,0 +1,9 @@
+{"type":"title","v":1,"title":"OMP scan fixture","pad":"                                                                                                                                                                                                     "}
+{"type":"session","version":3,"id":"omp-test","timestamp":"2026-10-19T10:00:00Z","cwd":"D:/demo/omp"}
+{"type":"message","id":"u0","parentId":null,"message":{"role":"user","content":"before clear"}}
+{"type":"message","id":"fork","parentId":"u0","message":{"role":"assistant","content":[{"type":"text","text":"inactive branch"}]}}
+{"type":"reset_boundary","id":"reset","parentId":"u0"}
+{"type":"message","id":"u1","parentId":"reset","message":{"role":"user","content":"run tests"}}
+{"type":"message","id":"a1","parentId":"u1","message":{"role":"assistant","content":[{"type":"text","text":"checking tests"},{"type":"toolCall","id":"call-1","name":"bash","arguments":{"command":"npm test"}}]}}
+{"type":"message","id":"t1","parentId":"a1","message":{"role":"toolResult","toolCallId":"call-1","toolName":"bash","content":[{"type":"text","text":"tests passed"}]}}
+{"type":"message","id":"a2","parentId":"t1","message":{"role":"assistant","content":[{"type":"text","text":"done"}]}}

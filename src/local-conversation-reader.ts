@@ -23,9 +23,14 @@ export async function readLocalConversation(input: Parameters<typeof readConvers
     }
   }
   const fingerprints: string[] = []
-  const versions = async () => Promise.all([input.path, input.path + '-wal'].map(async path => {
-    try { const info = await stat(path); return `${info.size}:${info.mtimeMs}` } catch (error) { if ((error as NodeJS.ErrnoException).code === 'ENOENT') return 'missing'; throw error }
-  }))
+  const versions = async () => {
+    const paths = input.format === 'doubao'
+      ? [input.path, ...(await readdir(input.path)).filter(name => /\.(ldb|log)$/.test(name)).sort().map(name => join(input.path, name))]
+      : [input.path, input.path + '-wal']
+    return Promise.all(paths.map(async path => {
+      try { const info = await stat(path); return `${path}:${info.size}:${info.mtimeMs}:${info.ctimeMs}` } catch (error) { if ((error as NodeJS.ErrnoException).code === 'ENOENT') return `${path}:missing`; throw error }
+    }))
+  }
   const initial = input.structured ? await versions() : []
   const target = (path: string): Target => ({ displayPath: resolve(path.startsWith('~/') || path.startsWith('~\\') ? join(homedir(), path.slice(2)) : path) })
   const fs = {

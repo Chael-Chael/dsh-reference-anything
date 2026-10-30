@@ -8,11 +8,11 @@
 
 环境需有 Playwright、Edge 和 PATH 中的 FFmpeg。若 Playwright 不在项目中，通过 `PLAYWRIGHT_MODULE` 环境变量指定其模块目录，再运行 `node scripts/feature-demos/render.mjs`，可追加场景 ID 只渲染指定场景。每秒实际捕获 30 帧，导出 30 fps MP4 和 20 fps GIF。鼠标目标在播放前从官方组件的实际布局测量；移动缓动、点击波纹、按键提示、逐字输入和列表过渡全部由帧号计算。
 
-脚本检查帧号、画布边界、浏览器异常、变化帧占比及 GIF 尺寸、帧数、时长。PNG 帧、MP4 和 `gallery.html` 总览保存在 `.codex-tmp/feature-demos/`，GIF 输出到 `release-notes/0.4.4/demos/`；替换前自动备份旧 GIF。
+脚本检查帧号、画布边界、浏览器异常、变化帧占比及 GIF 尺寸、帧数、时长。PNG 帧、MP4 和 `gallery.html` 总览保存在 `.codex-tmp/feature-demos/`，GIF 输出到 `docs/release/0.4.4/demos/`；替换前自动备份旧 GIF。
 
 动作设计参考本机 Remotion 与 snapcn 技能：缓入缓出、短暂停顿后点击、适度错峰、每个节拍只突出一个动作。界面没有换成 snapcn 的 shadcn 风格组件，仍使用下面列出的 DSH 官方组件。
 
-卡片标题、说明和媒体路径在 `release-notes/0.4.4/features.json` 中维护，正常插件构建会将 GIF 嵌入新功能卡片。
+卡片标题、说明和媒体路径在 `docs/release/0.4.4/features.json` 中维护，构建仅写入固定提交的远程图片 URL。更新 GIF 后还需按 [发布素材说明](../../docs/release/README.md) 更新远程基址并验证内容。
 
 ## 官方样式来源
 

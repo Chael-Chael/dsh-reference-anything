@@ -44,7 +44,7 @@
 - 🧩 DSH 命令与 Skills
 - 📁 工作区文件和文件夹
 - 💬 DSH 历史会话
-- 🖥️ **本地 Agent 对话**：内置 Claude Code、Codex、Cursor 等 29 种来源格式的扫描和只读解析能力，可通过 Chat Import 导入 DSH；真实验收覆盖范围另行记录。
+- 🖥️ **本地 Agent 对话**：内置 Claude Code、Codex、Cursor 等 33 种来源格式的扫描和只读解析能力，可通过 Chat Import 导入 DSH；真实验收覆盖范围另行记录。
 - ✨ **本插件新增：来自 ChatGPT、Claude、Gemini、DeepSeek、Grok 和 Kimi 这些网页端 Chatbot 的历史对话（重点）**
 - ☁️ **本插件新增：通过 OpenList 连接的云盘文件**
 - 🧩 **本插件新增：本机已安装和已配置的 DSH 插件，无需再频繁翻找目录**
@@ -77,9 +77,16 @@
 
 ## 📰 新闻
 
+### v0.5.2
+
+![四种新增来源的只读引用；使用虚构演示数据](./docs/release/0.5.2/demos/new-local-sources.gif)
+
+新增 oh-my-pi、Copilot VS Code、Copilot CLI 和豆包桌面版引用；修复官方引用开启后的文件/会话分类前缀；教程 GIF 改为远程按需加载。豆包需要本地缓存正文，导入需要 Chat Import 0.26.3 或更新兼容版本。[发布说明](./docs/release/0.5.2/README.md)。
+
+
 ### 0.5.0 预览 · 功能演示
 
-本轮还升级了本地工具的统一分页与长文本接续读取，正文和工具记录均可搜索；每次读取检查当前来源开关，非本地工具迁移到 external_reference_list/read。完整变更及调用示例见 [0.5.0 发布说明](./docs/release-v0.5.0.md)。另见 [v0.5.1 兼容性修复](./docs/release-v0.5.1.md)。
+本轮还升级了本地工具的统一分页与长文本接续读取，正文和工具记录均可搜索；每次读取检查当前来源开关，非本地工具迁移到 external_reference_list/read。完整变更及调用示例见 [0.5.0 发布说明](./docs/release/0.5.0/README.md)。另见 [v0.5.1 兼容性修复](./docs/release/0.5.1/README.md)。
 
 #### 把历史对话直接“搬”进 DSH，无缝接着聊
 
@@ -89,17 +96,17 @@
 - **只当参考资料（按 `Enter`）**：直接引用该会话；
 - **接着往下聊（按 `Tab`）**：在弹出的菜单中选择**导入**并确认，就能把整段历史记录直接搬进 DSH，顺着之前的上下文继续对话！（如果觉得每次确认太麻烦，也可以在设置中关闭二次确认，一步到位）
 
-> 💡 **提示**：使用导入功能需安装并启用 `dsh-chat-import`（0.26.1 或更高兼容版本）。
+> 💡 **提示**：使用导入功能需安装并启用 `dsh-chat-import`（0.26.3 或更高兼容版本）。
 
-![Enter 引用会话，Tab 打开操作菜单，确认后展示模拟导入的历史；使用虚构数据。](./release-notes/0.5.0/demos/agent-import.gif)
+![Enter 引用会话，Tab 打开操作菜单，确认后展示模拟导入的历史；使用虚构数据。](./docs/release/0.5.0/demos/agent-import.gif)
 
 #### 菜单内一键升级配套插件，不用手动折腾
 
 如果提示 `dsh-chat-import` 版本太旧、用不了“对话导入”或“交接摘要”，不用自己再去后台找安装包手动更新了。
 
-直接在菜单里点击**升级提示**，即可一键完成更新（需升级至 0.26.1 或更高兼容版本）。升级后如果弹出重启提示，重启一下 DSH 即可生效。
+直接在菜单里点击**升级提示**，即可一键完成更新（需升级至 0.26.3 或更高兼容版本）。升级后如果弹出重启提示，重启一下 DSH 即可生效。
 
-![在菜单中升级 dsh-chat-import，并在设置中查看模拟的重启提示。](./release-notes/0.5.0/demos/chat-import-upgrade.gif)
+![在菜单中升级 dsh-chat-import，并在设置中查看模拟的重启提示。](./docs/release/0.5.0/demos/chat-import-upgrade.gif)
 
 #### 输入 `@plugin:`，直接让 Agent 帮你检查本地插件
 
@@ -107,7 +114,7 @@
 
 现在只需输入 `@plugin:`，搜索插件名称并按 `Enter`，就能直接把该插件的本地目录喂给 Agent（支持当前 DSH 环境中已安装的所有插件）。
 
-![在 @plugin: 菜单筛选本地插件，按 Enter 插入插件目录引用。](./release-notes/0.5.0/demos/local-plugins.gif)
+![在 @plugin: 菜单筛选本地插件，按 Enter 插入插件目录引用。](./docs/release/0.5.0/demos/local-plugins.gif)
 
 #### 自定义快捷词，直接缩小搜索范围，不用手动翻找
 
@@ -117,7 +124,7 @@
 - **按分类合并搜**：比如忘了具体在哪聊过，可以给“本地 Agent”和“网页对话”都加上同一个快捷词（如 `chat`），输入 `@chat:` 就能把搜索范围直接缩小到这两类对话中；
 - **按来源精准搜**：明确只想找某一个来源时，直接输入它的专属快捷词（比如 `@codex:`），即可一步到位只搜 Codex。
 
-![在设置中配置共享快捷词，再用共享词和具体来源词搜索会话。](./release-notes/0.5.0/demos/shortcuts.gif)
+![在设置中配置共享快捷词，再用共享词和具体来源词搜索会话。](./docs/release/0.5.0/demos/shortcuts.gif)
 
 #### 不用死记路径，像逛文件夹一样找到目录并引用
 
@@ -128,7 +135,7 @@
 - **返回上一级**：点击菜单顶部的导航栏；
 - **确认引用**：找到目标文件夹后按 `Enter`，一键插入到当前对话中。
 
-![在文件菜单按 Tab 进入子目录，再返回并按 Enter 引用目录。](./release-notes/0.5.0/demos/folders.gif)
+![在文件菜单按 Tab 进入子目录，再返回并按 Enter 引用目录。](./docs/release/0.5.0/demos/folders.gif)
 
 - **2026-10-12 · v0.4.4** — 新增本地插件来源、可配置的分组与平台快捷词，改进 Picker 图标和文件夹插入行为，并补充 `model` 命令入口。
 
@@ -157,7 +164,7 @@
 
 ## 📦 安装
 
-当前发布版本为 **v0.5.1**，包声明的 DSH SDK 最低版本为 **`0.2.0-rc.2`**。
+当前版本为 **v0.5.2**，包声明的 DSH SDK 最低版本为 **`0.2.0-rc.2`**。
 
 ### 官方桌面端
 
@@ -185,7 +192,7 @@ dsh plugin --profile web add dshmarket
 dsh plugin --profile web add dsh-reference-anything
 ```
 
-安装入口提供的版本以对应渠道为准；本文描述 v0.5.1 的功能。
+安装入口提供的版本以对应渠道为准；本文描述 v0.5.2 功能。
 
 ### 可选：连接网页 AI 对话
 
@@ -214,6 +221,8 @@ Reference Anything 直接向 DSH 原生 `@` 菜单注册八个来源，不会引
 需要网页对话时，先完成上方连接步骤，再到 **设置 → Reference Anything → 网页端 AI 对话同步设置** 选择平台、浏览器 Profile、保存方式和历史范围，开始同步。需要网盘时，在设置中连接 OpenList 并添加挂载。
 
 默认使用“按需读取正文”模式：本地只保存标题索引，Agent 需要对话内容时才通过浏览器读取正文。若需要离线读取和正文检索，请选择“在本地保存完整正文”。插件会在加载时检查新版本；可在设置页查看更新日志，安装更新后重启 DSH 即可生效。
+
+功能介绍中的演示图片仅在当前卡片显示时从 GitHub 加载，需要网络连接；图片加载失败不影响阅读文字和翻页。
 
 > [!NOTE]
 > 网页对话同步或读取正文时，OpenCLI 可能打开或复用浏览器窗口。请保持窗口可用，直到操作完成；同步速度取决于平台、记录数量和浏览器连接。
@@ -269,11 +278,15 @@ Reference Anything 直接向 DSH 原生 `@` 菜单注册八个来源，不会引
 
 选中的会话使用 DSH 规范 `dsh-session:` mention 和原生 session 外观；快照准备与解析继续由 DSH 官方服务负责，而不是由本插件复制实现。
 
+内置 0.26.3 解析器新增 **oh-my-pi（`@omp:`）**，默认读取 `~/.omp/agent/sessions`；导入需要 Chat Import 0.26.3 或更新版本。
+
 #### 🖥️ @Local agent conversations — 本地 Agent 历史对话
 
 键入 `@agent:`，即可搜索并引用其他本地 Agent 工具保存的历史对话。
 
-全部 29 种来源使用内置的只读扫描器和解析器，代码来自 dsh-chat-import。扫描和引用无需安装 Chat Import。来源开关、附加目录和工作区范围继续生效；设置页显示来源目录、数量和扫描异常。Enter 插入引用，可恢复的图片通过 DSH 附件返回，查看图片需要支持视觉的模型。确认没有正文的会话会隐藏，读取异常的会话仍然保留。本地引用现在保存可读的来源、路径和会话 ID；旧版 URI 协议的本地引用需要重新选择。
+新增 **Copilot VS Code（`@copilot-vscode:`）**、**Copilot CLI（`@copilot-cli:`）** 和 **豆包桌面版（`@doubao:`）**。豆包仅能引用本地已有缓存正文的对话；缺少的对话可先在豆包中打开后再刷新。
+
+全部 33 种来源使用内置的只读扫描器和解析器，代码来自 dsh-chat-import。扫描和引用无需安装 Chat Import。来源开关、附加目录和工作区范围继续生效；设置页显示来源目录、数量和扫描异常。Enter 插入引用，可恢复的图片通过 DSH 附件返回，查看图片需要支持视觉的模型。确认没有正文的会话会隐藏，读取异常的会话仍然保留。本地引用现在保存可读的来源、路径和会话 ID；旧版 URI 协议的本地引用需要重新选择。
 
 发送本地引用时，插件在每条用户消息后附上一个聚合背景。模型使用 `ref: {source, path, sessionId}` 和内容 `revision` 定位。`reference_list` 发现本地会话；`reference_read` 读取 `messages`、`tools` 或 `images`；`reference_search` 搜索正文/工具文本；`reference_image` 返回真实像素。
 

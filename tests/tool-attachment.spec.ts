@@ -346,6 +346,36 @@ describe('reference_attachment_read', () => {
     await expect(access(localPath)).resolves.toBeUndefined()
   })
 
+  it('preserves a replacement even when its inode is reused', async () => {
+    const base = await testBase()
+    const mounted = await mount(
+      async () => ({ name: 'report.pdf', bytes: new Uint8Array([1, 2, 3]), mimeType: 'application/pdf' }),
+      undefined,
+      base,
+    )
+    const result = await run(mounted.ctx)
+    expect(result.isError).toBe(false)
+    const localPath = (result.value as { localPath: string }).localPath
+    const fs = await import('node:fs/promises')
+    const originalStat = fs.lstat
+    const original = await originalStat(localPath)
+    await rm(localPath)
+    await writeFile(localPath, 'replacement data')
+    const spy = vi.spyOn(fs, 'lstat').mockImplementation((async (path: string) => {
+      const stats = await originalStat(path)
+      if (path === localPath) Object.assign(stats, {
+        dev: original.dev, ino: original.ino, birthtimeMs: original.birthtimeMs + 1,
+      })
+      return stats
+    }) as typeof fs.lstat)
+    try {
+      await mounted.dispose()
+      await expect(access(localPath)).resolves.toBeUndefined()
+    } finally {
+      spy.mockRestore()
+    }
+  })
+
   it('cleans a partial custom-directory file when writing fails after creation', async () => {
     const base = await testBase()
     selectedWriteFault.mode = 'partial-fail'

@@ -1,7 +1,7 @@
 # Bundled conversation scanners and readers
 
 Derived from [dsh-chat-import](https://github.com/Nwflower/dsh-chat-import), npm
-0.26.1 (MIT). `upstream-sha256.json` records the exact version and source hashes.
+0.26.3 (MIT). `upstream-sha256.json` records the exact version and source hashes.
 Both generated bundles include fzstd (MIT); `LICENSE` and `LICENSE.fzstd` ship
 with the package. Upstream paths in comments are not runtime dependencies.
 
@@ -24,6 +24,12 @@ Async sidecar reports only supplement GENERIC results, never replace typed outpu
 Hermes SQLite and JSONL reads preserve tool-only assistant messages, OpenAI-style
 function calls, and role=tool results. Results are associated by call ID, including
 parallel calls; string arguments and result text remain unchanged.
+
+The 0.26.3 snapshot adds Copilot VS Code, Copilot CLI and Doubao Desktop.
+Doubao reads cached local IndexedDB bodies only. Its directory entries must be
+regular files, and child-file fingerprints invalidate revisions and availability
+checks when the database changes. Background availability checks leave databases
+larger than 8 MiB unknown instead of eagerly parsing them.
 
 ## Update from upstream
 

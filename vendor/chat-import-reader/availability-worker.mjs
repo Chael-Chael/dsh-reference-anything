@@ -61,6 +61,11 @@ channel.on('message', async ({ id, target }) => {
         state = found ? 'unknown' : 'empty'
       }
     } else {
+      if (info.type === 'directory' && target.format === 'doubao') {
+        const names = (await readdir(target.path)).filter(name => /\.(ldb|log)$/.test(name))
+        const files = await Promise.all(names.map(name => inspect(join(target.path, name))))
+        if (files.reduce((sum, file) => sum + (file?.size || 0), 0) > 8 * 1024 * 1024) throw new Error('Background validation budget exceeded')
+      }
       if (info.type === 'directory' && ['grokbuild', 'vibe', 'kimi'].includes(target.format)) {
         const names = target.format === 'grokbuild' ? ['chat_history.jsonl']
           : target.format === 'vibe' ? ['messages.jsonl'] : ['wire.jsonl', 'agents/main/wire.jsonl']
