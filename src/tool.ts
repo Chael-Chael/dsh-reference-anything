@@ -1,3 +1,4 @@
+import { usesLocalProtocol } from './local-locator.ts'
 import { registerLocalReferenceTools } from './local-reference-tools.ts'
 /**
  * Model-facing tools for finding and reading outside conversations.
@@ -19,14 +20,12 @@ import { defineTool } from '@deepseek-ai/dsh-tools'
 import { AttachmentId, type ImageMediaType } from '@deepseek-ai/dsh-attachment'
 import { appendDownloadDirectoryPrefix, validateDownloadDirectory } from './download-directory.ts'
 import { ReferenceAnythingError } from './errors.ts'
-import { DEFAULT_OPENCLI_MAX_STDOUT_BYTES, OpenCliError, OpenCliRunner } from './opencli.ts'
 import { addUnavailableAttachmentNotices, continuationFooter, frameReferenceBlock } from './render.ts'
 import { retainConversation } from './retain.ts'
 import { encodeReferenceUri } from './uri.ts'
 import { stringifyTagSafeJson } from './serialize.ts'
 import type { ReferenceWindow } from './types.ts'
 import type {} from './index.ts'
-import type { CloudDriveService } from './sources/cloud-drive/index.ts'
 
 /** Cordis plugin name used by loader diagnostics. */
 export const name = 'reference-tool'
@@ -283,12 +282,10 @@ export function apply(ctx: Context, config: Config = {}): void {
     async execute(args, exec) {
       if (!args.uri) throw new ReferenceAnythingError('Provide a non-local reference URI.', 'REFERENCE_INVALID_URI')
       const ref = ctx.references.resolveReadReference(exec.agent?.session, args.uri)
-      if (ref.source === 'local-agent') throw new ReferenceAnythingError('The old local reference protocol is no longer supported. Reselect the conversation and use reference_read with ref.', 'REFERENCE_INVALID_URI')
+      if (usesLocalProtocol(ref)) throw new ReferenceAnythingError('The old local reference protocol is no longer supported. Reselect the conversation and use reference_read with ref.', 'REFERENCE_INVALID_URI')
       ctx.references.assertSessionGranted(exec.agent?.session, ref)
-      const chatHistory = ctx.get('referenceChatHistory')
-      const userMaximum = ref.source === 'web-chat' && chatHistory
-        ? Math.min(maxReadTurns, chatHistory.store.settings.maxReadTurns)
-        : maxReadTurns
+      const userLimit = ctx.references.source(ref.source)?.readLimit?.()
+      const userMaximum = userLimit === undefined ? maxReadTurns : Math.min(maxReadTurns, userLimit)
       const window = parseWindow(args, Math.min(readTurns, userMaximum), userMaximum)
       const snapshot = await ctx.references.read(ref, window, exec.signal)
       const slice = snapshot.body
@@ -561,7 +558,7 @@ export function apply(ctx: Context, config: Config = {}): void {
 
   ctx.effect(() => ctx.tools.register(defineTool({
     name: 'reference_attachment_read',
-    description: 'Materialize one authorized Web-conversation attachment or cloud-drive document on demand.',
+    description: 'Materialize one authorized attachment of a referenced item (for example a Web-conversation file or a cloud-drive document) on demand.',
     parameters: {
       uri: { type: 'string', required: true, description: 'The dsh-ref URI that exposed the attachment.' },
       attachmentId: { type: 'string', required: true, description: 'Attachment id exactly as shown in the conversation page.' },
@@ -596,112 +593,57 @@ export function apply(ctx: Context, config: Config = {}): void {
     async execute(args, exec) {
       const ref = ctx.references.resolveReadReference(exec.agent?.session, args.uri)
       ctx.references.assertSessionGranted(exec.agent?.session, ref)
-      if (ref.source === 'cloud-drive') {
-        if (args.attachmentId !== 'file') {
-          throw new ReferenceAnythingError(
-            'cloud-drive documents use attachmentId "file" exactly as shown by external_reference_read',
-            'ATTACHMENT_UNAVAILABLE',
-          )
-        }
-        const service = ctx.get('referenceCloudDrive') as CloudDriveService | undefined
-        if (!service) throw new ReferenceAnythingError('cloud-drive service is not mounted', 'SOURCE_UNAVAILABLE')
-        const history = ctx.get('referenceChatHistory')
-        const configuredValue = (history?.store.settings as { cloudDriveDownloadDirectory?: unknown } | undefined)
-          ?.cloudDriveDownloadDirectory
-        if (configuredValue !== undefined && typeof configuredValue !== 'string') {
-          throw new ReferenceAnythingError(
-            'selected cloud-drive download directory must be a string path',
-            'REFERENCE_INVALID_CONFIG',
-          )
-        }
-        const configuredBase = await validateDownloadDirectory(configuredValue ?? '')
-        const usesConfiguredBase = configuredBase !== ''
-        const configuredBaseIdentity = usesConfiguredBase ? await selectedBaseIdentity(configuredBase) : undefined
-        let attachment: Awaited<ReturnType<CloudDriveService['attachment']>>
-        try {
-          attachment = await service.attachment(ref, MAX_ATTACHMENT_BYTES, exec.signal)
-        } catch (error) {
-          throw attachmentFailure(error, exec.signal, 'cloud-drive')
-        }
-        if (attachment.bytes.byteLength > MAX_ATTACHMENT_BYTES) {
-          throw new ReferenceAnythingError('cloud-drive attachment exceeds 25 MiB', 'ATTACHMENT_TOO_LARGE')
-        }
-        const root = await createTempRoot(
-          usesConfiguredBase ? configuredBase : tmpdir(),
-          'dsh-reference-drive-',
-          configuredBaseIdentity,
-        )
-        beginTempRootOperation(root)
-        try {
-          const localPath = attachmentLocalPath(root, attachment.name)
-          const handle = await open(localPath, 'wx', 0o600)
-          try {
-            registerSelectedTempFile(root, localPath, fileIdentity(await handle.stat()))
-            await handle.writeFile(attachment.bytes)
-          } finally {
-            await handle.close()
-          }
-          const bytes = Buffer.from(attachment.bytes)
-          const mimeType = sniffMime(bytes, attachment.mimeType)
-          const image = isRenderableImage(mimeType) ? await saveImage(ctx, bytes, mimeType, attachment.name) : undefined
-          await retainTempRoot(root)
-          return { name: attachment.name, mimeType, size: bytes.byteLength, localPath, ...(image ? { image } : {}) }
-        } catch (error) {
-          await removeTempRoot(root)
-          throw attachmentFailure(error, exec.signal, 'cloud-drive')
-        } finally {
-          endTempRootOperation(root)
-        }
-      }
-      if (ref.source !== 'web-chat') {
+      const capability = ctx.references.source(ref.source)?.attachments
+      if (!capability) {
         throw new ReferenceAnythingError(
-          'attachments are available only for synchronized Web conversations and cloud-drive documents',
+          `the ${ref.source} source offers no attachments`,
           'ATTACHMENT_UNAVAILABLE',
         )
       }
-      const service = ctx.get('referenceChatHistory')
-      if (!service) throw new ReferenceAnythingError('Web conversation history service is not mounted', 'SOURCE_UNAVAILABLE')
-      const conversation = service.store.conversations.get(ref.id)
-      const revision = conversation?.currentRevision
-      if (!conversation) throw new ReferenceAnythingError('conversation is not in the local title index', 'REFERENCE_NOT_FOUND')
-      if (!/^[a-f0-9]{64}$/.test(conversation.accountScope)) {
-        throw new ReferenceAnythingError(
-          `conversation has no verified ${conversation.provider} account scope; ask the user to sync ${conversation.provider} and reselect the conversation from the refreshed @ list, then retry`,
-          'REFERENCE_ACCOUNT_MISMATCH',
-        )
+      const configuredBase = await validateDownloadDirectory(capability.baseDirectory?.() ?? '')
+      const usesConfiguredBase = configuredBase !== ''
+      const configuredBaseIdentity = usesConfiguredBase ? await selectedBaseIdentity(configuredBase) : undefined
+      let payload: Awaited<ReturnType<typeof capability.fetch>>
+      try {
+        payload = await capability.fetch(ref, args.attachmentId, MAX_ATTACHMENT_BYTES, exec.signal)
+      } catch (error) {
+        throw attachmentFailure(error, exec.signal, ref.source)
       }
-      const attachment = service.store.settings.historyMode === 'metadata-only'
-        ? service.liveAttachment(ref.id, args.attachmentId)
-        : revision ? service.store.attachment(ref.id, revision, args.attachmentId) : undefined
-      if (!attachment?.locator || attachment.status !== 'available') {
-        throw new ReferenceAnythingError('provider supplied no stable attachment locator', 'ATTACHMENT_UNAVAILABLE')
+      if ('bytes' in payload && payload.bytes.byteLength > MAX_ATTACHMENT_BYTES) {
+        throw new ReferenceAnythingError(`${ref.source} attachment exceeds 25 MiB`, 'ATTACHMENT_TOO_LARGE')
       }
-      const root = await createTempRoot(tmpdir(), 'dsh-reference-attachment-')
+      const root = await createTempRoot(
+        usesConfiguredBase ? configuredBase : tmpdir(),
+        capability.directoryPrefix ?? 'dsh-reference-attachment-',
+        configuredBaseIdentity,
+      )
       beginTempRootOperation(root)
       try {
-        const localPath = attachmentLocalPath(root, attachment.name)
-        const settings = service.store.settings
-        const runner = new OpenCliRunner({
-          executable: settings.opencliPath, profile: settings.profile, timeoutMs,
-          maxStdoutBytes: DEFAULT_OPENCLI_MAX_STDOUT_BYTES,
-        })
-        await runner.attachment(
-          conversation.provider, attachment.locator, localPath, MAX_ATTACHMENT_BYTES, exec.signal, conversation.accountScope,
-        )
-        const bytes = await readFile(localPath)
-        if (bytes.byteLength > MAX_ATTACHMENT_BYTES) {
-          throw new ReferenceAnythingError('attachment exceeds 25 MiB', 'ATTACHMENT_TOO_LARGE')
+        const localPath = attachmentLocalPath(root, payload.name)
+        let bytes: Buffer
+        if ('bytes' in payload) {
+          const handle = await open(localPath, 'wx', 0o600)
+          try {
+            registerSelectedTempFile(root, localPath, fileIdentity(await handle.stat()))
+            await handle.writeFile(payload.bytes)
+          } finally {
+            await handle.close()
+          }
+          bytes = Buffer.from(payload.bytes)
+        } else {
+          await payload.writeTo(localPath, MAX_ATTACHMENT_BYTES, exec.signal)
+          bytes = await readFile(localPath)
+          if (bytes.byteLength > MAX_ATTACHMENT_BYTES) {
+            throw new ReferenceAnythingError('attachment exceeds 25 MiB', 'ATTACHMENT_TOO_LARGE')
+          }
         }
-        const mimeType = sniffMime(bytes, attachment.mimeType)
-        const image = isRenderableImage(mimeType) ? await saveImage(ctx, bytes, mimeType, attachment.name) : undefined
+        const mimeType = sniffMime(bytes, payload.mimeType)
+        const image = isRenderableImage(mimeType) ? await saveImage(ctx, bytes, mimeType, payload.name) : undefined
         await retainTempRoot(root)
-        return {
-          name: attachment.name, mimeType, size: bytes.byteLength, localPath,
-          ...(image ? { image } : {}),
-        }
+        return { name: payload.name, mimeType, size: bytes.byteLength, localPath, ...(image ? { image } : {}) }
       } catch (error) {
         await removeTempRoot(root)
-        throw attachmentFailure(error, exec.signal, conversation.provider)
+        throw attachmentFailure(error, exec.signal, ref.source)
       } finally {
         endTempRootOperation(root)
       }
@@ -793,30 +735,13 @@ async function saveImage(ctx: Context, bytes: Buffer, mimeType: ImageMediaType, 
   }
 }
 
-function attachmentFailure(error: unknown, signal: AbortSignal | undefined, provider: string): ReferenceAnythingError {
+function attachmentFailure(error: unknown, signal: AbortSignal | undefined, label: string): ReferenceAnythingError {
   if (error instanceof ReferenceAnythingError) return error
   if (signal?.aborted) {
     return new ReferenceAnythingError('attachment materialization was cancelled', 'REFERENCE_CANCELLED', { cause: signal.reason })
   }
-  if (error instanceof OpenCliError && error.code === 'PROVIDER_ACCOUNT_MISMATCH') {
-    return new ReferenceAnythingError(
-      `attachment belongs to a different logged-in ${provider} account; ask the user to sync ${provider} and reselect the conversation from the refreshed @ list, then retry`,
-      'REFERENCE_ACCOUNT_MISMATCH',
-      { cause: error },
-    )
-  }
-  if (error instanceof OpenCliError && error.code === 'ATTACHMENT_TOO_LARGE') {
-    return new ReferenceAnythingError('attachment exceeds 25 MiB', 'ATTACHMENT_TOO_LARGE', { cause: error })
-  }
-  if (error instanceof OpenCliError && error.code === 'PROVIDER_RATE_LIMIT') {
-    return new ReferenceAnythingError(
-      `${provider} rate-limited account verification; wait before retrying the attachment`,
-      'PROVIDER_RATE_LIMIT',
-      { cause: error },
-    )
-  }
   return new ReferenceAnythingError(
-    `could not materialize the attachment from ${provider}`,
+    `could not materialize the attachment from ${label}`,
     'REFERENCE_READ_FAILED',
     { cause: error },
   )

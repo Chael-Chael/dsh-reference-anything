@@ -1,0 +1,19 @@
+{
+  "name": "dsh-reference-notes",
+  "version": "0.1.0",
+  "description": "Example Reference Anything source: Markdown and text notes in one directory.",
+  "type": "module",
+  "exports": {
+    ".": "./lib/index.js",
+    "./client": "./lib/client.js",
+    "./package.json": "./package.json"
+  },
+  "files": ["lib", "cordis.patch.yml"],
+  "dsh": {
+    "bundle": { "patch": "./cordis.patch.yml" },
+    "client": { "platform": "web", "inject": ["dsh-reference-anything"] }
+  },
+  "peerDependencies": {
+    "dsh-reference-anything": ">=0.6.0"
+  }
+}

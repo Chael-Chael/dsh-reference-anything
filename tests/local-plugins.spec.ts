@@ -22,6 +22,7 @@ describe('local plugin discovery', () => {
     vi.spyOn(ctx.loader, 'import').mockImplementation(async name => name === 'cordis:include' ? Include : ({
       name, inject: name === 'waiting-plugin' ? ['missingService'] : [], apply: () => {},
     }))
+    ctx.provide('references', { settingsOf: () => ({ onlyLive: false, showDeepSeek: true }) } as never)
     remote = new ReferenceAnythingRemote(ctx)
   })
   afterEach(async () => {
@@ -105,6 +106,6 @@ describe('local plugin discovery', () => {
     const isolated = new Context()
     try { expect(await new ReferenceAnythingRemote(isolated).localPlugins(signal())).toEqual([]) }
     finally { await isolated.fiber.dispose() }
-    expect(() => remote.localPlugins(AbortSignal.abort())).toThrow()
+    await expect(remote.localPlugins(AbortSignal.abort())).rejects.toThrow()
   })
 })

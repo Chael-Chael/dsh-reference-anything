@@ -137,8 +137,8 @@ export function registerLocalReferenceTools(ctx: Context, budget: number, timeou
       const identity=(row:typeof candidates[number])=>JSON.stringify(row.ref)
       candidates.sort((a,b)=>Number(b.workspace)-Number(a.workspace)||(b.updatedAt??-Infinity)-(a.updatedAt??-Infinity)||(identity(a)<identity(b)?-1:identity(a)>identity(b)?1:0))
       const failures=[...new Set(unavailable)].sort()
-      const settings=ctx.get('referenceChatHistory')?.getSettings()
-      const policy={discovery:service.discoveryPolicy(),enabled:settings?.enabledAgents,directories:settings?.agentDirectories}
+      const settings=service.preferences.get()
+      const policy={discovery:service.discoveryPolicy(),enabled:settings.enabledAgents,directories:settings.agentDirectories}
       const revision='list:'+createHash('sha256').update(JSON.stringify({source:args.source??null,query:args.query,cwd,policy,failures,items:candidates})).digest('hex')
       if(args.revision&&args.revision!==revision)throw localError('REVISION_CHANGED','Directory changed. Restart without from and revision.')
       const index=args.from?.index??1

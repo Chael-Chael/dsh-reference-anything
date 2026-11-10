@@ -1,3 +1,6 @@
+import { mkdtemp, rm } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { Context } from '@deepseek-ai/cordis'
 import { afterEach, describe, expect, it } from 'vitest'
 import ReferenceRuntime from '../src/index.ts'
@@ -178,5 +181,44 @@ describe('cloud drive source safeguards survive the OpenList migration', () => {
     const drive = new StubDrive({ kind: 'openlist', id: '/partial.md', path: '/partial.md', name: 'partial.md', size: text.byteLength, isDirectory: false, searchIncomplete: true }, text)
     const { ctx, dispose } = await mount(drive)
     try { expect(await ctx.references.list('partial', 10)).toMatchObject([{ label: 'partial.md', searchIncomplete: true }]) } finally { await dispose() }
+  })
+})
+
+describe('cloud drive mount switches', () => {
+  it('hides and refuses switched-off mounts for the model, not only in the menu', async () => {
+    const text = new TextEncoder().encode('secret')
+    const drive = new StubDrive({ kind: 'openlist', id: '/private/notes.md', path: '/private/notes.md', name: 'notes.md', size: text.byteLength, isDirectory: false }, text)
+    const { ctx, dispose } = await mount(drive)
+    try {
+      const ref = (await ctx.references.list('', 10))[0]!.ref
+      await ctx.referenceCloudDrive.updatePreferences({ downloadDirectory: '', enabledMounts: ['/work'] })
+      expect(await ctx.references.list('', 10)).toEqual([])
+      expect(await ctx.referenceCloudDrive.pickerList('', 10)).toEqual([])
+      await expect(ctx.references.read(ref, { limit: 2 })).rejects.toMatchObject({ code: 'SOURCE_DISABLED' })
+      await expect(ctx.referenceCloudDrive.attachment(ref, 10)).rejects.toMatchObject({ code: 'SOURCE_DISABLED' })
+      await ctx.referenceCloudDrive.updatePreferences({ downloadDirectory: '', enabledMounts: ['/private'] })
+      expect(await ctx.references.list('', 10)).toHaveLength(1)
+    } finally { await dispose() }
+  })
+})
+
+describe('cloud drive download directory', () => {
+  it('validates a changed directory before saving and keeps the old value on rejection', async () => {
+    const drive = new StubDrive({ kind: 'openlist', id: '/a.md', path: '/a.md', name: 'a.md', size: 1, isDirectory: false }, new Uint8Array([97]))
+    const { ctx, dispose } = await mount(drive)
+    try {
+      const missing = join(tmpdir(), `dsh-missing-${Date.now()}`)
+      await expect(ctx.referenceCloudDrive.updatePreferences({ downloadDirectory: missing })).rejects.toThrow()
+      expect(ctx.referenceCloudDrive.preferences.get().downloadDirectory).toBe('')
+      const existing = await mkdtemp(join(tmpdir(), 'dsh-drive-base-'))
+      try {
+        await ctx.referenceCloudDrive.updatePreferences({ downloadDirectory: existing })
+        expect(ctx.referenceCloudDrive.preferences.get().downloadDirectory).toBe(existing)
+        // An unrelated save does not revalidate the unchanged directory.
+        await rm(existing, { recursive: true })
+        await ctx.referenceCloudDrive.updatePreferences({ downloadDirectory: existing, enabledMounts: ['/'] })
+        expect(ctx.referenceCloudDrive.preferences.get().enabledMounts).toEqual(['/'])
+      } finally { await rm(existing, { recursive: true, force: true }) }
+    } finally { await dispose() }
   })
 })

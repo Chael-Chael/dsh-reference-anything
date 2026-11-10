@@ -61,7 +61,7 @@ async function mount(over: Config = {}): Promise<{ ctx: Context; dispose: () => 
   const ctx = new Context()
   ctx.provide('storageDomain', memoryStorage())
   await ctx.plugin(ReferenceRuntime, {})
-  const fiber = await ctx.plugin(localAgent, { scope: 'all', ...over })
+  const fiber = await ctx.plugin(localAgent, { scope: 'all', discovery: 'builtin', ...over })
   return { ctx, dispose: () => fiber.dispose() }
 }
 

@@ -2,28 +2,32 @@ import { normalize } from 'node:path'
 import { Context } from '@deepseek-ai/cordis'
 import { describe, expect, it, vi } from 'vitest'
 import { ReferenceAnythingRemote } from '../src/host.ts'
+import { LocalAgentRemote } from '../src/sources/local-agent/remote.ts'
+import { CloudDriveRemote } from '../src/sources/cloud-drive/remote.ts'
+import { mountRemote } from '../src/remote-mount.ts'
+import { DRIVE_TYPERT_MANIFEST } from '../src/typert.ts'
 import * as web from '../src/web.ts'
-import { defaultPickerSettings } from '../src/wire.ts'
+import { memorySettings } from '../src/settings.ts'
+import { defaultLocalAgentSettings, localAgentSettingsSchema } from '../src/sources/local-agent/settings.ts'
 
 describe('external conversation Remote availability', () => {
   function setup() {
     const ctx = new Context()
-    const settings = { enabledAgents: ['codex', 'claude-code'], picker: defaultPickerSettings(), agentDirectories: { codex: '/custom' } }
-    ctx.provide('referenceChatHistory', { getSettings: () => settings })
+    const preferences = memorySettings(localAgentSettingsSchema, { ...defaultLocalAgentSettings(), enabledAgents: ['codex', 'claude-code'], agentDirectories: { codex: '/custom' } })
     const scanDiscover = vi.fn(async ({ format, path }: { format: string; path?: string }) => ({
       sessions: format === 'codex' ? ['empty', 'read-error', 'readable'].map((id, index) => ({
         format, sessionId: id, title: id, sourcePath: `/test/${id}`, cwd: '/project', lastActiveAt: 3 - index,
       })) : [], warnings: path === '/broken' ? [{ format, target: path, error: 'Permission denied' }] : [],
     }))
     ctx.provide('referenceLocalAgents', {
-      scanner: { scanDiscover }, conversationAvailability: { visible: async ({ sessionId }: { sessionId: string }) => sessionId !== 'empty' },
+      preferences, scanner: { scanDiscover }, conversationAvailability: { visible: async ({ sessionId }: { sessionId: string }) => sessionId !== 'empty' },
       setAgentDirectories: vi.fn(), discoveryPolicy: () => ({ roots: [{ kind: 'codex', path: '/custom' }], scope: 'workspace' }),
       referenceForDiscovered: async (kind: string, path: string, id: string) => `${kind}:chat-import:${id}`,
     })
-    const remote = new ReferenceAnythingRemote(ctx)
+    const remote = new LocalAgentRemote(ctx)
     const signal = new AbortController().signal
     const agent = { session: { header: { id: 'owner', cwd: '/project' } } } as never
-    return { ctx, settings, scanDiscover, remote, signal, agent }
+    return { ctx, preferences, scanDiscover, remote, signal, agent }
   }
   it('scans and counts without Chat Import, hiding only confirmed empty rows', async () => {
     const { remote, signal, agent } = setup()
@@ -78,52 +82,44 @@ describe('external conversation Remote availability', () => {
     const importPath = vi.fn(async (input: unknown) => ({ mode: 'single', status: 'imported', sessionId: 'imported-session', ...(input as object) }))
     ctx.provide('chatImport', { importPath })
     ctx.provide('referenceLocalAgents', { conversationAvailability: { visible: async () => true }, importTarget: vi.fn(async () => ({ format: 'codex', path: 'C:/rollout.jsonl' })) })
-    const remote = new ReferenceAnythingRemote(ctx)
+    const remote = new LocalAgentRemote(ctx)
     await expect(remote.agentImport({} as never, { id: 'codex:rollout.jsonl' }, new AbortController().signal)).resolves.toBe('imported-session')
     expect(importPath).toHaveBeenCalledWith({ format: 'codex', path: 'C:/rollout.jsonl' }, expect.any(AbortSignal))
   })
 
-  it('starts and searches conversations when the optional cloud-drive source is absent', async () => {
+  it('mounts the core Remote and settings with every source switched off', async () => {
     const ctx = new Context()
-    const search = vi.fn(() => [])
-    ctx.provide('typert', { register: vi.fn(() => () => undefined) })
-    ctx.provide('referenceChatHistory', { search })
-    ctx.provide('openListManager', {})
-    ctx.provide('references', { registerSource: vi.fn(() => () => undefined) })
+    const register = vi.fn(() => () => undefined)
+    ctx.provide('typert', { register })
+    ctx.provide('references', { registerSource: vi.fn(() => () => undefined), sourceIds: () => ['local-plugin'], settingsIds: () => ['menu', 'local-plugin'], settingsOf: () => undefined, defineSettings: (_id: string, definition: { schema: never; defaults: never }) => memorySettings(definition.schema, definition.defaults) })
     const fiber = await ctx.plugin(web)
     try {
       const remote = ctx.get('referenceAnything') as ReferenceAnythingRemote | undefined
       expect(remote).toBeDefined()
       const signal = new AbortController().signal
-      expect(remote!.search({ query: 'cache', limit: 10 }, signal)).toEqual([])
-      expect(search).toHaveBeenCalledWith('cache', undefined, 10, signal)
-      await expect(remote!.driveSearch({ query: '', limit: 10 }, signal)).resolves.toEqual([])
+      expect(remote!.sources(signal)).toEqual(['local-plugin', 'menu'])
+      expect(remote!.settingsGet().picker?.agents.enabled).toBe(true)
+      expect(ctx.get('referenceAnythingWebChat')).toBeUndefined()
+      expect(ctx.get('referenceAnythingDrive')).toBeUndefined()
     } finally {
       await fiber.dispose()
     }
   })
 
-  it('keeps cloud-drive lookup available without making it a startup dependency', async () => {
+  it('mounts a source Remote only while Typert and its plugin are present', async () => {
     const ctx = new Context()
-    ctx.provide('typert', { register: vi.fn(() => () => undefined) })
-    ctx.provide('referenceChatHistory', { search: () => [] })
-    ctx.provide('openListManager', {})
-    ctx.provide('references', { registerSource: vi.fn(() => () => undefined) })
     const pickerList = vi.fn(async () => [{ ref: { source: 'cloud-drive', id: 'drive-1' }, label: 'notes.md', provider: 'OpenList' }])
-    const disposeDrive = ctx.provide('referenceCloudDrive', { pickerList })
-    const fiber = await ctx.plugin(web)
-    try {
-      const remote = ctx.get('referenceAnything') as ReferenceAnythingRemote
-      const signal = new AbortController().signal
-      await expect(remote.driveSearch({ query: 'notes', limit: 10 }, signal))
-        .resolves.toEqual([{ id: 'drive-1', label: 'notes.md', provider: 'OpenList' }])
-      expect(pickerList).toHaveBeenCalledWith('notes', 10, signal)
-      disposeDrive()
-      expect(ctx.get('referenceAnything')).toBeDefined()
-      expect(remote.search({ query: '', limit: 10 }, signal)).toEqual([])
-      await expect(remote.driveSearch({ query: '', limit: 10 }, signal)).resolves.toEqual([])
-    } finally {
-      await fiber.dispose()
-    }
+    ctx.provide('referenceCloudDrive', { pickerList })
+    const fiber = await ctx.plugin({ apply(scoped: Context) { mountRemote(scoped, scope => new CloudDriveRemote(scope), DRIVE_TYPERT_MANIFEST) } })
+    expect(ctx.get('referenceAnythingDrive')).toBeUndefined()
+    const disposeTypert = ctx.provide('typert', { register: vi.fn(() => () => undefined) })
+    await new Promise(resolve => setTimeout(resolve, 0))
+    const remote = ctx.get('referenceAnythingDrive') as CloudDriveRemote
+    const signal = new AbortController().signal
+    await expect(remote.driveSearch({ query: 'notes', limit: 10 }, signal))
+      .resolves.toEqual([{ id: 'drive-1', label: 'notes.md', provider: 'OpenList' }])
+    await fiber.dispose()
+    expect(ctx.get('referenceAnythingDrive')).toBeUndefined()
+    if (typeof disposeTypert === 'function') await disposeTypert()
   })
 })

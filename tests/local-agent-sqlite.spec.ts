@@ -199,6 +199,7 @@ async function mount(
     extraRoots: [{ kind, path: root }],
     scope: 'all',
     directoryTtlMs: 0,
+    discovery: 'builtin',
     ...over,
   })
   return { ctx, dispose: () => fiber.dispose() }

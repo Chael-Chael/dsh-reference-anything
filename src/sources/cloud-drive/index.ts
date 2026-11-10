@@ -19,6 +19,13 @@
 import { Context, Service } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
 import { ReferenceAnythingError } from '../../errors.ts'
+import { memorySettings, type SourceSettingsHandle } from '../../settings.ts'
+import type { ReferenceAttachmentCapability } from '../../types.ts'
+import { mountRemote } from '../../remote-mount.ts'
+import { DRIVE_TYPERT_MANIFEST } from '../../typert.ts'
+import { CloudDriveRemote } from './remote.ts'
+import { validateDownloadDirectory } from '../../download-directory.ts'
+import { CLOUD_DRIVE_SETTINGS_ID, cloudDriveSettingsFromLegacy, cloudDriveSettingsSchema, defaultCloudDriveSettings, mountAllowed, type CloudDriveSettings } from './settings.ts'
 import { compareMatches, scoreTitle } from '../../search.ts'
 import type { TitleMatch } from '../../search.ts'
 import type {
@@ -162,10 +169,23 @@ export class CloudDriveService extends Service implements ReferenceSource {
   private readonly cache: DriveCache
   private readonly extensions: ReadonlySet<string>
   private credentialGeneration = -1
+  /** The user's own choices for this source, stored by the core registry. */
+  readonly preferences: SourceSettingsHandle<CloudDriveSettings>
+  /** Binary documents, for `reference_attachment_read`; always attachment id `file`. */
+  readonly attachments: ReferenceAttachmentCapability = cloudDriveAttachments(this)
 
   constructor(ctx: Context, config: Config = {}) {
     super(ctx, 'referenceCloudDrive')
     this.settings = { ...defaults(), ...definedOnly(config) }
+    const definition = {
+      schema: cloudDriveSettingsSchema, defaults: defaultCloudDriveSettings(), fromLegacy: cloudDriveSettingsFromLegacy,
+      // The one field a schema cannot check: a chosen directory must exist and be writable.
+      prepare: async (next: CloudDriveSettings, previous: CloudDriveSettings) => next.downloadDirectory === previous.downloadDirectory
+        ? next : { ...next, downloadDirectory: await validateDownloadDirectory(next.downloadDirectory) },
+    }
+    // `references` is injected; the fallback only serves direct construction.
+    this.preferences = ctx.get('references')?.defineSettings(CLOUD_DRIVE_SETTINGS_ID, definition)
+      ?? memorySettings(cloudDriveSettingsSchema, definition.defaults)
     const built = new Map<DriveKind, DriveProvider>()
     for (const kind of this.settings.drives) {
       const root = this.settings.roots[kind] ?? this.settings.root
@@ -188,6 +208,21 @@ export class CloudDriveService extends Service implements ReferenceSource {
 
   protected async [Service.init](): Promise<void> {
     this.ctx.effect(() => this.ctx.references.registerSource(this), 'reference-cloud-drive.registerSource()')
+    mountRemote(this.ctx, scope => new CloudDriveRemote(scope), DRIVE_TYPERT_MANIFEST)
+  }
+
+  /** Save settings; a changed download directory is validated first. */
+  updatePreferences(value: unknown): Promise<CloudDriveSettings> { return this.preferences.update(value) }
+
+  /** Whether the user has this entry's mount switched on. */
+  private visible(entry: DriveEntry): boolean {
+    return mountAllowed(entry.path, this.preferences.get().enabledMounts)
+  }
+
+  private assertVisible(entry: DriveEntry): void {
+    if (!this.visible(entry)) {
+      throw new ReferenceAnythingError('cloud-drive: this mount is switched off in Reference Anything settings', 'SOURCE_DISABLED')
+    }
   }
 
   /**
@@ -231,7 +266,7 @@ export class CloudDriveService extends Service implements ReferenceSource {
       const key = `${provider.kind}\0${trimmed}`
       const cached = this.cache.listing(key)
       if (cached !== undefined) {
-        collected.push(...cached)
+        collected.push(...cached.filter(entry => this.visible(entry)))
         return
       }
       try {
@@ -245,7 +280,7 @@ export class CloudDriveService extends Service implements ReferenceSource {
         const entries = await provider.list(trimmed, bounded, signal)
         const files = entries.filter(entry => !entry.isDirectory && this.readable(entry))
         this.cache.remember(key, files)
-        collected.push(...files)
+        collected.push(...files.filter(entry => this.visible(entry)))
       } catch (cause) {
         if (cause instanceof ReferenceAnythingError && cause.code === 'REFERENCE_CANCELLED') return
         // Only the drive and the error class are reported. The message may
@@ -280,6 +315,7 @@ export class CloudDriveService extends Service implements ReferenceSource {
     if (entry === undefined) {
       throw new ReferenceAnythingError('cloud-drive: no such file', 'REFERENCE_NOT_FOUND')
     }
+    this.assertVisible(entry)
     if (entry.isDirectory) {
       throw new ReferenceAnythingError(
         `cloud-drive: ${JSON.stringify(entry.name)} is a folder, which has no text to read`,
@@ -349,6 +385,7 @@ export class CloudDriveService extends Service implements ReferenceSource {
     if (!provider) throw new ReferenceAnythingError('cloud-drive provider is unavailable', 'SOURCE_UNAVAILABLE')
     const entry = this.cache.entry(kind, fileId) ?? await provider.describe(fileId, signal)
     if (!entry || entry.isDirectory) throw new ReferenceAnythingError('cloud-drive file was not found', 'REFERENCE_NOT_FOUND')
+    this.assertVisible(entry)
     if (!ATTACHMENT_EXTENSIONS.has(extensionOf(entry.name))) throw new ReferenceAnythingError('cloud-drive file type is not supported as an attachment', 'REFERENCE_READ_FAILED')
     if (entry.size > maxBytes) throw new ReferenceAnythingError('cloud-drive attachment exceeds the download limit', 'ATTACHMENT_TOO_LARGE')
     const result = await provider.read(entry.id, 0, maxBytes + 1, signal)
@@ -380,7 +417,7 @@ export class CloudDriveService extends Service implements ReferenceSource {
       try {
         if (!await provider.credentialed()) return
         const entries = await provider.list(trimmed, bounded, signal)
-        collected.push(...entries.filter(entry => entry.isDirectory || this.readable(entry) || ATTACHMENT_EXTENSIONS.has(extensionOf(entry.name))))
+        collected.push(...entries.filter(entry => this.visible(entry) && (entry.isDirectory || this.readable(entry) || ATTACHMENT_EXTENSIONS.has(extensionOf(entry.name)))))
       } catch (cause) {
         if (cause instanceof ReferenceAnythingError && cause.code === 'REFERENCE_CANCELLED') return
         const code = cause instanceof ReferenceAnythingError ? cause.code : 'REFERENCE_READ_FAILED'
@@ -466,6 +503,23 @@ export class CloudDriveService extends Service implements ReferenceSource {
 function extensionOf(name: string): string {
   const dot = name.lastIndexOf('.')
   return dot <= 0 ? '' : name.slice(dot).toLocaleLowerCase()
+}
+
+/** @param drive - the cloud-drive service, or a stand-in with its two members. */
+export function cloudDriveAttachments(drive: Pick<CloudDriveService, 'attachment' | 'preferences'>): ReferenceAttachmentCapability {
+  return {
+    directoryPrefix: 'dsh-reference-drive-',
+    baseDirectory: () => drive.preferences.get().downloadDirectory,
+    async fetch(ref, attachmentId, maxBytes, signal) {
+      if (attachmentId !== 'file') {
+        throw new ReferenceAnythingError(
+          'cloud-drive documents use attachmentId "file" exactly as shown by external_reference_read',
+          'ATTACHMENT_UNAVAILABLE',
+        )
+      }
+      return drive.attachment(ref, maxBytes, signal)
+    },
+  }
 }
 
 function imageExtension(name: string): boolean { return ['.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg'].includes(extensionOf(name)) }

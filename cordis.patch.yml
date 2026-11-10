@@ -55,9 +55,15 @@
     - id: reference-openlist
       name: 'dsh-reference-anything/openlist'
 
-    # Host Remote used by the Web @Conversation source and settings panel.
+    # Core Remote for the settings panel, package updates and the local-plugin
+    # source. Each other source mounts its own Remote, so switching one off
+    # leaves the panel and the other sources working.
     - id: reference-anything-web
       name: 'dsh-reference-anything/web'
+
+    # Plugins installed in this profile: name, version and directory only.
+    - id: reference-local-plugin
+      name: 'dsh-reference-anything/local-plugin'
 
     # Exported conversations on disk. Inert until the directory exists, so the
     # default is safe; point `roots` wherever you keep your exports.

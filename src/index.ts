@@ -1,3 +1,4 @@
+import { usesLocalProtocol } from './local-locator.ts'
 /**
  * `ctx.references` — the registry of sources that can name and read material
  * held outside this session.
@@ -16,6 +17,8 @@ import type { Session } from '@deepseek-ai/dsh-session'
 import z from '@deepseek-ai/schemastery'
 import { ReferenceAnythingError } from './errors.ts'
 import { decodeReferenceUri, mayContainReference, parseReferenceText, referenceReadHandle } from './uri.ts'
+import type {} from '@deepseek-ai/dsh-storage-domain'
+import { SourceSettingsRegistry, sourceSettingsDomainSpec, type SourceSettingsDefinition, type SourceSettingsHandle } from './settings.ts'
 import type {
   ReferenceRef,
   ReferenceSnapshot,
@@ -26,6 +29,7 @@ import type {
 
 export type * from './types.ts'
 export { ReferenceAnythingError, type ReferenceErrorCode } from './errors.ts'
+export type { SourceSettingsDefinition, SourceSettingsHandle } from './settings.ts'
 export {
   REFERENCE_SCHEME,
   decodeReferenceUri,
@@ -67,6 +71,7 @@ export default class ReferenceRuntime extends Service {
   private readonly sources = new Map<string, ReferenceSource>()
   private readonly grants = new Map<string, Set<string>>()
   private readonly listLimit: number
+  private readonly settingsRegistry = new SourceSettingsRegistry()
 
   /**
    * @param ctx - the mounting context.
@@ -76,6 +81,52 @@ export default class ReferenceRuntime extends Service {
     super(ctx, 'references')
     this.listLimit = config.listLimit ?? DEFAULT_LIST_LIMIT
     ctx.on('session/disposed', session => { this.revoke(String(session.id)) })
+    // Optional: without durable storage (tests, minimal profiles) settings
+    // still work in memory, and they reload once storage appears.
+    const registry = this.settingsRegistry
+    ctx.inject(['storageDomain'], async scoped => {
+      const domain = await scoped.storageDomain.open(sourceSettingsDomainSpec)
+      scoped.effect(() => () => { registry.detach(); void domain.close() }, 'references.settingsDomain')
+      await registry.attach(domain)
+    })
+  }
+
+  /**
+   * Declare one source's user settings. They live as long as the calling
+   * plugin: unloading it removes the definition, never the stored value.
+   * @param id - the source id; one definition per id.
+   * @param definition - schema, defaults, and an optional migration.
+   * @returns a live handle to the source's own settings.
+   */
+  defineSettings<T>(id: string, definition: SourceSettingsDefinition<T>): SourceSettingsHandle<T> {
+    const registry = this.settingsRegistry
+    let defined: ReturnType<SourceSettingsRegistry['define']> | undefined
+    this.ctx.effect(function* () {
+      defined = registry.define(id, definition)
+      yield () => defined?.dispose()
+    }, 'references.defineSettings()')
+    return defined!.handle as SourceSettingsHandle<T>
+  }
+
+  /** Current settings of a loaded source, or undefined when it is not loaded. */
+  settingsOf(id: string): unknown { return this.settingsRegistry.value(id) }
+
+  /**
+   * Save one loaded source's settings, through that source's own validation.
+   * @throws when no loaded source declared settings under `id`.
+   */
+  updateSettings(id: string, value: unknown): Promise<unknown> {
+    const handle = this.settingsRegistry.handle(id)
+    if (!handle) throw new ReferenceAnythingError(`no loaded source declared settings ${JSON.stringify(id)}`, 'SOURCE_UNKNOWN')
+    return handle.update(value)
+  }
+
+  /** Ids of loaded sources that declared settings. */
+  settingsIds(): string[] { return this.settingsRegistry.ids() }
+
+  /** Hand over the settings object saved before sources owned their settings; kept once. */
+  publishLegacySettings(record: Readonly<Record<string, unknown>>): Promise<void> {
+    return this.settingsRegistry.publishLegacy(record)
   }
 
   /**
@@ -103,6 +154,11 @@ export default class ReferenceRuntime extends Service {
   /** @returns the registered source ids, in registration order. */
   sourceIds(): string[] {
     return [...this.sources.keys()]
+  }
+
+  /** @returns the registered source with this id, if any. */
+  source(id: string): ReferenceSource | undefined {
+    return this.sources.get(id)
   }
 
   /**
@@ -189,7 +245,7 @@ export default class ReferenceRuntime extends Service {
         }
       }
     }
-    const matched = candidates.find(ref => ref.source !== 'local-agent' && referenceReadHandle(ref) === uri)
+    const matched = candidates.find(ref => !usesLocalProtocol(ref) && referenceReadHandle(ref) === uri)
     if (!matched) throw new ReferenceAnythingError('Unknown reference handle in this task; use external_reference_list and copy its uri exactly.', 'CONVERSATION_REFERENCE_NOT_GRANTED')
     return matched
   }
@@ -211,7 +267,7 @@ export default class ReferenceRuntime extends Service {
    */
   async list(query = '', limit: number = this.listLimit, signal?: AbortSignal, externalOnly = false): Promise<ReferenceSummary[]> {
     throwIfCancelled(signal)
-    const available = (await this.availableSources(signal)).filter(source => !externalOnly || source.id !== 'local-agent')
+    const available = (await this.availableSources(signal)).filter(source => !externalOnly || !usesLocalProtocol({ source: source.id }))
     if (available.length === 0) return []
     const settled = await Promise.allSettled(
       available.map(source => source.list(query, limit, signal)),

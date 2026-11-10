@@ -38,7 +38,7 @@ describe('settings source registration guard', () => {
     // Keyed rather than positional so adding a group does not require editing a
     // literal, and so a failure names the group that broke the rule.
     const groups = Object.entries(picker)
-      .flatMap(([key, source]) => typeof source === 'object' ? [[key, source] as const] : [])
+      .flatMap(([key, source]) => typeof source === 'object' && key !== 'groups' ? [[key, source as { limit: number; maxCandidates: number }] as const] : [])
     expect(groups.map(([key, source]) => [key, source.limit]))
       .toEqual(groups.map(([key]) => [key, 6]))
     expect(picker.displayMode).toBe('collapse')

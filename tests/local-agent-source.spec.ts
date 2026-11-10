@@ -143,14 +143,15 @@ afterEach(async () => {
 async function mount(over: Config = {}, enabledAgents?: readonly string[]): Promise<{ ctx: Context; dispose: () => Promise<void> }> {
   const ctx = new Context()
   ctx.provide('storageDomain', memoryStorage())
-  if (enabledAgents !== undefined) ctx.provide('referenceChatHistory', { store: { settings: { enabledAgents } } } as never)
   await ctx.plugin(ReferenceRuntime, {})
   const fiber = await ctx.plugin(localAgent, {
     agents: [],
     extraRoots: [{ kind: 'claude-code', path: claudeRoot }, { kind: 'codex', path: codexRoot }],
     directoryTtlMs: 0,
+    discovery: 'builtin',
     ...over,
   })
+  if (enabledAgents !== undefined) await ctx.referenceLocalAgents.preferences.update({ ...ctx.referenceLocalAgents.preferences.get(), enabledAgents })
   return { ctx, dispose: () => fiber.dispose() }
 }
 
@@ -167,9 +168,7 @@ function reply(index: number): string {
 
 describe('discovery', () => {
   it('keeps healthy discovered sessions when another provider warns or throws', async () => {
-    const { ctx, dispose } = await mount({}, ['codex', 'trae', 'kimi'])
-    const history = ctx.get('referenceChatHistory')!
-    history.getSettings = (() => history.store.settings) as typeof history.getSettings
+    const { ctx, dispose } = await mount({ discovery: 'scanner' }, ['codex', 'trae', 'kimi'])
     const service = ctx.get('referenceLocalAgents')!
     vi.spyOn(service.scanner, 'scanDiscover').mockImplementation(async input => {
       if (input.format === 'kimi') throw new Error('scanner failed')

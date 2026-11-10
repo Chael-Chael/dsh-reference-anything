@@ -1,0 +1,7 @@
+# One row: this source is switched on and off like any other plugin.
+- insert:
+    - id: reference-notes
+      name: 'dsh-reference-notes'
+      config:
+        # Absolute, or relative to the workspace DSH starts in.
+        directory: 'notes'

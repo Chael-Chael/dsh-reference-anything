@@ -17,7 +17,8 @@
     "allowImportingTsExtensions": true,
     "rewriteRelativeImportExtensions": true,
 
-    "noEmit": true
+    "noEmit": true,
+    "paths": { "dsh-reference-anything/sdk": ["./src/sdk.ts"] }
   },
   "include": ["src", "tests", "vitest.config.ts"]
 }

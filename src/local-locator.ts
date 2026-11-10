@@ -35,3 +35,15 @@ export function localLocatorId(locator: LocalLocator): string {
   const encoded = btoa(Array.from(bytes, byte => String.fromCharCode(byte)).join('')).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
   return `${kind}:chat-import:${encoded}`
 }
+
+/**
+ * The source whose references travel in the `dsh-local:` wire protocol and are
+ * read through their own model tools rather than the shared external ones.
+ * Part of the durable URI format, so it is fixed here rather than registered.
+ */
+export const LOCAL_REFERENCE_SOURCE = 'local-agent'
+
+/** Whether a reference belongs to the `dsh-local:` protocol. */
+export function usesLocalProtocol(ref: { readonly source: string }): boolean {
+  return ref.source === LOCAL_REFERENCE_SOURCE
+}

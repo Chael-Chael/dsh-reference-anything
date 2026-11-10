@@ -10,8 +10,8 @@ import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import { createSnapshotStore } from '@deepseek-ai/dsh-client-store'
 import { createElement } from 'react'
 import type { InputTriggerServiceContract } from '@deepseek-ai/dsh-client-ui-input-trigger/client'
-import { ALL_LOCAL_AGENTS, ALL_PROVIDERS, defaultPickerSettings, samePickerSettings, pickerSourceSchema, type ChatProvider, type LocalAgent, type PickerSettings, type SettingsRecord } from '../wire.ts'
-import { REFERENCE_ANYTHING_REMOTE, type AgentCandidate, type DriveCandidate, type ReferenceAnythingRemoteFace, type SearchResult, type SyncStatus } from './remote.ts'
+import { ALL_LOCAL_AGENTS, ALL_PROVIDERS, defaultGroupSettings, defaultPickerSettings, samePickerSettings, pickerSourceSchema, type ChatProvider, type LocalAgent, type PickerSettings, type PickerSource, type SettingsRecord } from '../wire.ts'
+import { REFERENCE_ANYTHING_REMOTES, composeRemoteFace, type AgentCandidate, type DriveCandidate, type ReferenceAnythingRemoteFace, type SearchResult, type SyncStatus } from './remote.ts'
 import { createCloudDriveSource, createCommandSource, createConversationSource, createFileSource, createLocalAgentSource, createPluginSource, createSearchDebounce, createSessionSource, createSkillSource, type RefreshablePickerSource } from './source.ts'
 import { ConversationSettings, PAGE_SIZE, type SettingsSnapshot } from './components.tsx'
 import {
@@ -27,6 +27,8 @@ import { filterAgentCandidates, filterDriveCandidates } from './selection.ts'
 import { createUpdateSource, SettingsReleaseIntro } from './update-menu.tsx'
 import { pickDirectoryWithError } from './directory-picker.ts'
 import { registerNativeReferenceText } from './native-reference-text.tsx'
+import { HOST_GROUPS, createReferenceGroupRegistry, hostSourceLoaded } from './source-registry.ts'
+import { withDisplayPolicy } from './source.ts'
 
 declare module '@deepseek-ai/dsh-api-session-controller/client' {
   interface SessionReferenceSourceMap {
@@ -52,6 +54,9 @@ export function apply(ctx: ClientContext): void {
   const scope = createSnapshotStore<SettingsSnapshot>({
     settings: { opencliPath: 'opencli', profile: '', detailConcurrency: 8, autoSync: false, syncOnStartup: false, autoSyncMinutes: 60, historyMode: 'metadata-only', syncHistoryDays: null, enabledProviders: [...ALL_PROVIDERS], enabledAgents: [...ALL_LOCAL_AGENTS], maxReadTurns: 10, inputRenderMode: 'pill', cloudDriveDownloadDirectory: '' }, loading: true,
   })
+  /** Groups other plugins add to the `@` menu; see `source-registry.ts`. */
+  const groups = createReferenceGroupRegistry(pickerSourceSchema.options)
+  ;(ctx.reflect as unknown as { provide?(name: string, value: unknown): void }).provide?.('referenceSources', groups)
   let currentJob = ''
   let lastSyncFinishedAt: string | undefined
   let poll: ReturnType<typeof setInterval> | undefined
@@ -69,7 +74,7 @@ export function apply(ctx: ClientContext): void {
     return result.value
   }
   const refreshOpenList = async (): Promise<void> => {
-    if (!remote) return
+    if (!remote || !hostSourceLoaded(HOST_GROUPS.drives!.source, scope.getSnapshot().loadedSources)) return
     try {
       const status = unwrap(await remote.openListStatus())
       scope.set({ ...scope.getSnapshot(), openList: status })
@@ -95,20 +100,69 @@ export function apply(ctx: ClientContext): void {
     if (!remote) return
     try { const agentStats = unwrap(await remote.agentStats()); scope.set({ ...scope.getSnapshot(), agentStats }) } catch { /* Optional local-agent source. */ }
   }
+  let webChatLoaded = true
+  /** Ask the Host which sources are loaded; rebuild the menu groups when that changed. */
+  const refreshLoadedSources = async (): Promise<void> => {
+    if (!remote) return
+    const result = await remote.sources()
+    if (!result.ok) return
+    const previous = scope.getSnapshot().loadedSources
+    if (previous && previous.length === result.value.length && previous.every(id => result.value.includes(id))) return
+    scope.set({ ...scope.getSnapshot(), loadedSources: result.value })
+    reapplySources()
+  }
+  /**
+   * Switch the plugin row behind a built-in group. Off unloads that source for
+   * the model as well as the menu; on also shows its group again.
+   */
+  const setGroupPlugin = async (group: string, enabled: boolean): Promise<boolean> => {
+    const row = HOST_GROUPS[group]?.row
+    type ChangeResult = { ok: boolean; value?: { changed?: boolean; application?: string; error?: { code: string } }; error?: { message: string } }
+    const manager = (ctx.reflect as unknown as { get(name: string): unknown }).get('remote.pluginManager') as {
+      listPlugins(): Promise<{ ok: boolean; value?: ReadonlyArray<{ entryId?: string; patchId?: string }> }>
+      setPluginEnabled(id: string, enabled: boolean): Promise<ChangeResult>
+    } | undefined
+    if (!row || !manager) return false
+    try {
+      // The plugin manager addresses Loader entries, not patch rows: find the entry this row created.
+      const plugins = await manager.listPlugins()
+      const entryId = plugins.ok ? plugins.value?.find(item => item.patchId === row)?.entryId : undefined
+      if (!entryId) return false
+      const result = await manager.setPluginEnabled(entryId, enabled)
+      // A reload can report another entry's failure while this row did change;
+      // the Host's own source roster then decides what the panel shows.
+      const failure = !result.ok ? result.error?.message
+        : result.value?.application === 'failed' && result.value.changed !== true ? result.value.error?.code ?? 'failed' : undefined
+      await refreshLocal()
+      if (failure) throw new Error(`${row}: ${failure}`)
+      return true
+    } catch (error) {
+      scope.set({ ...scope.getSnapshot(), error: message(error), notice: undefined })
+      return true
+    }
+  }
+  /** Mirror figures from the Web-chat Remote and the temp directory from the drive Remote; either may be off. */
+  const loadStorage = async () => {
+    if (!remote) return scope.getSnapshot().storage
+    const [mirror, drive] = await Promise.all([remote.storageStats(), remote.driveStatus()])
+    webChatLoaded = mirror.ok
+    const base = mirror.ok ? mirror.value : { bytes: 0, conversations: 0, remoteMissing: 0, oldAccountConversations: 0 }
+    return { ...base, ...(drive.ok ? { systemTempDirectory: drive.value.systemTempDirectory } : {}) }
+  }
   /** Refresh settings and local mirror figures without starting OpenCLI. */
   const refreshLocal = async (): Promise<void> => {
     if (!remote) return
     const generation = ++refreshGeneration
     try {
-      const [settings, storageResult] = await Promise.all([remote.settingsGet(), remote.storageStats()])
+      const [settings, storageResult] = await Promise.all([remote.settingsGet(), loadStorage(), refreshLoadedSources()])
       let stats = scope.getSnapshot().stats
       let statsUnavailable = false
       try { stats = unwrap(await remote.stats()) } catch { statsUnavailable = true }
       if (generation !== refreshGeneration) return
       const currentSettings = unwrap(settings)
       applySources?.(currentSettings.picker)
-      scope.set({ ...scope.getSnapshot(), settings: currentSettings, stats, storage: unwrap(storageResult),
-        error: statsUnavailable && !stats ? 'Local conversation statistics are unavailable until the DSH host is restarted.' : undefined, loading: false })
+      scope.set({ ...scope.getSnapshot(), settings: currentSettings, stats, storage: storageResult,
+        error: statsUnavailable && !stats && webChatLoaded ? 'Local conversation statistics are unavailable until the DSH host is restarted.' : undefined, loading: false })
       void activeConversationSource?.refreshCachedMenu()
       void refreshOpenList()
       void refreshAgentStats()
@@ -123,7 +177,10 @@ export function apply(ctx: ClientContext): void {
     const generation = ++refreshGeneration
     scope.set({ ...scope.getSnapshot(), loading: true })
     try {
-      const [settings, health, storageResult] = await Promise.all([remote.settingsGet(), remote.health(), remote.storageStats()])
+      const webChatOn = hostSourceLoaded(HOST_GROUPS.conversations!.source, scope.getSnapshot().loadedSources)
+      const [settings, health, storageResult] = await Promise.all([remote.settingsGet(), webChatOn ? remote.health() : Promise.resolve({ ok: false as const, error: { code: 'SOURCE_UNAVAILABLE', message: '' } }), loadStorage()])
+      // A failed probe is an error only while the Web-chat source is loaded.
+      if (!health.ok && webChatLoaded) unwrap(health)
       let profiles = scope.getSnapshot().profiles
       try { profiles = unwrap(await remote.profiles()) } catch { /* Profile discovery failure is represented by bridge health. */ }
       let stats = scope.getSnapshot().stats
@@ -132,7 +189,7 @@ export function apply(ctx: ClientContext): void {
       if (generation !== refreshGeneration) return
       const currentSettings = unwrap(settings)
       applySources?.(currentSettings.picker)
-      scope.set({ ...scope.getSnapshot(), settings: currentSettings, health: unwrap(health), profiles, stats, storage: unwrap(storageResult),
+      scope.set({ ...scope.getSnapshot(), settings: currentSettings, health: health.ok ? health.value : scope.getSnapshot().health, profiles, stats, storage: storageResult,
         error: statsUnavailable && !stats ? 'Local conversation statistics are unavailable until the DSH host is restarted.' : undefined, loading: false })
       quickHealthError = undefined
       quickHealthCheckedAt = Date.now()
@@ -155,6 +212,8 @@ export function apply(ctx: ClientContext): void {
     if (!remote || quickHealthPending || (full ? Date.now() - fullHealthCheckedAt < 300_000 : Date.now() - quickHealthCheckedAt < 30_000)) return
     const settings = scope.getSnapshot().settings
     if (!(settings.picker ?? defaultPickerSettings()).conversations.enabled) return
+    // No Web-chat source, nothing to probe.
+    if (!hostSourceLoaded(HOST_GROUPS.conversations!.source, scope.getSnapshot().loadedSources)) return
     quickHealthPending = true
     quickHealthError = undefined
     void activeConversationSource?.refreshCachedMenu()
@@ -253,13 +312,18 @@ export function apply(ctx: ClientContext): void {
   }
 
   ctx.effect(async () => {
-    const dispose = await ctx.remote.$mount(REFERENCE_ANYTHING_REMOTE)
-    remote = (ctx.reflect as unknown as { get(name: string): unknown }).get('remote.referenceAnything') as ReferenceAnythingRemoteFace | undefined
-    if (!remote) throw new Error('referenceAnything Remote did not mount')
+    // Each source's Remote exists only while that source is loaded; one that
+    // cannot mount must not take the others, or the settings panel, with it.
+    const mounted = await Promise.allSettled(REFERENCE_ANYTHING_REMOTES.map(item => ctx.remote.$mount(item.contribution)))
+    const disposers = mounted.flatMap(result => result.status === 'fulfilled' ? [result.value] : [])
+    mounted.forEach((result, index) => { if (result.status === 'rejected') console.warn(`[reference-anything] ${REFERENCE_ANYTHING_REMOTES[index]!.key} Remote not mounted: ${message(result.reason)}`) })
+    const dispose = () => { for (const disposeOne of disposers) void disposeOne() }
+    const reflect = ctx.reflect as unknown as { get(name: string): unknown }
+    remote = composeRemoteFace(Object.fromEntries(REFERENCE_ANYTHING_REMOTES.map(item => [item.key, reflect.get(`remote.${item.key}`) as object | undefined])))
     await refreshLocal()
     void quickRefreshOnOpen()
     void refreshUpdateStatus()
-    return () => { remote = undefined; if (poll) clearInterval(poll); void dispose() }
+    return () => { remote = undefined; if (poll) clearInterval(poll); dispose() }
   }, 'reference-anything.client.remote')
 
   const inputTriggers = ctx.get('inputTriggers') as InputTriggerServiceContract
@@ -319,8 +383,8 @@ export function apply(ctx: ClientContext): void {
   let sourceDisposers: Array<() => void> = []
   let appliedPicker: PickerSettings | undefined
   const registerSources = (picker: PickerSettings) => {
-    const shortcuts: Record<string, Array<Exclude<keyof PickerSettings, 'displayMode'>>> = {}
-    const sourceAliasTargets: Partial<Record<Exclude<keyof PickerSettings, 'displayMode'>, Record<string, string>>> = {}
+    const shortcuts: Record<string, Array<PickerSource>> = {}
+    const sourceAliasTargets: Partial<Record<PickerSource, Record<string, string>>> = {}
     for (const key of pickerSourceSchema.options) {
       const sourceAliases = picker[key].sourceAliases ?? {}
       const defaultSourceAliases = key === 'conversations'
@@ -346,7 +410,7 @@ export function apply(ctx: ClientContext): void {
         if (!scopes.includes(key)) scopes.push(key)
       }
     }
-    const optionsFor = (key: Exclude<keyof PickerSettings, 'displayMode'>) => ({
+    const optionsFor = (key: PickerSource) => ({
       order: picker[key].order,
       sort: picker[key].sort,
       limit: picker[key].limit,
@@ -393,7 +457,9 @@ export function apply(ctx: ClientContext): void {
       })
     activeConversationSource = source
     const disposers: Array<() => void> = []
-    if (picker.conversations.enabled) disposers.push(inputTriggers.registerSource(source))
+    const loaded = scope.getSnapshot().loadedSources
+    const live = (group: PickerSource) => picker[group].enabled && hostSourceLoaded(HOST_GROUPS[group]?.source, loaded)
+    if (live('conversations')) disposers.push(inputTriggers.registerSource(source))
     if (picker.commands.enabled) disposers.push(inputTriggers.registerSource(createCommandSource(async (sessionId, signal) => { signal.throwIfAborted(); return unwrap(await ctx.remote.commands.list(sessionId)) }, t, optionsFor('commands'))))
     if (picker.skills.enabled) disposers.push(inputTriggers.registerSource(createSkillSource(async (sessionId, signal) => {
         const result = await ctx.remote.skills.list({ sessionId }, signal)
@@ -415,7 +481,7 @@ export function apply(ctx: ClientContext): void {
       const result = await referenceCandidates(sessionId, signal, () => ctx.remote.sessionReferenceResolver.candidates(sessionId, query, signal))
       return result.ok ? result.value : []
     }, t, { ...optionsFor('sessions'), prefixOnly: officialReferences }, sessions)))
-    if (picker.agents.enabled) disposers.push(inputTriggers.registerSource(createLocalAgentSource((sessionId, query, signal, limit, kind) =>
+    if (live('agents')) disposers.push(inputTriggers.registerSource(createLocalAgentSource((sessionId, query, signal, limit, kind) =>
       agentSearch.run(query, signal, async () => {
         // Re-read after the debounce, as the conversation source does above.
         if (!remote) return []
@@ -445,7 +511,7 @@ export function apply(ctx: ClientContext): void {
           notices.show(t(`chatImport.${chatImport.state}`, { version: chatImport.version }))
         },
       })))
-    if (picker.drives.enabled) {
+    if (live('drives')) {
       const source = createCloudDriveSource((query, signal, limit) =>
         driveSearch.run(query, signal, async () => {
         // Re-read after the debounce, as the two sources above do.
@@ -458,7 +524,7 @@ export function apply(ctx: ClientContext): void {
       activeDriveSource = source
       disposers.push(inputTriggers.registerSource(source))
     }
-    if (picker.plugins.enabled) {
+    if (live('plugins')) {
       disposers.push(inputTriggers.registerSource(createPluginSource(async (signal) => {
         if (!remote) return []
         return unwrap(await remote.localPlugins(signal)).filter(row =>
@@ -466,6 +532,18 @@ export function apply(ctx: ClientContext): void {
           (picker.plugins.showDeepSeek || !row.name.toLowerCase().startsWith('@deepseek-ai/')))
       }, t, optionsFor('plugins'))))
     }
+    // Groups other plugins registered: same limits, shortcuts and display policy as the built-in ones.
+    groups.list().forEach((group, index) => {
+      const settings = picker.groups?.[group.id] ?? defaultGroupSettings(group.order ?? 50 + index, group.aliases)
+      if (!settings.enabled || !hostSourceLoaded(group.hostSource, loaded)) return
+      for (const alias of [...(settings.shortcut ? settings.shortcut.split(',') : settings.aliases ?? []), group.id]) {
+        const normalized = alias.trim().toLocaleLowerCase()
+        if (normalized && !shortcuts[normalized]) shortcuts[normalized] = [group.id as PickerSource]
+      }
+      const options = { order: settings.order, limit: settings.limit, maxCandidates: settings.maxCandidates, shortcuts, displayMode: picker.displayMode, updateMenu, guardMenuActions }
+      try { disposers.push(inputTriggers.registerSource(withDisplayPolicy(group.create(options), options, t))) }
+      catch (error) { ctx.logger?.warn?.(`reference group ${group.id} failed to register: ${message(error)}`) }
+    })
     return disposers
   }
   const refreshStorage = async (): Promise<void> => {
@@ -497,6 +575,11 @@ export function apply(ctx: ClientContext): void {
     appliedPicker = next
   }
   applySources(undefined)
+  const reapplySources = () => {
+    appliedPicker = undefined
+    applySources?.(scope.getSnapshot().settings.picker)
+  }
+  ctx.effect(() => groups.subscribe(reapplySources), 'reference-anything.client.group-registry')
   ctx.effect(() => () => { for (const dispose of sourceDisposers) dispose() }, 'reference-anything.client.sources')
 
   const save = async (settings: SettingsRecord): Promise<boolean> => {
@@ -557,7 +640,7 @@ export function apply(ctx: ClientContext): void {
   ctx.slots.inject('settings.section', () => ctx.slots.register({
     name: 'settings.section', id: 'reference-anything', order: 56, label: () => t('settings.title'), locale: REFERENCE_ANYTHING_NS,
     inject: () => ({
-      hooks: { scope }, close: () => undefined, save, sync: startSync, refresh, quickRefreshOnOpen,
+      hooks: { scope }, close: () => undefined, save, sync: startSync, refresh, quickRefreshOnOpen: async () => { await refreshLoadedSources(); await quickRefreshOnOpen() },
       browse, deleteConversation, clearProvider, clearRemoteMissing, clearOldAccounts, refreshStats,
       refreshOpenList, refreshChatImport,
       upgradeChatImport: async () => {
@@ -577,6 +660,8 @@ export function apply(ctx: ClientContext): void {
       pickCloudDriveDownloadDirectory: () => pickDirectoryWithError(ctx.uiWorkspace, error => {
         scope.set({ ...scope.getSnapshot(), error: message(error), notice: undefined })
       }),
+      setGroupPlugin,
+      registeredGroups: () => groups.list().map(group => ({ id: group.id, label: group.label, order: group.order, aliases: group.aliases })),
       openCloudDriveDownloadDirectory: async () => {
         try { if (remote) unwrap(await remote.openDownloadDirectory()) }
         catch (error) { scope.set({ ...scope.getSnapshot(), error: message(error), notice: undefined }) }

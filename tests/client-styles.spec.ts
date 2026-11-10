@@ -349,7 +349,7 @@ describe('reference DOM customization', () => {
 
   it('keeps ChatGPT logos for both Web and local-import references', () => {
     document.body.innerHTML = `<div data-composer-card>
-      <div role="listbox"><div role="option"><span>\uE125</span><span>调研</span></div></div>
+      <div role="listbox"><div role="option"><span></span><span>调研</span></div></div>
       <span id="web-gpt" data-composer-chip="External conversations"><span><svg></svg><span>ChatGPT·调研</span></span></span>
       <span id="local-gpt" data-decoration="chip" data-reference-appearance="session" data-reference-source="Local agent conversations">ChatGPT·调研</span>
     </div>`

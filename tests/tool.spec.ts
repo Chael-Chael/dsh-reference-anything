@@ -248,3 +248,28 @@ it('external_reference_read renders retained historical images as DSH image bloc
  expect(result.content).toContainEqual({ type: 'image', attachment: image })
  expect(textOf(result)).toContain('untrusted reference material')
 })
+
+describe('source capabilities', () => {
+  it('applies a source read limit without naming the source', async () => {
+    const scoped = await mount({ readLimit: () => 1 }, { readTurns: 10, maxReadTurns: 50 })
+    const result = await run(scoped, 'external_reference_read', { uri: encodeReferenceUri(ref), limit: 2 })
+    expect(result.isError).toBe(true)
+    expect(textOf(result)).toContain('less than or equal to 1')
+  })
+
+  it('materializes attachments of any source that declares them', async () => {
+    const scoped = await mount({
+      attachments: { directoryPrefix: 'dsh-reference-test-', fetch: async (_ref, id) => ({ name: `${id}.txt`, mimeType: 'text/plain', bytes: new TextEncoder().encode('hello') }) },
+    })
+    const result = await run(scoped, 'reference_attachment_read', { uri: encodeReferenceUri(ref), attachmentId: 'note' })
+    expect(result.isError, textOf(result)).not.toBe(true)
+    expect(result.value).toMatchObject({ name: 'note.txt', size: 5 })
+    expect((result.value as { localPath: string }).localPath).toMatch(/dsh-reference-test-/u)
+  })
+
+  it('refuses attachments for a source that declares none', async () => {
+    const result = await run(ctx, 'reference_attachment_read', { uri: encodeReferenceUri(ref), attachmentId: 'note' })
+    expect(result.isError).toBe(true)
+    expect(textOf(result)).toContain('offers no attachments')
+  })
+})

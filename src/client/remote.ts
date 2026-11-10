@@ -1,5 +1,5 @@
 import type { RemoteResult, TypertRemoteContribution } from '@deepseek-ai/dsh-typert-protocol'
-import { REFERENCE_ANYTHING_INVOCATIONS } from '../contract.ts'
+import { CORE_INVOCATIONS, DRIVE_INVOCATIONS, LOCAL_AGENT_INVOCATIONS, REMOTE_PACKAGES, REMOTE_SERVICE_KEYS, WEB_CHAT_INVOCATIONS } from '../contract.ts'
 import type { ChatProvider, LocalAgent, SettingsRecord } from '../wire.ts'
 import type { ChatImportCompatibility } from '../chat-import-compatibility.ts'
 
@@ -97,8 +97,34 @@ export interface OpenListDriver { name: string; description?: string; quickAuth?
 export interface OpenListMount { id: string; name: string; driver: string; enabled: boolean; status?: 'ready' | 'disabled' | 'error'; error?: string; capacityUsed?: number; capacityTotal?: number; indexStatus?: 'idle' | 'running' | 'complete' | 'failed'; indexProgress?: number; indexCount?: number }
 export interface OpenListReindex { supported: boolean; reason?: string }
 
-export const REFERENCE_ANYTHING_REMOTE: TypertRemoteContribution = {
-  package: 'dsh-reference-anything', descriptors: REFERENCE_ANYTHING_INVOCATIONS,
+/** One browser contribution per Host Remote; each source's Remote exists only while that source is on. */
+export const REFERENCE_ANYTHING_REMOTES: readonly { readonly key: string; readonly contribution: TypertRemoteContribution }[] = [
+  { key: REMOTE_SERVICE_KEYS.core, contribution: { package: REMOTE_PACKAGES.core, descriptors: CORE_INVOCATIONS } },
+  { key: REMOTE_SERVICE_KEYS.webChat, contribution: { package: REMOTE_PACKAGES.webChat, descriptors: WEB_CHAT_INVOCATIONS } },
+  { key: REMOTE_SERVICE_KEYS.localAgent, contribution: { package: REMOTE_PACKAGES.localAgent, descriptors: LOCAL_AGENT_INVOCATIONS } },
+  { key: REMOTE_SERVICE_KEYS.drive, contribution: { package: REMOTE_PACKAGES.drive, descriptors: DRIVE_INVOCATIONS } },
+]
+
+/**
+ * One face over every mounted Remote. A method whose Remote is missing returns
+ * a failed result instead of throwing, so callers handle it like any other
+ * failed call and the rest of the panel keeps working.
+ * @param faces - mounted Remote faces by service key.
+ */
+export function composeRemoteFace(faces: Readonly<Record<string, object | undefined>>): ReferenceAnythingRemoteFace {
+  const owner = new Map<string, string>()
+  for (const { key, contribution } of REFERENCE_ANYTHING_REMOTES) for (const item of contribution.descriptors) owner.set(item.method, key)
+  return new Proxy({}, {
+    get(_target, name) {
+      if (typeof name !== 'string') return undefined
+      const key = owner.get(name)
+      if (key === undefined) return undefined
+      const face = faces[key] as Record<string, unknown> | undefined
+      const method = face?.[name]
+      if (typeof method === 'function') return (method as (...args: unknown[]) => unknown).bind(face)
+      return async () => ({ ok: false, error: { code: 'SOURCE_UNAVAILABLE', message: `${key} is not loaded` } })
+    },
+  }) as ReferenceAnythingRemoteFace
 }
 
 export interface ReferenceAnythingRemoteFace {
@@ -130,6 +156,8 @@ export interface ReferenceAnythingRemoteFace {
   browse(input: { query: string; provider?: ChatProvider; limit: number; offset: number }, signal?: AbortSignal): Promise<RemoteResult<BrowsePage>>
   deleteConversation(input: { uriId: string }, signal?: AbortSignal): Promise<RemoteResult<boolean>>
   storageStats(): Promise<RemoteResult<StorageStats>>
+  sources(signal?: AbortSignal): Promise<RemoteResult<readonly string[]>>
+  driveStatus(signal?: AbortSignal): Promise<RemoteResult<{ systemTempDirectory: string }>>
   clearProvider(input: { provider: ChatProvider }, signal?: AbortSignal): Promise<RemoteResult<number>>
   clearRemoteMissing(signal?: AbortSignal): Promise<RemoteResult<number>>
   clearOldAccounts(signal?: AbortSignal): Promise<RemoteResult<number>>

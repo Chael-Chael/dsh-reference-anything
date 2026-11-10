@@ -8,7 +8,7 @@ import { pathToFileURL } from 'node:url'
 import { chatImportCompatibility, missingChatImportApis, upgradeChatImport } from '../src/chat-import-compatibility.ts'
 const installBundle = vi.fn()
 import { resolveLocalPlugins } from '../src/local-plugins.ts'
-import { ReferenceAnythingRemote } from '../src/host.ts'
+import { LocalAgentRemote } from '../src/sources/local-agent/remote.ts'
 
 vi.mock('../src/local-plugins.ts', () => ({ resolveLocalPlugins: vi.fn() }))
 
@@ -58,14 +58,14 @@ it('does not downgrade a newer plugin with missing APIs or install an invalid re
   expect(installBundle).not.toHaveBeenCalled()
 })
 it('deduplicates upgrade clicks and reports restart only after a successful install', async () => {
-  const remote = new ReferenceAnythingRemote(ctx)
+  const remote = new LocalAgentRemote(ctx)
   await Promise.all([remote.chatImportUpgradeInstall(new AbortController().signal), remote.chatImportUpgradeInstall(new AbortController().signal)])
   expect(installBundle).toHaveBeenCalledTimes(1)
   expect(await remote.chatImportStatus()).toMatchObject({ state: 'restart-required', canUpgrade: false })
 })
 it('keeps upgrade retryable after installation failure', async () => {
   vi.mocked(installBundle).mockRejectedValueOnce(new Error('network failed'))
-  const remote = new ReferenceAnythingRemote(ctx)
+  const remote = new LocalAgentRemote(ctx)
   await expect(remote.chatImportUpgradeInstall(new AbortController().signal)).rejects.toThrow('network failed')
   expect(await remote.chatImportStatus()).toMatchObject({ state: 'incompatible', canUpgrade: true })
   await remote.chatImportUpgradeInstall(new AbortController().signal)

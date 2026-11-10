@@ -23,7 +23,7 @@ import type { ContentBlock, UserMessage } from '@deepseek-ai/dsh-llm'
 import { ReferenceAnythingError } from './errors.ts'
 import { renderPrompt, type PromptAssembly } from '@deepseek-ai/dsh-system-prompt'
 import { loadLocalReference, buildLocalPreview, renderLocalData, localBytes, localError, shortLabel, assertLocalScope, DEFAULT_LOCAL_BYTES, LOCAL_INSTRUCTIONS, type LocalPreview, type LocalDocument } from './local-reference.ts'
-import { localLocatorFromId, type LocalLocator } from './local-locator.ts'
+import { LOCAL_REFERENCE_SOURCE, localLocatorFromId, usesLocalProtocol, type LocalLocator } from './local-locator.ts'
 import { renderDeferredReferences } from './render.ts'
 import type { ReferenceContextSource, ReferenceInput } from './types.ts'
 import { mayContainReference, parseReferenceText } from './uri.ts'
@@ -127,8 +127,8 @@ export function apply(ctx: Context, config: Config = {}): void {
         const parsed = parseMessage(original), inputs = dedupe(parsed.references)
         if (!inputs.length) continue
         if (inputs.length > maxReferences) throw localError('INVALID_ARGUMENT', `at most ${maxReferences} references are allowed per message.`)
-        const local = inputs.filter(input => input.ref.source === 'local-agent')
-        const external = inputs.filter(input => input.ref.source !== 'local-agent')
+        const local = inputs.filter(input => usesLocalProtocol(input.ref))
+        const external = inputs.filter(input => !usesLocalProtocol(input.ref))
         for (const input of external) ctx.references.grant(String(agent.session.id), input.ref)
         const entries: Entry[] = local.map(input => ({ ref: localLocatorFromId(input.ref.id), title: shortLabel(input.label ?? localLocatorFromId(input.ref.id).sessionId),
           notice: 'Preview not loaded: insufficient or unknown context budget. Use reference_read with part="messages" and omit from and revision.' }))
@@ -141,7 +141,7 @@ export function apply(ctx: Context, config: Config = {}): void {
     const contextFor = (plan: typeof plans[number]): UserMessage => {
       if (plan.error) return notice(plan.error)
       const parts = [...(plan.entries.length ? [renderLocalData(plan.entries)] : []), ...(plan.external ? [plan.external.text] : []), ...(plan.error ? [plan.error] : [])]
-      const references = plan.entries.map((entry, index) => ({ source: 'local-agent', id: plan.inputs[index]!.ref.id, locator: entry.ref,
+      const references = plan.entries.map((entry, index) => ({ source: LOCAL_REFERENCE_SOURCE, id: plan.inputs[index]!.ref.id, locator: entry.ref,
         label: entry.title, capturedAt: Date.now(), ...('items' in entry ? { revision: entry.revision, startIndex: entry.items[0]?.messageId ?? 0,
           retainedMessages: entry.items.length, truncated: entry.next !== null || (entry.items[0]?.messageId ?? 1)>1 } : {}) }))
       return createUserMessage({content:[{type:'text',text:parts.join('\n')}],source:{kind:'reference-anything',form:'recall',version:1,

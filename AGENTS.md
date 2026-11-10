@@ -8,6 +8,7 @@
 | 定位改动、找调用方和测试 | [子系统地图](docs/subsystems/README.md) |
 | 设计引用返回协议、精简本地 Agent 输出 | [引用协议重设计](docs/ideas/reference-protocol-redesign.md)（协议契约与实施入口） |
 | 规划网页 AI 引用改进 | [未来方案：网页 AI 引用](docs/ideas/web-chat-reference.md)（待实施；阅读不代表授权开发） |
+| 接入或修改引用来源（含第三方） | [接入第三方引用来源](docs/development/third-party-source.md)、[来源插件化任务](docs/development/tasks/plugin-split.md) |
 | 查看后续方案与待办 | [Ideas 清单](docs/ideas/README.md) |
 | 启动、build、浏览器测试、Desktop 同步 | [四环境约定](docs/development/environments.md) |
 | 修改 UI | [设计规范](design.md)、[浏览器验收](docs/testing/npm-release-checklist.md) |

@@ -6,7 +6,6 @@ import { providerSchema, referenceAnythingDomainSpec, settingsRecordSchema } fro
 import { ConversationStore, type MatchedVia } from '../../store/store.ts'
 import { ConversationSyncManager } from '../../sync/index.ts'
 import { OpenCliError, OpenCliRunner, discoverOpenCli, installOpenCli as installOpenCliPackage, type OpenCliDiscovery } from '../../opencli.ts'
-import { PACKAGE_NAME, PackageUpdateManager, type PackageUpdateResult, type PackageUpdateStatus } from '../../update.ts'
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { isDeepStrictEqual } from 'node:util'
@@ -15,6 +14,11 @@ import { ReferenceAnythingError } from '../../errors.ts'
 import { parseProviderQuery } from '../../search.ts'
 import { validateDownloadDirectory } from '../../download-directory.ts'
 import type {} from '../../index.ts'
+import type { ReferenceAttachmentCapability } from '../../types.ts'
+import { webChatAttachments } from './attachments.ts'
+import { mountRemote } from '../../remote-mount.ts'
+import { WEB_CHAT_TYPERT_MANIFEST } from '../../typert.ts'
+import { WebChatRemote } from './remote.ts'
 
 export { parseProviderQuery }
 
@@ -78,14 +82,18 @@ export default class WebChatHistoryService extends Service implements ReferenceS
   private autoSyncCatchUp?: ReturnType<typeof setTimeout>
   private settingsUpdateQueue: Promise<void> = Promise.resolve()
   private validateDownloadDirectoryValue = validateDownloadDirectory
-  private readonly packageUpdates = new PackageUpdateManager({
-    afterInstall: async (profileDir, _version, signal) => {
-      await this.installAdapterFrom(pathToFileURL(join(profileDir, 'node_modules', PACKAGE_NAME, 'opencli-plugin')).href, signal)
-    },
-  })
   private readonly liveAttachments = new Map<string, { attachment: ConversationAttachment & { locator?: string }; expiresAt: number }>()
 
-  constructor(ctx: Context, private readonly config: Config = {}) { super(ctx, 'referenceChatHistory') }
+  /** Files carried by mirrored conversations, for `reference_attachment_read`. */
+  readonly attachments: ReferenceAttachmentCapability
+
+  constructor(ctx: Context, private readonly config: Config = {}) {
+    super(ctx, 'referenceChatHistory')
+    this.attachments = webChatAttachments(this, config.timeoutMs ?? 60_000)
+  }
+
+  /** The user's cap on turns per model read. */
+  readLimit(): number { return this.store.settings.maxReadTurns }
 
   protected async [Service.init](): Promise<void> {
     const domain = await this.ctx.storageDomain.open(referenceAnythingDomainSpec)
@@ -101,19 +109,16 @@ export default class WebChatHistoryService extends Service implements ReferenceS
     if (this.store.settings.syncHistoryDays !== null) {
       await this.store.removeOlderThan(this.store.settings.syncHistoryDays)
     }
+    // Sources now own their own settings. The record saved before that split
+    // lives here; hand it to the core once so other sources can migrate.
+    await this.ctx.references.publishLegacySettings(this.store.settings as unknown as Record<string, unknown>)
     this.syncValue = new ConversationSyncManager(this.storeValue, () => new OpenCliRunner({
       executable: this.store.settings.opencliPath, profile: this.store.settings.profile,
       timeoutMs: this.config.timeoutMs, maxStdoutBytes: this.config.maxStdoutBytes,
     }), this.ctx.logger)
     await this.store.collectExpired()
-    const updateAbort = new AbortController()
-    this.ctx.effect(() => () => { updateAbort.abort() }, 'reference-web-chat.updateCheckCleanup')
-    void this.packageUpdates.check(updateAbort.signal).then(status => {
-      if (status.updateAvailable) {
-        this.ctx.logger.info(`reference anything update available: ${status.currentVersion} -> ${status.latestVersion}`)
-      }
-    })
     this.ctx.references.registerSource(this)
+    mountRemote(this.ctx, scope => new WebChatRemote(scope), WEB_CHAT_TYPERT_MANIFEST)
     this.ctx.effect(() => () => { this.clearAutoSync() }, 'reference-web-chat.autoSyncCleanup')
     this.armAutoSync()
   }
@@ -129,11 +134,24 @@ export default class WebChatHistoryService extends Service implements ReferenceS
 
   async available(): Promise<boolean> { return this.storeValue !== undefined }
 
+  /** Providers the user has switched on; the others are neither listed nor read. */
+  private providerEnabled(provider: ChatProvider): boolean {
+    return this.store.settings.enabledProviders.includes(provider)
+  }
+
+  /** List from the store, dropping switched-off providers without shrinking the page. */
+  private listEnabled(query: string, provider: ChatProvider | undefined, limit: number) {
+    if (provider !== undefined && !this.providerEnabled(provider)) return []
+    const allOn = PROVIDERS.every(item => this.providerEnabled(item))
+    const rows = this.store.list(query, provider, allOn ? limit : Math.min(1000, limit * PROVIDERS.length))
+    return (allOn ? rows : rows.filter(({ row }) => this.providerEnabled(row.provider))).slice(0, limit)
+  }
+
   async list(query: string, limit: number): Promise<ReferenceSummary[]> {
     const parsed = parseProviderQuery(query)
     // No excerpt here: this surface feeds the model, and mirrored conversation
     // text may only reach it inside `reference_read`'s untrusted-data envelope.
-    return this.store.list(parsed.query, parsed.provider, limit).map(({ key, row }) => ({
+    return this.listEnabled(parsed.query, parsed.provider, limit).map(({ key, row }) => ({
       ref: { source: this.id, id: key }, label: row.title, origin: row.url,
       updatedAt: timestamp(row.updatedAt), provider: row.provider,
       messageCount: row.messageCount, partial: row.partial, syncedAt: timestamp(row.syncedAt),
@@ -142,6 +160,10 @@ export default class WebChatHistoryService extends Service implements ReferenceS
 
   async read(ref: { source: string; id: string }, window: ReferenceWindow, signal?: AbortSignal): Promise<ReferenceSnapshot> {
     if (ref.source !== this.id) throw new Error(`web-chat cannot read source ${ref.source}`)
+    const provider = this.store.conversations.get(ref.id)?.provider
+    if (provider !== undefined && !this.providerEnabled(provider)) {
+      throw new ReferenceAnythingError(`${provider} conversations are switched off in Reference Anything settings`, 'SOURCE_DISABLED')
+    }
     if (this.store.settings.historyMode === 'metadata-only') return this.readRemote(ref.id, window, signal)
     return this.store.read(ref.id, window)
   }
@@ -205,8 +227,8 @@ export default class WebChatHistoryService extends Service implements ReferenceS
   async search(query: string, provider: ChatProvider | undefined, limit: number, signal?: AbortSignal): Promise<ConversationSearchResult[]> {
     signal?.throwIfAborted()
     const parsed = parseProviderQuery(query)
-    return this.store
-      .list(parsed.query, provider ?? parsed.provider, Math.max(1, Math.min(100, limit)))
+    return this
+      .listEnabled(parsed.query, provider ?? parsed.provider, Math.max(1, Math.min(100, limit)))
       .map(({ key, row, via, snippet }) => ({
         uriId: key, provider: row.provider, title: row.title, url: row.url, updatedAt: row.updatedAt,
         turnCount: row.messageCount, partial: row.partial, syncedAt: row.syncedAt,
@@ -258,12 +280,6 @@ export default class WebChatHistoryService extends Service implements ReferenceS
   syncStates() { return this.store.syncStateSummary() }
 
   getSettings(): SettingsRecord { return this.store.settings }
-  updateStatus(signal?: AbortSignal): Promise<PackageUpdateStatus> { return this.packageUpdates.status(signal) }
-  checkUpdate(signal?: AbortSignal): Promise<PackageUpdateStatus> { return this.packageUpdates.check(signal) }
-  async installUpdate(signal?: AbortSignal): Promise<PackageUpdateResult> {
-    if (this.sync.isRunning()) throw new ReferenceAnythingError('wait for the current conversation sync to finish before updating', 'REFERENCE_SYNC_IN_PROGRESS')
-    return this.packageUpdates.update(signal)
-  }
   async restartDaemon(signal?: AbortSignal): Promise<boolean> {
     const runner = this.runner()
     await runner.restartDaemon(signal)
@@ -359,7 +375,8 @@ export default class WebChatHistoryService extends Service implements ReferenceS
     return true
   }
 
-  private async installAdapterFrom(pluginUrl: string, signal?: AbortSignal): Promise<void> {
+  /** Install the OpenCLI adapter shipped at `pluginUrl`; the core updater calls this after an update. */
+  async installAdapterFrom(pluginUrl: string, signal?: AbortSignal): Promise<void> {
     const settings = this.store.settings
     const runner = new OpenCliRunner({ executable: settings.opencliPath, profile: settings.profile,
       timeoutMs: this.config.timeoutMs, maxStdoutBytes: this.config.maxStdoutBytes })

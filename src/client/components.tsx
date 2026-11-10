@@ -5,16 +5,17 @@ import { Button, Checkbox, Input, Menu, Switch } from '@deepseek-ai/dsh-client-u
 import { useEffect, useId, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import ReactMarkdown from 'react-markdown'
 import Sortable from 'sortablejs'
-import { ALL_PROVIDERS, ALL_LOCAL_AGENTS, READABLE_LOCAL_AGENTS, LOCAL_AGENT_LABEL, defaultPickerSettings, type ChatProvider, type LocalAgent, type PickerSettings, type PickerSource, type SettingsRecord } from '../wire.ts'
+import { ALL_PROVIDERS, ALL_LOCAL_AGENTS, READABLE_LOCAL_AGENTS, LOCAL_AGENT_LABEL, defaultGroupSettings, defaultPickerSettings, pickerSourceSchema, type ChatProvider, type LocalAgent, type PickerSettings, type PickerSource, type PickerSourceSettings, type SettingsRecord } from '../wire.ts'
 import { syncProgressFraction, type AgentStats, type BrowsePage, type BrowserProfile, type Health, type OpenListDriver, type OpenListMount, type OpenListStatus, type PackageUpdateStatus, type ProviderStats, type StorageStats, type SyncStatus } from './remote.ts'
 import { AgentLogo, PickerSourceLogo, ProviderLogo } from './provider-icons.tsx'
 import { type REFERENCE_ANYTHING_NS } from './locale.ts'
 import type { TranslateNS } from '@deepseek-ai/dsh-client-locale/client'
 import { openCliStateDetail, daemonStateDetail, adapterStateDetail, extensionStateDetail, OPENCLI_EXTENSION_STORE_URL, OPENCLI_RELEASES_URL, openExtensionStore, setupReady, type SetupStage } from './health.ts'
+import { HOST_GROUPS, hostSourceLoaded } from './source-registry.ts'
 
 /** Current query/filter/page of the "Manage synced conversations" list, plus its last fetched page. */
 export interface BrowseState { query: string; provider?: ChatProvider; offset: number; page?: BrowsePage }
-export interface SettingsSnapshot { chatImport?: ChatImportCompatibility; chatImportError?: string; settings: SettingsRecord; health?: Health; update?: PackageUpdateStatus; profiles?: readonly BrowserProfile[]; stats?: readonly ProviderStats[]; agentStats?: readonly AgentStats[]; storage?: StorageStats; sync?: SyncStatus; openList?: OpenListStatus; openListDrivers?: readonly OpenListDriver[]; openListMounts?: readonly OpenListMount[]; error?: string; notice?: string; loading?: boolean; browse?: BrowseState; setupStep?: SetupStage }
+export interface SettingsSnapshot { loadedSources?: readonly string[]; chatImport?: ChatImportCompatibility; chatImportError?: string; settings: SettingsRecord; health?: Health; update?: PackageUpdateStatus; profiles?: readonly BrowserProfile[]; stats?: readonly ProviderStats[]; agentStats?: readonly AgentStats[]; storage?: StorageStats; sync?: SyncStatus; openList?: OpenListStatus; openListDrivers?: readonly OpenListDriver[]; openListMounts?: readonly OpenListMount[]; error?: string; notice?: string; loading?: boolean; browse?: BrowseState; setupStep?: SetupStage }
 export interface SettingsInjected {
   hooks: { scope: ObservableSnapshot<SettingsSnapshot> }
   save(value: SettingsRecord): Promise<boolean | void>
@@ -50,6 +51,10 @@ export interface SettingsInjected {
   pickCloudDriveDownloadDirectory?(): Promise<string | null>
   pickAgentDirectory?(agent: LocalAgent): Promise<void>
   openCloudDriveDownloadDirectory?(): Promise<void>
+  /** Switch the plugin row behind a built-in group; false when the plugin manager is unavailable. */
+  setGroupPlugin?(group: string, enabled: boolean): Promise<boolean>
+  /** Groups other plugins registered in the `@` menu. */
+  registeredGroups?(): ReadonlyArray<{ id: string; label: string; order?: number; aliases?: readonly string[] }>
 }
 
 function SettingsDisclosure({ title, description, open, onToggle, children, className = '' }: { title: ReactNode; description: ReactNode; open: boolean; onToggle: () => void; children: ReactNode; className?: string }) {
@@ -122,10 +127,25 @@ function SourceAliasIcon({ source, keyName }: { source: PickerSource; keyName: s
 }
 const REFERENCE_ANYTHING_LOGO = '__REFERENCE_ANYTHING_LOGO_DATA_URI__'
 const GITHUB_REPOSITORY_URL = 'https://github.com/Chael-Chael/dsh-reference-anything'
-export function ConversationSettings({ useScope, save, sync, cancel, refresh, refreshOpenList = async () => undefined, quickRefreshOnOpen, setupAll, discoverOpenCli, installOpenCli, useProfile, install, restartDaemon, checkUpdate, installUpdate, refreshChatImport, upgradeChatImport, browse, deleteConversation, clearProvider, clearRemoteMissing, clearOldAccounts, refreshStats, openListInstall = async () => undefined, openListUpgrade = async () => undefined, openListConnectExternal = async () => undefined, openListDisconnect = async () => undefined, openListCreateMount = async () => undefined, openListDisableMount = async () => undefined, openListRemoveMount = async () => undefined, openListReindex = async () => ({ supported: false }), pickCloudDriveDownloadDirectory, pickAgentDirectory, openCloudDriveDownloadDirectory, releaseIntro, t }: SettingsProps) {
+export function ConversationSettings({ useScope, save, sync, cancel, refresh, refreshOpenList = async () => undefined, quickRefreshOnOpen, setupAll, discoverOpenCli, installOpenCli, useProfile, install, restartDaemon, checkUpdate, installUpdate, refreshChatImport, upgradeChatImport, browse, deleteConversation, clearProvider, clearRemoteMissing, clearOldAccounts, refreshStats, openListInstall = async () => undefined, openListUpgrade = async () => undefined, openListConnectExternal = async () => undefined, openListDisconnect = async () => undefined, openListCreateMount = async () => undefined, openListDisableMount = async () => undefined, openListRemoveMount = async () => undefined, openListReindex = async () => ({ supported: false }), pickCloudDriveDownloadDirectory, pickAgentDirectory, openCloudDriveDownloadDirectory, setGroupPlugin, registeredGroups, releaseIntro, t }: SettingsProps) {
   const state = useScope(value => value)
   const settings = state.settings
   const picker = settings.picker ?? defaultPickerSettings()
+  const loaded = state.loadedSources
+  /** Built-in groups and the ones other plugins registered, in one list. */
+  const extraGroups = registeredGroups?.() ?? []
+  const groupRows: ReadonlyArray<{ id: string; builtin?: PickerSource; label: string; detail: string }> = [
+    ...PICKER_SOURCES.map(row => ({ id: row.id, builtin: row.id, label: t(SOURCE_KEYS[row.label]), detail: t(`source.${row.label}Detail` as never) })),
+    ...extraGroups.map(group => ({ id: group.id, label: group.label, detail: '' })),
+  ]
+  const groupSettings = (id: string): PickerSourceSettings => {
+    if ((pickerSourceSchema.options as readonly string[]).includes(id)) return picker[id as PickerSource]
+    const index = extraGroups.findIndex(group => group.id === id)
+    return picker.groups?.[id] ?? defaultGroupSettings(extraGroups[index]?.order ?? 50 + index, extraGroups[index]?.aliases)
+  }
+  /** A host-backed group is on only while its plugin row is loaded. */
+  const groupOn = (id: string) => groupSettings(id).enabled && hostSourceLoaded(HOST_GROUPS[id]?.source, loaded)
+  const sectionLoaded = (group: string) => hostSourceLoaded(HOST_GROUPS[group]?.source, loaded)
   const [busyAction, setBusyAction] = useState<string>()
   const [showReleaseNotes, setShowReleaseNotes] = useState(false)
   const busyActionRef = useRef(false)
@@ -139,9 +159,9 @@ export function ConversationSettings({ useScope, save, sync, cancel, refresh, re
   const [maxReadTurns, setMaxReadTurns] = useState(String(settings.maxReadTurns))
   const [openSections, setOpenSections] = useState<Record<string, boolean>>({ sync: true, storage: true, aliases: false })
   const [repairProfile, setRepairProfile] = useState('')
-  const [pickerLimits, setPickerLimits] = useState<Record<PickerSource, string>>(() => pickerLimitDrafts(picker))
-  const [pickerMaxCandidates, setPickerMaxCandidates] = useState<Record<PickerSource, string>>(() => pickerMaxCandidateDrafts(picker))
-  const [draggingPicker, setDraggingPicker] = useState<PickerSource | undefined>()
+  const [pickerLimits, setPickerLimits] = useState<Record<string, string>>(() => pickerLimitDrafts(picker))
+  const [pickerMaxCandidates, setPickerMaxCandidates] = useState<Record<string, string>>(() => pickerMaxCandidateDrafts(picker))
+  const [draggingPicker, setDraggingPicker] = useState<string | undefined>()
   const pickerListRef = useRef<HTMLDivElement>(null)
   const automaticQuickRefresh = useRef(quickRefreshOnOpen)
   useLayoutEffect(() => {
@@ -250,34 +270,50 @@ export function ConversationSettings({ useScope, save, sync, cancel, refresh, re
     void save({ ...settings, enabledAgents: next })
   }
   const savePicker = (next: PickerSettings) => { void save({ ...settings, picker: next }) }
-  const patchPicker = (id: PickerSource, patch: Partial<PickerSettings[PickerSource]>) => {
-    savePicker({ ...picker, [id]: { ...picker[id], ...patch } })
+  const withGroup = (base: PickerSettings, id: string, patch: Partial<PickerSourceSettings> & Record<string, unknown>): PickerSettings => (pickerSourceSchema.options as readonly string[]).includes(id)
+    ? { ...base, [id]: { ...base[id as PickerSource], ...patch } }
+    : { ...base, groups: { ...(base.groups ?? {}), [id]: { ...groupSettings(id), ...(base.groups?.[id] ?? {}), ...patch } } }
+  const patchPicker = (id: string, patch: Partial<PickerSourceSettings> & Record<string, unknown>) => {
+    savePicker(withGroup(picker, id, patch))
   }
-  const commitPickerLimit = (id: PickerSource) => {
-    const value = Number(pickerLimits[id])
+  /**
+   * The switch of a host-backed group is its plugin row: off unloads that
+   * source for the model too. Other groups only show or hide in the menu.
+   */
+  const setGroupOn = async (id: string, value: boolean) => {
+    const host = HOST_GROUPS[id]
+    const needsRow = host !== undefined && (!value || !hostSourceLoaded(host.source, loaded))
+    if (needsRow && setGroupPlugin && await setGroupPlugin(id, value)) {
+      if (value && !groupSettings(id).enabled) patchPicker(id, { enabled: true })
+      return
+    }
+    patchPicker(id, { enabled: value })
+  }
+  const draftOf = (drafts: Record<string, string>, id: string, value: number) => drafts[id] ?? String(value)
+  const commitPickerLimit = (id: string) => {
+    const value = Number(draftOf(pickerLimits, id, groupSettings(id).limit))
     if (Number.isInteger(value) && value >= 1 && value <= 50) {
       setPickerLimits(current => ({ ...current, [id]: String(value) }))
-      if (value !== picker[id].limit) patchPicker(id, { limit: value })
+      if (value !== groupSettings(id).limit) patchPicker(id, { limit: value })
       return
     }
-    setPickerLimits(current => ({ ...current, [id]: String(picker[id].limit) }))
+    setPickerLimits(current => ({ ...current, [id]: String(groupSettings(id).limit) }))
   }
-  const commitPickerMaxCandidates = (id: PickerSource) => {
-    const value = Number(pickerMaxCandidates[id])
+  const commitPickerMaxCandidates = (id: string) => {
+    const value = Number(draftOf(pickerMaxCandidates, id, groupSettings(id).maxCandidates))
     if (Number.isInteger(value) && value >= 1 && value <= 50) {
       setPickerMaxCandidates(current => ({ ...current, [id]: String(value) }))
-      if (value !== picker[id].maxCandidates) patchPicker(id, { maxCandidates: value })
+      if (value !== groupSettings(id).maxCandidates) patchPicker(id, { maxCandidates: value })
       return
     }
-    setPickerMaxCandidates(current => ({ ...current, [id]: String(picker[id].maxCandidates) }))
+    setPickerMaxCandidates(current => ({ ...current, [id]: String(groupSettings(id).maxCandidates) }))
   }
-  const reorderPicker = (ordered: readonly PickerSource[]) => {
-    const current = [...PICKER_SOURCES].sort((a, b) => picker[a.id].order - picker[b.id].order).map(row => row.id)
+  const orderedGroups = () => [...groupRows].sort((a, b) => groupSettings(a.id).order - groupSettings(b.id).order)
+  const reorderPicker = (ordered: readonly string[]) => {
+    const current = orderedGroups().map(row => row.id)
     const ids = [...ordered, ...current.filter(id => !ordered.includes(id))]
     if (ids.length !== current.length || ids.every((id, index) => id === current[index])) return
-    const next = { ...picker } as PickerSettings
-    ids.forEach((id, index) => { (next as Record<PickerSource, PickerSettings[PickerSource]>)[id] = { ...next[id], order: index } as PickerSettings[PickerSource] })
-    savePicker(next)
+    savePicker(ids.reduce((next, id, index) => withGroup(next, id, { order: index }), picker))
   }
   useEffect(() => {
     const list = pickerListRef.current
@@ -288,11 +324,11 @@ export function ConversationSettings({ useScope, save, sync, cancel, refresh, re
       handle: '.dsh_ref_picker_drag_handle',
       draggable: '.dsh_ref_picker_row',
       ghostClass: 'dsh_ref_picker_row_is_ghost',
-      onStart: event => { setDraggingPicker(event.item.dataset.pickerId as PickerSource | undefined) },
+      onStart: event => { setDraggingPicker(event.item.dataset.pickerId) },
       onEnd: event => {
         const ordered = Array.from(event.to.children)
           .map(item => item.getAttribute('data-picker-id'))
-          .filter((id): id is PickerSource => PICKER_SOURCES.some(source => source.id === id))
+          .filter((id): id is string => groupRows.some(source => source.id === id))
         reorderPicker(ordered)
         setDraggingPicker(undefined)
       },
@@ -318,20 +354,20 @@ export function ConversationSettings({ useScope, save, sync, cancel, refresh, re
     <div className="dsh_ref_workspace">
     {state.error && <div className="dsh_ref_error" role="alert"><strong>{t('settings.actionFailed')}</strong><span>{state.error}</span></div>}
     <section className="dsh_ref_panel dsh_ref_settings_card dsh_ref_general_settings"><div className="dsh_ref_section_head"><div><h3>{t('settings.general')}</h3><p>{t('settings.generalDetail')}</p></div></div>
-      <div className="dsh_ref_picker_list" ref={pickerListRef}>{[...PICKER_SOURCES].sort((a, b) => picker[a.id].order - picker[b.id].order).map(row => <div className={`dsh_ref_picker_row${draggingPicker === row.id ? ' is_dragging' : ''}`} data-picker-id={row.id} key={row.id}>
-        <div className="dsh_ref_picker_order"><button className="dsh_ref_picker_drag_handle" type="button" aria-label={t('settings.moveUp', { item: t(SOURCE_KEYS[row.label]) })}><span aria-hidden="true">⠿</span></button></div>
-        <label className="dsh_ref_picker_toggle"><PickerSourceLogo kind={row.id === 'commands' ? 'command' : row.id === 'skills' ? 'skill' : row.id === 'files' ? 'file' : row.id === 'sessions' ? 'session' : row.id === 'drives' ? 'drive' : row.id === 'plugins' ? 'plugin' : 'agent'} /><span><b>{t(SOURCE_KEYS[row.label])}</b><small>{t(`source.${row.label}Detail` as never)}</small></span><DshSwitch checked={picker[row.id].enabled} label={t(SOURCE_KEYS[row.label])} onChange={value => { patchPicker(row.id, { enabled: value }) }} /><Button className="dsh_ref_picker_expand" type="button" aria-label={t(SOURCE_KEYS[row.label]) + ' · ' + t('settings.aliases')} aria-expanded={Boolean(openSections['aliases-' + row.id])} aria-controls={'dsh-ref-aliases-' + row.id} onClick={() => { setOpenSections(current => ({ ...current, ['aliases-' + row.id]: !current['aliases-' + row.id] })) }}><span className="dsh_ref_collapsible_chevron" aria-hidden="true"/></Button></label>
-        <div className="dsh_ref_picker_aliases" id={'dsh-ref-aliases-' + row.id} hidden={!openSections['aliases-' + row.id]}><div className="dsh_ref_picker_fields">        <label className="dsh_ref_picker_limit"><span>{t('settings.collapsedItems')}</span><Input type="number" min={1} max={50} inputMode="numeric" value={pickerLimits[row.id]} aria-invalid={pickerLimits[row.id] !== '' && !validPickerLimit(pickerLimits[row.id])} onChange={event => { setPickerLimits(current => ({ ...current, [row.id]: event.target.value })) }} onBlur={() => { commitPickerLimit(row.id) }} onKeyDown={event => { if (event.key === 'Enter') event.currentTarget.blur() }} /></label>
-        <label className="dsh_ref_picker_limit"><span>{t('settings.maxCandidates')}</span><Input type="number" min={1} max={50} inputMode="numeric" value={pickerMaxCandidates[row.id]} aria-invalid={pickerMaxCandidates[row.id] !== '' && !validPickerLimit(pickerMaxCandidates[row.id])} onChange={event => { setPickerMaxCandidates(current => ({ ...current, [row.id]: event.target.value })) }} onBlur={() => { commitPickerMaxCandidates(row.id) }} onKeyDown={event => { if (event.key === 'Enter') event.currentTarget.blur() }} /></label>
-<label className="dsh_ref_picker_limit"><span>{t('settings.shortcut')}</span><Input type="text" maxLength={32} value={picker[row.id].shortcut} placeholder={DEFAULT_PICKER_SHORTCUTS[row.id]} onChange={event => { patchPicker(row.id, { shortcut: event.target.value.replace(/[@:\s/]/gu, '') }) }} /></label></div>{(SOURCE_ALIAS_GROUPS[row.id]?.length || (row.id === 'drives' && (state.openListMounts?.length ?? 0) > 0)) ? <div className="dsh_ref_source_aliases"><b>{t('settings.sourceAliases')}</b><small>{t('settings.sourceAliasesHint')}</small><div className="dsh_ref_source_alias_list">{(row.id === 'drives' ? (state.openListMounts ?? []).map(mount => mount.name) : SOURCE_ALIAS_GROUPS[row.id] ?? []).map(key => <label className="dsh_ref_source_alias_row" key={key}><span className="dsh_ref_source_alias_name"><SourceAliasIcon source={row.id} keyName={key} /><b>{row.id === 'agents' ? (LOCAL_AGENT_LABEL[key as LocalAgent] ?? key) : key}</b></span><Input defaultValue={picker[row.id].sourceAliases?.[key]?.join(', ') ?? ''} placeholder={key} onBlur={event => { const aliases = event.target.value.split(',').map(value => value.trim().replace(/[@:\s/]/gu, '')).filter(Boolean); patchPicker(row.id, { sourceAliases: { ...(picker[row.id].sourceAliases ?? {}), [key]: aliases } }) }} /></label>)}</div></div> : null}</div>
+      <div className="dsh_ref_picker_list" ref={pickerListRef}>{orderedGroups().map(row => <div className={`dsh_ref_picker_row${draggingPicker === row.id ? ' is_dragging' : ''}`} data-picker-id={row.id} key={row.id}>
+        <div className="dsh_ref_picker_order"><button className="dsh_ref_picker_drag_handle" type="button" aria-label={t('settings.moveUp', { item: row.label })}><span aria-hidden="true">⠿</span></button></div>
+        <label className="dsh_ref_picker_toggle"><PickerSourceLogo kind={row.id === 'commands' ? 'command' : row.id === 'skills' ? 'skill' : row.id === 'files' ? 'file' : row.id === 'sessions' ? 'session' : row.id === 'drives' ? 'drive' : row.id === 'agents' ? 'agent' : 'plugin'} /><span><b>{row.label}</b>{row.detail && <small>{row.detail}</small>}</span><DshSwitch checked={groupOn(row.id)} label={row.label} onChange={value => { void setGroupOn(row.id, value) }} /><Button className="dsh_ref_picker_expand" type="button" aria-label={row.label + ' · ' + t('settings.aliases')} aria-expanded={Boolean(openSections['aliases-' + row.id])} aria-controls={'dsh-ref-aliases-' + row.id} onClick={() => { setOpenSections(current => ({ ...current, ['aliases-' + row.id]: !current['aliases-' + row.id] })) }}><span className="dsh_ref_collapsible_chevron" aria-hidden="true"/></Button></label>
+        <div className="dsh_ref_picker_aliases" id={'dsh-ref-aliases-' + row.id} hidden={!openSections['aliases-' + row.id]}><div className="dsh_ref_picker_fields">        <label className="dsh_ref_picker_limit"><span>{t('settings.collapsedItems')}</span><Input type="number" min={1} max={50} inputMode="numeric" value={draftOf(pickerLimits, row.id, groupSettings(row.id).limit)} aria-invalid={!validPickerLimit(draftOf(pickerLimits, row.id, groupSettings(row.id).limit))} onChange={event => { setPickerLimits(current => ({ ...current, [row.id]: event.target.value })) }} onBlur={() => { commitPickerLimit(row.id) }} onKeyDown={event => { if (event.key === 'Enter') event.currentTarget.blur() }} /></label>
+        <label className="dsh_ref_picker_limit"><span>{t('settings.maxCandidates')}</span><Input type="number" min={1} max={50} inputMode="numeric" value={draftOf(pickerMaxCandidates, row.id, groupSettings(row.id).maxCandidates)} aria-invalid={!validPickerLimit(draftOf(pickerMaxCandidates, row.id, groupSettings(row.id).maxCandidates))} onChange={event => { setPickerMaxCandidates(current => ({ ...current, [row.id]: event.target.value })) }} onBlur={() => { commitPickerMaxCandidates(row.id) }} onKeyDown={event => { if (event.key === 'Enter') event.currentTarget.blur() }} /></label>
+<label className="dsh_ref_picker_limit"><span>{t('settings.shortcut')}</span><Input type="text" maxLength={32} value={groupSettings(row.id).shortcut} placeholder={row.builtin ? DEFAULT_PICKER_SHORTCUTS[row.builtin] : row.id} onChange={event => { patchPicker(row.id, { shortcut: event.target.value.replace(/[@:\s/]/gu, '') }) }} /></label></div>{row.builtin && (SOURCE_ALIAS_GROUPS[row.builtin]?.length || (row.id === 'drives' && (state.openListMounts?.length ?? 0) > 0)) ? <div className="dsh_ref_source_aliases"><b>{t('settings.sourceAliases')}</b><small>{t('settings.sourceAliasesHint')}</small><div className="dsh_ref_source_alias_list">{(row.id === 'drives' ? (state.openListMounts ?? []).map(mount => mount.name) : SOURCE_ALIAS_GROUPS[row.builtin] ?? []).map(key => <label className="dsh_ref_source_alias_row" key={key}><span className="dsh_ref_source_alias_name"><SourceAliasIcon source={row.builtin!} keyName={key} /><b>{row.id === 'agents' ? (LOCAL_AGENT_LABEL[key as LocalAgent] ?? key) : key}</b></span><Input defaultValue={groupSettings(row.id).sourceAliases?.[key]?.join(', ') ?? ''} placeholder={key} onBlur={event => { const aliases = event.target.value.split(',').map(value => value.trim().replace(/[@:\s/]/gu, '')).filter(Boolean); patchPicker(row.id, { sourceAliases: { ...(groupSettings(row.id).sourceAliases ?? {}), [key]: aliases } }) }} /></label>)}</div></div> : null}</div>
       </div>)}</div>
       <label className="dsh_ref_render_mode"><span><b>{t('settings.pickerDisplayMode')}</b><small>{t('settings.pickerDisplayModeDetail')}</small></span><DshMenuSelect value={picker.displayMode} options={[{ value: 'collapse', label: t('settings.pickerDisplayCollapse') }, { value: 'native-scroll', label: t('settings.pickerDisplayNative') }]} onChange={value => { savePicker({ ...picker, displayMode: value as PickerSettings['displayMode'] }) }} ariaLabel={t('settings.pickerDisplayMode')} /></label>
 
     </section>
-    <SettingsDisclosure className="dsh_ref_plugin_section" title={t('settings.pluginPicker')} description={t('settings.pluginPickerDetail')} open={Boolean(openSections.plugins)} onToggle={() => { setOpenSections(current => ({ ...current, plugins: !current.plugins })) }}>
+    {sectionLoaded('plugins') && <SettingsDisclosure className="dsh_ref_plugin_section" title={t('settings.pluginPicker')} description={t('settings.pluginPickerDetail')} open={Boolean(openSections.plugins)} onToggle={() => { setOpenSections(current => ({ ...current, plugins: !current.plugins })) }}>
       <section className="dsh_ref_sources dsh_ref_plugin_sources"><div className="dsh_ref_provider_controls"><label className="dsh_ref_toggle"><DshSwitch checked={picker.plugins.onlyLive} label={t('settings.pluginOnlyLive')} onChange={value => { patchPicker('plugins', { onlyLive: value }) }} /><b>{t('settings.pluginOnlyLive')}</b></label><label className="dsh_ref_toggle"><DshSwitch checked={picker.plugins.showDeepSeek} label={t('settings.pluginShowDeepSeek')} onChange={value => { patchPicker('plugins', { showDeepSeek: value }) }} /><b>{t('settings.pluginShowDeepSeek')}</b></label></div></section>
-    </SettingsDisclosure>
-    <SettingsDisclosure className="dsh_ref_agents_section" title={t('settings.localAgents')} description={t('settings.localAgentsDetail')} open={Boolean(openSections.agents)} onToggle={() => { setOpenSections(current => ({ ...current, agents: !current.agents })) }}>
+    </SettingsDisclosure>}
+    {sectionLoaded('agents') && <SettingsDisclosure className="dsh_ref_agents_section" title={t('settings.localAgents')} description={t('settings.localAgentsDetail')} open={Boolean(openSections.agents)} onToggle={() => { setOpenSections(current => ({ ...current, agents: !current.agents })) }}>
       <section className="dsh_ref_sources dsh_ref_agent_sources">
         <section className="dsh_ref_panel dsh_ref_settings_card dsh_ref_agent_actions">
           <div className="dsh_ref_section_head"><div><h3>{t('settings.agentActions')}</h3><p>{t('settings.agentActionsDetail')}</p></div></div>
@@ -349,13 +385,13 @@ export function ConversationSettings({ useScope, save, sync, cancel, refresh, re
         </section>
         <AgentSelectionCards enabledAgents={enabledAgents} stats={state.agentStats} directories={settings.agentDirectories} onEnabled={setAgentEnabled} onPickDirectory={pickAgentDirectory} t={t} />
       </section>
-    </SettingsDisclosure>
-    <SettingsDisclosure className="dsh_ref_drive_section" title={t('cloud.title')} description={t('cloud.detail')} open={Boolean(openSections.drive)} onToggle={() => { setOpenSections(current => ({ ...current, drive: !current.drive })) }}>
+    </SettingsDisclosure>}
+    {sectionLoaded('drives') && <SettingsDisclosure className="dsh_ref_drive_section" title={t('cloud.title')} description={t('cloud.detail')} open={Boolean(openSections.drive)} onToggle={() => { setOpenSections(current => ({ ...current, drive: !current.drive })) }}>
       <section className="dsh_ref_sources dsh_ref_drive_sources">
       <CloudDrives state={state} save={save} pickDownloadDirectory={pickCloudDriveDownloadDirectory} openDownloadDirectory={openCloudDriveDownloadDirectory} refreshOpenList={refreshOpenList} install={openListInstall} upgrade={openListUpgrade} connect={openListConnectExternal} disconnect={openListDisconnect} createMount={openListCreateMount} disableMount={openListDisableMount} removeMount={openListRemoveMount} reindexMount={openListReindex} t={t} />
       </section>
-    </SettingsDisclosure>
-    <SettingsDisclosure className="dsh_ref_chat_section" title={t('settings.sources')} description={t('settings.sourcesDetail')} open={Boolean(openSections.chat)} onToggle={() => { setOpenSections(current => ({ ...current, chat: !current.chat })) }}>
+    </SettingsDisclosure>}
+    {sectionLoaded('conversations') && <SettingsDisclosure className="dsh_ref_chat_section" title={t('settings.sources')} description={t('settings.sourcesDetail')} open={Boolean(openSections.chat)} onToggle={() => { setOpenSections(current => ({ ...current, chat: !current.chat })) }}>
       <section className="dsh_ref_sources dsh_ref_chat">
       <section className="dsh_ref_viability dsh_ref_settings_card"><div className="dsh_ref_section_head"><div><h3>{t('settings.viability')}</h3><p>{t('settings.viabilityDetail')}</p></div><div className="dsh_ref_viability_actions"><Button className="dsh_ref_recheck" type="button" disabled={state.loading || Boolean(busyAction)} onClick={() => { runAction('refresh', refresh) }}>{busyAction === 'refresh' ? t('settings.checking') : t('settings.recheck')}</Button></div></div>
         {state.loading ? <div className="dsh_ref_skeleton"><i/><i/><i/></div> : <div className="dsh_ref_checklist">
@@ -400,7 +436,7 @@ export function ConversationSettings({ useScope, save, sync, cancel, refresh, re
         <ManageConversations state={state} syncing={state.sync?.status === 'running'} browse={browse} deleteConversation={deleteConversation} clearRemoteMissing={clearRemoteMissing} clearOldAccounts={clearOldAccounts} t={t} />
       </SettingsDisclosure>
       </section>
-    </SettingsDisclosure>
+    </SettingsDisclosure>}
     </div>
   </section>
 }

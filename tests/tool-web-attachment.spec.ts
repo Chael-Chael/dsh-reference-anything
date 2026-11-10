@@ -1,3 +1,4 @@
+import { webChatAttachments } from '../src/sources/web-chat/attachments.ts'
 import { Context } from '@deepseek-ai/cordis'
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
 import { ToolRuntime } from '@deepseek-ai/dsh-tools'
@@ -27,9 +28,10 @@ const conversationId = 'web-conversation'
 const ref = { source: 'web-chat', id: conversationId }
 const expectedScope = 'a'.repeat(64)
 
-function source(): ReferenceSource {
+function source(history: Parameters<typeof webChatAttachments>[0]): ReferenceSource {
   return {
     id: 'web-chat',
+    attachments: webChatAttachments(history, 30_000),
     available: async () => true,
     list: async () => [],
     read: async () => { throw new Error('not used') },
@@ -39,7 +41,6 @@ function source(): ReferenceSource {
 async function mount(accountScope = expectedScope) {
   const ctx = new Context()
   await ctx.plugin(ReferenceRuntime, {})
-  ctx.references.registerSource(source())
   const history = {
     store: {
       settings: { historyMode: 'full', opencliPath: 'opencli', profile: '' },
@@ -52,6 +53,7 @@ async function mount(accountScope = expectedScope) {
       }),
     },
   }
+  ctx.references.registerSource(source(history as never))
   const provided = ctx.provide('referenceChatHistory', history as never)
   await ctx.plugin(SystemPrompt, {})
   await ctx.plugin(ToolRuntime, {})

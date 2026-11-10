@@ -36,6 +36,12 @@ const pickerSourceSettingsSchema = z.object({
   sourceAliases: z.record(z.string(), z.array(z.string().regex(/^[^@:\s/]+$/u).max(32))).optional(),
 })
 export type PickerSourceSettings = z.infer<typeof pickerSourceSettingsSchema>
+export { pickerSourceSettingsSchema }
+
+/** Settings a registered group starts with until the user changes them. */
+export function defaultGroupSettings(order: number, aliases: readonly string[] = []): PickerSourceSettings {
+  return { enabled: true, order, limit: 6, maxCandidates: 50, sort: 'updated', shortcut: '', aliases: [...aliases] }
+}
 
 export const agentActionsSchema = z.object({
   showImport: z.boolean().default(true),
@@ -63,6 +69,8 @@ export const pickerSettingsSchema = z.object({
     onlyLive: z.boolean().default(false),
     showDeepSeek: z.boolean().default(true),
   }).default({ enabled: true, order: 40, limit: 6, maxCandidates: 50, sort: 'updated', shortcut: '', aliases: ['plugin'], onlyLive: false, showDeepSeek: true }),
+  /** Groups other plugins register, by group id. */
+  groups: z.record(z.string(), pickerSourceSettingsSchema).default({}),
 })
 export type PickerSettings = z.infer<typeof pickerSettingsSchema>
 export type PickerDisplayMode = PickerSettings['displayMode']
@@ -81,11 +89,13 @@ export function defaultPickerSettings(): PickerSettings {
     conversations: { enabled: true, order: 30, limit: 6, maxCandidates: 50, sort: 'updated', shortcut: '', aliases: ['chat'] },
     drives: { enabled: true, order: 35, limit: 6, maxCandidates: 50, sort: 'updated', shortcut: '', aliases: ['drive'] },
     plugins: { enabled: true, order: 40, limit: 6, maxCandidates: 50, sort: 'updated', shortcut: '', aliases: ['plugin'], onlyLive: false, showDeepSeek: true },
+    groups: {},
   }
 }
 
 /** Picker settings have a fixed schema, so explicit comparison is cheap and stable. */
 export function samePickerSettings(left: PickerSettings, right: PickerSettings): boolean {
+  if (JSON.stringify(left.groups ?? {}) !== JSON.stringify(right.groups ?? {})) return false
   if (left.displayMode !== right.displayMode || left.agents.showImport !== right.agents.showImport || left.agents.showSummary !== right.agents.showSummary || left.agents.skipConfirmation !== right.agents.skipConfirmation) return false
   return pickerSourceSchema.options.every(key =>
     left[key].enabled === right[key].enabled &&

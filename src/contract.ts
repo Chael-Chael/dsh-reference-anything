@@ -140,53 +140,94 @@ export const chatImportCompatibilitySchema = z.object({
   version: z.string(), missing: z.array(z.string()), canUpgrade: z.boolean(), error: z.string().optional(),
 }).strict().readonly()
 
-export const REFERENCE_ANYTHING_INVOCATIONS: readonly InvocationDescriptor[] = [
-  descriptor('chatImportStatus', [], strict('ChatImportCompatibility', chatImportCompatibilitySchema)),
-  descriptor('chatImportUpgradeInstall', [], strict('ChatImportCompatibility', chatImportCompatibilitySchema), true),
-  descriptor('agentResume', [agentLookup, { name: 'input', wire: 'input', source: 'json', codec: strict('AgentResumeInput', z.object({ id: z.string().min(1) }).strict().readonly()) }], strict('ResumeSummary', z.string().min(1)), true),
-  descriptor('agentImport', [agentLookup, { name: 'input', wire: 'input', source: 'json', codec: strict('AgentImportInput', z.object({ id: z.string().min(1) }).strict().readonly()) }], strict('ImportedSessionId', z.string().min(1)), true),
-  descriptor('agentSearch', [agentLookup, { name: 'input', wire: 'input', source: 'json', codec: strict('AgentSearchInput', z.object({ query: z.string(), limit: z.number().int().min(1).max(100), kind: localAgentSchema.optional() }).readonly()) }], strict('AgentCandidate[]', z.array(agentCandidateSchema)), true),
-  descriptor('agentStats', [], strict('AgentStats[]', z.array(agentStatsSchema)), true),
+/** Cordis service keys of the Remotes this package mounts; one per plugin that owns it. */
+export const REMOTE_SERVICE_KEYS = {
+  core: 'referenceAnything',
+  webChat: 'referenceAnythingWebChat',
+  localAgent: 'referenceAnythingLocalAgent',
+  drive: 'referenceAnythingDrive',
+} as const
+const CORE = REMOTE_SERVICE_KEYS.core
+const WEB_CHAT = REMOTE_SERVICE_KEYS.webChat
+const LOCAL_AGENT = REMOTE_SERVICE_KEYS.localAgent
+const DRIVE = REMOTE_SERVICE_KEYS.drive
+
+/**
+ * Typert identity of each Remote. Typert accepts one contribution per package
+ * name, so each Remote, which a different plugin mounts, carries its own.
+ */
+export const REMOTE_PACKAGES = {
+  core: 'dsh-reference-anything',
+  webChat: 'dsh-reference-anything/web-chat',
+  localAgent: 'dsh-reference-anything/local-agent',
+  drive: 'dsh-reference-anything/cloud-drive',
+} as const
+
+export const driveStatusSchema = z.object({ systemTempDirectory: z.string() }).strict().readonly()
+
+export const CORE_INVOCATIONS: readonly InvocationDescriptor[] = [
+  descriptor(CORE, 'updateStatus', [], strict('PackageUpdateStatus', packageUpdateStatusSchema), true),
+  descriptor(CORE, 'checkUpdate', [], strict('PackageUpdateStatus', packageUpdateStatusSchema), true),
+  descriptor(CORE, 'installUpdate', [], strict('PackageUpdateResult', packageUpdateResultSchema), true),
+  descriptor(CORE, 'settingsGet', [], strict('Settings', settingsRecordSchema)),
+  descriptor(CORE, 'settingsUpdate', [{ name: 'settings', wire: 'settings', source: 'json', codec: strict('Settings', settingsRecordSchema) }], strict('Settings', settingsRecordSchema)),
+  descriptor(CORE, 'localPlugins', [], strict('LocalPluginCandidate[]', z.array(localPluginCandidateSchema)), true),
+  descriptor(CORE, 'sources', [], strict('SourceIds', z.array(z.string())), true),
+]
+
+export const WEB_CHAT_INVOCATIONS: readonly InvocationDescriptor[] = [
+  descriptor(WEB_CHAT, 'search', [{ name: 'input', wire: 'input', source: 'json', codec: strict('SearchInput', searchInputSchema) }], strict('SearchResult[]', z.array(searchResultSchema)), true),
+  descriptor(WEB_CHAT, 'health', [], strict('Health', healthSchema), true),
+  descriptor(WEB_CHAT, 'quickHealth', [], strict('Health', healthSchema), true),
+  descriptor(WEB_CHAT, 'profiles', [], strict('BrowserProfile[]', z.array(browserProfileSchema)), true),
+  descriptor(WEB_CHAT, 'discoverOpenCli', [], strict('OpenCliDiscovery', openCliDiscoverySchema), true),
+  descriptor(WEB_CHAT, 'installOpenCli', [], strict('OpenCliDiscovery', openCliDiscoverySchema), true),
+  descriptor(WEB_CHAT, 'installAdapter', [], strict('Boolean', z.boolean()), true),
+  descriptor(WEB_CHAT, 'restartDaemon', [], strict('Boolean', z.boolean()), true),
+  descriptor(WEB_CHAT, 'stats', [], strict('ProviderStats[]', z.array(providerStatsSchema))),
+  descriptor(WEB_CHAT, 'syncStart', [{ name: 'input', wire: 'input', source: 'json', codec: strict('SyncStart', syncStartSchema) }], strict('JobId', z.string())),
+  descriptor(WEB_CHAT, 'syncStatus', [{ name: 'input', wire: 'input', source: 'json', codec: strict('JobInput', jobInputSchema) }], strict('SyncStatus?', syncStatusSchema.optional())),
+  descriptor(WEB_CHAT, 'syncCancel', [{ name: 'input', wire: 'input', source: 'json', codec: strict('JobInput', jobInputSchema) }], strict('Boolean', z.boolean())),
+  descriptor(WEB_CHAT, 'browse', [{ name: 'input', wire: 'input', source: 'json', codec: strict('BrowseInput', browseInputSchema) }], strict('BrowsePage', browsePageSchema), true),
+  descriptor(WEB_CHAT, 'deleteConversation', [{ name: 'input', wire: 'input', source: 'json', codec: strict('DeleteInput', deleteInputSchema) }], strict('Boolean', z.boolean()), true),
+  descriptor(WEB_CHAT, 'storageStats', [], strict('StorageStats', storageStatsSchema)),
+  descriptor(WEB_CHAT, 'clearProvider', [{ name: 'input', wire: 'input', source: 'json', codec: strict('ClearProviderInput', clearProviderInputSchema) }], strict('Count', z.number().int().nonnegative()), true),
+  descriptor(WEB_CHAT, 'clearRemoteMissing', [], strict('Count', z.number().int().nonnegative()), true),
+  descriptor(WEB_CHAT, 'clearOldAccounts', [], strict('Count', z.number().int().nonnegative()), true),
+  descriptor(WEB_CHAT, 'syncStates', [], strict('ProviderSyncState[]', z.array(providerSyncStateSchema))),
+]
+
+export const LOCAL_AGENT_INVOCATIONS: readonly InvocationDescriptor[] = [
+  descriptor(LOCAL_AGENT, 'chatImportStatus', [], strict('ChatImportCompatibility', chatImportCompatibilitySchema)),
+  descriptor(LOCAL_AGENT, 'chatImportUpgradeInstall', [], strict('ChatImportCompatibility', chatImportCompatibilitySchema), true),
+  descriptor(LOCAL_AGENT, 'agentResume', [agentLookup, { name: 'input', wire: 'input', source: 'json', codec: strict('AgentResumeInput', z.object({ id: z.string().min(1) }).strict().readonly()) }], strict('ResumeSummary', z.string().min(1)), true),
+  descriptor(LOCAL_AGENT, 'agentImport', [agentLookup, { name: 'input', wire: 'input', source: 'json', codec: strict('AgentImportInput', z.object({ id: z.string().min(1) }).strict().readonly()) }], strict('ImportedSessionId', z.string().min(1)), true),
+  descriptor(LOCAL_AGENT, 'agentSearch', [agentLookup, { name: 'input', wire: 'input', source: 'json', codec: strict('AgentSearchInput', z.object({ query: z.string(), limit: z.number().int().min(1).max(100), kind: localAgentSchema.optional() }).readonly()) }], strict('AgentCandidate[]', z.array(agentCandidateSchema)), true),
+  descriptor(LOCAL_AGENT, 'agentStats', [], strict('AgentStats[]', z.array(agentStatsSchema)), true),
+]
+
+export const DRIVE_INVOCATIONS: readonly InvocationDescriptor[] = [
   // No session lookup, unlike `agentSearch`: a drive is the same drive from
   // every workspace, so there is nothing to scope the query to.
-  descriptor('driveSearch', [{ name: 'input', wire: 'input', source: 'json', codec: strict('DriveSearchInput', z.object({ query: z.string(), limit: z.number().int().min(1).max(100) }).readonly()) }], strict('DriveCandidate[]', z.array(driveCandidateSchema)), true),
-  descriptor('search', [{ name: 'input', wire: 'input', source: 'json', codec: strict('SearchInput', searchInputSchema) }], strict('SearchResult[]', z.array(searchResultSchema)), true),
-  descriptor('health', [], strict('Health', healthSchema), true),
-  descriptor('quickHealth', [], strict('Health', healthSchema), true),
-  descriptor('profiles', [], strict('BrowserProfile[]', z.array(browserProfileSchema)), true),
-  descriptor('discoverOpenCli', [], strict('OpenCliDiscovery', openCliDiscoverySchema), true),
-  descriptor('installOpenCli', [], strict('OpenCliDiscovery', openCliDiscoverySchema), true),
-  descriptor('installAdapter', [], strict('Boolean', z.boolean()), true),
-  descriptor('restartDaemon', [], strict('Boolean', z.boolean()), true),
-  descriptor('updateStatus', [], strict('PackageUpdateStatus', packageUpdateStatusSchema), true),
-  descriptor('checkUpdate', [], strict('PackageUpdateStatus', packageUpdateStatusSchema), true),
-  descriptor('installUpdate', [], strict('PackageUpdateResult', packageUpdateResultSchema), true),
-  descriptor('stats', [], strict('ProviderStats[]', z.array(providerStatsSchema))),
-  descriptor('syncStart', [{ name: 'input', wire: 'input', source: 'json', codec: strict('SyncStart', syncStartSchema) }], strict('JobId', z.string())),
-  descriptor('syncStatus', [{ name: 'input', wire: 'input', source: 'json', codec: strict('JobInput', jobInputSchema) }], strict('SyncStatus?', syncStatusSchema.optional())),
-  descriptor('syncCancel', [{ name: 'input', wire: 'input', source: 'json', codec: strict('JobInput', jobInputSchema) }], strict('Boolean', z.boolean())),
-  descriptor('settingsGet', [], strict('Settings', settingsRecordSchema)),
-  descriptor('settingsUpdate', [{ name: 'settings', wire: 'settings', source: 'json', codec: strict('Settings', settingsRecordSchema) }], strict('Settings', settingsRecordSchema)),
-  descriptor('openDownloadDirectory', [], strict('Boolean', z.boolean()), true),
-  descriptor('browse', [{ name: 'input', wire: 'input', source: 'json', codec: strict('BrowseInput', browseInputSchema) }], strict('BrowsePage', browsePageSchema), true),
-  descriptor('deleteConversation', [{ name: 'input', wire: 'input', source: 'json', codec: strict('DeleteInput', deleteInputSchema) }], strict('Boolean', z.boolean()), true),
-  descriptor('storageStats', [], strict('StorageStats', storageStatsSchema)),
-  descriptor('clearProvider', [{ name: 'input', wire: 'input', source: 'json', codec: strict('ClearProviderInput', clearProviderInputSchema) }], strict('Count', z.number().int().nonnegative()), true),
-  descriptor('clearRemoteMissing', [], strict('Count', z.number().int().nonnegative()), true),
-  descriptor('clearOldAccounts', [], strict('Count', z.number().int().nonnegative()), true),
-  descriptor('syncStates', [], strict('ProviderSyncState[]', z.array(providerSyncStateSchema))),
-  descriptor('openListStatus', [], strict('OpenListStatus', openListStatusSchema), true),
-  descriptor('openListInstall', [], strict('OpenListStatus', openListStatusSchema), true),
-  descriptor('openListUpgrade', [{ name: 'input', wire: 'input', source: 'json', codec: strict('OpenListUpgradeInput', openListUpgradeInputSchema) }], strict('OpenListStatus', openListStatusSchema), true),
-  descriptor('openListConnectExternal', [{ name: 'input', wire: 'input', source: 'json', codec: strict('OpenListExternalConnect', openListExternalConnectSchema) }], strict('OpenListStatus', openListStatusSchema), true),
-  descriptor('openListDisconnect', [], strict('OpenListStatus', openListStatusSchema), true),
-  descriptor('openListDrivers', [], strict('OpenListDriver[]', z.array(openListDriverSchema)), true),
-  descriptor('openListMounts', [], strict('OpenListMount[]', z.array(openListMountSchema)), true),
-  descriptor('openListCreateMount', [{ name: 'input', wire: 'input', source: 'json', codec: strict('OpenListMountCreate', openListMountCreateSchema) }], strict('OpenListMount', openListMountSchema), true),
-  descriptor('openListDisableMount', [{ name: 'input', wire: 'input', source: 'json', codec: strict('OpenListDisableMountInput', openListDisableMountSchema) }], strict('Boolean', z.boolean()), true),
-  descriptor('openListRemoveMount', [{ name: 'input', wire: 'input', source: 'json', codec: strict('OpenListMountInput', openListMountInputSchema) }], strict('Boolean', z.boolean()), true),
-  descriptor('openListReindex', [{ name: 'input', wire: 'input', source: 'json', codec: strict('OpenListMountInput', openListMountInputSchema) }], strict('OpenListReindex', z.object({ supported: z.boolean(), reason: z.string().optional() }).readonly()), true),
-  descriptor('localPlugins', [], strict('LocalPluginCandidate[]', z.array(localPluginCandidateSchema)), true),
+  descriptor(DRIVE, 'driveSearch', [{ name: 'input', wire: 'input', source: 'json', codec: strict('DriveSearchInput', z.object({ query: z.string(), limit: z.number().int().min(1).max(100) }).readonly()) }], strict('DriveCandidate[]', z.array(driveCandidateSchema)), true),
+  descriptor(DRIVE, 'openDownloadDirectory', [], strict('Boolean', z.boolean()), true),
+  descriptor(DRIVE, 'openListStatus', [], strict('OpenListStatus', openListStatusSchema), true),
+  descriptor(DRIVE, 'openListInstall', [], strict('OpenListStatus', openListStatusSchema), true),
+  descriptor(DRIVE, 'openListUpgrade', [{ name: 'input', wire: 'input', source: 'json', codec: strict('OpenListUpgradeInput', openListUpgradeInputSchema) }], strict('OpenListStatus', openListStatusSchema), true),
+  descriptor(DRIVE, 'openListConnectExternal', [{ name: 'input', wire: 'input', source: 'json', codec: strict('OpenListExternalConnect', openListExternalConnectSchema) }], strict('OpenListStatus', openListStatusSchema), true),
+  descriptor(DRIVE, 'openListDisconnect', [], strict('OpenListStatus', openListStatusSchema), true),
+  descriptor(DRIVE, 'openListDrivers', [], strict('OpenListDriver[]', z.array(openListDriverSchema)), true),
+  descriptor(DRIVE, 'openListMounts', [], strict('OpenListMount[]', z.array(openListMountSchema)), true),
+  descriptor(DRIVE, 'openListCreateMount', [{ name: 'input', wire: 'input', source: 'json', codec: strict('OpenListMountCreate', openListMountCreateSchema) }], strict('OpenListMount', openListMountSchema), true),
+  descriptor(DRIVE, 'openListDisableMount', [{ name: 'input', wire: 'input', source: 'json', codec: strict('OpenListDisableMountInput', openListDisableMountSchema) }], strict('Boolean', z.boolean()), true),
+  descriptor(DRIVE, 'openListRemoveMount', [{ name: 'input', wire: 'input', source: 'json', codec: strict('OpenListMountInput', openListMountInputSchema) }], strict('Boolean', z.boolean()), true),
+  descriptor(DRIVE, 'openListReindex', [{ name: 'input', wire: 'input', source: 'json', codec: strict('OpenListMountInput', openListMountInputSchema) }], strict('OpenListReindex', z.object({ supported: z.boolean(), reason: z.string().optional() }).readonly()), true),
+  descriptor(DRIVE, 'driveStatus', [], strict('DriveStatus', driveStatusSchema), true),
+]
+
+/** Every invocation, across all Remotes. */
+export const REFERENCE_ANYTHING_INVOCATIONS: readonly InvocationDescriptor[] = [
+  ...CORE_INVOCATIONS, ...WEB_CHAT_INVOCATIONS, ...LOCAL_AGENT_INVOCATIONS, ...DRIVE_INVOCATIONS,
 ]
 
 function strict(type: string, schema: z.ZodType): { mode: 'strict'; typeSymbol: string; schema: z.ZodType; create: () => z.ZodType } {
@@ -194,14 +235,15 @@ function strict(type: string, schema: z.ZodType): { mode: 'strict'; typeSymbol: 
 }
 
 function descriptor(
+  service: string,
   method: string,
   parameters: InvocationDescriptor['parameters'],
   result: NonNullable<InvocationDescriptor['result']>,
   cancelled = false,
 ): InvocationDescriptor {
   return {
-    id: `dsh-reference-anything#referenceAnything/${method}`,
-    service: 'referenceAnything', namespace: 'referenceAnything', method,
+    id: `dsh-reference-anything#${service}/${method}`,
+    service, namespace: service, method,
     invocation: { kind: 'direct' }, parameters,
     ...(cancelled ? { cancellation: { parameter: 'signal' } } : {}), result,
   }

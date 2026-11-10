@@ -1,4 +1,4 @@
-import { LOCAL_REFERENCE_SCHEME, decodeLocalLocator, encodeLocalLocator, localLocatorFromId, localLocatorId } from './local-locator.ts'
+import { LOCAL_REFERENCE_SCHEME, LOCAL_REFERENCE_SOURCE, decodeLocalLocator, encodeLocalLocator, localLocatorFromId, localLocatorId, usesLocalProtocol } from './local-locator.ts'
 /** Browser- and Host-safe codec for canonical opaque conversation references. */
 import type { ReferenceRef } from './types.ts'
 import { deflateSync, inflateSync } from 'fflate'
@@ -9,7 +9,7 @@ const COMPRESSED_PREFIX = 'z1_'
 const MAX_COMPRESSED_REFERENCE_BYTES = 64 * 1024
 
 export function encodeReferenceUri(ref: ReferenceRef): string {
-  if (ref.source === 'local-agent') return encodeLocalLocator(localLocatorFromId(ref.id))
+  if (usesLocalProtocol(ref)) return encodeLocalLocator(localLocatorFromId(ref.id))
   const legacy = encodeLegacyReferenceUri(ref)
   const bytes = new TextEncoder().encode(JSON.stringify(compactReference(ref)))
   if (bytes.length > MAX_COMPRESSED_REFERENCE_BYTES) return legacy
@@ -27,7 +27,7 @@ export function encodeLegacyReferenceUri(ref: ReferenceRef): string {
 }
 
 export function decodeReferenceUriUnchecked(uri: string): ReferenceRef {
-  if (uri.startsWith(LOCAL_REFERENCE_SCHEME)) return { source: 'local-agent', id: localLocatorId(decodeLocalLocator(uri)) }
+  if (uri.startsWith(LOCAL_REFERENCE_SCHEME)) return { source: LOCAL_REFERENCE_SOURCE, id: localLocatorId(decodeLocalLocator(uri)) }
   if (!uri.startsWith(REFERENCE_SCHEME)) throw new TypeError('wrong reference scheme')
   const payload = uri.slice(REFERENCE_SCHEME.length)
   if (!PAYLOAD_PATTERN.test(payload)) throw new TypeError('invalid base64url payload')
@@ -52,15 +52,21 @@ export function decodeReferenceUriUnchecked(uri: string): ReferenceRef {
   if (typeof source !== 'string' || typeof id !== 'string') {
     throw new TypeError('decoded reference lacks string source and id')
   }
-  if (source === 'local-agent') throw new TypeError('Old local reference protocol is no longer supported; reselect the conversation')
+  if (usesLocalProtocol({ source })) throw new TypeError('Old local reference protocol is no longer supported; reselect the conversation')
   const ref = { source, id }
   if ((compressed ? encodeReferenceUri(ref) : encodeLegacyReferenceUri(ref)) !== uri) throw new TypeError('URI is not canonical')
   return ref
 }
 
+/**
+ * Compression for the ids of the sources that existed when this format was
+ * fixed. Decoding re-encodes and compares, so this list is part of the durable
+ * URI format: widening it would make earlier URIs of other sources stop being
+ * canonical. Other sources get the generic, lossless encoding.
+ */
 function compactReference(ref: ReferenceRef): string[] {
   const separator = ref.source === 'web-chat' ? -1 : ref.id.lastIndexOf(':')
-  if (ref.source === 'web-chat' || ref.source === 'cloud-drive' || (ref.source === 'local-agent' && ref.id.includes(':chat-import:'))) {
+  if (ref.source === 'web-chat' || ref.source === 'cloud-drive' || (usesLocalProtocol(ref) && ref.id.includes(':chat-import:'))) {
     const prefix = ref.id.slice(0, separator + 1)
     const payload = ref.id.slice(separator + 1)
     try {

@@ -194,6 +194,39 @@ export interface ReferenceSource {
    * @returns the requested turns and their position in the conversation.
    */
   read(ref: ReferenceRef, window: ReferenceWindow, signal?: AbortSignal): Promise<ReferenceSnapshot>
+  /**
+   * Most turns one model read may return, as the user set it. The tool's own
+   * deployment limit still applies; omit to use only that.
+   */
+  readLimit?(): number
+  /** Lets the model materialize files the source's items carry. */
+  readonly attachments?: ReferenceAttachmentCapability
+}
+
+/** One attachment, fetched by the source and saved to disk by the core. */
+export type ReferenceAttachmentPayload =
+  | { readonly name: string; readonly mimeType: string; readonly bytes: Uint8Array }
+  | {
+    readonly name: string
+    readonly mimeType: string
+    /** Write the file to `localPath`, which does not exist yet; at most `maxBytes`. */
+    writeTo(localPath: string, maxBytes: number, signal?: AbortSignal): Promise<void>
+  }
+
+/** How a source hands attachments to `reference_attachment_read`. */
+export interface ReferenceAttachmentCapability {
+  /** Name prefix of the per-call directory the core creates, such as `dsh-reference-drive-`. */
+  readonly directoryPrefix?: string
+  /** Directory the user chose for these files; empty or absent means the system temp directory. */
+  baseDirectory?(): string
+  /**
+   * Fetch one attachment the model was shown.
+   * @param ref - a reference this source owns, already granted.
+   * @param attachmentId - the id exactly as the source displayed it.
+   * @param maxBytes - fail with `ATTACHMENT_TOO_LARGE` beyond this.
+   * @param signal - cancellation from the caller.
+   */
+  fetch(ref: ReferenceRef, attachmentId: string, maxBytes: number, signal?: AbortSignal): Promise<ReferenceAttachmentPayload>
 }
 
 /**

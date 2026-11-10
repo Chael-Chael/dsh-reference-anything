@@ -9,7 +9,7 @@ import type {
 } from '@deepseek-ai/dsh-client-ui-input-trigger/client'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import type { TranslateNS } from '@deepseek-ai/dsh-client-locale/client'
-import { defaultPickerSettings, type AgentActionsSettings, type LocalAgent, type ChatProvider, type PickerDisplayMode } from '../wire.ts'
+import { defaultPickerSettings, pickerSourceSchema, type AgentActionsSettings, type LocalAgent, type ChatProvider, type PickerDisplayMode } from '../wire.ts'
 import { healthAttention, setupReady } from './health.ts'
 import { parseProviderQuery } from '../search.ts'
 import { encodeReferenceUri } from '../uri-codec.ts'
@@ -92,7 +92,8 @@ export function workspacePathIconKind(path: string, kind: FileReferenceCandidate
   return WORKSPACE_EXTENSION_KIND[extension] ?? 'file'
 }
 
-type SourceScope = 'commands' | 'skills' | 'files' | 'sessions' | 'agents' | 'conversations' | 'drives' | 'plugins'
+/** A built-in group, or the id of a group another plugin registered. */
+export type SourceScope = 'commands' | 'skills' | 'files' | 'sessions' | 'agents' | 'conversations' | 'drives' | 'plugins' | (string & {})
 export interface PickerSourceOptions {
   order: number
   sort?: 'name' | 'updated'
@@ -139,7 +140,7 @@ const DEFAULT_SOURCE_OPTIONS: PickerSourceOptions = {
 const SEARCH_DEBOUNCE_MS = 100
 const DISPLAY_EXPANSION_STEP = 5
 const PREFIX_SCOPE: Readonly<Record<string, SourceScope>> = Object.fromEntries(
-  Object.entries(defaultPickerSettings()).flatMap(([scope, value]) => typeof value === 'object' ? (value.aliases ?? []).map(alias => [alias, scope as SourceScope]) : []),
+  pickerSourceSchema.options.flatMap(scope => (defaultPickerSettings()[scope].aliases ?? []).map(alias => [alias, scope as SourceScope])),
 )
 const COLON_PREFIX_SCOPE: Readonly<Record<string, SourceScope>> = {
   folders: 'files', path: 'files',
@@ -935,7 +936,7 @@ interface CachedSourceCandidates {
   revision: number
 }
 
-function withDisplayPolicy(
+export function withDisplayPolicy(
   source: InputTriggerSource,
   options: PickerSourceOptions,
   t: T,

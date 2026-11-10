@@ -62,10 +62,8 @@ async function parseSlot<T>(work: () => Promise<T>, signal?: AbortSignal): Promi
 }
 
 export function assertLocalSourceEnabled(ctx: Context, source: string): void {
-  const history = ctx.get('referenceChatHistory')
-  const settings = history?.getSettings?.() ?? history?.store.settings
-  if (!ctx.get('referenceLocalAgents') || settings?.picker?.agents.enabled === false
-    || !(settings?.enabledAgents ?? ALL_LOCAL_AGENTS).includes(agentKind(source) as typeof ALL_LOCAL_AGENTS[number])) {
+  const settings = ctx.get('referenceLocalAgents')?.preferences.get()
+  if (!settings || !settings.enabledAgents.includes(agentKind(source) as typeof ALL_LOCAL_AGENTS[number])) {
     throw new ReferenceAnythingError(`Local conversation source ${source} is disabled. Enable it in Reference Anything settings before reading; previous references do not bypass this setting.`, 'SOURCE_DISABLED')
   }
 }
@@ -75,7 +73,7 @@ export async function assertLocalScope(ctx: Context, locator: LocalLocator, sign
   assertLocalSourceEnabled(ctx, locator.source)
   const roots = localConversationRoots()[locator.source]
   const configured = ctx.get('referenceLocalAgents')?.discoveryPolicy().roots.filter(root => scanFormat(root.kind) === locator.source).map(root => root.path) ?? []
-  const custom = ctx.get('referenceChatHistory')?.getSettings().agentDirectories?.[agentKind(locator.source) as keyof typeof ctx.referenceChatHistory.store.settings.agentDirectories]
+  const custom = ctx.get('referenceLocalAgents')?.preferences.get().agentDirectories[agentKind(locator.source) as typeof ALL_LOCAL_AGENTS[number]]
   const allowed = [...(Array.isArray(roots) ? roots : roots ? [roots] : []), ...configured, ...(custom ? [custom] : [])]
   const target = await realpath(locator.path)
   for (const root of allowed) {

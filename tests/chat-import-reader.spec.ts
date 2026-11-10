@@ -59,17 +59,16 @@ describe('Chat Import reference reader', () => {
 })
 
 import { LocalAgentService } from '../src/sources/local-agent/index.ts'
-import { ReferenceAnythingRemote } from '../src/host.ts'
+import { LocalAgentRemote } from '../src/sources/local-agent/remote.ts'
 
 it('offers all sources with only the npm 0.26.1 scan API and quick import disabled', async () => {
  const ctx = new Context()
- const settings = { enabledAgents: [...ALL_LOCAL_AGENTS], picker: { agents: { showImport: false } } }
- ctx.provide('referenceChatHistory', { store: { settings }, getSettings: () => settings })
  const service = new LocalAgentService(ctx, { scope: 'all' })
+ await service.preferences.update({ ...service.preferences.get(), enabledAgents: [...ALL_LOCAL_AGENTS], showImport: false })
  ctx.provide('chatImport', { scanDiscover: async ({ format }: { format: string }) => ({ sessions: [{ format, sessionId: 's', sourcePath: '/history/' + format, importStatus: 'not-imported' }], warnings: [] }) })
  vi.spyOn(service.scanner, 'scanDiscover').mockImplementation(ctx.get('chatImport')!.scanDiscover as never)
  vi.spyOn(service.conversationAvailability, 'visible').mockResolvedValue(true)
- const rows = await new ReferenceAnythingRemote(ctx).agentSearch({ session: { header: { id: 'owner' } } } as never, { query: '', limit: 50 }, new AbortController().signal)
+ const rows = await new LocalAgentRemote(ctx).agentSearch({ session: { header: { id: 'owner' } } } as never, { query: '', limit: 50 }, new AbortController().signal)
  expect(rows).toHaveLength(ALL_LOCAL_AGENTS.length)
  expect(rows.every(row => 'referenceId' in row && row.referenceId && !row.importOnly)).toBe(true)
 })
@@ -80,14 +79,14 @@ it('offers all scanned formats as readable references even when quick import is 
  await writeFile(target.path,'fixture')
  try {
  const ctx=new Context()
- ctx.provide('referenceChatHistory',{store:{settings:{enabledAgents:['antigravity']}},getSettings:()=>({enabledAgents:['antigravity'],picker:{agents:{showImport:false}},agentDirectories:{antigravity:root}})})
  const service=new LocalAgentService(ctx,{scope:'all'})
+ await service.preferences.update({...service.preferences.get(),enabledAgents:['antigravity'],showImport:false,agentDirectories:{antigravity:root}})
  const readConversation=vi.fn(async()=>page)
  const scanDiscover=vi.fn(async()=>({sessions:[{format:'antigravity',sessionId:'s',sourcePath:target.path,title:'Image history',importStatus:'not-imported'}],warnings:[]}))
  ctx.provide('chatImport',{readConversation,scanDiscover,discoveryRoots:()=>({antigravity:['/history']})})
  vi.spyOn(service.scanner,'scanDiscover').mockImplementation(scanDiscover as never)
  vi.spyOn(service.conversationAvailability,'visible').mockResolvedValue(true)
- const remote=new ReferenceAnythingRemote(ctx)
+ const remote=new LocalAgentRemote(ctx)
  const signal=new AbortController().signal
  const rows=await remote.agentSearch({session:{header:{id:'owner',cwd:'/work'}}} as never,{query:'',limit:5},signal)
  expect(rows).toHaveLength(1)

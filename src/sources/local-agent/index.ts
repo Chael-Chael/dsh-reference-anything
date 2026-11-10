@@ -62,9 +62,15 @@ import { isQueryAdapter } from './types.ts'
 import { sliceTurns } from '../../window.ts'
 import { chatImportReference, chatImportTarget, readChatImport } from '../../chat-import-reader.ts'
 import { scanFormat, discoverySchema, agentKind } from '../../chat-import-discovery.ts'
+import { LOCAL_REFERENCE_SOURCE } from '../../local-locator.ts'
 import { ConversationAvailability } from '../../conversation-availability.ts'
 import { ALL_LOCAL_AGENTS, LOCAL_AGENT_LABEL, type LocalAgent } from '../../wire.ts'
 import type {} from '../../index.ts'
+import { memorySettings, type SourceSettingsHandle } from '../../settings.ts'
+import { mountRemote } from '../../remote-mount.ts'
+import { LOCAL_AGENT_TYPERT_MANIFEST } from '../../typert.ts'
+import { LocalAgentRemote } from './remote.ts'
+import { LOCAL_AGENT_SETTINGS_ID, defaultLocalAgentSettings, localAgentSettingsFromLegacy, localAgentSettingsSchema, type LocalAgentSettings } from './settings.ts'
 
 /** Cordis plugin name used by loader diagnostics. */
 export const name = 'reference-local-agent'
@@ -73,7 +79,7 @@ export const name = 'reference-local-agent'
 export const inject = ['references', 'storageDomain']
 
 /** Registry id, and the `source` half of every reference this source owns. */
-export const LOCAL_AGENT_SOURCE_ID = 'local-agent'
+export const LOCAL_AGENT_SOURCE_ID = LOCAL_REFERENCE_SOURCE
 
 /** Transcripts probed per `list()` call, so a cold cache costs a bounded read. */
 const BACKFILL_PER_LIST = 24
@@ -117,6 +123,12 @@ export interface Config {
   sqlite?: boolean
   /** Message rows one database read may materialize, counted from the end. */
   maxSessionRecords?: number
+  /**
+   * How conversations are discovered: `scanner` uses the bundled Chat Import
+   * scanners for every supported agent; `builtin` uses only this package's own
+   * transcript adapters under the configured roots.
+   */
+  discovery?: 'scanner' | 'builtin'
 }
 
 /**
@@ -155,6 +167,7 @@ export const Config: z<Config> = z.object({
   // for on a runtime whose SQLite build is not to be trusted.
   sqlite: z.boolean().default(true),
   maxSessionRecords: z.natural().default(2000),
+  discovery: z.union(['scanner', 'builtin'] as const).default('scanner'),
 })
 
 /** One directory scan, reused for as long as it is fresh. */
@@ -188,10 +201,16 @@ export class LocalAgentService extends Service implements ReferenceSource {
   private readonly convert: ConvertOptions
   private cache: DirectoryCache | undefined
   private store: AgentBookmarkStore | undefined
+  /** The user's own choices for this source, stored by the core registry. */
+  readonly preferences: SourceSettingsHandle<LocalAgentSettings>
 
   constructor(ctx: Context, config: Config = {}) {
     super(ctx, 'referenceLocalAgents')
     this.settings = { ...defaults(), ...definedOnly(config) }
+    const definition = { schema: localAgentSettingsSchema, defaults: defaultLocalAgentSettings(), fromLegacy: localAgentSettingsFromLegacy }
+    // `references` is injected; the fallback only serves direct construction.
+    this.preferences = ctx.get('references')?.defineSettings(LOCAL_AGENT_SETTINGS_ID, definition)
+      ?? memorySettings(localAgentSettingsSchema, definition.defaults)
     this.adapters = new Map(AGENT_ADAPTERS.map(adapter => [adapter.kind, adapter]))
     this.roots = resolveRoots(this.settings, homedir())
     this.convert = {
@@ -210,7 +229,10 @@ export class LocalAgentService extends Service implements ReferenceSource {
     this.ctx.effect(() => () => this.scanner.dispose(), 'reference-local-agent.scannerClose')
     this.ctx.effect(() => () => this.conversationAvailability.dispose(), 'reference-local-agent.availabilityClose')
     this.store = new AgentBookmarkStore(domain)
+    this.setAgentDirectories(this.preferences.get().agentDirectories)
+    this.ctx.effect(() => this.preferences.subscribe(value => { this.setAgentDirectories(value.agentDirectories) }), 'reference-local-agent.preferences')
     this.ctx.effect(() => this.ctx.references.registerSource(this), 'reference-local-agent.registerSource()')
+    mountRemote(this.ctx, scope => new LocalAgentRemote(scope), LOCAL_AGENT_TYPERT_MANIFEST)
   }
 
   /**
@@ -306,14 +328,13 @@ export class LocalAgentService extends Service implements ReferenceSource {
   private async listIn(query: string, limit: number, cwd: string, signal?: AbortSignal,
     directory?: { source?: string; warnings: string[] }): Promise<ReferenceSummary[]> {
     signal?.throwIfAborted()
-    if (this.ctx.get('referenceChatHistory')?.getSettings?.().picker?.agents.enabled === false) return []
-    if (this.ctx.get('referenceChatHistory')?.getSettings) {
-      const settings = this.ctx.get('referenceChatHistory')?.getSettings()
+    if (this.settings.discovery === 'scanner') {
+      const settings = this.preferences.get()
       const found = new Map<string, ReferenceSummary>()
       const failures: string[] = []
-      for (const kind of settings ? settings.enabledAgents ?? ALL_LOCAL_AGENTS : this.settings.agents) {
+      for (const kind of settings.enabledAgents) {
         if (directory?.source && scanFormat(kind) !== directory.source) continue
-        const custom = settings?.agentDirectories?.[kind]
+        const custom = settings.agentDirectories[kind]
         const paths = new Set<string | undefined>([undefined, ...this.roots.filter(root => root.kind === kind).map(root => root.path)])
         if (custom) paths.add(expandRoot(custom, homedir()))
         for (const path of paths) {
@@ -377,9 +398,7 @@ export class LocalAgentService extends Service implements ReferenceSource {
 
   /** Durable discovery policy. Reads stay independent so granted old refs work. */
   private enabledAgentKinds(): ReadonlySet<AgentKind> {
-    const history = this.ctx.get('referenceChatHistory')
-    const configured = history?.store.settings.enabledAgents ?? AGENT_KINDS
-    return new Set(configured.filter(isAgentKind))
+    return new Set(this.preferences.get().enabledAgents.filter(isAgentKind))
   }
 
   /**

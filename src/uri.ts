@@ -1,4 +1,4 @@
-import { LOCAL_REFERENCE_SCHEME, LOCAL_REFERENCE_OPEN, LOCAL_REFERENCE_CLOSE, localLocatorId, localLocatorFromId, validateLocalLocator } from './local-locator.ts'
+import { LOCAL_REFERENCE_SCHEME, LOCAL_REFERENCE_OPEN, LOCAL_REFERENCE_CLOSE, localLocatorId, localLocatorFromId, validateLocalLocator, LOCAL_REFERENCE_SOURCE, usesLocalProtocol } from './local-locator.ts'
 /**
  * Canonical `dsh-ref:` URI and the inline mention that carries it.
  *
@@ -74,7 +74,7 @@ export function parseReferenceText(text: string): ParsedReferenceText {
   const withLocators = text.replace(/<local-agent-reference>([\s\S]*?)<\/local-agent-reference>/gu, (_match, json: string) => {
     const value = JSON.parse(json)
     const locator = validateLocalLocator(value)
-    references.push({ ref: { source: 'local-agent', id: localLocatorId(locator) }, label: typeof value.label === 'string' ? value.label : locator.sessionId })
+    references.push({ ref: { source: LOCAL_REFERENCE_SOURCE, id: localLocatorId(locator) }, label: typeof value.label === 'string' ? value.label : locator.sessionId })
     return `@${typeof value.label === 'string' ? value.label : locator.sessionId}`
   })
   const pattern = /@\[((?:\\.|[^\\\]])*)\]\(((?:dsh-ref:|dsh-local:)[^\s)]*)\)|((?:dsh-ref:[A-Za-z0-9_-]+|dsh-local:\?[^\s<>]+))/gu
@@ -87,7 +87,7 @@ export function parseReferenceText(text: string): ParsedReferenceText {
     const uri = markdownUri ?? bareUri
     if (uri === undefined) throw invalidUri(String(_match))
     const ref = decodeReferenceUri(uri)
-    const label = rawLabel === undefined ? (ref.source === 'local-agent' ? localLocatorFromId(ref.id).sessionId : ref.id) : unescapeLabel(rawLabel)
+    const label = rawLabel === undefined ? (usesLocalProtocol(ref) ? localLocatorFromId(ref.id).sessionId : ref.id) : unescapeLabel(rawLabel)
     references.push({ ref, label })
     return `@${label}`
   })

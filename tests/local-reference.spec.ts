@@ -15,9 +15,11 @@ import { localLocatorId, type LocalLocator } from '../src/local-locator.ts'
 import { formatReferenceMention, parseReferenceText } from '../src/uri.ts'
 import { loadLocalReference, renderLocalPreview, buildLocalPreview, readLocalPage, selectLocalRows, localBytes, type LocalDocument, type LocalFrom } from '../src/local-reference.ts'
 import { readLocalTool } from '../src/local-reference-tools.ts'
+import { ALL_LOCAL_AGENTS } from '../src/wire.ts'
 
 let mentionFiber: { dispose(): Promise<void> }
 let toolFiber: { dispose(): Promise<void> }
+let prefs: { enabledAgents: string[]; agentDirectories: Record<string, string> }
 let root: string, ctx: Context, locator: LocalLocator, agent: Agent, raw: string
 const png='iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aDxkAAAAASUVORK5CYII='
 const message=(role:string,text:string, image=false)=>({type:'response_item',payload:{type:'message',role,content:[{type:role==='user'?'input_text':'output_text',text},...(image?[{type:'input_image',image_url:`data:image/png;base64,${png}`}]:[])]}})
@@ -29,7 +31,8 @@ beforeEach(async()=>{
  ctx=new Context()
  await ctx.plugin(ReferenceRuntime,{})
  ctx.references.registerSource({id:'local-agent',requiresGrant:true,available:async()=>true,list:async()=>[{ref:{source:'local-agent',id:localLocatorId(locator)},label:'Color'}],read:async()=>{throw Error('legacy read must not run')}})
- ctx.provide('referenceLocalAgents',{referenceDirectory:async()=>({items:[{ref:{source:'local-agent',id:localLocatorId(locator)},label:'Color',updatedAt:1}],warnings:[]}),discoveryPolicy:()=>({roots:[{kind:'codex',path:root}],scope:'all'})})
+ prefs={enabledAgents:[...ALL_LOCAL_AGENTS],agentDirectories:{}}
+ ctx.provide('referenceLocalAgents',{preferences:{get:()=>prefs},referenceDirectory:async()=>({items:[{ref:{source:'local-agent',id:localLocatorId(locator)},label:'Color',updatedAt:1}],warnings:[]}),discoveryPolicy:()=>({roots:[{kind:'codex',path:root}],scope:'all'})})
  await ctx.plugin(SystemPrompt,{})
  await ctx.plugin(ToolRuntime,{})
  toolFiber=await ctx.plugin(tool,{maxReadTurns:50})
@@ -66,10 +69,9 @@ it('reads 118 messages continuously with versioned next and a single canonical b
 })
 
 it('rechecks source settings for read, search, images, listing and hook without needing grants',async()=>{
- const settings={enabledAgents:['codex'],picker:{agents:{enabled:true}}}
- ctx.provide('referenceChatHistory',{getSettings:()=>settings,store:{settings}} as never)
+ prefs.enabledAgents=['codex']
  const {revision}=await initial()
- for(const disable of [()=>{settings.enabledAgents=[]},()=>{settings.enabledAgents=['codex'];settings.picker.agents.enabled=false}]){
+ for(const disable of [()=>{prefs.enabledAgents=[]},()=>{prefs.enabledAgents=['claude-code']}]){
   disable()
   for(const [name,args] of [['reference_read',{}],['reference_read',{part:'tools'}],['reference_search',{query:'color'}],['reference_image',{imageId:1}]] as const){
    const result=await call(name,{ref:locator,revision,...args});expect(result.isError).toBe(true);expect(text(result)).toContain('disabled')
@@ -77,7 +79,7 @@ it('rechecks source settings for read, search, images, listing and hook without 
   const list=await call('reference_list',{source:'codex'});expect(list.isError).toBe(true)
   expect(preview((await step())[1])[0].error.code).toBe('SOURCE_DISABLED')
  }
- settings.picker.agents.enabled=true
+ prefs.enabledAgents=['codex']
  expect((await initial()).items.length).toBeGreaterThan(0)
 })
 
@@ -87,11 +89,10 @@ it.each(['copilot-cli', 'copilot-vscode', 'doubao'])('reads %s through reference
  if(source === 'doubao') await mkdir(path)
  await writeFile(source === 'doubao' ? join(path,'000001.log') : path,await readFile(resolve('tests/fixtures/chat-import-reader',file)))
  locator={source,path,sessionId:source==='doubao'?'conv-1':source==='copilot-cli'?'11111111-2222-3333-4444-555555555555':'copilot-example'}
- const settings={enabledAgents:[source],picker:{agents:{enabled:true}}}
- ctx.provide('referenceChatHistory',{getSettings:()=>settings,store:{settings}} as never)
+ prefs.enabledAgents=[source]
  ctx.referenceLocalAgents.discoveryPolicy=()=>({roots:[{kind:source,path:root}],scope:'all'}) as never
  expect((await initial()).items.length).toBeGreaterThan(0)
- settings.enabledAgents=[]
+ prefs.enabledAgents=[]
  expect(text(await call('reference_read',{ref:locator}))).toContain('disabled')
 })
 
@@ -266,10 +267,9 @@ it('reports partial list failures and budgets search results without dropping hi
 
 // Policy changes invalidate cursors even if the matching directory is unchanged.
 it('invalidates list revisions when enabled source policy changes',async()=>{
- const settings={enabledAgents:['codex'],picker:{agents:{enabled:true}}}
- ctx.provide('referenceChatHistory',{getSettings:()=>settings,store:{settings}} as never)
+ prefs.enabledAgents=['codex']
  const page=unwrap(await call('reference_list',{}))
- settings.enabledAgents.push('claude-code')
+ prefs.enabledAgents=['codex','claude-code']
  const result=await call('reference_list',{revision:page.revision,from:{index:1}})
  expect(result.isError).toBe(true);expect(text(result)).toContain('REVISION_CHANGED')
 })

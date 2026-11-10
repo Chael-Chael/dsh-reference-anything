@@ -1,3 +1,4 @@
+import { cloudDriveAttachments } from '../src/sources/cloud-drive/index.ts'
 import { Context } from '@deepseek-ai/cordis'
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
 import { ToolRuntime } from '@deepseek-ai/dsh-tools'
@@ -81,9 +82,10 @@ const RASTER_IMAGES = [
   },
 ] as const
 
-function attachmentSource(): ReferenceSource {
+function attachmentSource(drive: Parameters<typeof cloudDriveAttachments>[0]): ReferenceSource {
   return {
     id: 'cloud-drive',
+    attachments: cloudDriveAttachments(drive),
     available: async () => true,
     list: async () => [],
     read: async () => { throw new Error('not used') },
@@ -101,10 +103,8 @@ async function mount(
 ) {
   const ctx = new Context()
   await ctx.plugin(ReferenceRuntime, {})
-  ctx.references.registerSource(attachmentSource())
-  const driveProvider = ctx.provide('referenceCloudDrive', { attachment } as never)
   const settings = { cloudDriveDownloadDirectory }
-  const historyProvider = ctx.provide('referenceChatHistory', { store: { settings } } as never)
+  ctx.references.registerSource(attachmentSource({ attachment, preferences: { get: () => ({ downloadDirectory: settings.cloudDriveDownloadDirectory }) } } as never))
   const imageProvider = saveImage === undefined ? undefined : ctx.provide('attachments', { saveImage } as never)
   await ctx.plugin(SystemPrompt, {})
   await ctx.plugin(ToolRuntime, {})
@@ -115,8 +115,6 @@ async function mount(
     dispose: async () => {
       await fiber.dispose()
       if (typeof imageProvider === 'function') await imageProvider()
-      if (typeof historyProvider === 'function') await historyProvider()
-      if (typeof driveProvider === 'function') await driveProvider()
     },
   }
 }

@@ -1,5 +1,15 @@
 # 项目复盘账本
 
+## L-056：拆分 Remote 与切换插件行要按宿主真实契约验收
+
+- 状态：观察中。
+- 规则：一个插件包挂多个 Remote 时，每个 Typert 贡献用独立包名，并逐个挂载、容忍单个失败；切换 bundle 行先 `listPlugins()` 按 `patchId` 取 `entryId`，以 `changed` 判断结果。
+- 原因：单元测试全绿，但真实宿主拒绝同名 Typert 包，`Promise.all` 让全部 Remote 失效；`setPluginEnabled` 不认补丁行 id；另一行的重载失败让成功的切换显示为失败。
+- 证据：[来源插件化任务](docs/development/tasks/plugin-split.md) 的 P5 真实 Web 验收；`tests/client-remote-face.spec.ts` 的 Typert 包名用例。
+- 观察日期：2026-11-10，Seen 1。
+- 验证：agent-browser-test 中 web-chat 缺席时设置页与菜单正常；本地插件行关→开往返通过。
+- 晋升：未达到三个独立日期。
+
 ## L-055：GitHub Release 图片不能沿用仓库相对路径
 
 - 2026-10-30：v0.5.2 正文直接复制仓库 README，demos/new-local-sources.gif 在 Release 页无法解析。发布前转换 Markdown 图片为原发布 SHA 对应的 raw.githubusercontent.com 绝对 URL；保留正文及仓库内相对链接。正常与恢复 workflow 共用转换脚本。
