@@ -35,16 +35,27 @@ Desktop 欢迎页报认证失败时，可查阅 [本地认证 Cookie 累积导�
 
 ## 演示和测试边界
 
-- 插件更新统一在 `agent-browser-test` 环境中使用 Browser Use 做真实浏览器实验和验收，不使用用户亲自测试环境或 Desktop 进行自动化实验。
-- 同一更新也需同步到 Desktop：核对本地链接，构建后完整重启 Desktop 并验证实际界面；浏览器测试结果与 Desktop 同步、验收结果分别报告。
-- 后续 GIF 更新复用真实 Web 演示环境，保留旧 HTML 动画与 GIF 备份；遵循演示 README 的 build → prepare → start 流程。
-- 演示环境的虚构服务结果不能作为真实导入、同步或升级功能通过的证据。
-- 测试“所有 @ 功能”时，覆盖所有已提供类别并验证实际插入。普通菜单检查不发送消息；真实引用端到端验收可按用户 2026-10-18 授权，使用其实际对话/来源和 DeepSeek 官方账号模型额度发送测试，具体步骤见发版规程 4.5。结束清空草稿，原始来源保持只读。
-- 构建、进程启动和自动化单测通过，不等于 Desktop 窗口或浏览器端到端验收通过。报告已验证项及未验证项。
+- 自动化浏览器实验和验收只在 `agent-browser-test` 做，不用用户亲测环境或 Desktop。
+- GIF 更新复用真实 Web 演示环境，保留旧 HTML 动画与 GIF 备份；遵循演示 README 的 build → prepare → start 流程。
+- 普通菜单检查不发送消息。真实引用端到端验收按[发版规程 4.4](../testing/npm-release-checklist.md#44-真实来源--官方账号模型--回答核验)发送；结束清空草稿，原始来源保持只读。
 
+### Desktop 何时验收
+
+用户于 2026-11-11 决定：日常开发只刷新、验收测试 Web；Desktop 只在以下情况完整重启并做窗口验收：
+
+- npm 发版；
+- 改动涉及 Desktop 专属行为（Electron 窗口、原生文件打开/选择、Desktop 启动或认证）。
 
 ## 构建与刷新
 
-两个 profile 均保持 link:D:/dsh-reference-anything，共用 lib/。每次 build 后运行 npm run agent:sync，刷新测试 Web 和 Desktop，再刷新浏览器并实际验收；仅文档修改无需构建或重启。Desktop profile 由 Electron 管理，不使用 dsh plugin --profile desktop 安装或刷新。
+两个 profile 均保持 `link:D:/dsh-reference-anything`，共用 `lib/`。build 后：
 
-刷新脚本会先尝试关闭 Desktop 窗口，再结束仍存活的同一可执行文件的托盘进程。不要在进行中的用户任务期间强行刷新，应先确认运行状态并说明阻塞。它不会修改 profile 或关闭其他 Web 实例。
+| 命令 | 刷新 |
+| --- | --- |
+| `npm run agent:sync`（默认） | 测试 Web |
+| `npm run agent:sync -- desktop` | Desktop |
+| `npm run agent:sync -- all` | 两者（发版准备自动执行） |
+
+`agent:verify` 接受同样的参数。仅文档修改无需构建或重启。Desktop profile 由 Electron 管理，不使用 `dsh plugin --profile desktop` 安装或刷新。
+
+刷新 Desktop 时脚本先关闭窗口，再结束同一可执行文件残留的托盘进程，所以不要在用户正使用 Desktop 时刷新。脚本不修改 profile，也不关闭其他 Web 实例。

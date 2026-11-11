@@ -23,7 +23,7 @@
 - 中英文 README 的改动段落与文件链接（避免把整篇未变内容塞进对话）。
 - 完整发布说明、功能卡标题和描述。
 - GIF/MP4 预览链接，以及全部新增字幕、动作说明、alt 文本与 README 配图说明。
-- 技术检查摘要、已知限制、仍未完成项，以及候选版本、sourceDigest 和 tgz SHA-256。
+- 技术检查摘要、已知限制、仍未完成项，以及候选版本和 prepare 记录的 copyDigest。
 - 一次性说明“请审核这些最终文字”；用户可修改或批准。未答复不算批准。
 
 Agent 先准备完材料和技术验收，再交最终审稿；不要用“是否需要更新 README/录 GIF”把已授权工作交回用户。
@@ -31,8 +31,8 @@ Agent 先准备完材料和技术验收，再交最终审稿；不要用“是�
 ## 批准与失效
 
 - 只有用户对本次具体最终文字的明确回复才算批准；“继续测试”“先做出来”或过去版本的批准都不算。
-- 收到批准后，在 `release.json.editorialApproval` 写入 `APPROVED`、用户原话、包含该回复时间/对话定位的本地审稿记录路径，以及本次 `sourceDigest` 和 `packageSha256`。没有自动批准命令，Agent 不得编造用户回复。
-- `readme`、`releaseNotes`、`demos` 三项必须有 PASS、说明和证据；gate 另外校验用户审稿记录及候选哈希。
-- 用户提出改稿：先改实际文件和相关 GIF 字幕，复测受影响部分，再 prepare 生成新候选并交审。prepare 默认重置批准，不沿用旧候选许可。
+- 收到批准后，在验收报告里加一条审稿条目（如 `E-01`，含用户原话和对话定位），并在 `release.json.editorialApproval` 写入 `APPROVED`、用户原话、该条目编号和 prepare 记录的 `copyDigest`。没有自动批准命令，Agent 不得编造用户回复。
+- `readme`、`releaseNotes`、`demos` 三项必须 PASS 并指向报告条目；gate 另外校验审稿条目与 `copyDigest`。
+- 审核只绑定文字（两份 README、`docs/release/<version>/`、`images/`）。批准后只改代码：重新 prepare 时自动沿用批准，不再送审。文字或 GIF 有任何变化：先改实际文件、复测受影响部分，再交审。
 - 最终文案批准不自动等于 npm/GitHub/社交平台发布授权；用户已同时明确授权发版则无需重复询问，按最终 gate 放行。
 - 脚本能校验记录和哈希，不能确认回复真的来自用户。Agent 必须遵守直接用户授权，禁止用自填 JSON 代替审核。
