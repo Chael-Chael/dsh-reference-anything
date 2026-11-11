@@ -144,8 +144,13 @@ export function ConversationSettings({ useScope, save, sync, cancel, refresh, re
     return picker.groups?.[id] ?? defaultGroupSettings(extraGroups[index]?.order ?? 50 + index, extraGroups[index]?.aliases)
   }
   /** A host-backed group is on only while its plugin row is loaded. */
-  const groupOn = (id: string) => groupSettings(id).enabled && hostSourceLoaded(HOST_GROUPS[id]?.source, loaded)
+  // Loading or unloading a plugin row reloads the Host (seconds). The switch
+  // moves at once and shows progress until the Host reports the new roster.
+  const [pendingGroups, setPendingGroups] = useState<Readonly<Record<string, boolean>>>({})
+  const groupOn = (id: string) => pendingGroups[id] ?? (groupSettings(id).enabled && hostSourceLoaded(HOST_GROUPS[id]?.source, loaded))
   const sectionLoaded = (group: string) => hostSourceLoaded(HOST_GROUPS[group]?.source, loaded)
+  /** A section whose source is being switched off stays visible, dimmed, until it is gone. */
+  const sectionClass = (group: string, base: string) => pendingGroups[group] === false ? `${base} is_source_pending` : base
   const [busyAction, setBusyAction] = useState<string>()
   const [showReleaseNotes, setShowReleaseNotes] = useState(false)
   const busyActionRef = useRef(false)
@@ -283,9 +288,17 @@ export function ConversationSettings({ useScope, save, sync, cancel, refresh, re
   const setGroupOn = async (id: string, value: boolean) => {
     const host = HOST_GROUPS[id]
     const needsRow = host !== undefined && (!value || !hostSourceLoaded(host.source, loaded))
-    if (needsRow && setGroupPlugin && await setGroupPlugin(id, value)) {
-      if (value && !groupSettings(id).enabled) patchPicker(id, { enabled: true })
-      return
+    if (needsRow && setGroupPlugin) {
+      if (pendingGroups[id] !== undefined) return
+      setPendingGroups(current => ({ ...current, [id]: value }))
+      let switched = false
+      try { switched = await setGroupPlugin(id, value) } finally {
+        setPendingGroups(current => { const { [id]: _, ...rest } = current; return rest })
+      }
+      if (switched) {
+        if (value && !groupSettings(id).enabled) patchPicker(id, { enabled: true })
+        return
+      }
     }
     patchPicker(id, { enabled: value })
   }
@@ -309,6 +322,11 @@ export function ConversationSettings({ useScope, save, sync, cancel, refresh, re
     setPickerMaxCandidates(current => ({ ...current, [id]: String(groupSettings(id).maxCandidates) }))
   }
   const orderedGroups = () => [...groupRows].sort((a, b) => groupSettings(a.id).order - groupSettings(b.id).order)
+  /** Settings sections keyed by group id, in the order the user gave those groups in the @ menu. */
+  const inGroupOrder = (sections: Readonly<Record<string, ReactNode>>) => {
+    const rank = new Map(orderedGroups().map((row, index) => [row.id, index]))
+    return Object.keys(sections).sort((a, b) => (rank.get(a) ?? Infinity) - (rank.get(b) ?? Infinity)).map(id => sections[id])
+  }
   const reorderPicker = (ordered: readonly string[]) => {
     const current = orderedGroups().map(row => row.id)
     const ids = [...ordered, ...current.filter(id => !ordered.includes(id))]
@@ -356,7 +374,7 @@ export function ConversationSettings({ useScope, save, sync, cancel, refresh, re
     <section className="dsh_ref_panel dsh_ref_settings_card dsh_ref_general_settings"><div className="dsh_ref_section_head"><div><h3>{t('settings.general')}</h3><p>{t('settings.generalDetail')}</p></div></div>
       <div className="dsh_ref_picker_list" ref={pickerListRef}>{orderedGroups().map(row => <div className={`dsh_ref_picker_row${draggingPicker === row.id ? ' is_dragging' : ''}`} data-picker-id={row.id} key={row.id}>
         <div className="dsh_ref_picker_order"><button className="dsh_ref_picker_drag_handle" type="button" aria-label={t('settings.moveUp', { item: row.label })}><span aria-hidden="true">⠿</span></button></div>
-        <label className="dsh_ref_picker_toggle"><PickerSourceLogo kind={row.id === 'commands' ? 'command' : row.id === 'skills' ? 'skill' : row.id === 'files' ? 'file' : row.id === 'sessions' ? 'session' : row.id === 'drives' ? 'drive' : row.id === 'agents' ? 'agent' : 'plugin'} /><span><b>{row.label}</b>{row.detail && <small>{row.detail}</small>}</span><DshSwitch checked={groupOn(row.id)} label={row.label} onChange={value => { void setGroupOn(row.id, value) }} /><Button className="dsh_ref_picker_expand" type="button" aria-label={row.label + ' · ' + t('settings.aliases')} aria-expanded={Boolean(openSections['aliases-' + row.id])} aria-controls={'dsh-ref-aliases-' + row.id} onClick={() => { setOpenSections(current => ({ ...current, ['aliases-' + row.id]: !current['aliases-' + row.id] })) }}><span className="dsh_ref_collapsible_chevron" aria-hidden="true"/></Button></label>
+        <label className={`dsh_ref_picker_toggle${pendingGroups[row.id] !== undefined ? ' is_pending' : ''}`} aria-busy={pendingGroups[row.id] !== undefined}><PickerSourceLogo kind={row.id === 'commands' ? 'command' : row.id === 'skills' ? 'skill' : row.id === 'files' ? 'file' : row.id === 'sessions' ? 'session' : row.id === 'drives' ? 'drive' : row.id === 'agents' ? 'agent' : 'plugin'} /><span><b>{row.label}</b>{pendingGroups[row.id] !== undefined ? <small role="status">{t(pendingGroups[row.id] ? 'settings.sourceEnabling' : 'settings.sourceDisabling')}</small> : row.detail && <small>{row.detail}</small>}</span><DshSwitch checked={groupOn(row.id)} disabled={pendingGroups[row.id] !== undefined} label={row.label} onChange={value => { void setGroupOn(row.id, value) }} /><Button className="dsh_ref_picker_expand" type="button" aria-label={row.label + ' · ' + t('settings.aliases')} aria-expanded={Boolean(openSections['aliases-' + row.id])} aria-controls={'dsh-ref-aliases-' + row.id} onClick={() => { setOpenSections(current => ({ ...current, ['aliases-' + row.id]: !current['aliases-' + row.id] })) }}><span className="dsh_ref_collapsible_chevron" aria-hidden="true"/></Button></label>
         <div className="dsh_ref_picker_aliases" id={'dsh-ref-aliases-' + row.id} hidden={!openSections['aliases-' + row.id]}><div className="dsh_ref_picker_fields">        <label className="dsh_ref_picker_limit"><span>{t('settings.collapsedItems')}</span><Input type="number" min={1} max={50} inputMode="numeric" value={draftOf(pickerLimits, row.id, groupSettings(row.id).limit)} aria-invalid={!validPickerLimit(draftOf(pickerLimits, row.id, groupSettings(row.id).limit))} onChange={event => { setPickerLimits(current => ({ ...current, [row.id]: event.target.value })) }} onBlur={() => { commitPickerLimit(row.id) }} onKeyDown={event => { if (event.key === 'Enter') event.currentTarget.blur() }} /></label>
         <label className="dsh_ref_picker_limit"><span>{t('settings.maxCandidates')}</span><Input type="number" min={1} max={50} inputMode="numeric" value={draftOf(pickerMaxCandidates, row.id, groupSettings(row.id).maxCandidates)} aria-invalid={!validPickerLimit(draftOf(pickerMaxCandidates, row.id, groupSettings(row.id).maxCandidates))} onChange={event => { setPickerMaxCandidates(current => ({ ...current, [row.id]: event.target.value })) }} onBlur={() => { commitPickerMaxCandidates(row.id) }} onKeyDown={event => { if (event.key === 'Enter') event.currentTarget.blur() }} /></label>
 <label className="dsh_ref_picker_limit"><span>{t('settings.shortcut')}</span><Input type="text" maxLength={32} value={groupSettings(row.id).shortcut} placeholder={row.builtin ? DEFAULT_PICKER_SHORTCUTS[row.builtin] : row.id} onChange={event => { patchPicker(row.id, { shortcut: event.target.value.replace(/[@:\s/]/gu, '') }) }} /></label></div>{row.builtin && (SOURCE_ALIAS_GROUPS[row.builtin]?.length || (row.id === 'drives' && (state.openListMounts?.length ?? 0) > 0)) ? <div className="dsh_ref_source_aliases"><b>{t('settings.sourceAliases')}</b><small>{t('settings.sourceAliasesHint')}</small><div className="dsh_ref_source_alias_list">{(row.id === 'drives' ? (state.openListMounts ?? []).map(mount => mount.name) : SOURCE_ALIAS_GROUPS[row.builtin] ?? []).map(key => <label className="dsh_ref_source_alias_row" key={key}><span className="dsh_ref_source_alias_name"><SourceAliasIcon source={row.builtin!} keyName={key} /><b>{row.id === 'agents' ? (LOCAL_AGENT_LABEL[key as LocalAgent] ?? key) : key}</b></span><Input defaultValue={groupSettings(row.id).sourceAliases?.[key]?.join(', ') ?? ''} placeholder={key} onBlur={event => { const aliases = event.target.value.split(',').map(value => value.trim().replace(/[@:\s/]/gu, '')).filter(Boolean); patchPicker(row.id, { sourceAliases: { ...(groupSettings(row.id).sourceAliases ?? {}), [key]: aliases } }) }} /></label>)}</div></div> : null}</div>
@@ -364,10 +382,12 @@ export function ConversationSettings({ useScope, save, sync, cancel, refresh, re
       <label className="dsh_ref_render_mode"><span><b>{t('settings.pickerDisplayMode')}</b><small>{t('settings.pickerDisplayModeDetail')}</small></span><DshMenuSelect value={picker.displayMode} options={[{ value: 'collapse', label: t('settings.pickerDisplayCollapse') }, { value: 'native-scroll', label: t('settings.pickerDisplayNative') }]} onChange={value => { savePicker({ ...picker, displayMode: value as PickerSettings['displayMode'] }) }} ariaLabel={t('settings.pickerDisplayMode')} /></label>
 
     </section>
-    {sectionLoaded('plugins') && <SettingsDisclosure className="dsh_ref_plugin_section" title={t('settings.pluginPicker')} description={t('settings.pluginPickerDetail')} open={Boolean(openSections.plugins)} onToggle={() => { setOpenSections(current => ({ ...current, plugins: !current.plugins })) }}>
+    {/* Source sections follow the user's @ group order. */}
+    {inGroupOrder({
+    plugins: sectionLoaded('plugins') && <SettingsDisclosure key="plugins" className={sectionClass('plugins', 'dsh_ref_plugin_section')} title={t('settings.pluginPicker')} description={t('settings.pluginPickerDetail')} open={Boolean(openSections.plugins)} onToggle={() => { setOpenSections(current => ({ ...current, plugins: !current.plugins })) }}>
       <section className="dsh_ref_sources dsh_ref_plugin_sources"><div className="dsh_ref_provider_controls"><label className="dsh_ref_toggle"><DshSwitch checked={picker.plugins.onlyLive} label={t('settings.pluginOnlyLive')} onChange={value => { patchPicker('plugins', { onlyLive: value }) }} /><b>{t('settings.pluginOnlyLive')}</b></label><label className="dsh_ref_toggle"><DshSwitch checked={picker.plugins.showDeepSeek} label={t('settings.pluginShowDeepSeek')} onChange={value => { patchPicker('plugins', { showDeepSeek: value }) }} /><b>{t('settings.pluginShowDeepSeek')}</b></label></div></section>
-    </SettingsDisclosure>}
-    {sectionLoaded('agents') && <SettingsDisclosure className="dsh_ref_agents_section" title={t('settings.localAgents')} description={t('settings.localAgentsDetail')} open={Boolean(openSections.agents)} onToggle={() => { setOpenSections(current => ({ ...current, agents: !current.agents })) }}>
+    </SettingsDisclosure>,
+    agents: sectionLoaded('agents') && <SettingsDisclosure key="agents" className={sectionClass('agents', 'dsh_ref_agents_section')} title={t('settings.localAgents')} description={t('settings.localAgentsDetail')} open={Boolean(openSections.agents)} onToggle={() => { setOpenSections(current => ({ ...current, agents: !current.agents })) }}>
       <section className="dsh_ref_sources dsh_ref_agent_sources">
         <section className="dsh_ref_panel dsh_ref_settings_card dsh_ref_agent_actions">
           <div className="dsh_ref_section_head"><div><h3>{t('settings.agentActions')}</h3><p>{t('settings.agentActionsDetail')}</p></div></div>
@@ -385,13 +405,13 @@ export function ConversationSettings({ useScope, save, sync, cancel, refresh, re
         </section>
         <AgentSelectionCards enabledAgents={enabledAgents} stats={state.agentStats} directories={settings.agentDirectories} onEnabled={setAgentEnabled} onPickDirectory={pickAgentDirectory} t={t} />
       </section>
-    </SettingsDisclosure>}
-    {sectionLoaded('drives') && <SettingsDisclosure className="dsh_ref_drive_section" title={t('cloud.title')} description={t('cloud.detail')} open={Boolean(openSections.drive)} onToggle={() => { setOpenSections(current => ({ ...current, drive: !current.drive })) }}>
+    </SettingsDisclosure>,
+    drives: sectionLoaded('drives') && <SettingsDisclosure key="drives" className={sectionClass('drives', 'dsh_ref_drive_section')} title={t('cloud.title')} description={t('cloud.detail')} open={Boolean(openSections.drive)} onToggle={() => { setOpenSections(current => ({ ...current, drive: !current.drive })) }}>
       <section className="dsh_ref_sources dsh_ref_drive_sources">
       <CloudDrives state={state} save={save} pickDownloadDirectory={pickCloudDriveDownloadDirectory} openDownloadDirectory={openCloudDriveDownloadDirectory} refreshOpenList={refreshOpenList} install={openListInstall} upgrade={openListUpgrade} connect={openListConnectExternal} disconnect={openListDisconnect} createMount={openListCreateMount} disableMount={openListDisableMount} removeMount={openListRemoveMount} reindexMount={openListReindex} t={t} />
       </section>
-    </SettingsDisclosure>}
-    {sectionLoaded('conversations') && <SettingsDisclosure className="dsh_ref_chat_section" title={t('settings.sources')} description={t('settings.sourcesDetail')} open={Boolean(openSections.chat)} onToggle={() => { setOpenSections(current => ({ ...current, chat: !current.chat })) }}>
+    </SettingsDisclosure>,
+    conversations: sectionLoaded('conversations') && <SettingsDisclosure key="conversations" className={sectionClass('conversations', 'dsh_ref_chat_section')} title={t('settings.sources')} description={t('settings.sourcesDetail')} open={Boolean(openSections.chat)} onToggle={() => { setOpenSections(current => ({ ...current, chat: !current.chat })) }}>
       <section className="dsh_ref_sources dsh_ref_chat">
       <section className="dsh_ref_viability dsh_ref_settings_card"><div className="dsh_ref_section_head"><div><h3>{t('settings.viability')}</h3><p>{t('settings.viabilityDetail')}</p></div><div className="dsh_ref_viability_actions"><Button className="dsh_ref_recheck" type="button" disabled={state.loading || Boolean(busyAction)} onClick={() => { runAction('refresh', refresh) }}>{busyAction === 'refresh' ? t('settings.checking') : t('settings.recheck')}</Button></div></div>
         {state.loading ? <div className="dsh_ref_skeleton"><i/><i/><i/></div> : <div className="dsh_ref_checklist">
@@ -436,7 +456,8 @@ export function ConversationSettings({ useScope, save, sync, cancel, refresh, re
         <ManageConversations state={state} syncing={state.sync?.status === 'running'} browse={browse} deleteConversation={deleteConversation} clearRemoteMissing={clearRemoteMissing} clearOldAccounts={clearOldAccounts} t={t} />
       </SettingsDisclosure>
       </section>
-    </SettingsDisclosure>}
+    </SettingsDisclosure>,
+    })}
     </div>
   </section>
 }

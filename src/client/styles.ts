@@ -9,6 +9,8 @@ import type { TranslateNS } from '@deepseek-ai/dsh-client-locale/client'
 import { en, zh, type REFERENCE_ANYTHING_NS } from './locale.ts'
 import { driveMenuIconKind, workspacePathIconKind } from './source.ts'
 
+/** A vector ring (faint track + arc): gradients rasterize too coarsely at 10px and lose their roundness. */
+const SWITCH_SPINNER_MASK = `url("data:image/svg+xml,${encodeURIComponent("<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='none' stroke='black' stroke-width='3'><circle cx='10' cy='10' r='8' stroke-opacity='.2'/><circle cx='10' cy='10' r='8' stroke-linecap='round' stroke-dasharray='16 60'/></svg>")}")`
 const css = `
   /* Reference Anything customizes the public @ menu and only the visual glyph
      inside matching Composer reference chips. Native text continues to own all
@@ -259,7 +261,7 @@ body[data-ds-dark-theme] [data-shortcut-modal="settings"] nav button[data-dsh-re
 .dsh_ref_collapsible_chevron{display:inline-block;flex:none;width:7px;height:7px;margin:0 3px 4px 0;border:solid var(--dsw-alias-label-tertiary,#8b93a1);border-width:0 1.5px 1.5px 0;transform:rotate(45deg);transition:transform .16s}
 .dsh_ref_collapsible[data-open='true']>.dsh_ref_collapsible_head>.dsh_ref_collapsible_chevron{transform:rotate(225deg);margin-bottom:0}
 .dsh_ref_collapsible_body{border-top:1px solid var(--dsw-alias-border-l2,#e5e7eb);margin:0 16px;padding:0 0 8px;background:transparent}
-.dsh_ref_chat_section{order:1}.dsh_ref_agents_section{order:2}.dsh_ref_drive_section{order:3}
+
 .dsh_ref_toggle>span,.dsh_ref_provider_controls>.dsh_ref_toggle>span{width:54px;height:30px;border:0;border-radius:999px;background:#e8e8e8;transition:background .16s ease}
 .dsh_ref_toggle>span:after,.dsh_ref_provider_controls>.dsh_ref_toggle>span:after{top:3px;left:3px;width:24px;height:24px;background:#777;transition:transform .16s ease,background .16s ease}
 .dsh_ref_toggle input:checked+span{border:0;background:#f5f5f5}
@@ -565,6 +567,10 @@ body[data-ds-dark-theme] .dsh_ref_agent_logo{filter:brightness(0) invert(1);opac
 .dsh_ref_settings .dsh_ref_picker_toggle b{font-size:14px;font-weight:600}
 .dsh_ref_settings .dsh_ref_picker_toggle small{color:var(--dsw-alias-label-tertiary,#737780);font-size:12px;line-height:1.35}
 .dsh_ref_settings .dsh_ref_picker_toggle>button[role=switch]{order:3}.dsh_ref_settings .dsh_ref_picker_toggle>button[role=switch]{margin-left:auto}
+.dsh_ref_settings .dsh_ref_picker_toggle.is_pending>button[role=switch]{opacity:1!important;cursor:progress}.dsh_ref_settings .dsh_ref_picker_toggle.is_pending>button[role=switch]>span{position:relative}.dsh_ref_settings .dsh_ref_picker_toggle.is_pending>button[role=switch]>span::after{content:"";position:absolute;inset:3px;background:var(--dsw-alias-brand-primary);-webkit-mask:${SWITCH_SPINNER_MASK} center/100% 100% no-repeat;mask:${SWITCH_SPINNER_MASK} center/100% 100% no-repeat;animation:dsh_ref_switch_spin .8s linear infinite}.dsh_ref_settings .dsh_ref_picker_toggle.is_pending small{color:var(--dsw-alias-brand-primary)}@keyframes dsh_ref_switch_spin{to{transform:rotate(360deg)}}
+.dsh_ref_settings :is(.dsh_ref_toggle,.dsh_ref_picker_toggle,.dsh_ref_cloud_mount_enabled)>button[role="switch"]>span{transition:transform .2s cubic-bezier(.2,.8,.2,1),background-color .2s}
+.dsh_ref_settings :is(.dsh_ref_plugin_section,.dsh_ref_agents_section,.dsh_ref_drive_section,.dsh_ref_chat_section){animation:dsh_ref_section_in .24s ease-out both;transition:opacity .2s}.dsh_ref_settings .is_source_pending{opacity:.45;pointer-events:none}@keyframes dsh_ref_section_in{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
+@media(prefers-reduced-motion:reduce){.dsh_ref_settings .dsh_ref_picker_toggle.is_pending>button[role=switch]>span::after{animation-duration:2s}.dsh_ref_settings :is(.dsh_ref_plugin_section,.dsh_ref_agents_section,.dsh_ref_drive_section,.dsh_ref_chat_section){animation:none}}
 .dsh_ref_settings .dsh_ref_picker_expand{order:4;flex:none;min-width:36px!important;width:36px!important;padding:0!important;border:0!important;background:transparent!important;align-self:center}
 .dsh_ref_settings .dsh_ref_picker_aliases{grid-column:2 / 4;grid-row:2;border-top:1px solid var(--dsh-ref-line);margin-top:14px;padding-top:14px}
 .dsh_ref_picker_fields{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-bottom:14px}

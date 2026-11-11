@@ -63,6 +63,7 @@ type SettingsActions = {
   pickCloudDriveDownloadDirectory?: () => Promise<string | null>
   pickAgentDirectory?: (agent: LocalAgent) => Promise<void>
   openCloudDriveDownloadDirectory?: () => Promise<void>
+  setGroupPlugin?: (group: string, enabled: boolean) => Promise<boolean>
 }
 function settingsElement(current: SettingsSnapshot, actions: SettingsActions = {}) {
   const noop = async () => {}
@@ -72,7 +73,7 @@ function settingsElement(current: SettingsSnapshot, actions: SettingsActions = {
     setupAll={actions.setupAll ?? noop} discoverOpenCli={actions.discoverOpenCli ?? noop} installOpenCli={actions.installOpenCli ?? noop}
     useProfile={actions.useProfile ?? noop} install={actions.install ?? noop} restartDaemon={noop} checkUpdate={actions.checkUpdate ?? noop} installUpdate={actions.installUpdate ?? noop} browse={noop} deleteConversation={noop}
     clearProvider={noop} refreshStats={noop} pickCloudDriveDownloadDirectory={actions.pickCloudDriveDownloadDirectory}
-    pickAgentDirectory={actions.pickAgentDirectory} openCloudDriveDownloadDirectory={actions.openCloudDriveDownloadDirectory} t={t} />
+    pickAgentDirectory={actions.pickAgentDirectory} openCloudDriveDownloadDirectory={actions.openCloudDriveDownloadDirectory} setGroupPlugin={actions.setGroupPlugin} t={t} />
 }
 function renderSettings(current: SettingsSnapshot, actions: SettingsActions = {}): HTMLElement {
   return render(settingsElement(current, actions))
@@ -350,7 +351,7 @@ describe('local agent source selection', () => {
     expect(saved.at(-1)?.enabledAgents).toHaveLength(32)
   })
 
-  it('places Agent and cloud-drive details in separate cards above external conversations', async () => {
+  it('places Agent and cloud-drive details in their own cards', async () => {
     const saved: SettingsRecord[] = []
     const el = renderSettings({ settings, openListMounts: [
       { id: '1', name: '/work', driver: 'OneDrive', enabled: true, status: 'ready' },
@@ -361,8 +362,7 @@ describe('local agent source selection', () => {
     const driveCard = el.querySelector('.dsh_ref_drive_sources')!
     const cloudSetup = el.querySelector('.dsh_ref_cloud')!
     expect(agentCard.querySelectorAll('[data-local-agent]')).toHaveLength(33)
-    expect(agentCard.compareDocumentPosition(driveCard) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0)
-    expect(driveCard.compareDocumentPosition(providerGrid) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0)
+    expect(driveCard.contains(providerGrid) || agentCard.contains(providerGrid)).toBe(false)
     expect(driveCard.contains(cloudSetup)).toBe(true)
     expect(driveCard.textContent).toContain('/work')
     expect(driveCard.textContent).toContain('/archive')
@@ -532,6 +532,42 @@ describe('general settings editing', () => {
     expect(toggle().getAttribute('aria-checked')).toBe('false')
     await act(async () => { toggle().click() })
     expect(saved[1]?.picker).toEqual(initial.picker)
+  })
+
+  it('orders the source sections like the @ groups', () => {
+    const base = defaultPickerSettings()
+    const picker = { ...base, conversations: { ...base.conversations, order: 1 }, plugins: { ...base.plugins, order: 2 }, drives: { ...base.drives, order: 3 }, agents: { ...base.agents, order: 4 } }
+    const el = renderSettings({ settings: { ...settings, picker }, loadedSources: ['file', 'web-chat', 'local-plugin', 'local-agent', 'cloud-drive', 'menu'] })
+    const order = Array.from(el.querySelectorAll('.dsh_ref_chat_section, .dsh_ref_plugin_section, .dsh_ref_drive_section, .dsh_ref_agents_section')).map(node => node.className.match(/dsh_ref_(\w+)_section/u)?.[1])
+    expect(order).toEqual(['chat', 'plugin', 'drive', 'agents'])
+  })
+
+  it('moves a source switch at once and shows progress until the Host reloads it', async () => {
+    const initial = { ...settings, picker: defaultPickerSettings() }
+    const pending = deferred<boolean>()
+    const calls: [string, boolean][] = []
+    const actions = { setGroupPlugin: (group: string, enabled: boolean) => { calls.push([group, enabled]); return pending.promise } }
+    const loaded = ['file', 'local-plugin', 'local-agent', 'menu']
+    const el = renderSettings({ settings: initial, loadedSources: loaded }, actions)
+    const row = () => el.querySelector<HTMLElement>('[data-picker-id="plugins"] .dsh_ref_picker_toggle')!
+    const toggle = () => row().querySelector<HTMLButtonElement>('button[role="switch"]')!
+    expect(el.querySelector('.dsh_ref_plugin_section')).not.toBeNull()
+
+    await act(async () => { toggle().click() })
+    expect(toggle().getAttribute('aria-checked')).toBe('false')
+    expect(toggle().disabled).toBe(true)
+    expect(row().getAttribute('aria-busy')).toBe('true')
+    expect(row().querySelector('[role="status"]')?.textContent).toBe(en['settings.sourceDisabling'])
+    expect(el.querySelector('.dsh_ref_plugin_section')?.classList.contains('is_source_pending')).toBe(true)
+    await act(async () => { toggle().click() })
+    expect(calls).toEqual([['plugins', false]])
+
+    rerenderSettings({ settings: initial, loadedSources: loaded.filter(id => id !== 'local-plugin') }, actions)
+    await act(async () => { pending.resolve(true); await pending.promise })
+    expect(row().classList.contains('is_pending')).toBe(false)
+    expect(toggle().disabled).toBe(false)
+    expect(toggle().getAttribute('aria-checked')).toBe('false')
+    expect(el.querySelector('.dsh_ref_plugin_section')).toBeNull()
   })
 
   it('defaults the chat history range to unlimited and saves days or unlimited', async () => {

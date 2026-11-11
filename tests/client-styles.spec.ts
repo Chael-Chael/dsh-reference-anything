@@ -109,6 +109,15 @@ describe('reference DOM customization', () => {
     } finally { dispose() }
   })
 
+  it('spins a ring inside a pending switch thumb without rotating the thumb off its track', () => {
+    adoptStyles()
+    const css = document.getElementById('dsh-reference-anything-style')!.textContent!
+    const pending = css.match(/[^}]*\.is_pending>button\[role=switch\]>span[^{]*\{[^}]*\}/gu) ?? []
+    // The checked thumb is placed with transform; any animation on it would orbit the track.
+    expect(pending.filter(rule => !rule.includes('::after{') && /animation/u.test(rule))).toEqual([])
+    expect(pending.some(rule => rule.includes('::after{') && rule.includes('dsh_ref_switch_spin'))).toBe(true)
+  })
+
   it('places each agent description on its own row and allows wrapping', () => {
     adoptStyles()
     document.body.innerHTML = '<div class="dsh_ref_settings"><article class="dsh_ref_agent_provider"><div class="dsh_ref_provider_main"><div class="dsh_ref_provider_summary"><h4>Antigravity</h4><strong>34</strong><small>Discovered by chat import</small><small>Import only</small></div></div></article></div>'
