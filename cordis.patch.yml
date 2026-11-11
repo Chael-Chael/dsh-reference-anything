@@ -13,20 +13,18 @@
   disabled: true
 
 - insert:
-    - id: reference-chat-import-runtime
-      name: 'dsh-reference-anything/chat-import-runtime'
-
     # The registry every source registers into.
     - id: references
       name: 'dsh-reference-anything'
       config:
         listLimit: 20
 
-    # Local Agent mentions receive bounded body previews before the model runs.
-    # Other external sources retain deferred reading. Native file and
+    # Runs at agent/pre-step, before each model step: grants this task the
+    # references the user picked, adds a deferred-reading note for external
+    # sources and bounded body previews for local Agent ones. Native file and
     # `dsh-session:` references stay with DSH's official services.
-    - id: reference-mention
-      name: 'dsh-reference-anything/reference'
+    - id: reference-prestep
+      name: 'dsh-reference-anything/prestep'
       config:
         maxReferences: 3
 
@@ -50,34 +48,13 @@
         timeoutMs: 60000
         maxStdoutBytes: 33554432
 
-    # Host-only OpenList lifecycle, credentials, and administration. This must
-    # start before the cloud-drive source and Remote that consume it.
-    - id: reference-openlist
-      name: 'dsh-reference-anything/openlist'
-
-    # Core Remote for the settings panel, package updates and the local-plugin
-    # source. Each other source mounts its own Remote, so switching one off
-    # leaves the panel and the other sources working.
-    - id: reference-anything-web
-      name: 'dsh-reference-anything/web'
-
     # Plugins installed in this profile: name, version and directory only.
     - id: reference-local-plugin
       name: 'dsh-reference-anything/local-plugin'
 
-    # Exported conversations on disk. Inert until the directory exists, so the
-    # default is safe; point `roots` wherever you keep your exports.
-    - id: reference-file
-      name: 'dsh-reference-anything/file'
-      config:
-        # External plugin overlays intentionally cannot evaluate !!js. This
-        # portable relative root stays inert unless the launched workspace has
-        # a references/ directory; users may override it with absolute roots.
-        roots: ['references']
-        extensions: ['.json']
-
     # Text files in the user's own cloud drives, listed by name and read a
-    # window at a time. Reading one needs a per-task grant: these are personal
+    # window at a time. This plugin also starts and stops OpenList, so the
+    # drive switch controls the OpenList process too. Reading one needs a per-task grant: these are personal
     # remote files, so the model may only open what its user named. Inert
     # without a credential — a drive that has never been logged into simply
     # reports unavailable, so the default is safe.

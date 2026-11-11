@@ -25,7 +25,7 @@ mkdirSync(join(profile,'node_modules'),{recursive:true})
 if(!existsSync(join(profile,'node_modules/dsh-reference-anything')))symlinkSync(plugin,join(profile,'node_modules/dsh-reference-anything'),'junction')
 writeFileSync(join(profile,'package.json'),JSON.stringify(manifest,null,2))
 const patch=join(profile,'cordis.patch.yml'),old=readFileSync(patch,'utf8').replace(/^\s*\[\]\s*$/m,'')
-if(!old.includes('# Demo isolation'))writeFileSync(patch,old+'\n# Demo isolation: fixture Remote handles these, never scan or install.\n- id: reference-chat-import-runtime\n  disabled: true\n- id: reference-local-agent\n  disabled: true\n')
+if(!old.includes('# Demo isolation'))writeFileSync(patch,old+'\n# Demo isolation: fixture Remote handles these, never scan or install.\n- id: reference-local-agent\n  disabled: true\n')
 for(const [path,text] of [['README.md','# 演示项目'],['docs/api.md','# API 设计'],['docs/guide.md','# 使用指南'],['docs/testing/verification.md','# 验证清单'],['docs/testing/start.ps1','# 演示启动脚本']]){const file=join(demo,'workspace',path);mkdirSync(resolve(file,'..'),{recursive:true});writeFileSync(file,text+'\n')}
 const workspaceStore=join(demo,'dsh-home/storages/workspace.json')
 if(existsSync(workspaceStore)){

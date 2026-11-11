@@ -26,6 +26,7 @@ import type {
   ReferenceSummary,
   ReferenceWindow,
 } from './types.ts'
+import { mountCoreRemote } from './core-remote.ts'
 
 export type * from './types.ts'
 export { ReferenceAnythingError, type ReferenceErrorCode } from './errors.ts'
@@ -89,6 +90,8 @@ export default class ReferenceRuntime extends Service {
       scoped.effect(() => () => { registry.detach(); void domain.close() }, 'references.settingsDomain')
       await registry.attach(domain)
     })
+    // The settings panel's Remote lives with the registry: while the core is on, the panel works.
+    mountCoreRemote(ctx, this)
   }
 
   /**

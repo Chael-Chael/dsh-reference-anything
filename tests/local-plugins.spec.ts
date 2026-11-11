@@ -6,12 +6,12 @@ import { mkdtemp, mkdir, realpath, rm, symlink, writeFile } from 'node:fs/promis
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
-import { ReferenceAnythingRemote } from '../src/host.ts'
+import { LocalPluginRemote } from '../src/sources/local-plugin-remote.ts'
 
 describe('local plugin discovery', () => {
   let root: string
   let ctx: Context
-  let remote: ReferenceAnythingRemote
+  let remote: LocalPluginRemote
   const signal = () => new AbortController().signal
 
   beforeEach(async () => {
@@ -23,7 +23,7 @@ describe('local plugin discovery', () => {
       name, inject: name === 'waiting-plugin' ? ['missingService'] : [], apply: () => {},
     }))
     ctx.provide('references', { settingsOf: () => ({ onlyLive: false, showDeepSeek: true }) } as never)
-    remote = new ReferenceAnythingRemote(ctx)
+    remote = new LocalPluginRemote(ctx, () => ({ onlyLive: false, showDeepSeek: true }))
   })
   afterEach(async () => {
     await ctx.fiber.dispose()
@@ -104,7 +104,7 @@ describe('local plugin discovery', () => {
 
   it('returns no guessed profile without a loader and rejects cancelled requests', async () => {
     const isolated = new Context()
-    try { expect(await new ReferenceAnythingRemote(isolated).localPlugins(signal())).toEqual([]) }
+    try { expect(await new LocalPluginRemote(isolated, () => ({ onlyLive: false, showDeepSeek: true })).localPlugins(signal())).toEqual([]) }
     finally { await isolated.fiber.dispose() }
     await expect(remote.localPlugins(AbortSignal.abort())).rejects.toThrow()
   })

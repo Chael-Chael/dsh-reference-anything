@@ -22,10 +22,10 @@ describe('client Remote face', () => {
 
 describe('Typert identities', () => {
   it('gives every Remote its own package, which Typert requires', async () => {
-    const { CORE_TYPERT_MANIFEST, DRIVE_TYPERT_MANIFEST, LOCAL_AGENT_TYPERT_MANIFEST, WEB_CHAT_TYPERT_MANIFEST } = await import('../src/typert.ts')
-    const hosts = [CORE_TYPERT_MANIFEST, WEB_CHAT_TYPERT_MANIFEST, LOCAL_AGENT_TYPERT_MANIFEST, DRIVE_TYPERT_MANIFEST].map(item => item.package)
-    expect(new Set(hosts).size).toBe(4)
+    const { CORE_TYPERT_MANIFEST, DRIVE_TYPERT_MANIFEST, LOCAL_AGENT_TYPERT_MANIFEST, LOCAL_PLUGIN_TYPERT_MANIFEST, WEB_CHAT_TYPERT_MANIFEST } = await import('../src/typert.ts')
+    const hosts = [CORE_TYPERT_MANIFEST, WEB_CHAT_TYPERT_MANIFEST, LOCAL_AGENT_TYPERT_MANIFEST, DRIVE_TYPERT_MANIFEST, LOCAL_PLUGIN_TYPERT_MANIFEST].map(item => item.package)
+    expect(new Set(hosts).size).toBe(5)
     const clients = REFERENCE_ANYTHING_REMOTES.map(item => item.contribution.package)
-    expect(new Set(clients).size).toBe(4)
+    expect(new Set(clients).size).toBe(5)
   })
 })

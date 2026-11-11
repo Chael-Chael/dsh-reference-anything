@@ -1,5 +1,5 @@
 import type { RemoteResult, TypertRemoteContribution } from '@deepseek-ai/dsh-typert-protocol'
-import { CORE_INVOCATIONS, DRIVE_INVOCATIONS, LOCAL_AGENT_INVOCATIONS, REMOTE_PACKAGES, REMOTE_SERVICE_KEYS, WEB_CHAT_INVOCATIONS } from '../contract.ts'
+import { CORE_INVOCATIONS, DRIVE_INVOCATIONS, LOCAL_AGENT_INVOCATIONS, LOCAL_PLUGIN_INVOCATIONS, REMOTE_PACKAGES, REMOTE_SERVICE_KEYS, WEB_CHAT_INVOCATIONS } from '../contract.ts'
 import type { ChatProvider, LocalAgent, SettingsRecord } from '../wire.ts'
 import type { ChatImportCompatibility } from '../chat-import-compatibility.ts'
 
@@ -103,6 +103,7 @@ export const REFERENCE_ANYTHING_REMOTES: readonly { readonly key: string; readon
   { key: REMOTE_SERVICE_KEYS.webChat, contribution: { package: REMOTE_PACKAGES.webChat, descriptors: WEB_CHAT_INVOCATIONS } },
   { key: REMOTE_SERVICE_KEYS.localAgent, contribution: { package: REMOTE_PACKAGES.localAgent, descriptors: LOCAL_AGENT_INVOCATIONS } },
   { key: REMOTE_SERVICE_KEYS.drive, contribution: { package: REMOTE_PACKAGES.drive, descriptors: DRIVE_INVOCATIONS } },
+  { key: REMOTE_SERVICE_KEYS.localPlugin, contribution: { package: REMOTE_PACKAGES.localPlugin, descriptors: LOCAL_PLUGIN_INVOCATIONS } },
 ]
 
 /**

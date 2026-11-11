@@ -1,6 +1,6 @@
 import type { TypertContribution } from '@deepseek-ai/dsh-typert-registry/types'
 import type { InvocationDescriptor } from '@deepseek-ai/dsh-typert-protocol'
-import { CORE_INVOCATIONS, DRIVE_INVOCATIONS, LOCAL_AGENT_INVOCATIONS, REMOTE_PACKAGES, REMOTE_SERVICE_KEYS, WEB_CHAT_INVOCATIONS } from './contract.ts'
+import { CORE_INVOCATIONS, DRIVE_INVOCATIONS, LOCAL_AGENT_INVOCATIONS, LOCAL_PLUGIN_INVOCATIONS, REMOTE_PACKAGES, REMOTE_SERVICE_KEYS, WEB_CHAT_INVOCATIONS } from './contract.ts'
 
 /** TypeScript signatures shown by the Typert registry, by method name. */
 const SIGNATURES: Readonly<Record<string, string>> = {
@@ -68,3 +68,5 @@ export const LOCAL_AGENT_TYPERT_MANIFEST = manifest(REMOTE_PACKAGES.localAgent, 
   'Local Agent conversation discovery and import.', LOCAL_AGENT_INVOCATIONS)
 export const DRIVE_TYPERT_MANIFEST = manifest(REMOTE_PACKAGES.drive, REMOTE_SERVICE_KEYS.drive, 'CloudDriveRemote',
   'Cloud drive discovery and OpenList administration.', DRIVE_INVOCATIONS)
+export const LOCAL_PLUGIN_TYPERT_MANIFEST = manifest(REMOTE_PACKAGES.localPlugin, REMOTE_SERVICE_KEYS.localPlugin, 'LocalPluginRemote',
+  'Installed DSH plugins for the local-plugin source.', LOCAL_PLUGIN_INVOCATIONS)

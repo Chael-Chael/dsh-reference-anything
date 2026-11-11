@@ -146,11 +146,13 @@ export const REMOTE_SERVICE_KEYS = {
   webChat: 'referenceAnythingWebChat',
   localAgent: 'referenceAnythingLocalAgent',
   drive: 'referenceAnythingDrive',
+  localPlugin: 'referenceAnythingLocalPlugin',
 } as const
 const CORE = REMOTE_SERVICE_KEYS.core
 const WEB_CHAT = REMOTE_SERVICE_KEYS.webChat
 const LOCAL_AGENT = REMOTE_SERVICE_KEYS.localAgent
 const DRIVE = REMOTE_SERVICE_KEYS.drive
+const LOCAL_PLUGIN = REMOTE_SERVICE_KEYS.localPlugin
 
 /**
  * Typert identity of each Remote. Typert accepts one contribution per package
@@ -161,6 +163,7 @@ export const REMOTE_PACKAGES = {
   webChat: 'dsh-reference-anything/web-chat',
   localAgent: 'dsh-reference-anything/local-agent',
   drive: 'dsh-reference-anything/cloud-drive',
+  localPlugin: 'dsh-reference-anything/local-plugin',
 } as const
 
 export const driveStatusSchema = z.object({ systemTempDirectory: z.string() }).strict().readonly()
@@ -171,7 +174,6 @@ export const CORE_INVOCATIONS: readonly InvocationDescriptor[] = [
   descriptor(CORE, 'installUpdate', [], strict('PackageUpdateResult', packageUpdateResultSchema), true),
   descriptor(CORE, 'settingsGet', [], strict('Settings', settingsRecordSchema)),
   descriptor(CORE, 'settingsUpdate', [{ name: 'settings', wire: 'settings', source: 'json', codec: strict('Settings', settingsRecordSchema) }], strict('Settings', settingsRecordSchema)),
-  descriptor(CORE, 'localPlugins', [], strict('LocalPluginCandidate[]', z.array(localPluginCandidateSchema)), true),
   descriptor(CORE, 'sources', [], strict('SourceIds', z.array(z.string())), true),
 ]
 
@@ -225,9 +227,13 @@ export const DRIVE_INVOCATIONS: readonly InvocationDescriptor[] = [
   descriptor(DRIVE, 'driveStatus', [], strict('DriveStatus', driveStatusSchema), true),
 ]
 
+export const LOCAL_PLUGIN_INVOCATIONS: readonly InvocationDescriptor[] = [
+  descriptor(LOCAL_PLUGIN, 'localPlugins', [], strict('LocalPluginCandidate[]', z.array(localPluginCandidateSchema)), true),
+]
+
 /** Every invocation, across all Remotes. */
 export const REFERENCE_ANYTHING_INVOCATIONS: readonly InvocationDescriptor[] = [
-  ...CORE_INVOCATIONS, ...WEB_CHAT_INVOCATIONS, ...LOCAL_AGENT_INVOCATIONS, ...DRIVE_INVOCATIONS,
+  ...CORE_INVOCATIONS, ...WEB_CHAT_INVOCATIONS, ...LOCAL_AGENT_INVOCATIONS, ...DRIVE_INVOCATIONS, ...LOCAL_PLUGIN_INVOCATIONS,
 ]
 
 function strict(type: string, schema: z.ZodType): { mode: 'strict'; typeSymbol: string; schema: z.ZodType; create: () => z.ZodType } {

@@ -4,13 +4,13 @@
 
 | 子系统 | 源码入口 | 验证入口 | 关键边界 |
 | --- | --- | --- | --- |
-| 引用注册、URI、读取 | `src/index.ts`, `uri.ts`, `uri-codec.ts`, `reference.ts`, `tool.ts` | `tests/runtime.spec.ts`, `uri.spec.ts`, `mention.spec.ts`, `tool*.spec.ts` | 只读、权限、编码兼容、输出限额 |
+| 引用注册、URI、读取 | `src/index.ts`, `uri.ts`, `uri-codec.ts`, `reference-prestep.ts`（行 `reference-prestep`：发送前授权并展开引用）, `tool.ts` | `tests/runtime.spec.ts`, `uri.spec.ts`, `reference-prestep.spec.ts`, `tool*.spec.ts` | 只读、权限、编码兼容、输出限额 |
 | 客户端菜单与设置 | `src/client/index.ts`, `source.ts`, `components.tsx`, `styles.ts` | `tests/client-*.spec.*` + Browser Use | 来源覆盖、键盘语义、异步结果、主题 |
 | 本地 Agent | `src/sources/local-agent/`, `agent-scan-cache.ts`, `local-reference.ts`, `local-reference-tools.ts` | `tests/local-agent-*.spec.ts`, `local-reference.spec.ts`, `agent-scan-cache.spec.ts` | 多格式、来源开关与真实路径校验；本地 ref/revision/part/from/maxItems → items/next，搜索 hits.position；next 保留消息范围，长文本按码点补读；附属记录只保留可靠关联 |
 | 会话读取和导入 | `src/chat-import-*.ts`, `local-conversation-reader.ts`, `vendor/chat-import-reader/` | `tests/chat-import-*.spec.ts`, `local-conversation-reader.spec.ts`, 合成 fixtures | 导入确认、版本兼容、插件生命周期 |
 | 网页会话/OpenCLI | `src/opencli.ts`, `src/sync/`, `src/sources/web-chat/`, `opencli-plugin/` | `tests/opencli*.spec.ts`, `sync.spec.ts`, `provider-*.spec.ts` | 账号范围、认证、增量、超时 |
-| 云盘/OpenList | `src/openlist/`, `src/sources/cloud-drive/` | `tests/openlist*.spec.ts`, `cloud-drive-source.spec.ts`, `download-directory.spec.ts` | URL 校验、下载目标、凭据 |
-| 宿主/Remote | 核心 `src/host.ts`、`web.ts`；各来源 `sources/*/remote.ts`；`contract.ts`、`typert.ts`、`remote-mount.ts` | `tests/web.spec.ts`, `client-remote-face.spec.ts`, `runtime.spec.ts` | 一个来源一个 Remote，随其插件挂载；客户端 `composeRemoteFace` 对缺席 Remote 返回失败结果 |
+| 云盘/OpenList | `src/sources/cloud-drive/`（启动并持有 `src/openlist/`，同一开关） | `tests/openlist*.spec.ts`, `cloud-drive-source.spec.ts`, `cloud-drive-openlist-lifecycle.spec.ts`, `download-directory.spec.ts` | URL 校验、下载目标、凭据 |
+| 宿主/Remote | 核心 `src/host.ts`、`core-remote.ts`（由核心在有 Typert 时挂载）；各来源 `sources/*/remote.ts`；`contract.ts`、`typert.ts`、`remote-mount.ts` | `tests/web.spec.ts`, `client-remote-face.spec.ts`, `runtime.spec.ts` | 一个来源一个 Remote，随其插件挂载；客户端 `composeRemoteFace` 对缺席 Remote 返回失败结果 |
 | 第三方来源 SDK | `src/sdk.ts`、`src/client/source-registry.ts`，示例 `examples/reference-source-notes/` | `tests/example-source.spec.ts`, `client-source-registry.spec.ts` | 只经 `ctx.references` 与 `referenceSources` 接入；见 [接入文档](../development/third-party-source.md) |
 | 来源设置 | `src/settings.ts`，各来源 `settings.ts` | `tests/source-settings.spec.ts` | 每个来源自有记录；旧设置一次性迁移，用户保存不被覆盖 |
 | 构建/发版/升级 | `build.mjs`, `package.json`, `cordis.patch.yml`, `src/update.ts`, `docs/release/` | `tests/update.spec.ts`, `release-features.spec.mjs`, 发版规程 | npm 文件完整性、SDK、版本 |

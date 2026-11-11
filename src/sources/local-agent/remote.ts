@@ -86,7 +86,7 @@ export class LocalAgentRemote extends TypertRemoteService {
   /**
    * Discovery for the `@` menu's local-agent group.
    *
-   * Resolved optionally rather than injected: `reference-anything-web` must
+   * Resolved optionally rather than injected: the core Remote must
    * still load in a profile where the local-agent plugin is switched off, and an
    * absent service means an empty group, not a broken composer. Workspace
    * scoping takes the session's own cwd, so a Web server serving projects from

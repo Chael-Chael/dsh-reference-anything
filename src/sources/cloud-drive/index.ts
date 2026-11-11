@@ -40,14 +40,17 @@ import { sliceTurns } from '../../window.ts'
 import { DriveCache } from './cache.ts'
 import { DRIVE_KINDS, decodeDriveId, encodeDriveId, providerFor } from './registry.ts'
 import type { DriveEntry, DriveKind, DriveProvider } from './types.ts'
-import type {} from '../../openlist/index.ts'
+import { OpenListService } from '../../openlist/index.ts'
 import type {} from '../../index.ts'
 
 /** Cordis plugin name used by loader diagnostics. */
 export const name = 'reference-cloud-drive'
 
-/** The services this source is built on. */
-export const inject = ['references', 'openListManager']
+/** The plugin needs only the registry; it starts OpenList itself. */
+export const inject = ['references']
+
+/** The source service waits for the OpenList manager the plugin started. */
+const serviceInject = ['references', 'openListManager']
 
 /** Registry id, and the `source` half of every reference this source owns. */
 export const CLOUD_DRIVE_SOURCE_ID = 'cloud-drive'
@@ -155,7 +158,7 @@ declare module '@deepseek-ai/cordis' {
 
 /** Lists and reads text files held in the user's cloud drives. */
 export class CloudDriveService extends Service implements ReferenceSource {
-  static inject = inject
+  static inject = serviceInject
   static Config = Config
   readonly id = CLOUD_DRIVE_SOURCE_ID
   /**
@@ -555,6 +558,10 @@ export function apply(ctx: Context, config: Config = {}): void {
       )
     }
   }
+  // OpenList belongs to this source: it starts and stops with the drive
+  // switch, so a managed OpenList process never outlives it. An embedder that
+  // already provides a manager (tests, custom hosts) keeps its own.
+  if (!ctx.get('openListManager')) ctx.plugin(OpenListService)
   ctx.plugin(CloudDriveService, config)
 }
 

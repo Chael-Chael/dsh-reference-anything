@@ -5,7 +5,6 @@ import { mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
-import * as bootstrap from '../src/chat-import-runtime.ts'
 import { chatImportCompatibility, ensureChatImport } from '../src/chat-import-compatibility.ts'
 import { resolveLocalPlugins } from '../src/local-plugins.ts'
 vi.mock('../src/local-plugins.ts', () => ({ resolveLocalPlugins: vi.fn(async () => []) }))
@@ -23,12 +22,6 @@ beforeEach(async () => {
   ctx.provide('pluginManager', { installBundle } as never)
 })
 afterEach(async () => { await ctx.fiber.dispose(); await rm(directory, { recursive: true, force: true }); vi.unstubAllGlobals() })
-it('does not install Chat Import when the reference plugin starts', async () => {
-  await ctx.plugin(bootstrap)
-  await ctx.loader.await()
-  expect(installBundle).not.toHaveBeenCalled()
-  expect(fetch).not.toHaveBeenCalled()
-})
 it.each([true, false])('does not reinstall existing providers (selected=%s)', async selected => {
   await writeFile(join(directory, 'package.json'), JSON.stringify({ dependencies: { 'dsh-chat-import': '0.25.2' }, dsh: { profile: { bundles: selected ? ['dsh-chat-import'] : [] } } }))
   await ensureChatImport(ctx)

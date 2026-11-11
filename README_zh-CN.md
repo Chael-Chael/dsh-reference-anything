@@ -292,7 +292,7 @@ Reference Anything 直接向 DSH 原生 `@` 菜单注册八个来源，不会引
 
 读取范围与起点统一放进 `from`：正文使用 `messageId`，工具使用 `toolId` 并可用 `messageId` 限定所属正文，图片使用 `imageId` 并可限定所属正文。续读时把完整 `next` 原样复制为 `from`。长文本按 Unicode 码点 `textOffset` 连续补读，不再只保留首尾。来源明确提供的历史摘要用 `role: "summary"`，来源限制用英文 `notice`，原始内容不翻译。
 
-`reference-mention.maxTextBytes` 默认将同一 pre-step 批次的新增引用上下文总量限制在 16 KiB，剩余上下文估算可进一步降低它；`reference-tool.maxTextBytes` 独立限制每次本地工具文本结果，默认也是 16 KiB。容量未知时只给有界定位与说明，连定位也装不下时明确报错。预览保留最近连续尾段，最新消息过长时给可续读的前缀。图片另限 10 MiB。
+`reference-prestep.maxTextBytes` 默认将同一 pre-step 批次的新增引用上下文总量限制在 16 KiB，剩余上下文估算可进一步降低它；`reference-tool.maxTextBytes` 独立限制每次本地工具文本结果，默认也是 16 KiB。容量未知时只给有界定位与说明，连定位也装不下时明确报错。预览保留最近连续尾段，最新消息过长时给可续读的前缀。图片另限 10 MiB。
 
 每次新读取均校验来源开关、允许目录内的真实路径和会话身份，本地引用不要求逐会话授权。版本变化后，保持 `ref`，以 `part: "messages"` 并省略 `revision` 与 `from` 从头重新读取。不保存全文快照或跨调用的完整解析缓存。其他来源通过 `external_reference_list` 和 `external_reference_read` 保留原有 URI 协议。
 

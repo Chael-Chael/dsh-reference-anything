@@ -2,8 +2,7 @@
 import type { Context } from '@deepseek-ai/cordis'
 import { TypertRemoteService } from '@deepseek-ai/dsh-typert-protocol'
 import { REMOTE_SERVICE_KEYS } from './contract.ts'
-import { resolveLocalPlugins } from './local-plugins.ts'
-import { LOCAL_PLUGIN_SETTINGS_ID, localPluginVisible, type LocalPluginSettings } from './local-plugin-settings.ts'
+import { LOCAL_PLUGIN_SETTINGS_ID, type LocalPluginSettings } from './local-plugin-settings.ts'
 import { defaultMenuSettings, menuSettingsSchema, type MenuSettings } from './menu-settings.ts'
 import { memorySettings, type SourceSettingsHandle } from './settings.ts'
 import { referenceAnythingDomainSpec, settingsRecordSchema, type SettingsRecord } from './store/spec.ts'
@@ -104,13 +103,6 @@ export class ReferenceAnythingRemote extends TypertRemoteService {
       }
     }
     return this.settingsGet()
-  }
-  /** Plugin rows for the `@` menu, filtered by the local-plugin source's settings; empty while that source is off. */
-  async localPlugins(signal: AbortSignal) {
-    signal.throwIfAborted()
-    const settings = this.ctx.get('references')?.settingsOf(LOCAL_PLUGIN_SETTINGS_ID) as LocalPluginSettings | undefined
-    if (!settings) return []
-    return (await resolveLocalPlugins(this.ctx)).filter(row => localPluginVisible(row, settings))
   }
 }
 

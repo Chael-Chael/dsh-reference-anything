@@ -4,7 +4,7 @@ import type { UserMessage } from '@deepseek-ai/dsh-llm'
 import type { Agent, PreStepDecision } from '@deepseek-ai/dsh-agent'
 import { beforeEach, describe, expect, it } from 'vitest'
 import ReferenceRuntime from '../src/index.ts'
-import * as mention from '../src/reference.ts'
+import * as mention from '../src/reference-prestep.ts'
 import { encodeReferenceUri, formatReferenceMention } from '../src/uri.ts'
 import type { ReferenceRef, ReferenceSnapshot, ReferenceSource } from '../src/types.ts'
 

@@ -20,7 +20,8 @@ import {
   type OpenListMount, type OpenListMountInput, type OpenListSeams, type OpenListAdminMutationState,
 } from './host.ts'
 
-export const name = 'reference-openlist'
+/** Started by the cloud-drive plugin; shares its switch. */
+export const name = 'reference-cloud-drive-openlist'
 export const inject: readonly string[] = []
 
 export interface OpenListStatus {
@@ -82,7 +83,7 @@ export class OpenListService extends Service {
       if (version === undefined || !await this.binaryExists(version)) { this.lifecycle = 'failed'; this.failure = 'Managed OpenList version is unavailable' }
       else try { await this.startManaged(this.binaryPath(version), version) } catch { this.lifecycle = 'failed'; this.failure = 'Managed OpenList could not be started' }
     }
-    this.ctx.effect(() => async () => { await this.runtime.stop() }, 'reference-openlist.stop-owned-process')
+    this.ctx.effect(() => async () => { await this.runtime.stop() }, 'reference-cloud-drive-openlist.stop-owned-process')
   }
 
   async status(signal?: AbortSignal): Promise<OpenListStatus> {

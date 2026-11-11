@@ -6,7 +6,7 @@ import { LocalAgentRemote } from '../src/sources/local-agent/remote.ts'
 import { CloudDriveRemote } from '../src/sources/cloud-drive/remote.ts'
 import { mountRemote } from '../src/remote-mount.ts'
 import { DRIVE_TYPERT_MANIFEST } from '../src/typert.ts'
-import * as web from '../src/web.ts'
+import ReferenceRuntime from '../src/index.ts'
 import { memorySettings } from '../src/settings.ts'
 import { defaultLocalAgentSettings, localAgentSettingsSchema } from '../src/sources/local-agent/settings.ts'
 
@@ -87,23 +87,35 @@ describe('external conversation Remote availability', () => {
     expect(importPath).toHaveBeenCalledWith({ format: 'codex', path: 'C:/rollout.jsonl' }, expect.any(AbortSignal))
   })
 
-  it('mounts the core Remote and settings with every source switched off', async () => {
+  it('mounts the core Remote with the registry, with every source switched off', async () => {
     const ctx = new Context()
     const register = vi.fn(() => () => undefined)
     ctx.provide('typert', { register })
-    ctx.provide('references', { registerSource: vi.fn(() => () => undefined), sourceIds: () => ['local-plugin'], settingsIds: () => ['menu', 'local-plugin'], settingsOf: () => undefined, defineSettings: (_id: string, definition: { schema: never; defaults: never }) => memorySettings(definition.schema, definition.defaults) })
-    const fiber = await ctx.plugin(web)
+    // No network: the startup update check must not reach npm from a test.
+    vi.stubGlobal('fetch', vi.fn(async () => { throw new Error('offline') }))
+    const fiber = await ctx.plugin(ReferenceRuntime, {})
     try {
-      const remote = ctx.get('referenceAnything') as ReferenceAnythingRemote | undefined
-      expect(remote).toBeDefined()
+      await vi.waitFor(() => expect(ctx.get('referenceAnything')).toBeDefined())
+      const remote = ctx.get('referenceAnything') as ReferenceAnythingRemote
       const signal = new AbortController().signal
-      expect(remote!.sources(signal)).toEqual(['local-plugin', 'menu'])
-      expect(remote!.settingsGet().picker?.agents.enabled).toBe(true)
+      expect(remote.sources(signal)).toEqual(['menu'])
+      expect(remote.settingsGet().picker?.agents.enabled).toBe(true)
+      expect(register).toHaveBeenCalledWith(expect.objectContaining({ package: 'dsh-reference-anything' }))
       expect(ctx.get('referenceAnythingWebChat')).toBeUndefined()
       expect(ctx.get('referenceAnythingDrive')).toBeUndefined()
     } finally {
       await fiber.dispose()
+      vi.unstubAllGlobals()
     }
+    expect(ctx.get('referenceAnything')).toBeUndefined()
+  })
+
+  it('works without Typert: no core Remote, the registry still serves sources', async () => {
+    const ctx = new Context()
+    const fiber = await ctx.plugin(ReferenceRuntime, {})
+    expect(ctx.get('referenceAnything')).toBeUndefined()
+    expect(ctx.references.settingsIds()).toEqual(['menu'])
+    await fiber.dispose()
   })
 
   it('mounts a source Remote only while Typert and its plugin are present', async () => {

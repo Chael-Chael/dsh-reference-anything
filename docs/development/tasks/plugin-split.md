@@ -110,3 +110,53 @@
 - 测试：`client-manage.spec.tsx` 待定态用例；Web（3081）实测本地插件开/关时序与滑块位置不动。
 - 转圈环第二版：边框画法在 1.5 倍缩放下边宽取整为 1.33px，两色边的端点是斜切的，看起来不圆；渐变遮罩在 10px 尺寸下栅格过粗，同样变方。改为 SVG 遮罩（浅色整圈 + 圆头弧线），任意缩放都是正圆。
 - 设置分区顺序跟随 @ 分组的用户排序（`inGroupOrder`）；删除原 CSS 固定 `order`（网页对话 1 / Agent 2 / 网盘 3）。测试：`client-manage.spec.tsx` 分区顺序用例；3081 实测顺序与 @ 列表一致。`npm run check` 1216 passed / 8 skipped。
+
+## 插件行精简（2026-11-11）
+
+用户决定：插件行只保留用户该看到的部分。
+
+| 原行 | 处理 |
+| --- | --- |
+| `reference-chat-import-runtime` | 删除（空插件，仅为旧 profile 保留） |
+| `reference-file` | 删除（只供模型、无菜单入口、默认不生效） |
+| `reference-mention` | 改名 `reference-prestep`（导出 `dsh-reference-anything/prestep`），仍独立一行 |
+| `reference-openlist` | 并入网盘：网盘插件自己启动 OpenList，关网盘即停 OpenList 进程 |
+| `reference-anything-web` | 并入核心：`references` 在有 Typert 时挂载核心 Remote、菜单设置与启动更新检查 |
+| `reference-tool` | 不变 |
+
+- 本地插件列表接口从核心 Remote 移到本地插件来源自己的 Remote（`referenceAnythingLocalPlugin`），关闭本地插件时接口随之消失。
+- 结果：7 行——核心、prestep、tool、本地 Agent、网页对话、网盘、本地插件；四个来源行对应设置开关。
+- 兼容：被删/改名行的 profile 覆盖配置需改到新行（如 `reference-mention.maxReferences` → `reference-prestep.maxReferences`）；本机 profile 无此类覆盖。
+- 测试：`cloud-drive-openlist-lifecycle.spec.ts`（OpenList 随网盘启停、宿主自带管理器时不重复启动）；`web.spec.ts` 改为核心挂载 Remote、无 Typert 时不挂载。
+
+### 发布说明草稿：插件行变化（待发版时并入 Release 正文，须用户审稿）
+
+版本号未定。下面两段分别放入中文"其他变更"和英文 "Chores"。
+
+```markdown
+- 插件详情页的组件从 11 个精简为 7 个，四个来源（本地 Agent、网页 AI 对话、网盘、本地插件）各对应设置中的一个开关。OpenList 现在随网盘一起开关：关闭网盘时，插件启动的 OpenList 进程也会停止。只通过设置页使用插件的用户无需任何操作。
+- **仅当你在 profile 的 `cordis.patch.yml` 中手动覆盖过以下组件的配置时**，需要按下表调整，否则覆盖不再生效、该组件回到默认值：
+
+  | 原组件 id | 现在 |
+  | --- | --- |
+  | `reference-mention` | 改名为 `reference-prestep`，配置项不变（如 `maxReferences`、`maxTextBytes`） |
+  | `reference-openlist` | 已并入 `reference-cloud-drive`，无单独配置 |
+  | `reference-anything-web` | 已并入核心 `references`，无单独配置 |
+  | `reference-file` | 已移除（读取 `references/` 目录下导出对话的来源） |
+  | `reference-chat-import-runtime` | 已移除（空组件） |
+```
+
+```markdown
+- The plugin's component list shrinks from 11 entries to 7, and each of the four sources (local Agents, web AI chats, cloud drives, local plugins) maps to one switch in Settings. OpenList now follows the cloud-drive switch: turning cloud drives off also stops the OpenList process the plugin started. If you only use the Settings page, nothing needs to change.
+- **Only if you hand-edited the config of these components in your profile's `cordis.patch.yml`**, move the override as below; otherwise it no longer applies and the component falls back to its defaults:
+
+  | Old component id | Now |
+  | --- | --- |
+  | `reference-mention` | Renamed to `reference-prestep`; same keys (e.g. `maxReferences`, `maxTextBytes`) |
+  | `reference-openlist` | Merged into `reference-cloud-drive`; no config of its own |
+  | `reference-anything-web` | Merged into the core `references`; no config of its own |
+  | `reference-file` | Removed (the source that read exported conversations from a `references/` folder) |
+  | `reference-chat-import-runtime` | Removed (it did nothing) |
+```
+
+未核实：宿主遇到指向已不存在组件的覆盖时，是静默忽略还是在日志里报错。发版前在临时 profile 里加一条 `reference-mention` 覆盖实测一次，按结果补充说明。

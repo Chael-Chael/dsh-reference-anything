@@ -12,7 +12,7 @@
  * resolved through `ctx.references`. Native file and DSH-session
  * references are owned end-to-end by their official DSH services.
  *
- * @module dsh-reference-anything/reference
+ * @module dsh-reference-anything/prestep
  */
 
 import type { Context } from '@deepseek-ai/cordis'
@@ -30,7 +30,7 @@ import { mayContainReference, parseReferenceText } from './uri.ts'
 import type {} from './index.ts'
 
 /** Cordis plugin name used by loader diagnostics. */
-export const name = 'reference-mention'
+export const name = 'reference-prestep'
 
 /** The registry this expander reads through. */
 export const inject = ['references']
