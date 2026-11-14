@@ -12,7 +12,7 @@ import * as localAgent from '../src/sources/local-agent/index.ts'
 import { LOCAL_AGENT_SOURCE_ID, referenceId } from '../src/sources/local-agent/index.ts'
 import type { Config } from '../src/sources/local-agent/index.ts'
 import type { ReferenceSnapshot } from '../src/types.ts'
-import { encodeReferenceUri, referenceReadHandle } from '../src/uri.ts'
+import { encodeReferenceUri } from '../src/uri.ts'
 
 /** Wide enough for every fixture here; clamping has its own test. */
 const WINDOW = { limit: 100 }
@@ -522,19 +522,9 @@ describe('as a mounted plugin', () => {
         content: [{ type: 'text', text: `Please read ${uri}` }], source: { kind: 'user' },
       }), { surfaceOp: 'append' })
       const restored = Session.create(target.id, target.snapshotEvents())
-      const resolved = ctx.references.resolveReadReference(restored, uri)
-      expect(resolved).toEqual(ref)
-      expect(() => ctx.references.assertSessionGranted(restored, resolved)).not.toThrow()
-      expect(() => ctx.references.assertSessionGranted(Session.create(SessionId('not-pasted')), resolved)).not.toThrow()
+      expect(() => ctx.references.assertSessionGranted(restored, ref)).not.toThrow()
+      expect(() => ctx.references.assertSessionGranted(Session.create(SessionId('not-pasted')), ref)).not.toThrow()
     } finally { await dispose() }
-  })
-  it('rejects obsolete local short handles even when a grant exists', async () => {
-    const {ctx,dispose}=await mount()
-    try {
-      const ref={source:'local-agent',id:localLocatorId({source:'codex',path:'C:/history/test.jsonl',sessionId:'s'})}
-      ctx.references.grant('task',ref)
-      expect(()=>ctx.references.resolveReadReference(Session.create(SessionId('task')),referenceReadHandle(ref))).toThrow()
-    } finally {await dispose()}
   })
   it('does not require a task grant for local transcripts', async () => {
     const { ctx, dispose } = await mount()

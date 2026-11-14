@@ -1,8 +1,8 @@
 {
   "name": "opencli-plugin-dsh-chat-history",
-  "version": "0.2.3",
+  "version": "0.2.6",
   "type": "module",
   "peerDependencies": {
-    "@jackwener/opencli": ">=2.0.0"
+    "@jackwener/opencli": ">=2.0.3"
   }
 }

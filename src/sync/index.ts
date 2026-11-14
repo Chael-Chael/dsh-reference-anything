@@ -222,13 +222,14 @@ export class ConversationSyncManager {
     let accountScope = ''
     let progress: ProgressWriter | undefined
     try {
-      if ((await runner.health(signal)).extensionCompatible === false) {
+      if (!runner.hasToken?.(provider) && (await runner.health(signal)).extensionCompatible === false) {
         throw new OpenCliError('Browser extension is incompatible with OpenCLI; update the extension or plugin, then recheck setup', 'OPENCLI_CONFIGURATION')
       }
       signal.throwIfAborted()
       const sinceFor = (scope: string): string => this.listingSince(provider, scope, mode)
       let rows: ProviderConversationRow[]
       let since = ''
+      let listingComplete = true
       if (typeof runner.syncIndex === 'function') {
         // The first pass has no account scope yet, so use the newest known
         // scope for this provider only as a listing hint. The adapter returns
@@ -239,6 +240,7 @@ export class ConversationSyncManager {
         this.store.setActiveAccountScope(provider, accountScope)
         rows = index.rows
         since = index.sinceApplied
+        listingComplete = index.listingComplete !== false
       } else {
         // Compatibility for injected runners and adapters predating
         // `sync-index`; production OpenCliRunner always takes the branch above.
@@ -298,7 +300,7 @@ export class ConversationSyncManager {
       // Retiring rows the provider no longer lists needs the complete set of
       // its ids. An incremental listing does not have one, and neither does a
       // pass that could not read every conversation.
-      const enumerated = since === '' && failures.length === 0
+      const enumerated = listingComplete && since === '' && failures.length === 0
       if (enumerated) await this.store.markRemoteMissing(provider, accountScope, seen)
       await progress.save('idle', {
         cursor: listedRows.at(-1)?.cursor ?? '',

@@ -1,0 +1,3 @@
+import{defineIcon as e,OL as o,cloud as d,frontPiece as f,at as c}from"../kit.js";var i=e({name:"cloud",category:"weather",tags:["cloudy","storage","online","sync","icloud"],variants:["up","down","check","x","lock","sync","alert","search","cog","bolt","plus","minus"],off:!0,svg:t=>`
+    <g filter="${t.sh}"><g filter="${t.hi}"><path data-n="cl" fill="${t.loS}"/></g></g><path data-n="clO" ${o}/>
+    <g filter="${t.hi}"><path data-n="fr" fill="${t.upS}"/></g><path data-n="frO" ${o}/>`,target:t=>({L:[t?8.9:9,t?15.9:16,t?5.9:5.7],T:[16.3,t?10.4:10.8,t?7.8:7.5],Rc:[t?22.6:22.5,t?16.4:16.5,t?5.4:5.2],chord:t?18.6:18.8}),draw(t,a){const r=d(t.L,t.T,t.Rc),l=f(t.L,t.Rc,t.chord,2);c(a.cl,{d:r}),c(a.clO,{d:r}),c(a.fr,{d:l}),c(a.frO,{d:l})}});export{i as default};

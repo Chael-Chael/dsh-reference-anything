@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "本地插件",
+    "description": "引用当前 profile 中已安装的插件。"
+  }
+}

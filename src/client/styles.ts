@@ -4,6 +4,8 @@ import { Children, isValidElement, type ReactElement, type ReactNode } from 'rea
 import {
   LOCAL_AGENT_ICON_MARKER, PICKER_ICON_MARKER, PICKER_ICON_NODES, PICKER_ICON_STROKE_WIDTH, PICKER_OFFICIAL_COMMAND_KINDS, PICKER_OFFICIAL_COMMAND_STROKE_WIDTH, PROVIDER_ICON_MARKER, PROVIDER_ICON_PATH, agentLogoElement,
   type PickerIconKind, PICKER_ICON_VIEWBOX,
+  createKubaiIcon,
+  getKubaiIconColor,
 } from './provider-icons.tsx'
 import type { TranslateNS } from '@deepseek-ai/dsh-client-locale/client'
 import { en, zh, type REFERENCE_ANYTHING_NS } from './locale.ts'
@@ -45,6 +47,7 @@ const css = `
 [data-composer-card] [role="listbox"] .dsh_ref_dual_icon{width:36px!important;gap:4px}
 [data-composer-card] [role="listbox"] :is(.dsh_ref_projected_icon,.dsh_ref_picker_icon)>svg{display:block;width:16px;height:16px;overflow:visible}
 [data-composer-card] [role="listbox"] .dsh_ref_command_icon,[data-composer-card] [role="listbox"] .dsh_ref_command_icon>svg{width:18px!important;height:18px!important}
+html[data-dsh-ref-icon-style="vivid"] [data-composer-card] [role="listbox"] .dsh_ref_command_icon>svg.kubai-icon{width:16px!important;height:16px!important}
 [data-composer-card] [data-decoration="chip"][data-dsh-ref-chip-icon]>:first-child>svg{visibility:hidden!important}
 [data-composer-card] [data-decoration="chip"][data-dsh-ref-chip-icon]>:first-child:after{content:"";position:absolute;top:50%;left:50%;display:block;width:16px;height:16px;transform:translate(-50%,-50%);background:currentColor;-webkit-mask:var(--dsh-ref-chip-icon-mask) center/contain no-repeat;mask:var(--dsh-ref-chip-icon-mask) center/contain no-repeat;pointer-events:none}
 [data-composer-card] [data-composer-chip][data-dsh-ref-chip-icon]>:first-child>svg{background:currentColor;-webkit-mask:var(--dsh-ref-chip-icon-mask) center/contain no-repeat;mask:var(--dsh-ref-chip-icon-mask) center/contain no-repeat}
@@ -379,6 +382,7 @@ body[data-ds-dark-theme] .dsh_ref_agent_logo{filter:brightness(0) invert(1);opac
 .dsh_ref_settings .dsh_ref_provider_main .dsh_ref_provider_summary>small{grid-column:1 / -1;grid-row:2}
 .dsh_ref_settings .dsh_ref_agent_provider .dsh_ref_provider_main .dsh_ref_provider_summary>small{grid-row:auto;white-space:normal;overflow-wrap:anywhere}
 .dsh_ref_settings .dsh_ref_provider_foot{display:flex;align-items:center;min-height:58px;padding:10px 16px;border-top:.5px solid var(--dsw-alias-border-l2);background:transparent}
+.dsh_ref_settings .dsh_ref_token_controls{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:0 16px 14px}.dsh_ref_settings .dsh_ref_token_controls>small{flex:1 1 180px;line-height:1.5}
 .dsh_ref_settings .dsh_ref_provider_foot .dsh_ref_provider_controls{display:flex;align-items:center;justify-content:space-between;gap:12px;width:100%;min-width:0}
 .dsh_ref_settings .dsh_ref_provider_foot .dsh_ref_provider_actions{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:6px}
 .dsh_ref_settings .dsh_ref_agent_provider .dsh_ref_provider_controls>button{font-size:14px!important;line-height:22px!important}
@@ -425,6 +429,7 @@ body[data-ds-dark-theme] .dsh_ref_agent_logo{filter:brightness(0) invert(1);opac
 .dsh_ref_settings .dsh_ref_general_settings>.dsh_ref_render_mode{min-height:64px;padding:12px 0}
 .dsh_ref_settings .dsh_ref_general_settings>.dsh_ref_render_mode{border-bottom:0}
 .dsh_ref_settings .dsh_ref_general_settings>.dsh_ref_render_mode{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:16px}
+.dsh_ref_icon_colors{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.dsh_ref_icon_color{position:relative;flex:none;width:24px!important;height:24px!important;min-width:0!important;min-height:0!important;padding:0!important;border:0;border-radius:50%!important;cursor:pointer;box-shadow:0 0 0 2px var(--dsw-alias-bg-primary,#fff) inset;outline:0}.dsh_ref_icon_color[aria-checked="true"]{box-shadow:0 0 0 2px var(--dsw-alias-bg-primary,#fff) inset,0 0 0 2px var(--dsw-alias-label-secondary,#737780)}.dsh_ref_icon_color:focus-visible{outline:2px solid var(--dsw-alias-state-business-primary,#4176e6);outline-offset:2px}.dsh_ref_icon_color_multi{background:conic-gradient(#4176e6 0 20%,#8b5cf6 0 40%,#e84393 0 60%,#f2711c 0 80%,#22c55e 0)!important}.dsh_ref_icon_custom{display:inline-flex;align-items:center;gap:8px;margin-left:4px}.dsh_ref_icon_hex{margin-left:8px;width:76px;height:28px;padding:0 8px;border:1px solid var(--dsh-ref-line);border-radius:8px;background:var(--dsw-alias-bg-secondary,#f5f6f8);font:12px ui-monospace,SFMono-Regular,Consolas,monospace;color:var(--dsw-alias-label-primary,#1f2329);outline:0}.dsh_ref_icon_hex:focus{border-color:var(--dsw-alias-state-business-primary,#4176e6)}.dsh_ref_icon_well{position:relative;display:inline-flex;align-items:center;justify-content:center;width:52px;height:32px;border:1px solid var(--dsh-ref-line);border-radius:10px;cursor:pointer;background:var(--dsw-alias-bg-primary,#fff)}.dsh_ref_icon_custom[data-active] .dsh_ref_icon_well{box-shadow:0 0 0 1.5px var(--dsw-alias-label-secondary,#737780)}.dsh_ref_icon_well>span{width:30px;height:16px;border-radius:4px;box-shadow:0 0 0 1px rgba(0,0,0,.12) inset}.dsh_ref_icon_well input{position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer;border:0;padding:0}.dsh_ref_icon_color_custom{margin-left:6px;overflow:visible!important}.dsh_ref_icon_color_custom:before{content:"";position:absolute;left:-10px;top:2px;bottom:2px;width:1px;background:var(--dsw-alias-label-quaternary,#c9ccd2)}.dsh_ref_icon_color_custom:not([data-defined]){border:1.5px dashed var(--dsw-alias-label-tertiary,#a0a4ab)!important}.dsh_ref_icon_color_custom[data-defined]:after{content:"";position:absolute;right:-4px;bottom:-4px;width:15px;height:15px;border-radius:50%;background:var(--dsw-alias-bg-primary,#fff) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12' fill='none' stroke='%23596070' stroke-width='1.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M7.6 2.4l2 2L4.4 9.6 2 10l.4-2.4z'/%3E%3C/svg%3E") center/11px no-repeat;box-shadow:0 1px 2px rgba(0,0,0,.18),0 0 0 1px rgba(0,0,0,.08);pointer-events:none}.dsh_ref_icon_color_custom{display:inline-flex;align-items:center;justify-content:center;border:1px solid var(--dsh-ref-line);color:var(--dsw-alias-label-tertiary,#737780);font-size:15px;line-height:1}.dsh_ref_icon_color_custom input{position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer;border:0;padding:0}
 .dsh_ref_settings .dsh_ref_general_settings>.dsh_ref_render_mode>.dsh_ref_official_menu{width:max-content;max-width:100%;min-width:0}
 .dsh_ref_settings .dsh_ref_general_settings>.dsh_ref_render_mode .dsh_ref_menu_trigger{width:auto;max-width:100%;min-width:0}
 .dsh_ref_settings .dsh_ref_general_settings>.dsh_ref_picker_list{margin:8px 0 0}
@@ -528,6 +533,66 @@ body[data-ds-dark-theme] .dsh_ref_agent_logo{filter:brightness(0) invert(1);opac
 .dsh_ref_settings .dsh_ref_picker_row{grid-template-columns:minmax(0,1fr) repeat(4,max-content) auto;grid-template-rows:auto;row-gap:0}
 .dsh_ref_settings .dsh_ref_picker_toggle{grid-column:1;grid-row:1;min-width:0;white-space:nowrap}
 .dsh_ref_settings .dsh_ref_picker_toggle>button{flex:none}
+/* The locked last row of the source list: brand blue hugs the top, left and right edges and fades into the card. */
+.dsh_ref_settings .dsh_ref_locked_source{position:relative;isolation:isolate}
+.dsh_ref_settings .dsh_ref_locked_source{--dsh-ref-accent:var(--dsw-alias-state-business-primary,#4176e6);--dsh-ref-flow:var(--dsh-ref-accent),color-mix(in srgb,var(--dsh-ref-accent) 45%,#fff),var(--dsh-ref-accent)}
+html[data-dsh-ref-icon-style="vivid"] .dsh_ref_settings .dsh_ref_locked_source{--dsh-ref-accent:var(--dsh-ref-kubai-color,#4176e6)}
+html[data-dsh-ref-icon-style="vivid"][data-dsh-ref-icon-multi] .dsh_ref_settings .dsh_ref_locked_source{--dsh-ref-accent:#8b5cf6;--dsh-ref-flow:#4176e6,#8b5cf6,#e84393,#f2711c,#22c55e}
+/* Rim light (ported from BoardUI composer-loader); the old static edge gradient is replaced by it. */
+.dsh_ref_settings .dsh_ref_locked_source::before{display:none!important}
+.dsh_ref_settings .dsh_ref_locked_source{--dsh-ref-rim-0:var(--dsh-ref-accent);--dsh-ref-rim-1:var(--dsh-ref-accent);--dsh-ref-rim-2:var(--dsh-ref-accent);--dsh-ref-rim-3:var(--dsh-ref-accent)}
+html[data-dsh-ref-icon-style="vivid"][data-dsh-ref-icon-multi] .dsh_ref_settings .dsh_ref_locked_source{--dsh-ref-rim-0:#5eead4;--dsh-ref-rim-1:#46baec;--dsh-ref-rim-2:#e633a4;--dsh-ref-rim-3:#00faa7}
+.dsh_ref_rim_light{position:absolute;inset:0;z-index:0;overflow:hidden;pointer-events:none;border-radius:inherit}
+.dsh_ref_rim_light>svg{display:block;opacity:.7}
+.dsh_ref_rim_c0{stop-color:var(--dsh-ref-rim-0)}.dsh_ref_rim_c1{stop-color:var(--dsh-ref-rim-1)}.dsh_ref_rim_c2{stop-color:var(--dsh-ref-rim-2)}.dsh_ref_rim_c3{stop-color:var(--dsh-ref-rim-3)}
+.dsh_ref_rim_rect{animation-name:dsh-ref-rim;animation-timing-function:linear;animation-iteration-count:infinite}
+@keyframes dsh-ref-rim{from{stroke-dashoffset:0}to{stroke-dashoffset:-100}}
+.dsh_ref_settings .dsh_ref_locked_source>:not(.dsh_ref_rim_light){position:relative;z-index:1}
+@media(prefers-reduced-motion:reduce){.dsh_ref_rim_rect{animation:none!important}}
+.dsh_ref_settings .dsh_ref_locked_source::before{--dsh-ref-edge:color-mix(in srgb,var(--dsh-ref-accent) 32%,transparent);content:'';position:absolute;inset:0;z-index:-1;pointer-events:none;background:linear-gradient(to bottom,var(--dsh-ref-edge),transparent 35%),linear-gradient(to right,var(--dsh-ref-edge),transparent 6%),linear-gradient(to left,var(--dsh-ref-edge),transparent 6%);-webkit-mask-image:linear-gradient(to bottom,#000 10%,transparent);mask-image:linear-gradient(to bottom,#000 10%,transparent)}
+.dsh_ref_settings .dsh_ref_locked_source .dsh_ref_picker_toggle{white-space:normal}
+/* Lock sits in the drag-handle column; the button stops where the chevrons above end. */
+.dsh_ref_settings .dsh_ref_locked_source .dsh_ref_picker_toggle>button{margin-right:12px}
+.dsh_ref_kubai_icon{display:inline-flex;flex:none;align-items:center;justify-content:center}.dsh_ref_kubai_icon>svg{display:block;overflow:visible}
+html:not([data-dsh-ref-icon-style="vivid"]) :is(.dsh_ref_kubai_icon,svg.kubai-icon){display:none!important}
+html[data-dsh-ref-icon-style="vivid"] .dsh_ref_lucide_alt{display:none!important}
+/* Kubai draws inside a 31-unit canvas with more margin than Lucide; 1.125x matches Lucide ink size (16px slot -> 18px). */
+html[data-dsh-ref-icon-style="vivid"]:not([data-dsh-ref-icon-multi]) svg.kubai-icon{color:var(--dsh-ref-kubai-color,#4176e6)!important}html[data-dsh-ref-icon-style="vivid"] svg.kubai-icon{transform:scale(1.125);transform-origin:center}
+.dsh_ref_settings .dsh_ref_update_bar{display:block;padding:12px 0}
+.dsh_ref_member_card{--mc:var(--dsh-ref-kubai-color,#4176e6);position:relative;isolation:isolate;display:grid;gap:14px;padding:14px 16px 0;border:1px solid var(--dsh-ref-line);border-radius:12px;background:var(--dsw-alias-bg-layer-1,#fff);overflow:hidden}
+html[data-dsh-ref-icon-multi] .dsh_ref_member_card{--mc:#8b5cf6}
+.dsh_ref_member_dither{position:absolute;z-index:-1;inset:0;pointer-events:none;background:var(--mc);-webkit-mask:radial-gradient(circle,#000 .75px,transparent 1.05px) 0 0/3px 3px,linear-gradient(90deg,transparent 35%,rgba(0,0,0,.6) 75%,#000);-webkit-mask-composite:source-in;mask:radial-gradient(circle,#000 .75px,transparent 1.05px) 0 0/3px 3px,linear-gradient(90deg,transparent 35%,rgba(0,0,0,.6) 75%,#000);mask-composite:intersect;opacity:.55}
+html[data-dsh-ref-icon-multi] .dsh_ref_member_dither{background:linear-gradient(90deg,#4176e6,#8b5cf6,#e84393,#f2711c)}
+.dsh_ref_member_head{display:flex;align-items:center;gap:8px;min-width:0;font-size:12px;color:var(--dsw-alias-label-tertiary,#737780)}
+.dsh_ref_member_head>span:first-child{color:var(--dsw-alias-label-primary,#1f2328);font-weight:600}
+.dsh_ref_member_head>b{font:500 11px/1 "Geist Mono",Consolas,monospace;padding:3px 6px;border-radius:5px;background:var(--dsh-ref-surface,#f4f5f7);color:var(--dsw-alias-label-secondary,#4b5563)}
+.dsh_ref_member_head>i{width:6px;height:6px;border-radius:50%;background:#22c55e}.dsh_ref_member_head>i.is_new{background:var(--mc)}.dsh_ref_member_head>i.is_error{background:#ef4444}
+.dsh_ref_settings .dsh_ref_member_head .dsh_ref_update_copy strong{font-size:12px;line-height:16px;font-weight:400;color:inherit}
+.dsh_ref_member_stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));margin:0;row-gap:14px}
+.dsh_ref_member_stats>div{display:grid;gap:4px;padding-right:12px}.dsh_ref_member_stats>div:not(:nth-child(3n+1)){padding-left:14px;border-left:1px dashed var(--dsh-ref-line)}
+.dsh_ref_member_stats dt{font-size:11px;color:var(--dsw-alias-label-tertiary,#737780)}
+.dsh_ref_member_stats dd{margin:0;font:600 22px/1 "Geist Mono",Consolas,monospace;letter-spacing:-.03em;color:var(--dsw-alias-label-primary,#1f2328)}
+.dsh_ref_member_stats dd small{margin-left:4px;letter-spacing:0;font-family:var(--dsw-alias-font-family,sans-serif);font-size:11px;font-weight:400;color:var(--dsw-alias-label-tertiary,#737780)}
+.dsh_ref_member_front{position:relative;margin:0 -16px;padding:10px 16px;border-top:1px solid var(--dsh-ref-line)}
+.dsh_ref_member_front>*{position:relative}
+.dsh_ref_settings .dsh_ref_member_front .dsh_ref_update_actions{flex-wrap:wrap;gap:6px}
+.dsh_ref_settings .dsh_ref_member_front .dsh_ref_update_actions{align-items:stretch}.dsh_ref_settings .dsh_ref_member_front .dsh_ref_button.is_github{padding:0 16px}
+.dsh_ref_settings .dsh_ref_member_front .is_primary{background:var(--mc);border-color:var(--mc);color:#fff}
+.dsh_ref_settings .dsh_ref_member_front .dsh_ref_button.is_github{border-color:var(--dsw-alias-label-primary,#1f2328);background:var(--dsw-alias-label-primary,#1f2328);color:var(--dsw-alias-bg-layer-1,#fff)}.dsh_ref_settings .dsh_ref_member_front .dsh_ref_button.is_github:hover{border-color:var(--dsw-alias-label-secondary,#4b5563);background:var(--dsw-alias-label-secondary,#4b5563);color:var(--dsw-alias-bg-layer-1,#fff)}
+.dsh_ref_settings .dsh_ref_member_card>.dsh_ref_update_notes{margin:-14px -16px 0;padding:12px 16px 14px;border-top:1px dashed var(--dsh-ref-line);animation:dsh-ref-member-open .46s cubic-bezier(.22,1,.36,1)}.dsh_ref_member_card>.dsh_ref_update_notes a{color:var(--mc)}@keyframes dsh-ref-member-open{from{opacity:0;transform:translateY(-6px)}}
+html[data-dsh-ref-icon-style="vivid"] svg.kubai-icon-command{transform:translateX(1px) scale(1.23)}
+html[data-dsh-ref-icon-style="vivid"] [data-composer-card] [data-dsh-ref-chip-kubai]>:first-child:after,html[data-dsh-ref-icon-style="vivid"] [data-composer-card] [data-dsh-ref-chip-kubai]>:first-child>svg{background:var(--dsh-ref-chip-kubai) center/contain no-repeat!important;-webkit-mask:none!important;mask:none!important;overflow:visible;scale:1.125}
+html[data-dsh-ref-icon-style="vivid"] [data-composer-card] [data-dsh-ref-chip-kubai]:hover>:first-child:after,html[data-dsh-ref-icon-style="vivid"] [data-composer-card] [data-dsh-ref-chip-kubai]:hover>:first-child>svg{background-image:var(--dsh-ref-chip-kubai-hover)!important}
+html[data-dsh-ref-icon-style="vivid"] [data-composer-card] [data-dsh-ref-chip-kubai]>:first-child>svg>*{visibility:hidden}
+.dsh_ref_settings .dsh_ref_locked_source :is(.dsh_ref_kubai_icon,.dsh_ref_lucide_alt){flex:none;color:var(--dsh-ref-accent)}
+.dsh_ref_settings .dsh_ref_locked_source b{color:var(--dsh-ref-accent)}
+.dsh_ref_settings .dsh_ref_source_badge.is_external{padding:0 5px;border:1px solid var(--dsw-alias-border-l4);background:transparent}
+.dsh_ref_settings .dsh_ref_locked_source .dsh_ref_locked_badge{background:color-mix(in srgb,var(--dsh-ref-accent) 14%,transparent);color:var(--dsh-ref-accent)}
+/* The host's button rules (dark theme included) would repaint this one control. */
+.dsh_ref_settings .dsh_ref_locked_source .dsh_ref_picker_toggle>button,.dsh_ref_settings .dsh_ref_locked_source .dsh_ref_picker_toggle>button:hover:not(:disabled){flex:none;height:32px;padding:0 14px;border:0!important;border-radius:var(--dsw-radius-md,12px);background:var(--dsh-ref-accent)!important;color:var(--dsw-alias-bg-base,#fff)!important;font-size:13px;font-weight:500;cursor:pointer;transition:filter .2s var(--ds-ease-in-out,ease)}
+.dsh_ref_settings .dsh_ref_locked_source .dsh_ref_picker_toggle>button:hover:not(:disabled){filter:brightness(1.1)}
+.dsh_ref_settings .dsh_ref_locked_source .dsh_ref_picker_toggle>button:focus-visible{outline:2px solid var(--dsh-ref-accent);outline-offset:2px}
+.dsh_ref_settings .dsh_ref_source_badge{display:inline-block;margin-left:6px;padding:0 6px;border-radius:var(--dsw-radius-xs,4px);background:var(--dsw-alias-bg-module-platform);color:var(--dsw-alias-label-secondary);font-size:11px;font-style:normal;font-weight:400;line-height:18px;vertical-align:1px}
 .dsh_ref_settings .dsh_ref_picker_order{grid-column:6;grid-row:1;align-self:center}
 .dsh_ref_settings .dsh_ref_picker_limit{flex-direction:column;align-items:flex-start;gap:4px}
 @media(max-width:640px){.dsh_ref_settings .dsh_ref_general_settings>.dsh_ref_render_mode{grid-template-columns:1fr}.dsh_ref_settings .dsh_ref_general_settings>.dsh_ref_render_mode>.dsh_ref_official_menu{width:max-content;max-width:100%}.dsh_ref_settings .dsh_ref_picker_row{grid-template-columns:1fr;grid-template-rows:auto}.dsh_ref_settings .dsh_ref_picker_toggle,.dsh_ref_settings .dsh_ref_picker_order,.dsh_ref_settings .dsh_ref_picker_row>label:nth-of-type(2),.dsh_ref_settings .dsh_ref_picker_row>label:nth-of-type(3),.dsh_ref_settings .dsh_ref_picker_row>label:nth-of-type(4){grid-column:auto;grid-row:auto}}
@@ -1080,7 +1145,8 @@ export function adoptReferenceIconProjection(): () => void {
     return [agent, logo === undefined ? `url("${AGENT_ICON_MONO_URI[agent]}")` : reactIconMask(logo)]
   })) as Partial<Record<LocalAgent, string>>
   const paintPicker = (node: HTMLElement, kind: PickerIconKind, secondary?: PickerIconKind): void => {
-    node.replaceChildren(createPickerIcon(kind), ...(secondary === undefined ? [] : [createPickerIcon(secondary)]))
+    node.closest('[role="option"]')?.setAttribute('data-kubai-trigger', '')
+    node.replaceChildren(...pickerIcons(kind), ...(secondary === undefined ? [] : pickerIcons(secondary)))
     node.classList.remove('dsh_ref_projected_icon')
     node.classList.add('dsh_ref_picker_icon')
     node.classList.toggle('dsh_ref_command_icon', ['paperclip', 'goal', 'plan', 'feedback', 'compact', 'permission', 'model', 'export'].includes(kind))
@@ -1185,7 +1251,7 @@ export function adoptReferenceIconProjection(): () => void {
             if (text.includes(PICKER_ICON_MARKER.drive)) {
               const fileKind = pickerKinds.find(item => item !== 'drive' && text.includes(PICKER_ICON_MARKER[item]))
               if (fileKind !== undefined) {
-                node.replaceChildren(createPickerIcon('drive'), createPickerIcon(fileKind))
+                node.replaceChildren(...pickerIcons('drive'), ...pickerIcons(fileKind))
                 node.classList.remove('dsh_ref_projected_icon')
                 node.classList.add('dsh_ref_picker_icon', 'dsh_ref_dual_icon')
                 node.dataset.dshRefMenuIcon = 'drive'
@@ -1195,7 +1261,7 @@ export function adoptReferenceIconProjection(): () => void {
             }
             const kind = pickerKinds.find(item => text.includes(PICKER_ICON_MARKER[item]))
             if (kind !== undefined) {
-              node.replaceChildren(createPickerIcon(kind))
+              node.replaceChildren(...pickerIcons(kind))
               node.classList.remove('dsh_ref_projected_icon')
               node.classList.add('dsh_ref_picker_icon')
               node.dataset.dshRefMenuIcon = kind
@@ -1229,7 +1295,7 @@ export function adoptReferenceIconProjection(): () => void {
 }
 
 const CHIP_PROVIDER_LABEL: Readonly<Record<ChatProvider, string>> = {
-  chatgpt: 'ChatGPT', claude: 'Claude', gemini: 'Gemini', deepseek: 'DeepSeek', grok: 'Grok', kimi: 'Kimi',
+  chatgpt: 'ChatGPT', claude: 'Claude', gemini: 'Gemini', deepseek: 'DeepSeek', grok: 'Grok', kimi: 'Kimi', qwen: 'Qwen', qianwen: '千问', doubao: '豆包',
 }
 const LOCAL_AGENT_CHIP_LABEL: Readonly<Record<LocalAgent, string>> = { ...LOCAL_AGENT_LABEL, kimi: 'Kimi CLI' }
 
@@ -1281,12 +1347,58 @@ function projectComposerChips(
 }
 
 function applyChipIcon(chip: HTMLElement, kind: string, mask: string): void {
+  syncChipKubai(chip, kind)
   if (chip.dataset.dshRefChipIcon === kind && chip.style.getPropertyValue('--dsh-ref-chip-icon-mask') === mask) return
   chip.dataset.dshRefChipIcon = kind
   chip.style.setProperty('--dsh-ref-chip-icon-mask', mask)
 }
 
+/**
+ * Vivid chips: the host editor (Lexical) drops foreign DOM inside chips, so Kubai is applied
+ * through CSS only — pre-rendered rest and hover frames as background images.
+ */
+const kubaiChipFrames = new Map<string, readonly [string, string] | null>()
+function kubaiChipFrame(kind: string): readonly [string, string] | null {
+  const key = kind + getKubaiIconColor()
+  if (kubaiChipFrames.has(key)) return kubaiChipFrames.get(key)!
+  const svg = createKubaiIcon(kind as PickerIconKind) as (SVGSVGElement & { kubai?: { hover(on: boolean, instant?: boolean): void; destroy(): void } }) | undefined
+  let frames: readonly [string, string] | null = null
+  if (svg?.kubai !== undefined) {
+    const shot = (): string => `url("data:image/svg+xml,${encodeURIComponent(svg.outerHTML)}")`
+    svg.kubai.hover(false, true)
+    const rest = shot()
+    svg.kubai.hover(true, true)
+    frames = [rest, shot()]
+    svg.kubai.destroy()
+  }
+  kubaiChipFrames.set(key, frames)
+  return frames
+}
+
+/** Re-bake vivid chip frames after the Kubai colour changes. */
+export function refreshKubaiChips(): void {
+  for (const chip of Array.from(document.querySelectorAll<HTMLElement>('[data-dsh-ref-chip-kubai]'))) syncChipKubai(chip, chip.dataset.dshRefChipKubai)
+}
+
+function syncChipKubai(chip: HTMLElement, kind: string | undefined): void {
+  const frames = kind === undefined ? null : kubaiChipFrame(kind)
+  if (frames === null) {
+    if (chip.dataset.dshRefChipKubai === undefined) return
+    delete chip.dataset.dshRefChipKubai
+    delete chip.dataset.dshRefChipKubaiColor
+    chip.style.removeProperty('--dsh-ref-chip-kubai')
+    chip.style.removeProperty('--dsh-ref-chip-kubai-hover')
+    return
+  }
+  if (chip.dataset.dshRefChipKubai === kind && chip.dataset.dshRefChipKubaiColor === getKubaiIconColor()) return
+  chip.dataset.dshRefChipKubai = kind
+  chip.dataset.dshRefChipKubaiColor = getKubaiIconColor()
+  chip.style.setProperty('--dsh-ref-chip-kubai', frames[0])
+  chip.style.setProperty('--dsh-ref-chip-kubai-hover', frames[1])
+}
+
 function clearChipIcon(chip: HTMLElement): void {
+  syncChipKubai(chip, undefined)
   delete chip.dataset.dshRefChipIcon
   chip.style.removeProperty('--dsh-ref-chip-icon-mask')
 }
@@ -1318,6 +1430,15 @@ function createProviderIcon(path: string): SVGSVGElement {
   shape.setAttribute('d', path)
   svg.append(shape)
   return svg
+}
+
+/** Both styles are mounted; the root data-dsh-ref-icon-style attribute picks one, so switching needs no re-projection. */
+function pickerIcons(kind: PickerIconKind): SVGSVGElement[] {
+  const lucide = createPickerIcon(kind)
+  const kubai = createKubaiIcon(kind)
+  if (kubai === undefined) return [lucide]
+  lucide.classList.add('dsh_ref_lucide_alt')
+  return [kubai, lucide]
 }
 
 function createPickerIcon(kind: PickerIconKind): SVGSVGElement {

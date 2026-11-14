@@ -20,6 +20,7 @@ const SIGNATURES: Readonly<Record<string, string>> = {
   checkUpdate: 'checkUpdate(signal: AbortSignal): Promise<PackageUpdateStatus>',
   installUpdate: 'installUpdate(signal: AbortSignal): Promise<PackageUpdateResult>',
   stats: 'stats(): ProviderStats[]',
+  tokenConnect: 'tokenConnect(input: TokenConnect, signal: AbortSignal): Promise<Settings>',
   syncStart: 'syncStart(input: SyncStart): string',
   syncStatus: 'syncStatus(input: JobInput): SyncStatus | undefined',
   syncCancel: 'syncCancel(input: JobInput): boolean',

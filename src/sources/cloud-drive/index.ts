@@ -174,7 +174,7 @@ export class CloudDriveService extends Service implements ReferenceSource {
   private credentialGeneration = -1
   /** The user's own choices for this source, stored by the core registry. */
   readonly preferences: SourceSettingsHandle<CloudDriveSettings>
-  /** Binary documents, for `reference_attachment_read`; always attachment id `file`. */
+  /** Binary documents, read as a file child through the `reference` tool; always source attachment id `file`. */
   readonly attachments: ReferenceAttachmentCapability = cloudDriveAttachments(this)
 
   constructor(ctx: Context, config: Config = {}) {
@@ -328,7 +328,7 @@ export class CloudDriveService extends Service implements ReferenceSource {
     if (!this.readable(entry) && ATTACHMENT_EXTENSIONS.has(extensionOf(entry.name))) {
       const item: ConversationItem = {
         role: 'document',
-        text: `Binary cloud-drive document: ${entry.name}. Use reference_attachment_read with this reference URI and attachmentId "file" to materialize it on demand.`,
+        text: `Binary cloud-drive document: ${entry.name}. List this id to see the file child, then read the child with as="file" (or as="image") to save it on demand.`,
         attachments: [{ attachmentId: 'file', kind: imageExtension(entry.name) ? 'image' : 'file', name: entry.name, mimeType: mimeForName(entry.name), size: entry.size, status: 'available' }],
       }
       return { ...this.summarize(entry), body: { kind: 'conversation', items: [item], startIndex: 0, totalTurns: 1, hasOlder: false }, partial: false, capturedAt: Date.now(), provider: provider.displayName }
@@ -516,7 +516,7 @@ export function cloudDriveAttachments(drive: Pick<CloudDriveService, 'attachment
     async fetch(ref, attachmentId, maxBytes, signal) {
       if (attachmentId !== 'file') {
         throw new ReferenceAnythingError(
-          'cloud-drive documents use attachmentId "file" exactly as shown by external_reference_read',
+          'cloud-drive documents carry exactly one file child; list the document id to see it',
           'ATTACHMENT_UNAVAILABLE',
         )
       }

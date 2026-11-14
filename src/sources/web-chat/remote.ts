@@ -4,6 +4,7 @@ import { TypertRemoteService } from '@deepseek-ai/dsh-typert-protocol'
 import { REMOTE_SERVICE_KEYS } from '../../contract.ts'
 import type { ChatProvider } from '../../store/spec.ts'
 import type { SyncMode } from '../../sync/index.ts'
+import type { TokenProvider } from '../../web-chat-token.ts'
 import type {} from './index.ts'
 
 export class WebChatRemote extends TypertRemoteService {
@@ -21,8 +22,11 @@ export class WebChatRemote extends TypertRemoteService {
   installAdapter(signal: AbortSignal) { return this.ctx.referenceChatHistory.installAdapter(signal) }
   restartDaemon(signal: AbortSignal) { return this.ctx.referenceChatHistory.restartDaemon(signal) }
   stats() { return this.ctx.referenceChatHistory.stats() }
+  tokenConnect(input: { provider: TokenProvider; disconnect: boolean }, signal: AbortSignal) {
+    return this.ctx.referenceChatHistory.connectToken(input.provider, input.disconnect, signal)
+  }
   async syncStart(input: { providers: ChatProvider[]; mode: SyncMode }): Promise<string> {
-    await this.ctx.referenceChatHistory.ensureBrowser()
+    if (input.providers.some(provider => !this.ctx.referenceChatHistory.hasToken(provider))) await this.ctx.referenceChatHistory.ensureBrowser()
     return this.ctx.referenceChatHistory.sync.start(input.providers, input.mode)
   }
   syncStatus(input: { jobId: string }) { return this.ctx.referenceChatHistory.sync.status(input.jobId) }

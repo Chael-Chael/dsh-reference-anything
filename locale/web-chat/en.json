@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Web AI conversations",
+    "description": "Syncs ChatGPT, Claude, Gemini, DeepSeek, Grok and Kimi history into a local mirror."
+  }
+}

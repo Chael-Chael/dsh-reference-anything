@@ -6,7 +6,7 @@ import { resolveLocalPlugins } from './local-plugins.ts'
 import { compareVersions } from './update.ts'
 
 const PACKAGE = 'dsh-chat-import'
-const MIN_VERSION = '0.26.3'
+const MIN_VERSION = '0.26.6'
 export const CHAT_IMPORT_APIS = ['scanDiscover', 'importPath', 'resumeSummary'] as const
 export interface ChatImportCompatibility {
   state: 'ready' | 'incompatible' | 'unavailable' | 'disabled' | 'installing' | 'restart-required'

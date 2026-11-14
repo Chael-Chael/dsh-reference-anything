@@ -108,3 +108,13 @@ Copyright (c) 2026 Nwflower and Scarlett; fzstd copyright (c) 2020 Arjun Barrett
 Both are MIT licensed. Full licenses are shipped in
 `vendor/chat-import-reader/LICENSE` and `LICENSE.fzstd`; source hashes and
 regeneration instructions accompany the snapshot in the repository.
+
+## Kubai Icons
+
+`src/client/vendor/kubai-icons` vendors a subset of `kubai-icons@0.6.0` (MIT), used for non-provider icons in the @ menu and Settings. Full license: `src/client/vendor/kubai-icons/LICENSE`.
+
+Copyright (c) 2026 Kubai087 and the Kubai Icons contributors
+
+## BoardUI
+
+`RimLight` in `src/client/components.tsx` ports the light band of the BoardUI `composer-loader` component (MIT, https://github.com/mertcanesmergul/boardui), used on the Settings "next source" card.

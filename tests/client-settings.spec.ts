@@ -24,7 +24,7 @@ describe('settings source registration guard', () => {
   })
   it('keeps the durable local-agent enum identical to the runtime registry', () => {
     expect(READABLE_LOCAL_AGENTS).toEqual(AGENT_KINDS)
-    expect(ALL_LOCAL_AGENTS).toHaveLength(33)
+    expect(ALL_LOCAL_AGENTS).toHaveLength(36)
     for (const agent of ALL_LOCAL_AGENTS) {
       expect(AGENT_ICON_SVG[agent]).toContain('<svg')
       const mono = decodeURIComponent(AGENT_ICON_MONO_URI[agent]!)
@@ -51,7 +51,7 @@ describe('settings source registration guard', () => {
       opencliPath: 'opencli', profile: '', detailConcurrency: 2, autoSync: false,
       autoSyncMinutes: 60, historyMode: 'metadata-only', referenceUiMode: 'official',
     })
-    expect(value).toMatchObject({ syncOnStartup: false, syncHistoryDays: null, maxReadTurns: 10, inputRenderMode: 'pill', cloudDriveDownloadDirectory: '' })
+    expect(value).toMatchObject({ syncOnStartup: false, syncHistoryDays: null, includeThinking: false, inputRenderMode: 'pill', cloudDriveDownloadDirectory: '' })
     expect(value).not.toHaveProperty('referenceUiMode')
     expect(value.enabledProviders).toEqual(['chatgpt', 'claude', 'gemini', 'deepseek', 'grok', 'kimi'])
     expect(value.enabledAgents).toEqual(ALL_LOCAL_AGENTS)

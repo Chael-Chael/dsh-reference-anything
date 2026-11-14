@@ -1,4 +1,3 @@
-import { usesLocalProtocol } from './local-locator.ts'
 /**
  * `ctx.references` — the registry of sources that can name and read material
  * held outside this session.
@@ -16,7 +15,7 @@ import type { ContentBlock } from '@deepseek-ai/dsh-llm'
 import type { Session } from '@deepseek-ai/dsh-session'
 import z from '@deepseek-ai/schemastery'
 import { ReferenceAnythingError } from './errors.ts'
-import { decodeReferenceUri, mayContainReference, parseReferenceText, referenceReadHandle } from './uri.ts'
+import { mayContainReference, parseReferenceText } from './uri.ts'
 import type {} from '@deepseek-ai/dsh-storage-domain'
 import { SourceSettingsRegistry, sourceSettingsDomainSpec, type SourceSettingsDefinition, type SourceSettingsHandle } from './settings.ts'
 import type {
@@ -27,8 +26,13 @@ import type {
   ReferenceWindow,
 } from './types.ts'
 import { mountCoreRemote } from './core-remote.ts'
+import { registerSourceAuthorSkill } from './source-author-skill.ts'
+import { legacySourcePlugin, legacyPluginName } from './legacy-source.ts'
+import { referenceError, type ReferenceCall, type ReferenceSourcePlugin } from './reference-source.ts'
 
 export type * from './types.ts'
+export type * from './reference-source.ts'
+export { defineReferenceSource } from './reference-source.ts'
 export { ReferenceAnythingError, type ReferenceErrorCode } from './errors.ts'
 export type { SourceSettingsDefinition, SourceSettingsHandle } from './settings.ts'
 export {
@@ -70,6 +74,9 @@ export default class ReferenceRuntime extends Service {
   static Config: z<Config> = Config
 
   private readonly sources = new Map<string, ReferenceSource>()
+  private readonly plugins = new Map<string, ReferenceSourcePlugin>()
+  /** Core wrappers of plain sources, kept per registered object so a re-registration gets a fresh one. */
+  private readonly adapted = new WeakMap<ReferenceSource, ReferenceSourcePlugin>()
   private readonly grants = new Map<string, Set<string>>()
   private readonly listLimit: number
   private readonly settingsRegistry = new SourceSettingsRegistry()
@@ -92,6 +99,7 @@ export default class ReferenceRuntime extends Service {
     })
     // The settings panel's Remote lives with the registry: while the core is on, the panel works.
     mountCoreRemote(ctx, this)
+    registerSourceAuthorSkill(ctx)
   }
 
   /**
@@ -152,6 +160,99 @@ export default class ReferenceRuntime extends Service {
     // ctx.effect's disposer resolves a promise; this API is synchronous
     // fire-and-forget, so the settled promise is discarded.
     return () => void dispose()
+  }
+
+  /**
+   * Make a source plugin answer the `reference` tool.
+   * @param plugin - its `source` is the routing key and must be unused.
+   * @returns a disposer that unregisters it.
+   */
+  registerPlugin(plugin: ReferenceSourcePlugin): () => void {
+    if (!/^[a-z][a-z0-9-]*$/.test(plugin.source) || this.plugins.has(plugin.source)) {
+      throw new ReferenceAnythingError(`reference source ${JSON.stringify(plugin.source)} is invalid or already registered`, 'SOURCE_DUPLICATE')
+    }
+    const plugins = this.plugins
+    const dispose = this.ctx.effect(function* () {
+      plugins.set(plugin.source, plugin)
+      yield () => plugins.delete(plugin.source)
+    }, 'references.registerPlugin()')
+    return () => void dispose()
+  }
+
+  /**
+   * @returns every source plugin: native ones in registration order, then each plain
+   * {@link ReferenceSource} that no native plugin answers for, wrapped by the core.
+   */
+  pluginList(): ReferenceSourcePlugin[] {
+    const native = [...this.plugins.values()]
+    const claimed = new Set(native.flatMap(plugin => [plugin.source, ...(plugin.mentionSources ?? [])]))
+    const adapted: ReferenceSourcePlugin[] = []
+    for (const source of this.sources.values()) {
+      const name = legacyPluginName(source.id)
+      if (claimed.has(source.id) || claimed.has(name) || !/^[a-z][a-z0-9-]*$/.test(name)) continue
+      let wrapped = this.adapted.get(source)
+      if (!wrapped) { wrapped = legacySourcePlugin(this.ctx, source); this.adapted.set(source, wrapped) }
+      claimed.add(name)
+      adapted.push(wrapped)
+    }
+    return [...native, ...adapted]
+  }
+
+  /** @returns the plugin routed to by `source`, if any. */
+  plugin(source: string): ReferenceSourcePlugin | undefined {
+    return this.pluginList().find(plugin => plugin.source === source)
+  }
+
+  /**
+   * Map an `@` mention, in any wire format still accepted, to a plugin and its id.
+   * @returns undefined when no loaded plugin claims it.
+   */
+  resolveMention(ref: ReferenceRef): { plugin: ReferenceSourcePlugin; id: string } | undefined {
+    for (const plugin of this.pluginList()) {
+      if (plugin.source !== ref.source && !(plugin.mentionSources ?? []).includes(ref.source)) continue
+      let id: string | undefined
+      try { id = plugin.claim ? plugin.claim(ref) : plugin.source === ref.source ? ref.id : undefined } catch { id = undefined }
+      if (id) return { plugin, id }
+    }
+    return undefined
+  }
+
+  /** Authorize one task to read a plugin object and its children; only `@` mentions call this. */
+  grantPlugin(sessionId: string, source: string, id: string): void {
+    this.grant(sessionId, { source, id })
+  }
+
+  /**
+   * Enforce that the user of this task (or of the task that spawned it) `@`-mentioned
+   * the object or its parent, unless the plugin lets this id through ungated.
+   * Grants come only from user messages; tool results never grant.
+   */
+  async assertPluginGranted(session: Session | undefined, plugin: ReferenceSourcePlugin, id: string, call: ReferenceCall): Promise<void> {
+    const chain: string[] = []
+    for (let current: string | undefined = id; current && chain.length < 8; current = plugin.parentOf?.(current)) chain.push(current)
+    const keys = chain.map(value => ReferenceRuntime.grantKey({ source: plugin.source, id: value }))
+    const has = (sessionId: string | undefined) => !!sessionId && keys.some(key => this.grants.get(sessionId)?.has(key))
+    if (session) {
+      if (has(String(session.id))) return
+      // A subagent inherits what its parent task was granted.
+      const parent = session.header?.parentSession
+      if (parent && has(String(parent))) return
+      for (const event of session.snapshotEvents()) {
+        if (event.type !== 'user/message') continue
+        for (const block of event.data.content) {
+          if (block.type !== 'text' || !mayContainReference(block.text)) continue
+          let parsed
+          try { parsed = parseReferenceText(block.text) } catch { continue }
+          for (const input of parsed.references) {
+            const resolved = this.resolveMention(input.ref)
+            if (resolved) this.grantPlugin(String(session.id), resolved.plugin.source, resolved.id)
+          }
+        }
+      }
+      if (has(String(session.id))) return
+    }
+    if (plugin.ungated && await plugin.ungated(id, call).catch(() => false)) return
+    throw referenceError('UNAUTHORIZED', 'This object was not @-mentioned by the user in this task. Ask the user to @ it; listing or searching does not grant access.')
   }
 
   /** @returns the registered source ids, in registration order. */
@@ -216,41 +317,14 @@ export default class ReferenceRuntime extends Service {
     }
   }
 
-  /** Allow a gated URI granted live or named in this task's durable user/tool-result history. */
+  /** Allow a gated URI granted live or named in this task's durable user history; tool results never grant. */
   assertSessionGranted(session: Session | undefined, ref: ReferenceRef): void {
     const key = ReferenceRuntime.grantKey(ref)
     if (session && !this.grants.get(String(session.id))?.has(key)) {
-      const mentioned = session.snapshotEvents().some(event => {
-        if (event.type === 'user/message') return ReferenceRuntime.contentMentions(event.data.content, key)
-        if (event.type === 'tool/result') return ReferenceRuntime.contentMentions(event.data.message.content, key)
-        return false
-      })
+      const mentioned = session.snapshotEvents().some(event => event.type === 'user/message' && ReferenceRuntime.contentMentions(event.data.content, key))
       if (mentioned) this.grant(String(session.id), ref)
     }
     this.assertGranted(session && String(session.id), ref)
-  }
-
-  /** Resolve short handles only against references already named in this task. */
-  resolveReadReference(session: Session | undefined, uri: string): ReferenceRef {
-    if (!uri.startsWith('ref:')) return decodeReferenceUri(uri)
-    const candidates: ReferenceRef[] = []
-    if (session) {
-      for (const key of this.grants.get(String(session.id)) ?? []) {
-        const separator = key.indexOf('\u0000')
-        candidates.push({ source: key.slice(0, separator), id: key.slice(separator + 1) })
-      }
-      for (const event of session.snapshotEvents()) {
-        const blocks = event.type === 'user/message' ? event.data.content
-          : event.type === 'tool/result' ? event.data.message.content : []
-        for (const block of blocks) {
-          if (block.type !== 'text' || !mayContainReference(block.text)) continue
-          try { candidates.push(...parseReferenceText(block.text).references.map(input => input.ref)) } catch { /* Ignore malformed history. */ }
-        }
-      }
-    }
-    const matched = candidates.find(ref => !usesLocalProtocol(ref) && referenceReadHandle(ref) === uri)
-    if (!matched) throw new ReferenceAnythingError('Unknown reference handle in this task; use external_reference_list and copy its uri exactly.', 'CONVERSATION_REFERENCE_NOT_GRANTED')
-    return matched
   }
 
   /** Release task-local grants when a host knows the task is gone. */
@@ -268,9 +342,9 @@ export default class ReferenceRuntime extends Service {
    * @param signal - cancellation from the caller.
    * @returns matching items, capped at `limit`.
    */
-  async list(query = '', limit: number = this.listLimit, signal?: AbortSignal, externalOnly = false): Promise<ReferenceSummary[]> {
+  async list(query = '', limit: number = this.listLimit, signal?: AbortSignal): Promise<ReferenceSummary[]> {
     throwIfCancelled(signal)
-    const available = (await this.availableSources(signal)).filter(source => !externalOnly || !usesLocalProtocol({ source: source.id }))
+    const available = await this.availableSources(signal)
     if (available.length === 0) return []
     const settled = await Promise.allSettled(
       available.map(source => source.list(query, limit, signal)),

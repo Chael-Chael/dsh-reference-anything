@@ -12,7 +12,7 @@ import { ALL_LOCAL_AGENTS, defaultPickerSettings, type LocalAgent, type Settings
 // in a test environment; without this every act() call warns and defers.
 ;(globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
-const settings = { opencliPath: 'opencli', profile: '', detailConcurrency: 8, autoSync: false, syncOnStartup: false, autoSyncMinutes: 60, historyMode: 'metadata-only' as const, syncHistoryDays: null, enabledProviders: ['chatgpt', 'claude', 'gemini', 'deepseek', 'grok', 'kimi'] as Array<'chatgpt' | 'claude' | 'gemini' | 'deepseek' | 'grok' | 'kimi'>, enabledAgents: [...ALL_LOCAL_AGENTS], maxReadTurns: 10, inputRenderMode: 'pill' as const, cloudDriveDownloadDirectory: '' }
+const settings = { opencliPath: 'opencli', profile: '', detailConcurrency: 8, autoSync: false, syncOnStartup: false, autoSyncMinutes: 60, historyMode: 'metadata-only' as const, syncHistoryDays: null, enabledProviders: ['chatgpt', 'claude', 'gemini', 'deepseek', 'grok', 'kimi'] as Array<'chatgpt' | 'claude' | 'gemini' | 'deepseek' | 'grok' | 'kimi'>, enabledAgents: [...ALL_LOCAL_AGENTS], includeThinking: false, inputRenderMode: 'pill' as const, cloudDriveDownloadDirectory: '' }
 const t = ((key: keyof typeof en, values?: Record<string, string | number>) => Object.entries(values ?? {}).reduce((text, [name, value]) => text.replace(`{${name}}`, String(value)), en[key])) as never
 
 function conversation(overrides: Partial<ManagedConversation> = {}): ManagedConversation {
@@ -254,11 +254,11 @@ describe('cloud-drive download directory', () => {
 })
 
 describe('local agent settings', () => {
-  it('renders all 33 agents beside provider settings and saves an individual toggle', async () => {
+  it('renders all 36 agents beside provider settings and saves an individual toggle', async () => {
     const save = vi.fn(async (_value: SettingsRecord) => {})
     const el = renderSettings({ settings }, { save })
     const cards = el.querySelectorAll('[data-local-agent]')
-    expect(cards).toHaveLength(33)
+    expect(cards).toHaveLength(36)
     for (const card of Array.from(cards)) expect(card.querySelector('img')?.getAttribute('src')).toMatch(/^data:image\/svg\+xml,/)
     expect(el.querySelector('[data-local-agent=trae]')?.textContent).toContain('Import only')
     expect(Array.from(cards).map(card => card.getAttribute('data-local-agent'))).toContain('codex')
@@ -345,10 +345,10 @@ describe('local agent source selection', () => {
     const saved: SettingsRecord[] = []
     const el = renderSettings({ settings }, { save: async value => { saved.push(value) } })
     const choices = el.querySelector('.dsh_ref_agent_choices .dsh_ref_selection_grid')!.querySelectorAll<HTMLButtonElement>('button[role="switch"]')
-    expect(choices).toHaveLength(33)
+    expect(choices).toHaveLength(36)
     await act(async () => { choices[0]!.click() })
     expect(saved.at(-1)?.enabledAgents).not.toContain('claude-code')
-    expect(saved.at(-1)?.enabledAgents).toHaveLength(32)
+    expect(saved.at(-1)?.enabledAgents).toHaveLength(35)
   })
 
   it('places Agent and cloud-drive details in their own cards', async () => {
@@ -361,7 +361,7 @@ describe('local agent source selection', () => {
     const agentCard = el.querySelector('.dsh_ref_agent_sources')!
     const driveCard = el.querySelector('.dsh_ref_drive_sources')!
     const cloudSetup = el.querySelector('.dsh_ref_cloud')!
-    expect(agentCard.querySelectorAll('[data-local-agent]')).toHaveLength(33)
+    expect(agentCard.querySelectorAll('[data-local-agent]')).toHaveLength(36)
     expect(driveCard.contains(providerGrid) || agentCard.contains(providerGrid)).toBe(false)
     expect(driveCard.contains(cloudSetup)).toBe(true)
     expect(driveCard.textContent).toContain('/work')
@@ -570,6 +570,17 @@ describe('general settings editing', () => {
     expect(el.querySelector('.dsh_ref_plugin_section')).toBeNull()
   })
 
+  it('omits web chat thinking by default and saves the choice to include it', async () => {
+    const saved: SettingsRecord[] = []
+    const el = renderSettings({ settings }, { save: async value => { saved.push(value) } })
+    const trigger = el.querySelector<HTMLButtonElement>('button[aria-label="Include thinking in references"]')!
+    expect(trigger.textContent).toBe('Omit (recommended)')
+    act(() => { trigger.click() })
+    const include = Array.from(document.body.querySelectorAll<HTMLElement>('[role="menuitemradio"], [role="menuitem"], [role="option"]')).find(item => item.textContent === 'Include')!
+    await act(async () => { include.click() })
+    expect(saved.at(-1)?.includeThinking).toBe(true)
+  })
+
   it('defaults the chat history range to unlimited and saves days or unlimited', async () => {
     const saved: SettingsRecord[] = []
     const el = renderSettings({ settings }, { save: async value => { saved.push(value) } })
@@ -612,6 +623,32 @@ describe('general settings editing', () => {
     const option = Array.from(document.querySelectorAll<HTMLButtonElement>('button')).find(button => button.textContent === 'No collapse (native)')!
     await act(async () => { option.click() })
     expect(saved.at(-1)?.picker?.displayMode).toBe('native-scroll')
+  })
+
+  it('starts a source-writing chat from the banner and leaves settings', () => {
+    const calls: string[] = []
+    const current: SettingsSnapshot = { settings: { ...settings, picker: defaultPickerSettings() }, loading: true }
+    const useScope = ((selector: (value: SettingsSnapshot) => unknown) => selector(current)) as never
+    const props = { useWorkspaces: (() => []) as never, useScope, save: noop, sync: noop, cancel: noop, refresh: noop, setupAll: noop, discoverOpenCli: noop, installOpenCli: noop, useProfile: noop, install: noop, restartDaemon: noop, checkUpdate: noop, installUpdate: noop, browse: noop, deleteConversation: noop, clearProvider: noop, refreshStats: noop, t }
+    const without = render(<ConversationSettings close={() => {}} {...props} />)
+    expect(without.querySelector('.dsh_ref_locked_source')).toBeNull()
+    const el = render(<ConversationSettings close={() => { calls.push('close') }} writeSource={() => { calls.push('write') }} {...props} />)
+    const banner = el.querySelector('.dsh_ref_locked_source')!
+    expect(banner.parentElement?.classList.contains('dsh_ref_picker_list')).toBe(true)
+    expect(banner.parentElement?.lastElementChild).toBe(banner)
+    expect(banner.hasAttribute('data-picker-id')).toBe(false)
+    act(() => { banner.querySelector('button')!.click() })
+    expect(calls).toEqual(['write', 'close'])
+  })
+
+  it('marks plugin-provided @ sources with a badge', () => {
+    const current: SettingsSnapshot = { settings: { ...settings, picker: defaultPickerSettings() }, loading: true }
+    const useScope = ((selector: (value: SettingsSnapshot) => unknown) => selector(current)) as never
+    const el = render(<ConversationSettings close={() => {}} useWorkspaces={(() => []) as never} useScope={useScope} save={noop} sync={noop} cancel={noop} refresh={noop} setupAll={noop} discoverOpenCli={noop} installOpenCli={noop} useProfile={noop} install={noop} restartDaemon={noop} checkUpdate={noop} installUpdate={noop} browse={noop} deleteConversation={noop} clearProvider={noop} refreshStats={noop} registeredGroups={() => [{ id: 'notes', label: 'Notes' }]} t={t} />)
+    const badged = Array.from(el.querySelectorAll('.dsh_ref_picker_row')).filter(row => row.querySelector('.dsh_ref_source_badge')).map(row => row.getAttribute('data-picker-id')).sort()
+    expect(badged).toEqual(['agents', 'conversations', 'drives', 'notes', 'plugins'])
+    expect(Array.from(el.querySelectorAll('.dsh_ref_source_badge.is_external')).map(badge => badge.closest('[data-picker-id]')?.getAttribute('data-picker-id'))).toEqual(['notes'])
+    expect(el.querySelector('[data-picker-id="agents"] .dsh_ref_source_badge')?.getAttribute('title')).toContain('reference-local-agent')
   })
 
 })

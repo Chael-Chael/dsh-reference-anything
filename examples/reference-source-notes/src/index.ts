@@ -1,9 +1,11 @@
 /**
  * Host half: a reference source over the notes in one directory.
  *
- * Everything here goes through `ctx.references`, so the source unloads with
- * this plugin: switching its row off removes it from the model's tools, the
- * `@` menu, and the settings panel at once.
+ * The source writes only `load` (one note as records) and `list` (candidates);
+ * `defineReferenceSource` gives the `reference` tool its list, search, read,
+ * paging, continuation and revision checks. Everything goes through
+ * `ctx.references`, so the source unloads with this plugin: switching its row
+ * off removes it from the `reference` tool, the `@` menu and the settings panel at once.
  */
 import type { Context } from '@deepseek-ai/cordis'
 import { TypertRemoteService } from '@deepseek-ai/dsh-typert-protocol'
@@ -12,7 +14,7 @@ import z from '@deepseek-ai/schemastery'
 import { z as zod } from 'zod'
 import { readFile, readdir, stat } from 'node:fs/promises'
 import { extname, join, resolve } from 'node:path'
-import type { ReferenceSource, ReferenceSummary } from 'dsh-reference-anything/sdk'
+import { defineReferenceSource, referenceError } from 'dsh-reference-anything/source'
 import { INVOCATIONS, PACKAGE, SERVICE, SOURCE_ID, type Note } from './contract.ts'
 
 export const name = 'reference-notes'
@@ -51,36 +53,23 @@ export function apply(ctx: Context, config: Config = {}): void {
     return rows.sort((a, b) => b.updatedAt - a.updatedAt)
   }
 
-  const source: ReferenceSource = {
-    id: SOURCE_ID,
-    // The user's own files, but outside the task: the model reads only what was named.
-    requiresGrant: true,
-    available: async () => (await stat(root).catch(() => undefined))?.isDirectory() === true,
-    async list(query, limit): Promise<ReferenceSummary[]> {
-      const needle = query.toLocaleLowerCase()
-      return (await notes()).filter(note => note.label.toLocaleLowerCase().includes(needle)).slice(0, limit)
-        .map(note => ({ ref: { source: SOURCE_ID, id: note.id }, label: note.label, updatedAt: note.updatedAt }))
+  const available = async () => (await stat(root).catch(() => undefined))?.isDirectory() === true
+  ctx.effect(() => ctx.references.registerPlugin(defineReferenceSource({
+    source: SOURCE_ID,
+    usage: 'Markdown and text notes from one folder. Ids are file names such as plan.md; read one for its paragraphs.',
+    async list(query) {
+      if (!await available()) throw referenceError('SOURCE_UNAVAILABLE', 'The notes folder is missing.')
+      return { items: (await notes()).filter(note => note.label.includes(query)).map(note => ({ id: note.id, title: note.label, updatedAt: note.updatedAt })) }
     },
-    async read(ref, window) {
+    async load(id) {
       // Ids are file names inside `root`, never paths.
-      if (ref.id.includes('/') || ref.id.includes('\\') || ref.id.startsWith('.')) throw new Error(`not a note: ${ref.id}`)
-      if (!settings.get().extensions.includes(extname(ref.id).toLowerCase())) throw new Error(`note type is switched off: ${ref.id}`)
-      const text = await readFile(join(root, ref.id), 'utf8')
+      if (id.includes('/') || id.includes('\\') || id.startsWith('.')) throw referenceError('NOT_FOUND', `not a note: ${id}`)
+      if (!settings.get().extensions.includes(extname(id).toLowerCase())) throw referenceError('SOURCE_DISABLED', `note type is switched off: ${id}`)
+      const text = await readFile(join(root, id), 'utf8').catch(() => { throw referenceError('NOT_FOUND', `no such note: ${id}`, 'relist') })
       const blocks = text.split(/\n{2,}/u).filter(block => block.trim() !== '')
-      // An empty success would read as "the note says nothing"; fail instead.
-      if (blocks.length === 0) throw new Error(`note ${ref.id} is empty`)
-      const end = Math.min(window.before ?? blocks.length, blocks.length)
-      const start = Math.max(0, end - window.limit)
-      return {
-        ref, label: ref.id, partial: false, capturedAt: Date.now(),
-        body: {
-          kind: 'conversation', startIndex: start, totalTurns: blocks.length, hasOlder: start > 0,
-          items: blocks.slice(start, end).map(block => ({ role: 'document' as const, text: block })),
-        },
-      }
+      return { title: id, content: blocks.map(block => ({ role: 'document' as const, text: block })) }
     },
-  }
-  ctx.effect(() => ctx.references.registerSource(source), 'reference-notes.source')
+  })), 'reference-notes.source')
 
   // The browser half needs a Remote; mount it only where Typert exists.
   ctx.inject(['typert'], scope => {

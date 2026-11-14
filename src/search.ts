@@ -11,7 +11,7 @@
  * subsequence pass rather than demanding a contiguous substring.
  */
 
-export type SearchProvider = 'chatgpt' | 'claude' | 'gemini' | 'deepseek' | 'grok' | 'kimi'
+export type SearchProvider = 'chatgpt' | 'claude' | 'gemini' | 'deepseek' | 'grok' | 'kimi' | 'qwen' | 'qianwen' | 'doubao'
 
 /** Spellings accepted in a provider prefix, including short forms worth typing. */
 const PROVIDER_ALIASES: Record<string, SearchProvider> = {
@@ -20,11 +20,11 @@ const PROVIDER_ALIASES: Record<string, SearchProvider> = {
   gemini: 'gemini',
   deepseek: 'deepseek', ds: 'deepseek',
   grok: 'grok',
-  kimi: 'kimi',
+  kimi: 'kimi', qwen: 'qwen', qianwen: 'qianwen', doubao: 'doubao', 千问: 'qianwen', 豆包: 'doubao',
 }
 
 /** Provider prefix followed by a separator that survives `@` token detection, or by nothing. */
-const PROVIDER_PREFIX = /^@?([A-Za-z]+)(?:[:/\s]+([\s\S]*))?$/u
+const PROVIDER_PREFIX = /^@?([A-Za-z\u3400-\u9fff]+)(?:[:/\s]+([\s\S]*))?$/u
 
 /**
  * Split a leading provider scope off a query.

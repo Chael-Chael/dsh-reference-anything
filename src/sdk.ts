@@ -5,8 +5,12 @@
  * half needs to insert a reference. Safe to import from Host and browser code:
  * nothing here touches Node.
  *
- * Host half: inject `references`, then `ctx.references.registerSource(...)`
- * and, for user settings, `ctx.references.defineSettings(...)`.
+ * Host half: inject `references`, then either
+ * `ctx.references.registerPlugin(defineReferenceSource({ source, load, list }))`
+ * with `defineReferenceSource` from `dsh-reference-anything/source` (the
+ * `reference` tool's list/search/read come from it), or the older
+ * `ctx.references.registerSource(...)`, which the core wraps the same way. For
+ * user settings, `ctx.references.defineSettings(...)`.
  * Browser half: inject `referenceSources`, then
  * `ctx.effect(() => ctx.referenceSources.register(...))`.
  *
@@ -27,6 +31,12 @@ export type {
   ReferenceSummary,
   ReferenceWindow,
 } from './types.ts'
+export type {
+  ReferenceArgs, ReferenceArgSpec, ReferenceCall, ReferenceDoc, ReferenceDocChild, ReferenceDocItem, ReferenceDocListing,
+  ReferenceFileOptions, ReferenceFileResult, ReferenceListItem, ReferenceListResult, ReferenceOp, ReferencePreview,
+  ReferenceReadAs, ReferenceReadResult, ReferenceRetry, ReferenceRole, ReferenceSearchHit, ReferenceSearchResult,
+  ReferenceSourceDefinition, ReferenceSourceDescription, ReferenceSourcePlugin, ReferenceTextItem, ReferenceTextResult, ReferenceToolCode,
+} from './reference-source.ts'
 export type { SourceSettingsDefinition, SourceSettingsHandle } from './settings.ts'
 export type { ReferenceGroup, ReferenceGroupRegistry } from './client/source-registry.ts'
 export type { PickerSourceOptions } from './client/source.ts'
@@ -52,7 +62,7 @@ export function scopedGroupQuery(query: string, groupId: string, options: { shor
 
 /**
  * The text a browser group inserts for a picked item. The model sees it in
- * the user's message and reads the item through `external_reference_read`.
+ * the user's message and reads the item through the `reference` tool.
  * @param ref - the item, as the Host source names it.
  * @param label - what the user sees in place of the URI.
  */

@@ -18,7 +18,7 @@
     "rewriteRelativeImportExtensions": true,
 
     "noEmit": true,
-    "paths": { "dsh-reference-anything/sdk": ["./src/sdk.ts"] }
+    "paths": { "dsh-reference-anything/sdk": ["./src/sdk.ts"], "dsh-reference-anything/source": ["./src/reference-source.ts"] }
   },
   "include": ["src", "tests", "vitest.config.ts"]
 }

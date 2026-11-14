@@ -7,7 +7,7 @@ import ReactMarkdown from 'react-markdown'
 import Sortable from 'sortablejs'
 import { ALL_PROVIDERS, ALL_LOCAL_AGENTS, READABLE_LOCAL_AGENTS, LOCAL_AGENT_LABEL, defaultGroupSettings, defaultPickerSettings, pickerSourceSchema, type ChatProvider, type LocalAgent, type PickerSettings, type PickerSource, type PickerSourceSettings, type SettingsRecord } from '../wire.ts'
 import { syncProgressFraction, type AgentStats, type BrowsePage, type BrowserProfile, type Health, type OpenListDriver, type OpenListMount, type OpenListStatus, type PackageUpdateStatus, type ProviderStats, type StorageStats, type SyncStatus } from './remote.ts'
-import { AgentLogo, PickerSourceLogo, ProviderLogo } from './provider-icons.tsx'
+import { AgentLogo, KUBAI_COLOR_PRESETS, PickerSourceLogo, ProviderLogo } from './provider-icons.tsx'
 import { type REFERENCE_ANYTHING_NS } from './locale.ts'
 import type { TranslateNS } from '@deepseek-ai/dsh-client-locale/client'
 import { openCliStateDetail, daemonStateDetail, adapterStateDetail, extensionStateDetail, OPENCLI_EXTENSION_STORE_URL, OPENCLI_RELEASES_URL, openExtensionStore, setupReady, type SetupStage } from './health.ts'
@@ -15,11 +15,12 @@ import { HOST_GROUPS, hostSourceLoaded } from './source-registry.ts'
 
 /** Current query/filter/page of the "Manage synced conversations" list, plus its last fetched page. */
 export interface BrowseState { query: string; provider?: ChatProvider; offset: number; page?: BrowsePage }
-export interface SettingsSnapshot { loadedSources?: readonly string[]; chatImport?: ChatImportCompatibility; chatImportError?: string; settings: SettingsRecord; health?: Health; update?: PackageUpdateStatus; profiles?: readonly BrowserProfile[]; stats?: readonly ProviderStats[]; agentStats?: readonly AgentStats[]; storage?: StorageStats; sync?: SyncStatus; openList?: OpenListStatus; openListDrivers?: readonly OpenListDriver[]; openListMounts?: readonly OpenListMount[]; error?: string; notice?: string; loading?: boolean; browse?: BrowseState; setupStep?: SetupStage }
+export interface SettingsSnapshot { loadedSources?: readonly string[]; chatImport?: ChatImportCompatibility; chatImportError?: string; settings: SettingsRecord; health?: Health; update?: PackageUpdateStatus; profiles?: readonly BrowserProfile[]; stats?: readonly ProviderStats[]; agentStats?: readonly AgentStats[]; pluginCount?: number; dshSessionCount?: number; storage?: StorageStats; sync?: SyncStatus; openList?: OpenListStatus; openListDrivers?: readonly OpenListDriver[]; openListMounts?: readonly OpenListMount[]; error?: string; notice?: string; loading?: boolean; browse?: BrowseState; setupStep?: SetupStage }
 export interface SettingsInjected {
   hooks: { scope: ObservableSnapshot<SettingsSnapshot> }
   save(value: SettingsRecord): Promise<boolean | void>
   sync(providers: ChatProvider[], mode: 'incremental' | 'full'): Promise<void>
+  tokenConnect?(provider: 'deepseek' | 'kimi' | 'qwen' | 'qianwen' | 'doubao', disconnect: boolean): Promise<void>
   cancel(): Promise<void>
   refresh(): Promise<void>
   refreshOpenList?(): Promise<void>
@@ -55,6 +56,8 @@ export interface SettingsInjected {
   setGroupPlugin?(group: string, enabled: boolean): Promise<boolean>
   /** Groups other plugins registered in the `@` menu. */
   registeredGroups?(): ReadonlyArray<{ id: string; label: string; order?: number; aliases?: readonly string[] }>
+  /** Open a new chat that starts the `reference-source-author` skill. */
+  writeSource?(): void
 }
 
 function SettingsDisclosure({ title, description, open, onToggle, children, className = '' }: { title: ReactNode; description: ReactNode; open: boolean; onToggle: () => void; children: ReactNode; className?: string }) {
@@ -69,6 +72,45 @@ function SettingsDisclosure({ title, description, open, onToggle, children, clas
 
 function DshSwitch({ checked, onChange, label, disabled = false, className = '' }: { checked: boolean; onChange(next: boolean): void; label: string; disabled?: boolean; className?: string }) {
   return <Switch checked={checked} onChange={onChange} label={label} disabled={disabled} className={className} />
+}
+
+/**
+ * Rim light ported from BoardUI's composer-loader (MIT): a gradient band of SVG stroke dashes
+ * orbiting the card's rounded rect at three scales — crisp line, tight glow, inward bloom.
+ * Colours come from CSS (--dsh-ref-rim-0..3) so they follow the Kubai main colour.
+ */
+function RimLight({ speed = 4.5, arc = 120, line = 2.5, bloom = 16 }: { speed?: number; arc?: number; line?: number; bloom?: number }) {
+  const id = `dsh-ref-rim-${useId().replace(/[^a-zA-Z0-9]/g, '')}`
+  const ref = useRef<HTMLSpanElement>(null)
+  const [box, setBox] = useState({ w: 640, h: 80, r: 12 })
+  useLayoutEffect(() => {
+    const el = ref.current
+    if (!el) return
+    const measure = () => setBox({ w: Math.max(1, el.clientWidth), h: Math.max(1, el.clientHeight), r: parseFloat(getComputedStyle(el).borderBottomLeftRadius) || 0 })
+    measure()
+    if (typeof ResizeObserver === 'undefined') return
+    const observer = new ResizeObserver(measure)
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [])
+  const band = (arc / 360) * 100
+  const corner = Math.min(box.r, box.w / 2, box.h / 2)
+  const perimeter = Math.max(1, 2 * (box.w + box.h) - 8 * corner + 2 * Math.PI * corner)
+  const stroke = (width: number, blur: number, opacity: number, dash: number, backPx: number) => {
+    const phase = dash - band + (backPx * 100) / perimeter
+    return <rect x={0} y={0} width={box.w} height={box.h} rx={corner} pathLength={100} fill="none" stroke={`url(#${id})`} strokeWidth={width} strokeLinecap="round" strokeDasharray={`${dash} ${100 - dash}`} className="dsh_ref_rim_rect" filter={`url(#${id}-b${String(blur).replace('.', '_')})`} style={{ opacity, animationDuration: `${speed}s`, animationDelay: `${(phase * speed) / 100}s` }} />
+  }
+  return <span ref={ref} aria-hidden="true" className="dsh_ref_rim_light">
+    <svg width="100%" height="100%" viewBox={`0 0 ${box.w} ${box.h}`} preserveAspectRatio="none">
+      <defs>
+        <linearGradient id={id} x1="0" y1="0" x2="1" y2="0"><stop offset="0%" className="dsh_ref_rim_c0" /><stop offset="30%" className="dsh_ref_rim_c1" /><stop offset="70%" className="dsh_ref_rim_c2" /><stop offset="100%" className="dsh_ref_rim_c3" /></linearGradient>
+        {[14, 6, 0.5].map(radius => <filter key={radius} id={`${id}-b${String(radius).replace('.', '_')}`} x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation={radius} /></filter>)}
+      </defs>
+      {stroke(bloom * 2, 14, 0.3, band * 0.9, bloom + 16)}
+      {stroke(line * 3.2, 6, 0.8, band * 0.95, 10)}
+      {stroke(line, 0.5, 1, band, 0)}
+    </svg>
+  </span>
 }
 
 function DshMenuSelect({ value, options, onChange, ariaLabel, disabled = false }: { value: string; options: readonly { value: string; label: string }[]; onChange(value: string): void; ariaLabel?: string; disabled?: boolean }) {
@@ -88,7 +130,7 @@ function DshMenuSelect({ value, options, onChange, ariaLabel, disabled = false }
 }
 type T = TranslateNS<typeof REFERENCE_ANYTHING_NS>
 type SettingsProps = Omit<PropsRuntime<'settings.section'>, 'useSessionPendingInteraction' | 'useSessions'> & InjectFace<SettingsInjected> & { t: T; releaseIntro?: ReactNode }
-const PROVIDERS: ChatProvider[] = ['chatgpt', 'claude', 'gemini', 'deepseek', 'grok', 'kimi']
+const PROVIDERS: ChatProvider[] = ['chatgpt', 'claude', 'gemini', 'deepseek', 'grok', 'kimi', 'qwen', 'qianwen', 'doubao']
 /** Keystrokes to ride out before a typed filter re-queries the Host. */
 const SEARCH_DEBOUNCE_MS = 300
 /** Rows fetched per page in the "Manage synced conversations" list. */
@@ -102,7 +144,7 @@ export const PAGE_SIZE = 20
  */
 const STATS_POLL_MS = 30_000
 const PROVIDER_LABEL: Record<ChatProvider, string> = {
-  chatgpt: 'ChatGPT', claude: 'Claude', gemini: 'Gemini', deepseek: 'DeepSeek', grok: 'Grok', kimi: 'Kimi',
+  chatgpt: 'ChatGPT', claude: 'Claude', gemini: 'Gemini', deepseek: 'DeepSeek', grok: 'Grok', kimi: 'Kimi', qwen: 'Qwen', qianwen: '千问', doubao: '豆包',
 }
 const PICKER_SOURCES: ReadonlyArray<{ id: PickerSource; label: keyof typeof SOURCE_KEYS }> = [
   { id: 'commands', label: 'commands' },
@@ -119,7 +161,7 @@ const DEFAULT_PICKER_SHORTCUTS: Readonly<Record<PickerSource, string>> = {
   agents: 'agent', conversations: 'chat', drives: 'drive', plugins: 'plugin',
 }
 const SOURCE_KEYS = { commands: 'source.commands', skills: 'source.skills', files: 'source.files', sessions: 'source.sessions', agents: 'source.agents', conversations: 'source.conversations', drives: 'source.drives', plugins: 'source.plugins' } as const
-const SOURCE_ALIAS_GROUPS: Partial<Record<PickerSource, readonly string[]>> = { conversations: ['chatgpt', 'claude', 'gemini', 'deepseek', 'grok', 'kimi'], agents: ALL_LOCAL_AGENTS, drives: [] }
+const SOURCE_ALIAS_GROUPS: Partial<Record<PickerSource, readonly string[]>> = { conversations: ['chatgpt', 'claude', 'gemini', 'deepseek', 'grok', 'kimi', 'qwen', 'qianwen', 'doubao'], agents: ALL_LOCAL_AGENTS, drives: [] }
 function SourceAliasIcon({ source, keyName }: { source: PickerSource; keyName: string }) {
   if (source === 'conversations' && ALL_PROVIDERS.includes(keyName as ChatProvider)) return <ProviderLogo provider={keyName as ChatProvider} />
   if (source === 'agents' && ALL_LOCAL_AGENTS.includes(keyName as LocalAgent)) return <AgentLogo agent={keyName as LocalAgent} />
@@ -127,7 +169,7 @@ function SourceAliasIcon({ source, keyName }: { source: PickerSource; keyName: s
 }
 const REFERENCE_ANYTHING_LOGO = '__REFERENCE_ANYTHING_LOGO_DATA_URI__'
 const GITHUB_REPOSITORY_URL = 'https://github.com/Chael-Chael/dsh-reference-anything'
-export function ConversationSettings({ useScope, save, sync, cancel, refresh, refreshOpenList = async () => undefined, quickRefreshOnOpen, setupAll, discoverOpenCli, installOpenCli, useProfile, install, restartDaemon, checkUpdate, installUpdate, refreshChatImport, upgradeChatImport, browse, deleteConversation, clearProvider, clearRemoteMissing, clearOldAccounts, refreshStats, openListInstall = async () => undefined, openListUpgrade = async () => undefined, openListConnectExternal = async () => undefined, openListDisconnect = async () => undefined, openListCreateMount = async () => undefined, openListDisableMount = async () => undefined, openListRemoveMount = async () => undefined, openListReindex = async () => ({ supported: false }), pickCloudDriveDownloadDirectory, pickAgentDirectory, openCloudDriveDownloadDirectory, setGroupPlugin, registeredGroups, releaseIntro, t }: SettingsProps) {
+export function ConversationSettings({ useScope, save, sync, tokenConnect, cancel, refresh, refreshOpenList = async () => undefined, quickRefreshOnOpen, setupAll, discoverOpenCli, installOpenCli, useProfile, install, restartDaemon, checkUpdate, installUpdate, refreshChatImport, upgradeChatImport, browse, deleteConversation, clearProvider, clearRemoteMissing, clearOldAccounts, refreshStats, openListInstall = async () => undefined, openListUpgrade = async () => undefined, openListConnectExternal = async () => undefined, openListDisconnect = async () => undefined, openListCreateMount = async () => undefined, openListDisableMount = async () => undefined, openListRemoveMount = async () => undefined, openListReindex = async () => ({ supported: false }), pickCloudDriveDownloadDirectory, pickAgentDirectory, openCloudDriveDownloadDirectory, setGroupPlugin, registeredGroups, writeSource, close, releaseIntro, t }: SettingsProps) {
   const state = useScope(value => value)
   const settings = state.settings
   const picker = settings.picker ?? defaultPickerSettings()
@@ -161,7 +203,6 @@ export function ConversationSettings({ useScope, save, sync, cancel, refresh, re
   const [detailConcurrency, setDetailConcurrency] = useState(String(settings.detailConcurrency))
   const [autoSyncMinutes, setAutoSyncMinutes] = useState(String(settings.autoSyncMinutes))
   const [syncHistoryDays, setSyncHistoryDays] = useState(settings.syncHistoryDays === null ? '' : String(settings.syncHistoryDays))
-  const [maxReadTurns, setMaxReadTurns] = useState(String(settings.maxReadTurns))
   const [openSections, setOpenSections] = useState<Record<string, boolean>>({ sync: true, storage: true, aliases: false })
   const [repairProfile, setRepairProfile] = useState('')
   const [pickerLimits, setPickerLimits] = useState<Record<string, string>>(() => pickerLimitDrafts(picker))
@@ -182,7 +223,7 @@ export function ConversationSettings({ useScope, save, sync, cancel, refresh, re
       settleFrame = requestAnimationFrame(() => { requestAnimationFrame(resetSettingsScroll) })
       return () => { cancelAnimationFrame(frame); cancelAnimationFrame(settleFrame) }
   }, [])
-  useEffect(() => { setOpencliPath(settings.opencliPath); setProfile(settings.profile); setDetailConcurrency(String(settings.detailConcurrency)); setAutoSyncMinutes(String(settings.autoSyncMinutes)); setSyncHistoryDays(settings.syncHistoryDays === null ? '' : String(settings.syncHistoryDays)); setMaxReadTurns(String(settings.maxReadTurns)) }, [settings.opencliPath, settings.profile, settings.detailConcurrency, settings.autoSyncMinutes, settings.syncHistoryDays, settings.maxReadTurns])
+  useEffect(() => { setOpencliPath(settings.opencliPath); setProfile(settings.profile); setDetailConcurrency(String(settings.detailConcurrency)); setAutoSyncMinutes(String(settings.autoSyncMinutes)); setSyncHistoryDays(settings.syncHistoryDays === null ? '' : String(settings.syncHistoryDays)) }, [settings.opencliPath, settings.profile, settings.detailConcurrency, settings.autoSyncMinutes, settings.syncHistoryDays])
   useEffect(() => { setPickerLimits(pickerLimitDrafts(picker)) }, [picker.commands.limit, picker.skills.limit, picker.files.limit, picker.sessions.limit, picker.agents.limit, picker.conversations.limit, picker.drives.limit, picker.plugins.limit])
   useEffect(() => { setPickerMaxCandidates(pickerMaxCandidateDrafts(picker)) }, [picker.commands.maxCandidates, picker.skills.maxCandidates, picker.files.maxCandidates, picker.sessions.maxCandidates, picker.agents.maxCandidates, picker.conversations.maxCandidates, picker.drives.maxCandidates, picker.plugins.maxCandidates])
   useEffect(() => {
@@ -340,7 +381,8 @@ export function ConversationSettings({ useScope, save, sync, cancel, refresh, re
       animation: 220,
       easing: 'cubic-bezier(0.2, 0.8, 0.2, 1)',
       handle: '.dsh_ref_picker_drag_handle',
-      draggable: '.dsh_ref_picker_row',
+      // The locked "write a source" row stays last.
+      draggable: '.dsh_ref_picker_row:not(.dsh_ref_locked_source)',
       ghostClass: 'dsh_ref_picker_row_is_ghost',
       onStart: event => { setDraggingPicker(event.item.dataset.pickerId) },
       onEnd: event => {
@@ -357,7 +399,18 @@ export function ConversationSettings({ useScope, save, sync, cancel, refresh, re
     <div className="dsh_ref_notice_layer">{state.notice && <div className="dsh_ref_notice" role="status">{state.notice}</div>}</div>
     <header className="dsh_ref_header"><div className="dsh_ref_header_brand"><img src={REFERENCE_ANYTHING_LOGO} alt=""/><div><h2>{t('settings.title')}</h2><p>{t('settings.subtitle')}</p></div></div></header>
     <section className={`dsh_ref_update_bar${state.update?.updateAvailable ? ' is_available' : ''}`} aria-label={t('settings.updateTitle')}>
-      <div className="dsh_ref_update_copy"><strong>{updateTitle(state.update, t)}</strong><small>{updateDetail(state.update, t)}</small></div>
+      <div className="dsh_ref_member_card" data-kubai-trigger="">
+      <div className="dsh_ref_member_dither" aria-hidden="true"/>
+      <div className="dsh_ref_member_head"><span>Reference Anything</span><b>v{state.update?.currentVersion ?? '—'}</b><i className={state.update?.updateAvailable ? 'is_new' : state.update?.error ? 'is_error' : undefined}/><span className="dsh_ref_update_copy"><strong>{state.update && !state.update.updateAvailable && !state.update.error ? t('settings.cardUpToDate') : updateTitle(state.update, t)}</strong></span></div>
+      <dl className="dsh_ref_member_stats">
+        <div><dt>{t('settings.cardSources')}</dt><dd>{groupRows.filter(row => groupOn(row.id)).length}<small>/{groupRows.length}</small></dd></div>
+        <div><dt>{t('settings.cardDsh')}</dt><dd>{state.dshSessionCount?.toLocaleString() ?? '—'}</dd></div>
+        <div><dt>{t('settings.cardLocal')}</dt><dd>{(state.agentStats ?? []).reduce((sum, item) => sum + (item.conversations || 0), 0).toLocaleString()}<small>{t('settings.cardFrom', { count: (state.agentStats ?? []).filter(item => item.conversations > 0).length })}</small></dd></div>
+        <div><dt>{t('settings.cardWeb')}</dt><dd>{(state.stats ?? []).reduce((sum, item) => sum + (item.conversations || 0), 0).toLocaleString()}<small>{t('settings.cardFrom', { count: (state.stats ?? []).filter(item => item.conversations > 0).length })}</small></dd></div>
+        <div><dt>{t('settings.cardDrives')}</dt><dd>{(state.openListMounts ?? []).filter(mount => mount.enabled).length}</dd></div>
+        <div><dt>{t('settings.cardPlugins')}</dt><dd>{state.pluginCount ?? '—'}</dd></div>
+      </dl>
+      <div className="dsh_ref_member_front">
       <div className="dsh_ref_update_actions">
         {releaseIntro}
         {state.update?.updateAvailable && <Button className="is_primary" type="button" disabled={Boolean(busyAction)} onClick={() => {
@@ -365,21 +418,43 @@ export function ConversationSettings({ useScope, save, sync, cancel, refresh, re
         }}>{busyAction === 'package-update' ? t('settings.updating') : t('settings.updateNow', { version: state.update.latestVersion })}</Button>}
         {state.update?.releaseNotes && <Button type="button" aria-expanded={showReleaseNotes} onClick={() => { setShowReleaseNotes(value => !value) }}>{t(showReleaseNotes ? 'settings.hideReleaseNotes' : 'settings.showReleaseNotes')}</Button>}
         <Button type="button" disabled={Boolean(busyAction)} onClick={() => { runAction('update-check', checkUpdate) }}>{busyAction === 'update-check' ? t('settings.checkingUpdate') : t('settings.checkUpdate')}</Button>
-        <a className="dsh_ref_button" href={GITHUB_REPOSITORY_URL} target="_blank" rel="noreferrer">{t('settings.github')}</a>
+        <a className="dsh_ref_button is_github" href={GITHUB_REPOSITORY_URL} target="_blank" rel="noreferrer">{t('settings.github')}</a>
+      </div>
       </div>
       {showReleaseNotes && state.update?.releaseNotes && <div className="dsh_ref_update_notes"><strong>{t('settings.updateContents')}</strong><div className="dsh_ref_update_markdown"><ReactMarkdown disallowedElements={['img']} components={{ a: ({ node: _node, ...props }) => <a {...props} target="_blank" rel="noreferrer" /> }}>{state.update.releaseNotes}</ReactMarkdown></div>{state.update.releaseUrl && <a href={state.update.releaseUrl} target="_blank" rel="noreferrer">{t('settings.fullReleaseNotes')}</a>}</div>}
+      </div>
     </section>
     <div className="dsh_ref_workspace">
     {state.error && <div className="dsh_ref_error" role="alert"><strong>{t('settings.actionFailed')}</strong><span>{state.error}</span></div>}
     <section className="dsh_ref_panel dsh_ref_settings_card dsh_ref_general_settings"><div className="dsh_ref_section_head"><div><h3>{t('settings.general')}</h3><p>{t('settings.generalDetail')}</p></div></div>
       <div className="dsh_ref_picker_list" ref={pickerListRef}>{orderedGroups().map(row => <div className={`dsh_ref_picker_row${draggingPicker === row.id ? ' is_dragging' : ''}`} data-picker-id={row.id} key={row.id}>
         <div className="dsh_ref_picker_order"><button className="dsh_ref_picker_drag_handle" type="button" aria-label={t('settings.moveUp', { item: row.label })}><span aria-hidden="true">⠿</span></button></div>
-        <label className={`dsh_ref_picker_toggle${pendingGroups[row.id] !== undefined ? ' is_pending' : ''}`} aria-busy={pendingGroups[row.id] !== undefined}><PickerSourceLogo kind={row.id === 'commands' ? 'command' : row.id === 'skills' ? 'skill' : row.id === 'files' ? 'file' : row.id === 'sessions' ? 'session' : row.id === 'drives' ? 'drive' : row.id === 'agents' ? 'agent' : 'plugin'} /><span><b>{row.label}</b>{pendingGroups[row.id] !== undefined ? <small role="status">{t(pendingGroups[row.id] ? 'settings.sourceEnabling' : 'settings.sourceDisabling')}</small> : row.detail && <small>{row.detail}</small>}</span><DshSwitch checked={groupOn(row.id)} disabled={pendingGroups[row.id] !== undefined} label={row.label} onChange={value => { void setGroupOn(row.id, value) }} /><Button className="dsh_ref_picker_expand" type="button" aria-label={row.label + ' · ' + t('settings.aliases')} aria-expanded={Boolean(openSections['aliases-' + row.id])} aria-controls={'dsh-ref-aliases-' + row.id} onClick={() => { setOpenSections(current => ({ ...current, ['aliases-' + row.id]: !current['aliases-' + row.id] })) }}><span className="dsh_ref_collapsible_chevron" aria-hidden="true"/></Button></label>
+        <label data-kubai-trigger="" className={`dsh_ref_picker_toggle${pendingGroups[row.id] !== undefined ? ' is_pending' : ''}`} aria-busy={pendingGroups[row.id] !== undefined}><PickerSourceLogo kind={row.id === 'commands' ? 'command' : row.id === 'skills' ? 'skill' : row.id === 'files' ? 'file' : row.id === 'sessions' ? 'session' : row.id === 'drives' ? 'drive' : row.id === 'agents' ? 'agent' : row.id === 'conversations' ? 'globe' : 'plugin'} /><span><b>{row.label}{HOST_GROUPS[row.id] ? <em className="dsh_ref_source_badge" title={t('settings.pluginBadgeTitle', { row: HOST_GROUPS[row.id]!.row })}>{t('settings.pluginBadge')}</em> : !row.builtin && <em className="dsh_ref_source_badge is_external" title={t('settings.pluginBadgeThirdParty')}>{t('settings.externalBadge')}</em>}</b>{pendingGroups[row.id] !== undefined ? <small role="status">{t(pendingGroups[row.id] ? 'settings.sourceEnabling' : 'settings.sourceDisabling')}</small> : row.detail && <small>{row.detail}</small>}</span><DshSwitch checked={groupOn(row.id)} disabled={pendingGroups[row.id] !== undefined} label={row.label} onChange={value => { void setGroupOn(row.id, value) }} /><Button className="dsh_ref_picker_expand" type="button" aria-label={row.label + ' · ' + t('settings.aliases')} aria-expanded={Boolean(openSections['aliases-' + row.id])} aria-controls={'dsh-ref-aliases-' + row.id} onClick={() => { setOpenSections(current => ({ ...current, ['aliases-' + row.id]: !current['aliases-' + row.id] })) }}><span className="dsh_ref_collapsible_chevron" aria-hidden="true"/></Button></label>
         <div className="dsh_ref_picker_aliases" id={'dsh-ref-aliases-' + row.id} hidden={!openSections['aliases-' + row.id]}><div className="dsh_ref_picker_fields">        <label className="dsh_ref_picker_limit"><span>{t('settings.collapsedItems')}</span><Input type="number" min={1} max={50} inputMode="numeric" value={draftOf(pickerLimits, row.id, groupSettings(row.id).limit)} aria-invalid={!validPickerLimit(draftOf(pickerLimits, row.id, groupSettings(row.id).limit))} onChange={event => { setPickerLimits(current => ({ ...current, [row.id]: event.target.value })) }} onBlur={() => { commitPickerLimit(row.id) }} onKeyDown={event => { if (event.key === 'Enter') event.currentTarget.blur() }} /></label>
         <label className="dsh_ref_picker_limit"><span>{t('settings.maxCandidates')}</span><Input type="number" min={1} max={50} inputMode="numeric" value={draftOf(pickerMaxCandidates, row.id, groupSettings(row.id).maxCandidates)} aria-invalid={!validPickerLimit(draftOf(pickerMaxCandidates, row.id, groupSettings(row.id).maxCandidates))} onChange={event => { setPickerMaxCandidates(current => ({ ...current, [row.id]: event.target.value })) }} onBlur={() => { commitPickerMaxCandidates(row.id) }} onKeyDown={event => { if (event.key === 'Enter') event.currentTarget.blur() }} /></label>
 <label className="dsh_ref_picker_limit"><span>{t('settings.shortcut')}</span><Input type="text" maxLength={32} value={groupSettings(row.id).shortcut} placeholder={row.builtin ? DEFAULT_PICKER_SHORTCUTS[row.builtin] : row.id} onChange={event => { patchPicker(row.id, { shortcut: event.target.value.replace(/[@:\s/]/gu, '') }) }} /></label></div>{row.builtin && (SOURCE_ALIAS_GROUPS[row.builtin]?.length || (row.id === 'drives' && (state.openListMounts?.length ?? 0) > 0)) ? <div className="dsh_ref_source_aliases"><b>{t('settings.sourceAliases')}</b><small>{t('settings.sourceAliasesHint')}</small><div className="dsh_ref_source_alias_list">{(row.id === 'drives' ? (state.openListMounts ?? []).map(mount => mount.name) : SOURCE_ALIAS_GROUPS[row.builtin] ?? []).map(key => <label className="dsh_ref_source_alias_row" key={key}><span className="dsh_ref_source_alias_name"><SourceAliasIcon source={row.builtin!} keyName={key} /><b>{row.id === 'agents' ? (LOCAL_AGENT_LABEL[key as LocalAgent] ?? key) : key}</b></span><Input defaultValue={groupSettings(row.id).sourceAliases?.[key]?.join(', ') ?? ''} placeholder={key} onBlur={event => { const aliases = event.target.value.split(',').map(value => value.trim().replace(/[@:\s/]/gu, '')).filter(Boolean); patchPicker(row.id, { sourceAliases: { ...(groupSettings(row.id).sourceAliases ?? {}), [key]: aliases } }) }} /></label>)}</div></div> : null}</div>
-      </div>)}</div>
+      </div>)}
+      {writeSource && <div data-kubai-trigger="" className="dsh_ref_picker_row dsh_ref_locked_source"><RimLight /><div className="dsh_ref_picker_order" aria-hidden="true"><PickerSourceLogo kind="whale" size={16} /></div><div className="dsh_ref_picker_toggle"><span><b>{t('settings.writeSourceTitle')}<em className="dsh_ref_source_badge dsh_ref_locked_badge">{t('settings.lockedBadge')}</em></b><small>{t('settings.writeSourceDetail')}</small></span><Button type="button" onClick={() => { writeSource(); close?.() }}>{t('settings.writeSourceTry')}</Button></div></div>}</div>
       <label className="dsh_ref_render_mode"><span><b>{t('settings.pickerDisplayMode')}</b><small>{t('settings.pickerDisplayModeDetail')}</small></span><DshMenuSelect value={picker.displayMode} options={[{ value: 'collapse', label: t('settings.pickerDisplayCollapse') }, { value: 'native-scroll', label: t('settings.pickerDisplayNative') }]} onChange={value => { savePicker({ ...picker, displayMode: value as PickerSettings['displayMode'] }) }} ariaLabel={t('settings.pickerDisplayMode')} /></label>
+      <label className="dsh_ref_render_mode"><span><b>{t('settings.iconStyle')}</b><small>{t('settings.iconStyleDetail')}</small></span><DshMenuSelect value={picker.iconStyle} options={[{ value: 'minimal', label: t('settings.iconStyleMinimal') }, { value: 'vivid', label: t('settings.iconStyleVivid') }]} onChange={value => { savePicker({ ...picker, iconStyle: value as PickerSettings['iconStyle'] }) }} ariaLabel={t('settings.iconStyle')} /></label>
+      {picker.iconStyle === 'vivid' && <div className="dsh_ref_render_mode"><span><b>{t('settings.iconColor')}</b><small>{t('settings.iconColorDetail')}</small></span><div className="dsh_ref_icon_colors" role="radiogroup" aria-label={t('settings.iconColor')}>
+        <button type="button" role="radio" aria-checked={picker.iconColor === 'multi'} aria-label={t('settings.iconColorMulti')} title={t('settings.iconColorMulti')} className="dsh_ref_icon_color dsh_ref_icon_color_multi" onClick={() => { savePicker({ ...picker, iconColor: 'multi' }) }} />
+        {KUBAI_COLOR_PRESETS.map(color => <button key={color} type="button" role="radio" aria-checked={picker.iconColor.toLowerCase() === color} aria-label={color} className="dsh_ref_icon_color" style={{ background: color }} onClick={() => { savePicker({ ...picker, iconColor: color }) }} />)}
+        {(() => {
+          const customColor = picker.iconCustomColor
+          const selected = customColor !== undefined && picker.iconColor.toLowerCase() === customColor.toLowerCase() && !(KUBAI_COLOR_PRESETS as readonly string[]).includes(customColor.toLowerCase())
+          const saveCustom = (hex: string) => { savePicker({ ...picker, iconCustomColor: hex.toLowerCase(), iconColor: hex.toLowerCase() }) }
+          const shown = picker.iconColor === 'multi' ? (customColor ?? '#4176e6') : picker.iconColor
+          return <>
+            <span className="dsh_ref_icon_color dsh_ref_icon_color_custom" data-defined={customColor !== undefined || undefined} role="radio" aria-checked={selected} title={t('settings.iconColorCustom')} style={customColor !== undefined ? { background: customColor } : undefined}>
+              {customColor === undefined && <span aria-hidden="true">+</span>}
+              {/* Defined custom colour: first click selects it; when selected (or undefined) the native picker opens to adjust it. */}
+              <input type="color" value={customColor ?? '#4176e6'} aria-label={t('settings.iconColorCustom')} onClick={event => { if (customColor !== undefined && !selected) { event.preventDefault(); savePicker({ ...picker, iconColor: customColor }) } }} onChange={event => { saveCustom(event.currentTarget.value) }} />
+            </span>
+            <input className="dsh_ref_icon_hex" type="text" maxLength={7} spellCheck={false} key={shown} defaultValue={shown} aria-label={t('settings.iconColorCustom')} onBlur={event => { const next = event.currentTarget.value.trim(); const hex = next.startsWith('#') ? next : '#' + next; if (hex.toLowerCase() === shown.toLowerCase()) return; if (/^#[0-9a-fA-F]{6}$/.test(hex)) saveCustom(hex); else event.currentTarget.value = shown }} onKeyDown={event => { if (event.key === 'Enter') event.currentTarget.blur() }} />
+          </>
+        })()}
+      </div></div>}
 
     </section>
     {/* Source sections follow the user's @ group order. */}
@@ -433,9 +508,9 @@ export function ConversationSettings({ useScope, save, sync, cancel, refresh, re
         <div className="dsh_ref_install"><div><strong>{t('settings.serviceActions')}</strong><span>{t('settings.serviceActionsDetail')}</span></div><div className="dsh_ref_service_actions"><Button className="is_primary" type="button" disabled={state.loading || Boolean(busyAction)} onClick={() => { const opened = state.health?.extensionConnected ? true : openStore(); runAction('setup', () => setupAll(opened)) }}>{busyAction === 'setup' ? t('settings.settingUp') : t('settings.oneClickSetup')}</Button></div></div>
       </section>
       <div className="dsh_ref_chat_divider dsh_ref_provider_divider" />
-      <div className="dsh_ref_provider_grid">{PROVIDERS.map((provider, index) => <ProviderCard key={provider} provider={provider} index={index} progress={state.sync?.providerProgress.find(row => row.provider === provider)} stats={state.stats?.find(row => row.provider === provider)} busy={state.sync?.status === 'running'} syncDisabled={extensionIncompatible} autoSync={settings.autoSync} enabled={enabled.has(provider)} onEnabled={value => { setProviderEnabled(provider, value) }} onSync={(mode) => { void sync([provider], mode) }} onClear={() => { if (window.confirm(t('storage.clearProviderConfirm', { provider: PROVIDER_LABEL[provider] }))) void clearProvider(provider) }} t={t} />)}</div>
+      <div className="dsh_ref_provider_grid">{PROVIDERS.map((provider, index) => <ProviderCard key={provider} provider={provider} index={index} progress={state.sync?.providerProgress.find(row => row.provider === provider)} stats={state.stats?.find(row => row.provider === provider)} busy={state.sync?.status === 'running'} syncDisabled={extensionIncompatible && !settings.tokenAccounts?.[provider as 'deepseek' | 'kimi' | 'qwen' | 'qianwen' | 'doubao']} tokenConnected={Boolean(settings.tokenAccounts?.[provider as 'deepseek' | 'kimi' | 'qwen' | 'qianwen' | 'doubao'])} onTokenConnect={tokenConnect && (provider === 'deepseek' || provider === 'kimi' || provider === 'qwen' || provider === 'qianwen' || provider === 'doubao') ? (disconnect => tokenConnect(provider, disconnect)) : undefined} autoSync={settings.autoSync} enabled={enabled.has(provider)} onEnabled={value => { setProviderEnabled(provider, value) }} onSync={(mode) => { void sync([provider], mode) }} onClear={() => { if (window.confirm(t('storage.clearProviderConfirm', { provider: PROVIDER_LABEL[provider] }))) void clearProvider(provider) }} t={t} />)}</div>
       {!state.loading && state.stats?.every(item => item.conversations === 0) && <div className="dsh_ref_empty">{t('settings.empty')}</div>}
-      <div className="dsh_ref_source_actions"><Button className="is_primary" type="button" disabled={extensionIncompatible || state.sync?.status === 'running' || settings.enabledProviders.length === 0} onClick={() => { void sync(settings.enabledProviders, 'incremental') }}>{t('settings.syncAll')}</Button><Button type="button" disabled={extensionIncompatible || state.sync?.status === 'running' || settings.enabledProviders.length === 0} onClick={() => { if (window.confirm(t('settings.fullConfirmAll'))) void sync(settings.enabledProviders, 'full') }}>{t('settings.fullRescanAll')}</Button>{state.sync?.status === 'running' && <Button className="is_danger" type="button" onClick={() => { void cancel() }}>{t('settings.cancel')}</Button>}</div>
+      <div className="dsh_ref_source_actions"><Button className="is_primary" type="button" disabled={(extensionIncompatible && settings.enabledProviders.some(provider => !settings.tokenAccounts?.[provider as 'deepseek' | 'kimi' | 'qwen' | 'qianwen' | 'doubao'])) || state.sync?.status === 'running' || settings.enabledProviders.length === 0} onClick={() => { void sync(settings.enabledProviders, 'incremental') }}>{t('settings.syncAll')}</Button><Button type="button" disabled={(extensionIncompatible && settings.enabledProviders.some(provider => !settings.tokenAccounts?.[provider as 'deepseek' | 'kimi' | 'qwen' | 'qianwen' | 'doubao'])) || state.sync?.status === 'running' || settings.enabledProviders.length === 0} onClick={() => { if (window.confirm(t('settings.fullConfirmAll'))) void sync(settings.enabledProviders, 'full') }}>{t('settings.fullRescanAll')}</Button>{state.sync?.status === 'running' && <Button className="is_danger" type="button" onClick={() => { void cancel() }}>{t('settings.cancel')}</Button>}</div>
       {state.sync?.error && <p className="dsh_ref_inline_error dsh_ref_source_error">{state.sync.error}</p>}
       <SettingsDisclosure className="dsh_ref_sync_settings_card" title={t('settings.syncSettings')} description={t('settings.syncSettingsDetail')} open={Boolean(openSections.sync)} onToggle={() => { setOpenSections(current => ({ ...current, sync: !current.sync })) }}>
       <div className="dsh_ref_sync_settings">
@@ -446,7 +521,7 @@ export function ConversationSettings({ useScope, save, sync, cancel, refresh, re
         <label><span>{t('settings.opencli')}</span><Input value={opencliPath} onChange={event => { setOpencliPath(event.target.value) }} onBlur={() => { if (opencliPath.trim()) void save({ ...settings, opencliPath: opencliPath.trim() }).then(refresh) }} /><small className="dsh_ref_field_note">{t('settings.opencliDetail')}</small></label>
         <label><span>{t('settings.chromeProfile')}</span><Input list="dsh-ref-profiles" value={profile} placeholder={t('settings.defaultProfile')} onChange={event => { setProfile(event.target.value) }} onBlur={() => { void save({ ...settings, profile: profile.trim() }).then(refresh) }} /><datalist id="dsh-ref-profiles">{state.profiles?.filter(item => item.connected).map(item => <option key={item.id} value={item.alias || item.id}>{item.id}</option>)}</datalist><small className="dsh_ref_field_note">{t('settings.chromeProfileDetail')}</small></label>
         <label><span>{t('settings.detailConcurrency')}</span><Input type="number" min={1} max={8} value={detailConcurrency} aria-invalid={!(Number(detailConcurrency) >= 1 && Number(detailConcurrency) <= 8)} onChange={event => { setDetailConcurrency(event.target.value) }} onBlur={saveConcurrency} /><small className="dsh_ref_field_note">{t('settings.detailConcurrencyDetail')}</small></label>
-        <label><span>{t('settings.maxReadTurns')}</span><Input type="number" min={1} max={100} value={maxReadTurns} aria-invalid={!(Number(maxReadTurns) >= 1 && Number(maxReadTurns) <= 100)} onChange={event => { setMaxReadTurns(event.target.value) }} onBlur={() => { const value = Number(maxReadTurns); if (Number.isInteger(value) && value >= 1 && value <= 100) void save({ ...settings, maxReadTurns: value }) }} /><small className="dsh_ref_field_note">{t('settings.maxReadTurnsDetail')}</small></label>
+        <label><span>{t('settings.includeThinking')}</span><DshMenuSelect value={settings.includeThinking ? 'include' : 'omit'} options={[{ value: 'omit', label: t('settings.thinkingOmit') }, { value: 'include', label: t('settings.thinkingInclude') }]} onChange={value => { void save({ ...settings, includeThinking: value === 'include' }) }} ariaLabel={t('settings.includeThinking')} /><small className="dsh_ref_field_note">{t('settings.includeThinkingDetail')}</small></label>
         <label><span>{t('settings.interval')}</span><Input type="number" min={15} max={1440} inputMode="numeric" disabled={!settings.autoSync} value={autoSyncMinutes} aria-invalid={!hasValidAutoSyncMinutes} onChange={event => { setAutoSyncMinutes(event.target.value) }} onBlur={saveAutoSyncMinutes} /><small className="dsh_ref_field_note">{t('settings.intervalDetail')}</small>{settings.autoSync && <small className="dsh_ref_field_note">{t('settings.autoNote', { minutes: settings.autoSyncMinutes })}</small>}</label>
       </div>
       </div>
@@ -900,7 +975,8 @@ export function validPickerLimit(value: string): boolean {
   return Number.isInteger(parsed) && parsed >= 1 && parsed <= 50
 }
 
-export function ProviderCard({ provider, progress, stats, busy, syncDisabled = false, autoSync, enabled, onEnabled, onSync, onClear, index, t }: { provider: ChatProvider; progress?: SyncStatus['providerProgress'][number]; stats?: ProviderStats; busy: boolean; syncDisabled?: boolean; autoSync: boolean; enabled: boolean; onEnabled(value: boolean): void; onSync(mode: 'incremental' | 'full'): void; onClear(): void; index: number; t: T }) {
+export function ProviderCard({ provider, progress, stats, busy, syncDisabled = false, autoSync, enabled, onEnabled, onSync, onClear, tokenConnected, onTokenConnect, index, t }: { tokenConnected?: boolean; onTokenConnect?(disconnect: boolean): Promise<void>; provider: ChatProvider; progress?: SyncStatus['providerProgress'][number]; stats?: ProviderStats; busy: boolean; syncDisabled?: boolean; autoSync: boolean; enabled: boolean; onEnabled(value: boolean): void; onSync(mode: 'incremental' | 'full'): void; onClear(): void; index: number; t: T }) {
+  const [connecting, setConnecting] = useState(false)
   const label = PROVIDER_LABEL[provider]
   const date = stats?.lastSyncedAt ? new Date(stats.lastSyncedAt).toLocaleString() : t('provider.neverSynced')
   const phase = progress && !busy && (progress.phase === 'listing' || progress.phase === 'syncing') ? 'cancelled' : progress?.phase
@@ -912,6 +988,8 @@ export function ProviderCard({ provider, progress, stats, busy, syncDisabled = f
       <span className="dsh_ref_card_progress_status" role="progressbar" aria-label={label} aria-valuemin={0} aria-valuemax={100} aria-valuenow={phase === 'listing' ? undefined : Math.round(percent)} aria-valuetext={progressText}>{progressText}</span>
     </>}
     <div className="dsh_ref_provider_main"><span className="dsh_ref_provider_mark"><ProviderLogo provider={provider} /></span><div className="dsh_ref_provider_content"><div className="dsh_ref_provider_summary"><h4>{label}</h4><strong>{stats?.conversations ?? 0}<span>{t('provider.localConversations')}</span></strong><small>{t('provider.lastUpdated', { date })}</small></div>{progress?.error && <em className="dsh_ref_provider_error">{progress.error}</em>}</div></div>
+    {['qwen', 'qianwen', 'doubao'].includes(provider) && <small className="dsh_ref_hint">{t(provider === 'doubao' ? 'provider.recentScope' : 'provider.ordinaryScope')}</small>}
+    {onTokenConnect && <div className="dsh_ref_provider_controls dsh_ref_token_controls"><small>{t(tokenConnected ? 'provider.tokenSaved' : 'provider.tokenHint')}</small><Button type="button" disabled={busy || connecting} onClick={() => { setConnecting(true); void onTokenConnect(false).finally(() => { setConnecting(false) }) }}>{t(connecting ? 'provider.tokenWorking' : tokenConnected ? 'provider.tokenReconnect' : 'provider.tokenConnect')}</Button>{tokenConnected && <Button type="button" disabled={busy || connecting} onClick={() => { setConnecting(true); void onTokenConnect(true).finally(() => { setConnecting(false) }) }}>{t('provider.tokenDisconnect')}</Button>}</div>}
     <div className="dsh_ref_provider_foot"><div className="dsh_ref_provider_controls"><label className="dsh_ref_toggle"><DshSwitch checked={enabled} label={t('provider.enabled')} onChange={onEnabled} /><b>{t('provider.enabled')}</b></label><div className="dsh_ref_provider_actions"><Button type="button" disabled={busy || syncDisabled} onClick={() => { onSync('incremental') }}>{t('provider.syncNow')}</Button><Button type="button" disabled={busy || syncDisabled} onClick={() => { if (window.confirm(t('provider.fullConfirm', { provider: label }))) onSync('full') }}>{t('provider.fullResync')}</Button><Button className="is_danger" type="button" disabled={busy || !stats?.conversations} onClick={onClear}>{t('storage.clearProvider')}</Button></div></div></div>
   </article>
 }

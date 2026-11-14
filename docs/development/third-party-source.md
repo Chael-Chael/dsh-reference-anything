@@ -1,6 +1,8 @@
 # 接入第三方引用来源
 
-Reference Anything 的每个来源都是一个独立的 DSH 插件。第三方来源和内置来源走同一套接口：注册后即出现在模型工具、`@` 菜单和设置面板中；插件行关闭后三处一起消失。
+Reference Anything 的每个来源都是一个独立的 DSH 插件。第三方来源和内置来源走同一套接口：注册后即可经单一 `reference` 工具读取，并出现在 `@` 菜单和设置面板中；插件行关闭后三处一起消失。
+
+让 Agent 来写：核心插件注册技能 `reference-source-author`（正文为 [`skills/reference-source-author/SKILL.md`](../../skills/reference-source-author/SKILL.md) 加上下方示例的完整代码，并填入当前 profile 与 DSH 版本）。设置页「@ 来源」列表下的「立即尝试」会新建对话并预填 `/reference-source-author …`；技能只在调用时加载，平时不占模型上下文。改本文的接口约定时同步修改该技能。
 
 完整可运行示例：[`examples/reference-source-notes`](../../examples/reference-source-notes)，由 [`tests/example-source.spec.ts`](../../tests/example-source.spec.ts) 覆盖。
 
@@ -8,30 +10,45 @@ Reference Anything 的每个来源都是一个独立的 DSH 插件。第三方�
 
 | 部分 | 必需 | 做什么 | 接口 |
 | --- | --- | --- | --- |
-| 宿主来源 | 是 | 让模型列出、读取条目 | `ctx.references.registerSource(source)` |
+| 来源插件 | 是 | 让模型通过 `reference` 工具列出、搜索、读取条目 | `ctx.references.registerPlugin(defineReferenceSource({ source, load, list }))` |
 | 来源设置 | 否 | 用户可改的选项，核心负责存储与迁移 | `ctx.references.defineSettings(id, definition)` |
-| 附件 | 否 | 让模型取回条目附带的文件 | `source.attachments` |
-| 读取上限 | 否 | 用户设定的每次读取条数 | `source.readLimit()` |
+| 子项（附件） | 否 | 图片、文件作为子 id，模型用 `read` + `as: "image" \| "file"` 取回 | `ReferenceDoc.children` + `fetch` |
 | `@` 菜单分组 | 否 | 用户在输入框里挑选条目 | 浏览器端 `ctx.referenceSources.register(group)` |
 | Remote | 有菜单分组时 | 浏览器端查询宿主 | 自己的 `TypertRemoteService` 与 Typert 贡献 |
 
-类型与浏览器安全的辅助函数都从 `dsh-reference-anything/sdk` 导入。
+宿主端的 `defineReferenceSource`、`referenceError`、`readAllText` 从 `dsh-reference-anything/source` 导入；类型与浏览器安全的辅助函数从 `dsh-reference-anything/sdk` 导入。
 
-## 宿主来源
+## 来源插件（2026-11-14 单一 `reference` 工具，设计见[方案](../ideas/reference-single-tool.md)）
 
 插件声明 `inject: ['references']`，在 `apply` 中注册：
 
 ```ts
-ctx.effect(() => ctx.references.registerSource(source), 'my-source')
+import { defineReferenceSource, referenceError } from 'dsh-reference-anything/source'
+
+ctx.effect(() => ctx.references.registerPlugin(defineReferenceSource({
+  source: 'notes',
+  usage: 'Notes from one folder. Ids are file names such as plan.md.',
+  async list(query) { return { items: [{ id: 'plan.md', title: 'plan.md', updatedAt: 0 }] } },
+  async load(id, signal) { return { title: id, content: [{ role: 'document', text: '...' }] } },
+})), 'my-source')
 ```
 
-`ReferenceSource` 的约定：
+模型只有一个工具 `reference({ source, id?, op: 'list' | 'search' | 'read', args })`，通用参数 `query`、`limit`、`next`、`as`。`defineReferenceSource` 根据 `load` 自动提供分页、`next` 续读、字面搜索、revision 校验、子项列出与读取以及 `@` 预览；作者不计算位置。
 
-- `id`：全局唯一，也是每个引用的 `source` 字段。发布后不要改：用户对话里已保存的引用依赖它。
-- `requiresGrant`：条目在任务工作区之外时设为 `true`，模型只能读用户点名或本任务列出过的条目。
-- `available()`：只做本地廉价检查，不发网络请求、不起子进程。
-- `list(query, limit)`：只按标题等元数据匹配，不把正文摘录交给模型。
-- `read(ref, window)`：有条目却读不到内容时抛错，不返回空结果。空结果会被模型当成"内容为空"。
+约定：
+
+- `source`：插件类别，也是宿主唯一的路由键与授权键前缀。小写字母开头，只含小写字母、数字和 `-`；发布后不要改。重复注册报 `SOURCE_DUPLICATE`。
+- `id`：由插件发放，跨重启有效，可逆编码、不建登记表；不含凭据、用户名或绝对路径，也不能让 `..` 跳出范围。`>` 保留给子项（`<id>><key>`）。
+- 授权：只有用户 `@` 才授权该 id 及其子项。不带 id 的 `list` 与按标题 `search` 只返回元数据、不授权；`read` 与 id 内 `search` 未授权时报 `UNAUTHORIZED`。工具结果里出现的引用不算授权。
+- `load(id, signal)`：返回 `{ title, content: [{ role?, text }], children?, partial?, notice? }`。条目不存在或不允许读时抛 `referenceError(code, message)`，不返回空结果；每次调用都重查自己的开关、目录与账号。文件内容用 `role: 'document'`。
+- `list(query, args, call)`：只按标题等元数据匹配，不把正文交给模型。
+- 子项：`children: [{ key, title, kind: 'image' | 'file' | 'text', item? }]`，二进制子项由 `fetch(id, child, maxBytes)` 返回字节；核心负责落盘、类型检测、≤10 MiB 图片附像素与清理，上限由 `files.maxBytes` 决定。
+- 错误：模型看到 `{ code, message, retry }`，`code` 为 `NOT_FOUND`、`UNAUTHORIZED`、`SOURCE_DISABLED`、`SOURCE_UNAVAILABLE`、`REVISION_CHANGED`、`UNSUPPORTED_OP`、`INVALID_ARGS`、`BUDGET_EXCEEDED`，`retry` 为 `relist`、`restart`、`none`。
+- 自带服务端分页的数据源可以直接实现 `ReferenceSourcePlugin`（`describe`、`list?`、`search?`、`read`），但必须在预算内产出并给出 `next`（宿主超预算只报错不截断），并用 `readAllText` 自测：按 `next` 拼接须逐字还原原文。
+
+### 旧接口 `registerSource`
+
+旧的 `ctx.references.registerSource(source)`（`ReferenceSource`：`available`、`list`、`read`、`attachments`）继续可用：核心把它包装成同名来源插件（`cloud-drive` 对应 `drive`，`local-plugin` 对应 `plugin`），按窗口从新到旧读完整条目（最多 2000 条，超出标为不完整）。新来源请直接用 `defineReferenceSource`。
 
 ## 来源设置
 
@@ -78,6 +95,6 @@ ctx.effect(() => ctx.referenceSources.register({
 
 ## 自测清单
 
-1. 模型能通过 `external_reference_list` 列出并用 `external_reference_read` 读到条目。
-2. 关闭插件行后，`external_reference_list` 不再包含它，`@` 菜单与设置中也不再出现。
+1. 模型能用 `reference({ source, op: 'list' })` 列出条目；用户 `@` 之后能 `read` 读到、在 id 内 `search` 搜到；有附件时 `list` 该 id 列出子项，`read` 子 id 加 `as: "file"` 能取回。
+2. 关闭插件行后，`reference` 工具不再路由到它，`@` 菜单与设置中也不再出现。
 3. 已保存的旧引用在来源关闭时读取失败并给出原因，而不是返回空内容。

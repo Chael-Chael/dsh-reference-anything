@@ -1,0 +1,41 @@
+{
+  "schema_version": 1,
+  "diagram_type": "sequence",
+  "meta": { "title": "一个对话从 @ 到被读取的全过程", "quality_profile": "showcase", "locale": "zh-CN", "viewBox": [1080, 1180], "column_fit": "spread" },
+  "participants": [
+    { "id": "user", "type": "external", "label": "用户 / @ 菜单", "sublabel": "client" },
+    { "id": "prestep", "type": "security", "label": "reference-prestep", "sublabel": "agent/pre-step" },
+    { "id": "model", "type": "frontend", "label": "模型 Agent", "sublabel": "LLM 回合" },
+    { "id": "tools", "type": "backend", "label": "reference_* 工具", "sublabel": "4 个工具" },
+    { "id": "registry", "type": "backend", "label": "references 注册表", "sublabel": "授权 + 分派" },
+    { "id": "doc", "type": "messagebus", "label": "文档来源插件", "sublabel": "local / web / cloud" },
+    { "id": "raw", "type": "database", "label": "原始来源", "sublabel": "文件 / 网页 / 云盘" }
+  ],
+  "segments": [
+    { "from": 150, "to": 270, "label": "选择" },
+    { "from": 290, "to": 600, "label": "发送时组装" },
+    { "from": 620, "to": 960, "label": "工具读取" },
+    { "from": 980, "to": 1096, "label": "附件" }
+  ],
+  "messages": [
+    { "from": "user", "to": "registry", "y": 180, "label": "列候选 (metadata)" },
+    { "from": "user", "to": "prestep", "y": 240, "label": "发送含 dsh-ref: 的消息", "variant": "emphasis" },
+    { "from": "prestep", "to": "registry", "y": 320, "label": "解析≤3个引用, documentMention" },
+    { "from": "prestep", "to": "registry", "y": 370, "label": "grant(session, ref) 后按窗口算预算", "variant": "security" },
+    { "from": "prestep", "to": "doc", "y": 470, "label": "load(ref) 预览" },
+    { "from": "doc", "to": "raw", "y": 510, "label": "扫描文件 / liveDetail" },
+    { "from": "doc", "to": "prestep", "y": 550, "label": "document + revision", "variant": "return" },
+    { "from": "prestep", "to": "model", "y": 590, "label": "注入 recall 背景消息", "variant": "emphasis" },
+    { "from": "model", "to": "tools", "y": 650, "label": "reference_list(source, query)" },
+    { "from": "tools", "to": "model", "y": 690, "label": "items[].ref", "variant": "return" },
+    { "from": "model", "to": "tools", "y": 740, "label": "reference_read(ref, from, maxItems)" },
+    { "from": "tools", "to": "registry", "y": 780, "label": "按 ref.source 找来源 + 检查授权/开关" },
+    { "from": "registry", "to": "doc", "y": 820, "label": "load(ref, revision)" },
+    { "from": "doc", "to": "tools", "y": 860, "label": "分页 items + next (revision 变则 REVISION_CHANGED)", "variant": "return" },
+    { "from": "model", "to": "tools", "y": 910, "label": "reference_search → hits.position 回填 read.from", "variant": "dashed" },
+    { "from": "model", "to": "tools", "y": 990, "label": "reference_attachment(ref, revision, id)" },
+    { "from": "tools", "to": "doc", "y": 1025, "label": "attachment() 写临时文件" },
+    { "from": "doc", "to": "raw", "y": 1055, "label": "下载/读取字节" },
+    { "from": "tools", "to": "model", "y": 1088, "label": "localPath (保留 1 小时)", "variant": "return" }
+  ]
+}

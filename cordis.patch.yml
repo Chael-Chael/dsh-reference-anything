@@ -28,15 +28,11 @@
       config:
         maxReferences: 3
 
-    # Lets the model go looking on its own, and page backwards through a
-    # conversation it has only seen the end of.
+    # Lets the model go looking on its own through the shared reference_*
+    # tools (list, read, search, attachment) for every registered source.
     - id: reference-tool
       name: 'dsh-reference-anything/tool'
       config:
-        listLimit: 20
-        maxOutputBytes: 65536
-        readTurns: 10
-        maxReadTurns: 50
         timeoutMs: 30000
 
     # Durable, local-only mirror of ChatGPT/Claude/Gemini/DeepSeek/Grok.

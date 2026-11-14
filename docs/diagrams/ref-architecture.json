@@ -1,0 +1,36 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": { "title": "ref 工具、来源插件与来源", "quality_profile": "showcase", "locale": "zh-CN", "viewBox": [1360, 700] },
+  "components": [
+    { "id": "agent", "type": "external", "label": "Agent / @ 菜单", "sublabel": "reference-prestep.ts", "pos": [30, 300], "size": [160, 68] },
+    { "id": "list", "type": "frontend", "label": "reference_list", "sublabel": "按元数据列出来源条目", "pos": [250, 300], "size": [170, 68] },
+    { "id": "search", "type": "frontend", "label": "reference_search", "sublabel": "字面子串搜索", "pos": [480, 120], "size": [170, 68] },
+    { "id": "read", "type": "frontend", "label": "reference_read", "sublabel": "messages/tools/attachments", "pos": [480, 300], "size": [170, 68] },
+    { "id": "attach", "type": "frontend", "label": "reference_attachment", "sublabel": "tool.ts 物化临时文件", "pos": [480, 480], "size": [170, 68] },
+    { "id": "registry", "type": "backend", "label": "references 注册表", "sublabel": "index.ts + uri.ts", "pos": [730, 300], "size": [170, 68] },
+    { "id": "local", "type": "backend", "label": "local-agent 插件", "sublabel": "sources/local-agent", "pos": [980, 120], "size": [160, 68] },
+    { "id": "web", "type": "backend", "label": "web-chat 插件", "sublabel": "sources/web-chat", "pos": [980, 300], "size": [160, 68] },
+    { "id": "cloud", "type": "backend", "label": "cloud-drive 插件", "sublabel": "sources/cloud-drive", "pos": [980, 480], "size": [160, 68] },
+    { "id": "files", "type": "database", "label": "本地 Agent 会话", "sublabel": "jsonl / sqlite", "pos": [1190, 120], "size": [150, 68] },
+    { "id": "sites", "type": "external", "label": "DeepSeek / Kimi 等", "sublabel": "token + OpenCLI", "pos": [1190, 300], "size": [150, 68] },
+    { "id": "drive", "type": "cloud", "label": "OpenList 云盘", "sublabel": "src/openlist", "pos": [1190, 480], "size": [150, 68] }
+  ],
+  "connections": [
+    { "id": "c1", "from": "agent", "to": "list", "label": "发现", "variant": "emphasis" },
+    { "id": "c2", "from": "list", "to": "read", "label": "items[].ref" },
+    { "id": "c3", "from": "search", "to": "read", "label": "hits.position→from", "labelAt": [565, 244], "fromSide": "bottom", "toSide": "top" },
+    { "id": "c4", "from": "read", "to": "attach", "label": "附件清单 revision", "labelAt": [565, 424], "fromSide": "bottom", "toSide": "top" },
+    { "id": "c5", "from": "read", "to": "registry", "label": "按 source 分派" },
+    { "id": "c6", "from": "local", "to": "registry", "label": "文档来源" },
+    { "id": "c7", "from": "web", "to": "registry", "label": "注册", "labelDx": 22 },
+    { "id": "c8", "from": "cloud", "to": "registry", "label": "ReferenceSource" },
+    { "id": "c9", "from": "local", "to": "files", "label": "只读扫描" },
+    { "id": "c10", "from": "web", "to": "sites", "label": "同步" },
+    { "id": "c11", "from": "cloud", "to": "drive", "label": "持有" }
+  ],
+  "cards": [
+    { "dot": "cyan", "title": "工具链", "items": ["list 拿 ref → read 分页读；search 命中位置填回 read.from", "read 列出附件后，attachment 凭同一 revision 落盘"] },
+    { "dot": "amber", "title": "分派", "items": ["四个工具都经注册表按 ref.source 找文档来源", "第三方来源经 sdk.ts 接入同一注册表"] }
+  ]
+}

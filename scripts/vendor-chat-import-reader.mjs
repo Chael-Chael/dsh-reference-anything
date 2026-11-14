@@ -83,6 +83,10 @@ const result = await build({
       if (file === 'lib/convert/vibe.mjs') {
         source = replace(source, "step.content.push({ type: 'tool-call', id: callId, name: fnName, arguments: argsStr })", "step.content.push({ type: 'tool-call', id: callId, generatedId: !(typeof tc.id === 'string' && tc.id), name: fnName, arguments: argsStr })")
       }
+      if (file === 'lib/convert/buddy-family.mjs') {
+        // Upstream 0.26.6 increments a const destructured binding; keep the counter mutable.
+        source = replace(source, 'const { recs, skipped, skippedLines, secrets } = parseJsonlLines(raw)', 'const { recs, skippedLines, secrets, skipped: parsedSkipped } = parseJsonlLines(raw)\n  let skipped = parsedSkipped')
+      }
       if (file === 'lib/convert/trae.mjs') {
         // The DB reader already normalizes messages to parts before conversion.
         source = replace(source, '|| textFromValue(message && message.body)', '|| textFromValue(message && message.parts)\n    || textFromValue(message && message.body)')

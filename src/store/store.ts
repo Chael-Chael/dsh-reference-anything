@@ -22,7 +22,7 @@ export const CONTENT_SCAN_LIMIT = 300
 export const CONTENT_SCAN_CHARS = 200_000
 /** Stable final tie-breaker for equally relevant, equally recent conversations. */
 const PROVIDER_ORDER: Readonly<Record<ChatProvider, number>> = {
-  chatgpt: 0, claude: 1, gemini: 2, deepseek: 3, grok: 4, kimi: 5,
+  chatgpt: 0, claude: 1, gemini: 2, deepseek: 3, grok: 4, kimi: 5, qwen: 6, qianwen: 7, doubao: 8,
 }
 
 export interface ProviderConversationRow {
@@ -47,6 +47,8 @@ export interface ProviderTurnRow {
   activeBranch: boolean
   role: 'user' | 'assistant'
   text: string
+  /** Provider thinking shown before the answer, kept apart from text; empty when the provider has none. */
+  thinking?: string
   createdAt: string
   attachmentsJson: string
   partial: boolean

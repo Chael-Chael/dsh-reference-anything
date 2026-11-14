@@ -297,17 +297,17 @@ export function registerProvider(config) {
     args: [
       { name: 'locator', positional: true, required: true, help: 'Stable same-origin attachment locator' },
       { name: 'output', required: true, help: 'Absolute output file path' },
-      { name: 'maxBytes', type: 'int', default: 26214400, help: 'Maximum decoded bytes' },
+      { name: 'maxBytes', type: 'int', default: 52428800, help: 'Maximum decoded bytes' },
       { name: 'accountScope', help: 'Expected hashed account scope; mismatch refuses the download' },
     ],
     columns: ['attachmentId', 'name', 'mimeType', 'size', 'status', 'localPath'],
     func: async (page, kwargs) => inTemporaryTab(page, async () => {
       const locator = String(kwargs.locator || '').trim()
       const output = resolve(String(kwargs.output || ''))
-      const maxBytes = Number(kwargs.maxBytes ?? 26_214_400)
+      const maxBytes = Number(kwargs.maxBytes ?? 52_428_800)
       if (!locator) throw new ArgumentError('locator must not be empty')
-      if (!Number.isInteger(maxBytes) || maxBytes < 1 || maxBytes > 26_214_400) {
-        throw new ArgumentError('maxBytes must be between 1 and 26214400')
+      if (!Number.isInteger(maxBytes) || maxBytes < 1 || maxBytes > 52_428_800) {
+        throw new ArgumentError('maxBytes must be between 1 and 52428800')
       }
       await navigate(page, config.home, { settleMs: 500 })
       const expectedScope = parseExpectedAccountScope(kwargs.accountScope)

@@ -6,7 +6,7 @@ import { promisify } from 'node:util'
 import { createRequire } from 'node:module'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-const { command, inspectLink, home } = vi.hoisted(() => ({ command: vi.fn(async () => ({ stdout: '2.0.0', stderr: '' })), inspectLink: vi.fn(), home: vi.fn(() => 'unused-home') }))
+const { command, inspectLink, home } = vi.hoisted(() => ({ command: vi.fn(async () => ({ stdout: '2.0.3', stderr: '' })), inspectLink: vi.fn(), home: vi.fn(() => 'unused-home') }))
 vi.mock('node:os', async importOriginal => ({ ...await importOriginal<typeof import('node:os')>(), homedir: home }))
 vi.mock('node:fs', async importOriginal => ({ ...await importOriginal<typeof import('node:fs')>(), lstatSync: inspectLink }))
 vi.mock('node:child_process', async importOriginal => {

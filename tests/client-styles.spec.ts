@@ -75,7 +75,7 @@ describe('reference DOM customization', () => {
     const dispose = adoptReferenceIconProjection()
     try {
       for (const row of Array.from(document.querySelectorAll('[role="option"]'))) {
-        expect(row.querySelector('path')?.getAttribute('d')).toBe('M7.9 20A9 9 0 1 0 4 16.1L2 22Z')
+        expect(row.querySelector('svg.kubai-icon-message-circle')).not.toBeNull()
       }
     } finally { dispose() }
   })
@@ -264,7 +264,7 @@ describe('reference DOM customization', () => {
     const dispose = adoptReferenceIconProjection()
     expect(document.querySelector('[data-dsh-ref-menu-icon="codex"] > svg')).not.toBeNull()
     expect(document.querySelector('[data-dsh-ref-menu-icon="drive"] > svg')).not.toBeNull()
-    expect(document.querySelectorAll('[data-dsh-ref-menu-icon="drive"] > svg')).toHaveLength(2)
+    expect(document.querySelectorAll('[data-dsh-ref-menu-icon="drive"] > svg:not(.kubai-icon)')).toHaveLength(2)
     dispose()
   })
 

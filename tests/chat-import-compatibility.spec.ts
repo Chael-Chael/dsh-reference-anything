@@ -23,7 +23,7 @@ beforeEach(async () => {
   await ctx.plugin(Loader, { baseUrl: pathToFileURL(directory).href + '/' })
   await writeFile(join(directory, 'package.json'), JSON.stringify({ dependencies: { 'dsh-chat-import': '0.25.2' }, dsh: { profile: { bundles: ['dsh-chat-import'] } } }))
   vi.mocked(resolveLocalPlugins).mockResolvedValue([{ id: 'import', name: 'dsh-chat-import', label: 'Chat Import', version: '0.25.2', status: 'live' }])
-  vi.stubGlobal('fetch', vi.fn(async () => Response.json({ name: 'dsh-chat-import', version: '0.26.3' })))
+  vi.stubGlobal('fetch', vi.fn(async () => Response.json({ name: 'dsh-chat-import', version: '0.26.6' })))
 })
 afterEach(async () => { await ctx.fiber.dispose(); await rm(directory, { recursive: true, force: true }); vi.unstubAllGlobals() })
 
@@ -35,7 +35,7 @@ it('checks actual capabilities, including incomplete or absent services', () => 
 it('reports an old independently loaded plugin and upgrades only its owning profile', async () => {
   expect(await chatImportCompatibility(ctx)).toMatchObject({ state: 'incompatible', version: '0.25.2', canUpgrade: true })
   await upgradeChatImport(ctx)
-  expect(installBundle).toHaveBeenCalledWith('dsh-chat-import@0.26.3', { enabled: true })
+  expect(installBundle).toHaveBeenCalledWith('dsh-chat-import@0.26.6', { enabled: true })
 })
 it('never enables a user-disabled bundle or upgrades a bundled-only provider', async () => {
   await writeFile(join(directory, 'package.json'), JSON.stringify({ dependencies: { 'dsh-chat-import': '0.25.2' }, dsh: { profile: { bundles: [] } } }))
@@ -47,7 +47,7 @@ it('never enables a user-disabled bundle or upgrades a bundled-only provider', a
 })
 it.each(['0.25.2', '0.26.0', '0.26.2'])('rejects registry versions below the minimum: %s', async version => {
   vi.mocked(fetch).mockResolvedValue(Response.json({ name: 'dsh-chat-import', version }))
-  await expect(upgradeChatImport(ctx)).rejects.toThrow('0.26.3')
+  await expect(upgradeChatImport(ctx)).rejects.toThrow('0.26.6')
   expect(installBundle).not.toHaveBeenCalled()
 })
 it('does not downgrade a newer plugin with missing APIs or install an invalid response', async () => {
@@ -77,5 +77,5 @@ it('offers an explicit upgrade for an API-ready 0.26.1 provider so omp can be im
   ctx.provide('chatImport', { scanDiscover() {}, importPath() {}, resumeSummary() {} } as never)
   expect(await chatImportCompatibility(ctx)).toMatchObject({ state: 'incompatible', canUpgrade: true, missing: [] })
   await upgradeChatImport(ctx)
-  expect(installBundle).toHaveBeenCalledWith('dsh-chat-import@0.26.3', { enabled: true })
+  expect(installBundle).toHaveBeenCalledWith('dsh-chat-import@0.26.6', { enabled: true })
 })

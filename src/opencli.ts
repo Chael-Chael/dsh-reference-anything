@@ -11,14 +11,14 @@ import type { ChatProvider } from './store/spec.ts'
 import type { ProviderConversationRow, ProviderTurnRow } from './store/store.ts'
 
 const execFile = promisify(nodeExecFile)
-export const MIN_OPENCLI_VERSION = '2.0.0'
-export const MIN_ADAPTER_VERSION = '0.2.3'
-/** Allows a 25 MiB attachment to cross JSON/base64 stdout with bounded headroom. */
+export const MIN_OPENCLI_VERSION = '2.0.3'
+export const MIN_ADAPTER_VERSION = '0.2.5'
+/** Bounds CLI stdout; attachment bytes go straight to a file and never cross it. */
 export const DEFAULT_OPENCLI_MAX_STDOUT_BYTES = 40 * 1024 * 1024
 export const OPENCLI_NPM_PACKAGE = '@jackwener/opencli'
 const SITE: Record<ChatProvider, string> = {
   chatgpt: 'dsh-chatgpt', claude: 'dsh-claude', gemini: 'dsh-gemini',
-  deepseek: 'dsh-deepseek', grok: 'dsh-grok', kimi: 'dsh-kimi',
+  deepseek: 'dsh-deepseek', grok: 'dsh-grok', kimi: 'dsh-kimi', qwen: 'dsh-qwen', qianwen: 'dsh-qianwen', doubao: 'dsh-doubao',
 }
 const REQUIRED_ADAPTER_COMMANDS = ['chatgpt', 'claude', 'gemini', 'deepseek', 'grok', 'kimi'] as const
 const ADAPTER_PLUGIN_NAME = 'dsh-chat-history'
@@ -137,9 +137,26 @@ export function parseDaemonStatus(output: string): DaemonStatus {
 }
 
 export interface BrowserProfile { id: string; alias?: string; connected: boolean; isDefault: boolean }
-export interface ProviderIndex { accountScope: string; sinceApplied: string; rows: ProviderConversationRow[] }
+export interface ProviderIndex { listingComplete?: boolean; accountScope: string; sinceApplied: string; rows: ProviderConversationRow[] }
 
 export class OpenCliRunner {
+  tokenRequest?: (provider: ChatProvider, operation: string, args: string[], signal?: AbortSignal) => Promise<Record<string, unknown>[] | undefined>
+  hasToken?: (provider: ChatProvider) => boolean
+
+  async captureToken(provider: 'deepseek' | 'kimi' | 'qwen' | 'qianwen' | 'doubao', signal?: AbortSignal): Promise<string> {
+    try {
+      const profiles = (await this.profiles(signal)).filter(profile => profile.connected)
+      const selected = this.profile ? profiles.find(profile => profile.id === this.profile || profile.alias === this.profile)
+        : profiles.find(profile => profile.isDefault) ?? (profiles.length === 1 ? profiles[0] : undefined)
+      if (!selected) throw new Error('Select a connected browser profile')
+      const { captureWebChatToken } = await import('./web-chat-token-capture.ts')
+      const token = await captureWebChatToken(provider, selected.id, signal)
+      return token
+    } catch {
+      // Provider or bridge errors may contain credentials; keep this boundary generic.
+      throw new OpenCliError('Could not connect the webpage account; check login and the browser connection', 'PROVIDER_NOT_LOGGED_IN')
+    }
+  }
   readonly executable: string
   readonly profile: string
   readonly prefixArgs: readonly string[]
@@ -185,7 +202,7 @@ export class OpenCliRunner {
     if (!stableIdentity) throw new OpenCliError(`${provider} returned no stable account identity`, 'PROVIDER_NOT_LOGGED_IN')
     return {
       accountScope: createHash('sha256').update(`${provider}\0${stableIdentity}`).digest('hex'),
-      sinceApplied: stringField(identity, 'sinceApplied'),
+      sinceApplied: stringField(identity, 'sinceApplied'), ...(identity?.listingComplete === false ? { listingComplete: false } : {}),
       rows: conversationRows(provider, rows.filter(row => stringField(row, 'kind') === 'conversation')),
     }
   }
@@ -199,7 +216,7 @@ export class OpenCliRunner {
         conversationId: required(raw, 'conversationId'), ordinal: integerField(raw, 'ordinal', index),
         messageId: stringField(raw, 'messageId'), parentId: stringField(raw, 'parentId'),
         branchId: stringField(raw, 'branchId'), activeBranch: booleanField(raw, 'activeBranch', true),
-        role, text: stringField(raw, 'text'), createdAt: stringField(raw, 'createdAt'),
+        role, text: stringField(raw, 'text'), ...(stringField(raw, 'thinking') ? { thinking: stringField(raw, 'thinking') } : {}), createdAt: stringField(raw, 'createdAt'),
         attachmentsJson: stringField(raw, 'attachmentsJson', '[]'), partial: booleanField(raw, 'partial'),
       }
     })
@@ -357,6 +374,14 @@ export class OpenCliRunner {
   }
 
   private async json(site: string, operation: string, args: string[], signal?: AbortSignal): Promise<Record<string, unknown>[]> {
+    if (this.tokenRequest) {
+      const provider = Object.entries(SITE).find(([, value]) => value === site)?.[0] as ChatProvider | undefined
+      if (provider) {
+        const result = await this.tokenRequest(provider, operation, args, signal)
+        if (result !== undefined) return result
+      }
+    }
+    if (['dsh-qwen', 'dsh-qianwen', 'dsh-doubao'].includes(site)) throw new OpenCliError('Connect this web account in Reference Anything settings first', 'PROVIDER_NOT_LOGGED_IN')
     // Match the sync-index lifecycle: every command gets its own temporary
     // background tab, so providers and detail workers can run independently.
     const stdout = await this.raw([

@@ -2,6 +2,8 @@
 
 本规范把 DeepSeek Harness 官方 Web/Desktop UI 的视觉语言落到 Reference Anything 的设置页、插件卡片、选择器和弹层中。实现优先使用 DSH 已提供的 `--dsw-*` 语义 token；只有在宿主 token 不可用时，才使用文档中的 fallback 值。
 
+本文件与 [Reference Anything 设计系统](https://claude.ai/artifact/NGjTZ887RebVBtgcGVB8iA)（tokens、组件预览、素材）保持同步，二者以 `src/client/styles.ts` 最后生效的规则层为准；修改任一方时同步另一方。设计系统源文件保存在 `D:\dsh-reference-anything-claude\design-system\`（`claude/main-work` 分支），发布到线上时以该目录为 root 上传。设计系统 token 名去掉了 `--dsw-alias-` 前缀（如 `label-primary`）。
+
 ## Design principles
 
 - **Quiet hierarchy**：用字号、字重、留白和灰阶建立层级，避免大面积装饰和强阴影。
@@ -9,6 +11,7 @@
 - **Hairline separation**：设置行使用 `0.5px` 分隔线，卡片使用 `0.5px` 描边。
 - **One control language**：选择器、步进器、搜索框和按钮优先采用 36px 高度、12px 圆角和 14px 文本。
 - **Token first**：组件只引用语义 token，不直接复制官方调色板到组件 CSS。
+- Avoid unnecessary secondary labels and descriptions. Let the layout do the explaining.
 
 ## Typography
 
@@ -38,6 +41,17 @@ UI 文本使用 `--dsw-font-family`。代码、路径和 entry id 使用 `--ds-f
 | `caption` | 12 / 18px | 400 | 设置描述、帮助文本、次要说明 |
 | `micro` | 11 / 14px | 400 | 元数据、详情字段 |
 
+设置页最终层只用 `body`、`body-strong`、`caption`，页头用 `heading`，来源卡片计数用 `metric`（18 / 24px，500）；设置页正文不低于 12px。
+
+@ 菜单沿用官方 `MenuView`：
+
+| Token | Size / line-height | Weight | Usage |
+| --- | --- | --- | --- |
+| `menu-item` | 13 / 20px | 400 | 菜单项名称、下拉菜单项 |
+| `menu-meta` | 12 / 18px | 400 | 右对齐描述、命令别名、Agent 预览正文 |
+| `menu-section` | 11 / 16px | 500 | 分组标题，`label-tertiary` |
+| `menu-hint` | 10 / 16px | 400 | 可下钻行的 Tab 键帽提示 |
+
 官方 UI 中间字重按 `500` 实现；不要使用 510 等平台专用中间值。中文文本保持正常字距，不额外增加 `letter-spacing`。
 
 ## Spacing
@@ -66,6 +80,14 @@ UI 文本使用 `--dsw-font-family`。代码、路径和 entry id 使用 `--ds-f
 | Settings nav | `188px` wide; top padding `22px`; nav gap `18px` | — |
 | Settings nav cell | `40px` high; `12px 16px 12px 12px`; gap `8px` | `12px` |
 | Settings row | `16px 0` vertical padding; gap `8px` | — |
+| Preference row in a settings card | min `68px`; `12px 0`; grid `1fr 144px`, column gap `24px` | — |
+| Collapsible project card header | min `72px`; `14px 16px`; gap `12px` | `20px` (card) |
+| Source card | main `16px`, mark `44px`; foot min `68px`, `16px` | `20px` |
+| Picker list row | `12px 16px`; `36px` drag + `20px icon / text / 36px switch / 36px expand` | `20px` (list) |
+| Switch | `36 × 20px` track, `16px` thumb | `999px` / `50%` |
+| Health marker | `32px` circle | `50%` |
+| @ menu surface | max height `400px`; padding `4px` | `16px` |
+| @ menu / dropdown item | min `34px`; `6px 8px`; gap `6px`; icon `16px`（命令 `18px`） | `12px` |
 | Standard control | `36px` high; horizontal padding `14px` | `12px` |
 | Search input | `36px` high; icon/text inset `12px / 36px` | `12px` |
 | Close / compact icon button | `28px × 28px` | `8px` |
@@ -111,6 +133,17 @@ UI 文本使用 `--dsw-font-family`。代码、路径和 entry id 使用 `--ds-f
 | `state-error-primary` | `#ec1313` | `#f25a5a` | 错误 |
 | `state-success-primary` | `#22c55e` | `#22c55e` | 成功 |
 | `state-warn-primary` | `#f59e0b` | `#f59e0b` | 警告 |
+| `bg-layer-3` | `#ffffff` | `#353638` | 最高 raised layer |
+| `menu-surface` | `rgba(248,249,250,.94)` | `rgba(48,49,54,.94)` | @ 菜单与下拉菜单（`--dsw-specific-menu`） |
+| `label-dimmed` | `#e1e5ee` | `#43454a` | 折叠卡片 hover/展开描边 |
+| `label-primary-foreground` | `#ffffff` | `#0f1115` | 主按钮、徽标、通知、开关开启圆点上的文字/图形 |
+| `menu-icon` | `#353638` | `#ebeef2` | 官方菜单下钻箭头、面包屑分隔 |
+| `border-l1` | `rgba(0,0,0,.04)` | `rgba(255,255,255,.06)` | 菜单外框、面包屑分隔线 |
+| `border-l3` | `rgba(0,0,0,.12)` | `rgba(255,255,255,.16)` | 开关关闭轨道、输入框聚焦描边 |
+| `brand-primary` | `#0f1115` | `#f9fafb` | 开关开启轨道（DSH 品牌主色为黑白，不是蓝色） |
+| `switch-thumb` | `#ffffff` | `#adb2b8` | 开关关闭圆点 |
+
+对比度：`label-tertiary` 在浅色白底上约 3.7:1，`state-business-primary` 约 4.2:1，均为官方原值；只用于辅助文字、焦点环和引用 chip，不承载操作。成功/警告色在白底上低于 3:1，必须配文字或图标。
 
 对应的 CSS 写法：
 
@@ -161,11 +194,13 @@ border-color: var(--dsw-alias-border-l4);
 
 设置页中除“通用设置”外的 @ 项目使用官方插件设置卡片模式。官方实现位于 `packages/client/ui-settings-plugin-inventory/src/client/PluginInventorySettingsTab.tsx` 的 `PluginCard`，使用按钮而非原生 `<details>`：按钮通过 `aria-expanded`、`aria-controls` 和受控的 `open` 状态切换详情内容；官方 CSS 对应 `.cardContent`、`.cardDetails` 和 `.chevron`。
 
-1. 卡片使用单一 `0.5px` 细边框、官方 `--dsw-radius-xl` 圆角和卡片填充色；项目内容始终属于同一张卡片。
-2. 折叠头部高度约 `88px`，水平 padding `24px`，标题与副标题垂直排列，右侧保留 `20px` 箭头区域。
-3. 项目标题使用 `18/24 600`；副标题使用 `14/20 400` 和次级文字颜色。标题与版本号或状态可在同一行内联显示。
-4. 折叠状态只显示头部；展开状态在头部下方使用 `1px` 分隔线承接内容，内容区水平 padding `24px`、底部 padding `20px`。
-5. 箭头位于右侧并在展开时旋转 `180deg`；点击整个头部按钮均可切换，默认折叠，通用设置默认展开。详情内容使用 `hidden` 控制可见性，折叠时不占用布局空间。
+当前实现（`styles.ts` 最终层，以此为准）：
+
+1. 卡片使用官方 `--dsw-radius-xl`（20px）圆角和 `--dsw-alias-settings-card-fill`；折叠时 `1px border-l2`，hover 描边 `label-dimmed`；展开时 `0.5px settings-card-stroke`（`border-l4`）。项目内容始终属于同一张卡片，卡片之间 `16px` gap。
+2. 折叠头部最小高度 `72px`，padding `14px 16px`，gap `12px`，标题与描述垂直排列。
+3. 标题 `14/22 400`，描述 `12/18 400`、`label-tertiary`。
+4. 展开内容左右内缩 `16px`、底部 `16px`，不再画顶部分隔线。
+5. 右侧箭头为 7px 细线 chevron（1.5px border 旋转绘制），展开时旋转 `180deg`，`240ms cubic-bezier(.2,.8,.2,1)`；点击整个头部按钮切换，默认折叠，通用设置默认展开。详情内容使用 `hidden` 控制可见性。
 
 官方源码参考：
 
@@ -174,14 +209,28 @@ border-color: var(--dsw-alias-border-l4);
 - [PluginInventorySettingsTab.tsx](https://github.com/deepseek-ai/deepseek-harness/blob/master/packages/client/ui-settings-plugin-inventory/src/client/PluginInventorySettingsTab.tsx)
 - [PluginInventorySettingsTab.module.css](https://github.com/deepseek-ai/deepseek-harness/blob/master/packages/client/ui-settings-plugin-inventory/src/client/PluginInventorySettingsTab.module.css)
 
-本项目的折叠项目卡片进一步对齐 `dsh-market` 的 `SettingsCard`：源码位于 `src/client/SettingsCard.tsx`，样式位于 `src/client/Market.module.css` 的 `.setCard`、`.setHeader`、`.setHeadText`、`.setName`、`.setDesc`、`.setChevron` 和 `.setBody`。采用其实际值：`1px` 边框、`12px` 圆角、`14px 16px` 头部间距、`15px/600` 标题、`13px/1.5` 描述、`12px` 头部间距、卡片之间 `10px` gap、展开内容 `1px` 顶部分隔线并保持 `16px` 左右内缩。箭头使用 14px chevron 图标的细线轮廓，不使用文字字符替代。
+折叠卡片的结构（按钮头部、`14px 16px` 间距、`16px` 内容内缩、细线 chevron）来自 `dsh-market` 的 `SettingsCard`（`src/client/SettingsCard.tsx`，`Market.module.css` 的 `.setCard` 等）；其字号（15/600、13/1.5）、`12px` 圆角和 `10px` gap 已被上面的官方设置排版和 `radius-xl` 覆盖，不再采用。箭头不使用文字字符替代。
 
 - [dsh-market SettingsCard.tsx](https://github.com/dsh-market/dsh-market/blob/main/src/client/SettingsCard.tsx)
 - [dsh-market Market.module.css](https://github.com/dsh-market/dsh-market/blob/main/src/client/Market.module.css)
 
 深色模式遵循官方 `design-platform.css` 的语义 token，不直接写死面板色：卡片填充使用 `--dsw-alias-settings-card-fill`（官方映射到 `--dsw-alias-bg-layer-2`），嵌套控件使用 `--dsw-alias-bg-module-platform`，分隔线使用 `--dsw-alias-border-l2`，次级文字使用 `--dsw-alias-label-tertiary`。设置页外层保持透明，避免在深色主题产生一整块与官方背景不一致的矩形底色。
 
-本地 Agent 卡片展示适配器的实际默认读取位置（例如 `~/.claude/projects`、`~/.codex/sessions`、`~/.cursor/projects`），用户配置了自定义目录时优先显示自定义目录。开关复用 DSH 黑白语义：轨道约 `54×30px`、圆角 `999px`，启用时浅色轨道配黑色圆点，禁用时深灰轨道配中灰圆点，避免使用蓝色品牌色。
+本地 Agent 卡片展示适配器的实际默认读取位置（例如 `~/.claude/projects`、`~/.codex/sessions`、`~/.cursor/projects`），用户配置了自定义目录时优先显示自定义目录。开关复用 DSH 官方 `button[role="switch"]` 与黑白语义：轨道 `36×20px`、2px 内边距、圆角 `999px`，圆点 `16px`；关闭时轨道 `border-l3`、圆点 `switch-thumb`，开启时轨道 `brand-primary`（浅色为黑、深色为近白）、圆点 `label-primary-foreground` 并右移 16px。不使用蓝色。
+
+## @ menu recipe
+
+@ 菜单是官方 `MenuView` 的扩展，Reference Anything 只增加来源分组、图标投影和 Agent 预览，不改变原生引用文本的光标、选区与换行。
+
+1. 浮层：与输入卡片同宽，最高 `400px`，`menu-surface` 填充，`radius-lg`，`4px` padding，`elevation-prominent` 阴影加 `0.5px border-l1` 外框；下方仍有内容时显示 16px 渐隐提示。
+2. 分组标题：`menu-section`（11/16 500，`label-tertiary`），padding `5px 8px 2px`，非首个分组上方多 `3px`。
+3. 菜单项：最小 `34px`，padding `6px 8px`，gap `6px`，`radius-md`。顺序为 16px 图标（`label-secondary`；命令 18px；双 Agent 标记 36px 宽）→ 名称（最多 40% 宽，省略）→ 可选别名（`label-tertiary` 12/18）→ 右对齐描述（`menu-meta`，`label-tertiary`）。
+4. 高亮：鼠标与键盘共用一个 `interactive-bg-hover`；键盘 `:focus-visible` 额外显示 2px `state-business-primary` 内嵌焦点环（offset `-2px`）。
+5. 操作行（显示更多、依赖有更新）用 `label-tertiary` 文字且不显示描述；可下钻行仅在高亮时显示 Tab 键帽与 18px chevron。
+6. 加载中的来源显示 18px 骨架条，2s 呼吸动画；减少动态效果时停止。
+7. 本地 Agent 预览：12px padding、底部 `0.5px border-l2`，最多 `min(240px, 30vh)` 并独立滚动；消息气泡 `bg-module-platform`、`radius-sm`、`8px 12px`，用户消息左缩进 24px，助手消息右缩进 24px，正文 3 行截断。
+8. 引用 chip：`state-business-primary` 文字，`@` 500 字重，16px 图标，最多 240px；失效时 `state-error-primary`、删除线、70% 不透明度。只通过 mask 替换图标，不重绘文字。
+9. 图标风格由通用设置「图标风格」决定，默认「极简」：Lucide 线性图标（2px 描边）；引用 chip 通过 mask 单色显示。「灵动」：@ 菜单、引用 chip 与设置页的非供应商图标改用 Kubai Icons（`src/client/vendor/kubai-icons`，映射见 `KUBAI_PICKER_ICON`，统一 `state-business-primary` 蓝，悬停所在行/chip 时播放动效）；无对应 Kubai 图标的保留 Lucide。两种图标同时挂载，由 `html[data-dsh-ref-icon-style]` 切换显示，切换无需重新投影。
 
 ## Official references
 

@@ -1,0 +1,40 @@
+<!-- @dsCard height=288 -->
+<div class="cover">
+  <style>
+    .cover { position: relative; width: 960px; height: 288px; overflow: hidden; background: var(--bg-base); font-family: var(--font-sans); }
+    .cover svg { position: absolute; left: 480px; top: 0; width: 480px; height: 288px; }
+    .cover .ink { fill: var(--label-primary); }
+    .cover .accent { fill: var(--state-business-primary); }
+    .cover .tint { fill: var(--bg-module-platform); }
+    .cover .cut { fill: var(--label-primary-foreground); }
+    .cover .cut-soft { fill: var(--label-primary-foreground); opacity: .42; }
+    .cover .card { rx: var(--radius-xl); }
+    .cover .row { rx: var(--radius-md); }
+    .cover .pill { rx: 20px; }
+    .cover .text { position: absolute; left: 40px; bottom: 36px; max-width: 440px; }
+    .cover h1 { margin: 0; color: var(--label-primary); font-size: 72px; line-height: .95; font-weight: 600; letter-spacing: 0; }
+    .cover p { margin: 16px 0 0; color: var(--label-tertiary); font-size: 14px; line-height: 22px; }
+  </style>
+  <svg viewBox="0 0 480 288" aria-hidden="true">
+    <!--
+      blocks: label-primary slab 184×248 (radius-xl, bleeds top); state-business-primary 200×112 (radius-xl); bg-module-platform 232×128 bleeding right (radius-xl).
+      arrangement: one tall ink slab with two satellites stacked to its right, like the settings column beside the @ menu.
+      pattern: menu rows — "one control language, 34px items, radius-md" chose four row bars with 16px icon dots cut from the slab, plus one switch pill on the tint.
+      scales: rows 30px tall on a 44px pitch (space-12 minus space-1), 16px gutter (space-4), radii radius-md / radius-xl, pill = half its 40px height.
+    -->
+    <rect class="ink card" x="40" y="-24" width="184" height="248"/>
+    <rect class="cut row" x="56" y="28" width="152" height="30"/>
+    <rect class="cut-soft row" x="56" y="72" width="120" height="30"/>
+    <rect class="cut-soft row" x="56" y="116" width="136" height="30"/>
+    <rect class="cut-soft row" x="56" y="160" width="96" height="30"/>
+    <circle class="ink" cx="72" cy="43" r="8"/>
+    <rect class="accent card" x="240" y="32" width="200" height="112"/>
+    <rect class="tint card" x="240" y="160" width="256" height="128"/>
+    <rect class="ink pill" x="264" y="204" width="72" height="40"/>
+    <circle class="cut" cx="316" cy="224" r="16"/>
+  </svg>
+  <div class="text">
+    <h1>Reference Anything</h1>
+    <p>DSH 设置页与 @ 菜单的设计规范</p>
+  </div>
+</div>

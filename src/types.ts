@@ -199,7 +199,7 @@ export interface ReferenceSource {
    * deployment limit still applies; omit to use only that.
    */
   readLimit?(): number
-  /** Lets the model materialize files the source's items carry. */
+  /** Lets the model save files the source's items carry, as children read with `as: "file"`. */
   readonly attachments?: ReferenceAttachmentCapability
 }
 
@@ -213,7 +213,7 @@ export type ReferenceAttachmentPayload =
     writeTo(localPath: string, maxBytes: number, signal?: AbortSignal): Promise<void>
   }
 
-/** How a source hands attachments to `reference_attachment_read`. */
+/** How a source hands attachments to the `reference` tool's file reads. */
 export interface ReferenceAttachmentCapability {
   /** Name prefix of the per-call directory the core creates, such as `dsh-reference-drive-`. */
   readonly directoryPrefix?: string
@@ -222,7 +222,7 @@ export interface ReferenceAttachmentCapability {
   /**
    * Fetch one attachment the model was shown.
    * @param ref - a reference this source owns, already granted.
-   * @param attachmentId - the id exactly as the source displayed it.
+   * @param attachmentId - the `attachmentId` of a {@link ConversationAttachment} this source returned.
    * @param maxBytes - fail with `ATTACHMENT_TOO_LARGE` beyond this.
    * @param signal - cancellation from the caller.
    */

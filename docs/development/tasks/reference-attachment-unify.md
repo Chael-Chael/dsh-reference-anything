@@ -1,0 +1,26 @@
+# 统一引用工具与附件读取
+
+- 用户目标与授权范围：2026-11-13 用户确认 [合并方案](../../ideas/reference-attachment-merge.md) 并要求实施；选择把云盘与第三方 SDK 来源也迁到 ref + revision，删除旧工具。未授权提交、推送或发布。
+- 状态：实现完成，部分验收 BLOCKED/NOT_RUN（见下）
+- 验收条件：
+  - 模型侧只剩 `reference_list` / `reference_read` / `reference_search` / `reference_attachment`；`reference_image`、`reference_attachment_read`、`external_reference_list`、`external_reference_read` 删除。
+  - 云盘、本地插件与第三方 `ReferenceSource` 由核心自动包装为文档来源，作者代码无需改动；`requiresGrant` 来源只能读用户点名或 `reference_list` 列出过的条目。
+  - `reference_read` 的 `images` part 改为 `attachments`，编号 `attachmentId`，项字段 attachmentId/messageId/name/mimeType/size；网页对话的非图片附件也列出。
+  - `reference_attachment` 一律返回 `localPath`；可渲染且 ≤10 MiB 的图片附带像素，超限给 notice；网页、云盘与第三方下载上限 50 MiB，本地不设上限。
+  - OpenCLI 适配器 `maxBytes` 上限 50 MiB，版本与 `MIN_ADAPTER_VERSION` 同步提升。
+  - 关闭来源、账号切换、revision 变化后读取失败并给出原因。
+- 改动边界与相关子系统：`src/index.ts`（注册表）、`src/reference-documents.ts`、新增 `src/source-documents.ts`（ReferenceSource 包装）、`src/local-reference*.ts`、`src/tool.ts`、`src/reference-prestep.ts`、`src/sources/web-chat/document.ts`、`src/sources/cloud-drive/index.ts`、`src/web-chat-token.ts`、`opencli-plugin/`、相关测试与文档。
+- 用户已有改动及不可覆盖内容：工作区有另一会话的网页 Token 优先改动（未提交，含 `src/sources/web-chat/document.ts`、`src/reference-documents.ts` 等），在其基础上修改，不回退。
+- 当前候选 HEAD / 未提交内容：e066afa + 未提交工作区。
+- 已完成及证据：
+  - 基线 7 个相关测试文件 120 项通过（改动前）。
+  - 实现：核心包装 `src/source-documents.ts`（`ref.source` = `<id>:item`，用户 2026-11-13 选定）；`reference_attachment` 取代 `reference_image` / `reference_attachment_read`；`external_reference_list/read`、`render.ts`、`retain.ts` 删除；attachments part；50 MiB 下载上限（核心、Token 通道、OpenCLI 适配器 0.2.5，`MIN_ADAPTER_VERSION` 0.2.5）。
+  - typecheck PASS；本任务相关测试 PASS（tool、tool-attachment、tool-web-attachment、local-reference、web-chat-document、reference-prestep、example-source、local-agent-source、chat-import-reader、opencli、source-author-skill）；build PASS；`agent:sync -- web` 已刷新。
+  - 真实 Web PASS（agent-browser-test，3081，DeepSeek-V4.1-Flash，会话 "Reference tool acceptance test"）：模型工具只有四个 `reference_*`、无 `external_*`；`reference_list` 返回 `local:claude` 项；本会话转录变化时 `REVISION_CHANGED` 后重读成功；`attachments` 列出 3 张 PNG（attachmentId/messageId/mimeType/size）；`reference_attachment` 返回 localPath 并附像素，模型正确描述截图内容。落盘文件核对：37614 字节、487×249 PNG，副本 `.codex-tmp/reference-attachment-unify/attachment-1.png`。
+- 未完成 / NOT_RUN / 阻塞原因：
+  - `npm run check` 曾 FAIL：`client-plugin-toggle.spec.ts`、`client-reference-ownership.spec.ts` 共 5 项报 `sessions.list.subscribe is not a function`（15:58 他人为 `src/client/index.ts` 新增会话计数订阅，测试替身缺 `subscribe`）。2026-11-13 经用户同意给两处替身补空 `subscribe`，`npm run check` PASS（74 文件通过、2 跳过；1220 项通过、7 跳过）。
+  - `npm run agent:verify` BLOCKED：脚本源码指纹读取未跟踪的嵌套仓库目录 `.claude/skills/kubai-icons/` 报 EISDIR；已手动执行同等步骤（diff --check、typecheck、测试、build、sync web）。
+  - NOT_RUN：网页对话附件、云盘与本地插件经包装后的真实 Web 读取；50 MiB 经 OpenCLI 浏览器通道（页面→扩展）的体积上限；Desktop。
+  - README 中英文与发布素材文字为草稿，待用户审核。
+- 下一步具体动作：补测网页附件、云盘与 50 MiB OpenCLI 通道。
+- 最终结论与 LESSONS 链接（如有）：

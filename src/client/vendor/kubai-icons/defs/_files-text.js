@@ -1,0 +1,4 @@
+import{KR as a,OL as $,R as x,rp as c,rr as d}from"../kit.js";const h=6.3,o=24.7,r=1.5,s=23.5,p=6,i=c([[h,r],[o-p,r],[o,r+p],[o,s],[h,s]],[a,.5,.5,a,a]),n=c([[o-p,r],[o,r+p],[o-p,r+p]],[.4,.4,1.2]),S=(t,e)=>`<g filter="${t.sh}"><g filter="${t.hi}"><path d="${i}" fill="${t.loS}"/></g></g><path d="${i}" ${$}/>
+    ${e}
+    <g filter="${t.hi}"><path d="${n}" fill="${t.upS}"/></g><path d="${n}" ${$}/>`,k=["plus","minus","check","x","alert","info","up","down","right","clock","star","heart","lock","search","sync","sparkle"],g=d(5.2,2.2,20.6,20.6,a),m=[7.6,12.5,17.4],l=2.4,A=(t,e)=>`<g filter="${t.sh}"><g filter="${t.hi}"><path d="${g}" fill="${t.loS}"/></g></g><path d="${g}" ${$}/>
+    ${e}`,D=(t,e,f)=>c(x(t,e-l/2,Math.max(l,f),l),l/2);export{l as BAR,g as CARD,k as FILE_BADGES,m as ROWS,D as bar,A as card,n as foldPath,i as pagePath,S as typedPage};

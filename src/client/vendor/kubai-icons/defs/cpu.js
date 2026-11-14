@@ -1,0 +1,3 @@
+import{defineIcon as e,KR as a,f as i,OL as p,DEEPS as c,rr as r,at as l}from"../kit.js";import{solid as d}from"./_devices.js";const n=[12.5,18.5],$=n.map(t=>`M${t} 4.4V2.1M${t} 20.6V22.9M7.4 ${t-3}H5.1M23.6 ${t-3}H25.9`).join("");var f=e({name:"cpu",category:"devices",tags:["chip","processor","microchip","hardware","compute"],variants:["check","alert","bolt","cog","sparkle"],svg:t=>{const o=r(11.2,8.2,8.6,8.6,1.8);return`<path d="${$}" fill="none" stroke-width="2.2" stroke-linecap="round" ${c}/>
+      ${d(t,r(7.4,4.4,16.2,16.2,a),t.loS)}
+      <g filter="${t.hi}"><path d="${o}" fill="${t.upS}"/><path data-n="lit" d="${o}" fill="${t.pure("#4389FF")}"/></g><path d="${o}" ${p}/>`},target:t=>({o:t?1:0}),draw(t,o){l(o.lit,{opacity:i(t.o)})}});export{f as default};

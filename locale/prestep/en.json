@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Reference pre-step",
+    "description": "Before each model step, grants picked references and adds previews of local Agent conversations."
+  }
+}

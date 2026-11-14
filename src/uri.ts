@@ -11,15 +11,10 @@ import { LOCAL_REFERENCE_SCHEME, LOCAL_REFERENCE_OPEN, LOCAL_REFERENCE_CLOSE, lo
  */
 
 import { ReferenceAnythingError } from './errors.ts'
-import { createHash } from 'node:crypto'
 import type { ReferenceInput, ReferenceRef } from './types.ts'
-import { decodeReferenceUriUnchecked, encodeReferenceUri, encodeLegacyReferenceUri, REFERENCE_SCHEME } from './uri-codec.ts'
+import { decodeReferenceUriUnchecked, encodeReferenceUri, REFERENCE_SCHEME } from './uri-codec.ts'
 
 export { encodeReferenceUri, REFERENCE_SCHEME }
-
-export function referenceReadHandle(ref: ReferenceRef): string {
-  return `ref:${createHash('sha256').update(encodeLegacyReferenceUri(ref)).digest('hex').slice(0, 24)}`
-}
 
 /**
  * Decode one canonical reference URI.

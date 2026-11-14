@@ -1,17 +1,18 @@
 /** JSON-compatible schema shared by the Host Remote and browser client. */
 import { z } from 'zod'
 
-export const providerSchema = z.enum(['chatgpt', 'claude', 'gemini', 'deepseek', 'grok', 'kimi'])
+export const providerSchema = z.enum(['chatgpt', 'claude', 'gemini', 'deepseek', 'grok', 'kimi', 'qwen', 'qianwen', 'doubao'])
 export type ChatProvider = z.infer<typeof providerSchema>
 export const ALL_PROVIDERS: readonly ChatProvider[] = providerSchema.options
 
 export const READABLE_LOCAL_AGENTS = ['claude-code', 'codex', 'cursor', 'qoder', 'reasonix', 'openclaw', 'kimi', 'grokbuild', 'hermes', 'gemini-cli', 'pi', 'opencode', 'mimocode', 'zcode'] as const
-export const IMPORT_ONLY_AGENTS = ['antigravity', 'kilocode', 'chatgpt', 'workbuddy', 'qwen', 'continue', 'cline', 'goose', 'dsh4', 'zed', 'crush', 'teleagent', 'trae', 'vibe', 'dsh', 'omp', 'copilot-vscode', 'copilot-cli', 'doubao'] as const
+export const IMPORT_ONLY_AGENTS = ['antigravity', 'kilocode', 'chatgpt', 'workbuddy', 'qwen', 'continue', 'cline', 'goose', 'dsh4', 'zed', 'crush', 'teleagent', 'trae', 'vibe', 'dsh', 'omp', 'copilot-vscode', 'copilot-cli', 'doubao', 'codebuddy', 'codearts', 'opencowork'] as const
 export const localAgentSchema = z.enum([...READABLE_LOCAL_AGENTS, ...IMPORT_ONLY_AGENTS])
 export type LocalAgent = z.infer<typeof localAgentSchema>
 export const ALL_LOCAL_AGENTS: readonly LocalAgent[] = localAgentSchema.options
 export const LOCAL_AGENT_LABEL: Readonly<Record<LocalAgent, string>> = {
   'copilot-vscode': 'Copilot VS Code', 'copilot-cli': 'Copilot CLI', doubao: 'Doubao',
+  codebuddy: 'CodeBuddy Code', codearts: 'CodeArts', opencowork: 'openCoWork',
   'claude-code': 'Claude Code', codex: 'Codex', cursor: 'Cursor', qoder: 'Qoder', reasonix: 'Reasonix',
   openclaw: 'OpenClaw', kimi: 'Kimi', grokbuild: 'Grok Build', hermes: 'Hermes', 'gemini-cli': 'Gemini CLI',
   pi: 'Pi', omp: 'oh-my-pi', opencode: 'opencode', mimocode: 'mimocode', zcode: 'zcode',
@@ -52,6 +53,10 @@ export type AgentActionsSettings = z.infer<typeof agentActionsSchema>
 
 export const pickerSettingsSchema = z.object({
   displayMode: z.enum(['collapse', 'native-scroll']).default('collapse'),
+  /** minimal: Lucide line icons; vivid: animated Kubai icons. Visual only, so not part of samePickerSettings. */
+  iconStyle: z.enum(['minimal', 'vivid']).default('minimal'),
+  iconColor: z.string().regex(/^(#[0-9a-fA-F]{6}|multi)$/).default('#4176e6'),
+  iconCustomColor: z.string().regex(/^#[0-9a-fA-F]{6}$/).optional(),
   commands: pickerSourceSettingsSchema,
   skills: pickerSourceSettingsSchema,
   files: pickerSourceSettingsSchema,
@@ -81,6 +86,8 @@ export type InputRenderMode = z.infer<typeof inputRenderModeSchema>
 export function defaultPickerSettings(): PickerSettings {
   return {
     displayMode: 'collapse',
+    iconStyle: 'minimal',
+    iconColor: '#4176e6',
     commands: { enabled: true, order: 0, limit: 6, maxCandidates: 50, sort: 'updated', shortcut: '', aliases: ['command'] },
     skills: { enabled: true, order: 5, limit: 6, maxCandidates: 50, sort: 'updated', shortcut: '', aliases: ['skill'] },
     files: { enabled: true, order: 10, limit: 6, maxCandidates: 50, sort: 'updated', shortcut: '', aliases: ['file'] },
@@ -112,6 +119,8 @@ export function samePickerSettings(left: PickerSettings, right: PickerSettings):
 export const settingsRecordSchema = z.object({
   opencliPath: z.string(),
   profile: z.string(),
+  /** Opaque OS-keyring entry IDs; changed only by connect/disconnect. */
+  tokenAccounts: z.object({ deepseek: z.string().uuid().optional(), kimi: z.string().uuid().optional(), qwen: z.string().uuid().optional(), qianwen: z.string().uuid().optional(), doubao: z.string().uuid().optional() }).optional(),
   /** Empty keeps the original system-temporary-directory behavior. */
   cloudDriveDownloadDirectory: z.string().max(4096).default(''),
   detailConcurrency: z.number().int().min(1).max(8),
@@ -121,7 +130,7 @@ export const settingsRecordSchema = z.object({
   historyMode: z.enum(['metadata-only', 'offline-mirror']).default('metadata-only'),
   /** Null keeps all web-chat history; old settings default to that upgrade-safe behavior. */
   syncHistoryDays: z.number().int().min(1).max(36500).nullable().default(null),
-  enabledProviders: z.array(providerSchema).default([...ALL_PROVIDERS]),
+  enabledProviders: z.array(providerSchema).default(['chatgpt', 'claude', 'gemini', 'deepseek', 'grok', 'kimi']),
   enabledAgents: z.array(localAgentSchema).default([...ALL_LOCAL_AGENTS]),
   /** One optional additional transcript root per local Agent. */
   agentDirectories: z.partialRecord(localAgentSchema, z.string().max(4096)).optional(),
@@ -130,7 +139,8 @@ export const settingsRecordSchema = z.object({
    * legacy behaviour (all enabled mounts); an explicit empty array means none.
    */
   enabledDriveMounts: z.array(z.string().startsWith('/')).optional(),
-  maxReadTurns: z.number().int().min(1).max(100).default(10),
+  /** Include the provider's thinking text in referenced web chats. Off by default: it is not the answer. */
+  includeThinking: z.boolean().default(false),
   inputRenderMode: inputRenderModeSchema.default('pill'),
   // Optional keeps existing on-disk settings forward-compatible. The client
   // uses defaultPickerSettings() until the user saves the General section.

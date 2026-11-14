@@ -8,8 +8,9 @@
  * the loop durably appends, so injected material is logged by construction and
  * a replay reconstructs the request exactly.
  *
- * This plugin owns external references and readable local Agent locators
- * resolved through `ctx.references`. Native file and DSH-session
+ * This plugin owns every reference a loaded source plugin claims: it grants
+ * the object (and its children) to this task, and inserts guidance plus a
+ * bounded preview of the newest records. Native file and DSH-session
  * references are owned end-to-end by their official DSH services.
  *
  * @module dsh-reference-anything/prestep
@@ -22,10 +23,9 @@ import { boundContextSummary, createUserMessage, freezeMessage } from '@deepseek
 import type { ContentBlock, UserMessage } from '@deepseek-ai/dsh-llm'
 import { ReferenceAnythingError } from './errors.ts'
 import { renderPrompt, type PromptAssembly } from '@deepseek-ai/dsh-system-prompt'
-import { loadLocalReference, buildLocalPreview, renderLocalData, localBytes, localError, shortLabel, assertLocalScope, DEFAULT_LOCAL_BYTES, LOCAL_INSTRUCTIONS, type LocalPreview, type LocalDocument } from './local-reference.ts'
-import { LOCAL_REFERENCE_SOURCE, localLocatorFromId, usesLocalProtocol, type LocalLocator } from './local-locator.ts'
-import { renderDeferredReferences } from './render.ts'
-import type { ReferenceContextSource, ReferenceInput } from './types.ts'
+import { localError, shortLabel, DEFAULT_LOCAL_BYTES, LOCAL_INSTRUCTIONS } from './local-reference.ts'
+import { renderReferenceResult, type ReferencePreview, type ReferenceSourcePlugin } from './reference-source.ts'
+import type { ReferenceInput } from './types.ts'
 import { mayContainReference, parseReferenceText } from './uri.ts'
 import type {} from './index.ts'
 
@@ -119,76 +119,94 @@ export function apply(ctx: Context, config: Config = {}): void {
     if (decision.kind === 'reject') return decision
     signal.throwIfAborted()
     const deadline = AbortSignal.any([signal, AbortSignal.timeout(30_000)])
-    type Entry = LocalPreview | { ref: LocalLocator; title: string; notice?: string; error?: { code: string; message: string } }
-    const plans: Array<{ index: number; parsed: ParsedMessage; inputs: ReferenceInput[]; entries: Entry[]; external?: ReturnType<typeof renderDeferredReferences>; error?: string }> = []
+    const cwd = agent.session.header?.cwd ?? process.cwd()
+    type Guide = { source: string; id: string; title: string; notice?: string }
+    type Failure = { source: string; id: string; title: string; error: { code: string; message: string } }
+    type Entry = ReferencePreview | Guide | Failure
+    const plans: Array<{ index: number; parsed: ParsedMessage; inputs: ReferenceInput[]; plugins: Array<ReferenceSourcePlugin | undefined>; entries: Entry[]; error?: string }> = []
     for (const [index, original] of decision.messages.entries()) {
       if (original.source.kind !== 'user' || !messageText(original).some(mayContainReference)) continue
       try {
         const parsed = parseMessage(original), inputs = dedupe(parsed.references)
         if (!inputs.length) continue
         if (inputs.length > maxReferences) throw localError('INVALID_ARGUMENT', `at most ${maxReferences} references are allowed per message.`)
-        const local = inputs.filter(input => usesLocalProtocol(input.ref))
-        const external = inputs.filter(input => !usesLocalProtocol(input.ref))
-        for (const input of external) ctx.references.grant(String(agent.session.id), input.ref)
-        const entries: Entry[] = local.map(input => ({ ref: localLocatorFromId(input.ref.id), title: shortLabel(input.label ?? localLocatorFromId(input.ref.id).sessionId),
-          notice: 'Preview not loaded: insufficient or unknown context budget. Use reference_read with part="messages" and omit from and revision.' }))
-        plans.push({ index, parsed, inputs: local, entries, ...(external.length ? { external: renderDeferredReferences(external) } : {}) })
+        const claimed = inputs.map(input => ({ input, claim: ctx.references.resolveMention(input.ref) }))
+        // Only the user's @ grants: the object and, through parentOf, its children.
+        for (const { input, claim } of claimed) {
+          if (claim) ctx.references.grantPlugin(String(agent.session.id), claim.plugin.source, claim.id)
+          else ctx.references.grant(String(agent.session.id), input.ref)
+        }
+        const entries: Entry[] = claimed.map(({ input, claim }) => claim
+          ? { source: claim.plugin.source, id: claim.id, title: shortLabel(input.label ?? claim.id),
+            notice: 'Preview not loaded: insufficient or unknown context budget. Read this id from the beginning (omit next).' }
+          : { source: input.ref.source, id: input.ref.id, title: shortLabel(input.label ?? input.ref.id),
+            error: { code: 'SOURCE_UNAVAILABLE', message: 'The plugin providing this reference source is not loaded. Ask the user to enable it and resend the reference.' } })
+        plans.push({ index, parsed, inputs, plugins: claimed.map(row => row.claim?.plugin), entries })
       } catch (error) {
-        plans.push({index,parsed:{message:original,references:[]},inputs:[],entries:[],error:describe(error).slice(0,256)})
+        plans.push({ index, parsed: { message: original, references: [] }, inputs: [], plugins: [], entries: [], error: describe(error).slice(0, 256) })
       }
     }
     if (!plans.length) return decision
     const contextFor = (plan: typeof plans[number]): UserMessage => {
       if (plan.error) return notice(plan.error)
-      const parts = [...(plan.entries.length ? [renderLocalData(plan.entries)] : []), ...(plan.external ? [plan.external.text] : []), ...(plan.error ? [plan.error] : [])]
-      const references = plan.entries.map((entry, index) => ({ source: LOCAL_REFERENCE_SOURCE, id: plan.inputs[index]!.ref.id, locator: entry.ref,
-        label: entry.title, capturedAt: Date.now(), ...('items' in entry ? { revision: entry.revision, startIndex: entry.items[0]?.messageId ?? 0,
-          retainedMessages: entry.items.length, truncated: entry.next !== null || (entry.items[0]?.messageId ?? 1)>1 } : {}) }))
-      return createUserMessage({content:[{type:'text',text:parts.join('\n')}],source:{kind:'reference-anything',form:'recall',version:1,
-        references:[...references,...(plan.external?.provenance ?? [])]} as never})
+      // Each source's own usage appears once per batch, never in the tool description.
+      const usage = new Map<string, string>()
+      for (const plugin of plan.plugins) if (plugin && !usage.has(plugin.source)) usage.set(plugin.source, plugin.describe().usage)
+      const body = { sources: [...usage].map(([source, text]) => ({ source, usage: text })), references: plan.entries }
+      const references = plan.entries.map((entry, index) => {
+        const content = 'content' in entry ? entry.content : []
+        const total = 'total' in entry && entry.total !== undefined ? entry.total : content.length
+        return { source: plan.inputs[index]!.ref.source, id: plan.inputs[index]!.ref.id, label: entry.title, capturedAt: Date.now(),
+          startIndex: content[0]?.n ?? 0, retainedMessages: content.length, omittedMessages: Math.max(0, total - content.length),
+          truncated: content.length < total }
+      })
+      return createUserMessage({ content: [{ type: 'text', text: renderReferenceResult(body) }], source: { kind: 'reference-anything', form: 'recall', version: 1,
+        references } as never })
     }
-    const size = () => plans.reduce((sum,plan) => sum + Buffer.byteLength(messageText(contextFor(plan)).join('\n')),0)
+    const size = () => plans.reduce((sum, plan) => sum + Buffer.byteLength(messageText(contextFor(plan)).join('\n')), 0)
     const cap = config.maxTextBytes ?? DEFAULT_LOCAL_BYTES
-    if (size() > cap) throw localError('BUDGET_TOO_SMALL','Reference metadata exceeds the shared preview budget; use fewer references.')
-    const pending = decision.messages.map((message,index)=>plans.find(plan=>plan.index===index)?.parsed.message??message)
-    const capacity = await budget(agent,signal,pending,plans.map(contextFor))
-    let remaining = Math.max(0,capacity-size())
-    let left = plans.reduce((sum,plan)=>sum+plan.entries.length,0)
-    const captures = new Map<string,Promise<LocalDocument>>()
-    for(const plan of plans) for(let i=0;i<plan.entries.length;i++){
-      const entry=plan.entries[i]!,share=Math.floor(remaining/left--),before=size()
+    if (size() > cap) throw localError('BUDGET_TOO_SMALL', 'Reference metadata exceeds the shared preview budget; use fewer references.')
+    const pending = decision.messages.map((message, index) => plans.find(plan => plan.index === index)?.parsed.message ?? message)
+    const capacity = await budget(agent, signal, pending, plans.map(contextFor))
+    let remaining = Math.max(0, capacity - size())
+    let left = plans.reduce((sum, plan) => sum + plan.entries.length, 0)
+    const failed = (entry: Entry, error: unknown, limit: AbortSignal, message?: string): Failure => ({ source: entry.source, id: entry.id, title: entry.title, error: {
+      code: limit.aborted ? 'SOURCE_UNAVAILABLE' : error instanceof ReferenceAnythingError ? error.code : 'SOURCE_UNAVAILABLE',
+      message: message ?? (limit.aborted ? 'Reference preparation timed out.' : error instanceof ReferenceAnythingError ? error.message : 'Reference source is unavailable.') } })
+    for (const plan of plans) for (let i = 0; i < plan.entries.length; i++) {
+      const entry = plan.entries[i]!, share = Math.floor(remaining / left--), before = size()
+      const plugin = plan.plugins[i]
+      if (!plugin) continue
+      // A slow remote source must not hold the whole batch; its own cap still respects the batch deadline.
+      const limit = plugin.previewTimeoutMs ? AbortSignal.any([deadline, AbortSignal.timeout(plugin.previewTimeoutMs)]) : deadline
       try {
-        await assertLocalScope(ctx,entry.ref,deadline)
-        if(share>0){
-          const key=JSON.stringify(entry.ref)
-          let capture=captures.get(key)
-          if(!capture){capture=loadLocalReference(ctx,agent,entry.ref,undefined,deadline);captures.set(key,capture)}
-          const document=await capture
-          const preview=buildLocalPreview(entry.ref,document,before+share,entry.title,value=>{
-            plan.entries[i]=value;const bytes=size();plan.entries[i]=entry;return bytes
+        await plugin.check?.(entry.id, limit)
+        if (share > 0 && plugin.preview) {
+          const preview = await plugin.preview(entry.id, before + share, { budget: share, signal: limit, cwd }, value => {
+            plan.entries[i] = { ...value, title: entry.title }; const bytes = size(); plan.entries[i] = entry; return bytes
           })
-          plan.entries[i]=preview
+          plan.entries[i] = { ...preview, title: entry.title }
         }
-      } catch(error) {
+      } catch (error) {
         signal.throwIfAborted()
-        if(error instanceof ReferenceAnythingError && error.code==='BUDGET_TOO_SMALL') plan.entries[i]=entry
-        else plan.entries[i]={ref:entry.ref,title:entry.title,error:{code:deadline.aborted?'TIMEOUT':error instanceof ReferenceAnythingError?error.code:'READ_FAILED',
-          message:deadline.aborted?'Reference preparation timed out.':error instanceof ReferenceAnythingError?error.message:'Reference source is unavailable.'}}
+        const code = error instanceof ReferenceAnythingError ? error.code : undefined
+        plan.entries[i] = code === 'BUDGET_TOO_SMALL' || code === 'BUDGET_EXCEEDED' ? entry : failed(entry, error, limit)
       }
-      remaining=Math.max(0,remaining-(size()-before))
+      remaining = Math.max(0, remaining - (size() - before))
     }
     // Recheck permissions immediately before publishing all prepared contexts.
-    for(const plan of plans)for(let i=0;i<plan.entries.length;i++){
-      const entry=plan.entries[i]!
-      if('error' in entry && entry.error)continue
-      try {await assertLocalScope(ctx,entry.ref,deadline)} catch(error){signal.throwIfAborted();plan.entries[i]={ref:entry.ref,title:entry.title,error:{code:deadline.aborted?'TIMEOUT':error instanceof ReferenceAnythingError?error.code:'READ_FAILED',message:'Reference access is no longer available.'}}}
+    for (const plan of plans) for (let i = 0; i < plan.entries.length; i++) {
+      const entry = plan.entries[i]!
+      const plugin = plan.plugins[i]
+      if ('error' in entry || !plugin) continue
+      try { await plugin.check?.(entry.id, deadline) } catch (error) { signal.throwIfAborted(); plan.entries[i] = failed(entry, error, deadline, 'Reference access is no longer available.') }
     }
     signal.throwIfAborted()
-    if(size()>cap || (capacity>0&&size()>capacity))throw localError('BUDGET_TOO_SMALL','Reference contexts exceed the shared budget.')
-    return {...decision,messages:decision.messages.flatMap((message,index)=>{
-      const plan=plans.find(plan=>plan.index===index)
-      return plan?[plan.parsed.message,contextFor(plan)]:[message]
-    })}
+    if (size() > cap || (capacity > 0 && size() > capacity)) throw localError('BUDGET_TOO_SMALL', 'Reference contexts exceed the shared budget.')
+    return { ...decision, messages: decision.messages.flatMap((message, index) => {
+      const plan = plans.find(plan => plan.index === index)
+      return plan ? [plan.parsed.message, contextFor(plan)] : [message]
+    }) }
   }, { prepend: true })
 }
 

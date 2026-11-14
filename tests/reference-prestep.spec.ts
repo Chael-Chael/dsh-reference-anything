@@ -2,6 +2,7 @@ import { Context } from '@deepseek-ai/cordis'
 import { createUserMessage } from '@deepseek-ai/dsh-llm'
 import type { UserMessage } from '@deepseek-ai/dsh-llm'
 import type { Agent, PreStepDecision } from '@deepseek-ai/dsh-agent'
+import { Session, SessionId } from '@deepseek-ai/dsh-session'
 import { beforeEach, describe, expect, it } from 'vitest'
 import ReferenceRuntime from '../src/index.ts'
 import * as mention from '../src/reference-prestep.ts'
@@ -94,15 +95,39 @@ describe('expansion', () => {
     expect(entered[0]?.source.kind).toBe('user')
   })
 
-  it('carries an untrusted deferred reference into the context without its body', async () => {
+  it('hands a plain source to the reference tool without its body when no budget is known', async () => {
     const result = await step(ctx, [userMessage(`see ${formatReferenceMention(ref, 'Cache design')}`)])
     const context = (result as Extract<PreStepDecision, { kind: 'enter' }>).messages[1]
     const text = context?.content.flatMap(block => block.type === 'text' ? [block.text] : []).join('')
-    expect(text).toContain('untrusted reference to something the user keeps')
-    expect(text).toContain('bodies were not fetched')
-    expect(text).toContain('sync that provider')
-    expect(text).toContain(encodeReferenceUri(ref))
+    expect(text).toContain('Untrusted reference content')
+    expect(text).toContain('"source":"file"')
+    expect(text).toContain('"id":"chat.json"')
+    expect(text).toContain('Read this id from the beginning')
+    expect(text).toContain('"usage"')
     expect(text).not.toContain('by request hash')
+    expect(text).not.toContain('dsh-ref:')
+  })
+
+  it('previews a plain source inline when the context budget allows', async () => {
+    ctx.provide('llm', { resolveModelInfo: async () => ({ context: { contextWindow: 100000 } }) } as never)
+    const withBudget = { session: Session.create(SessionId('budget-task')), options: { provider: 'test', model: 'test' } } as unknown as Agent
+    const result = await ctx.waterfall('agent/pre-step',
+      { agent: withBudget, messages: [userMessage(`see ${formatReferenceMention(ref, 'Cache design')}`)], turn: 1, step: 1, signal: new AbortController().signal },
+      () => Promise.resolve({ kind: 'enter', messages: [userMessage(`see ${formatReferenceMention(ref, 'Cache design')}`)] } as PreStepDecision))
+    const context = (result as Extract<PreStepDecision, { kind: 'enter' }>).messages[1]
+    const text = context?.content.flatMap(block => block.type === 'text' ? [block.text] : []).join('')
+    expect(text).toContain('by request hash')
+    expect(text).toContain('"total":2')
+    expect(text).not.toContain('revision')
+  })
+
+  it('reports a mention whose source plugin is not loaded instead of a dead link', async () => {
+    const missing = { source: 'gone', id: 'x' }
+    const result = await step(ctx, [userMessage(`see ${formatReferenceMention(missing, 'Old chat')}`)])
+    const context = (result as Extract<PreStepDecision, { kind: 'enter' }>).messages[1]
+    const text = context?.content.flatMap(block => block.type === 'text' ? [block.text] : []).join('')
+    expect(text).toContain('SOURCE_UNAVAILABLE')
+    expect(text).toContain('not loaded')
   })
 
   it('replaces the opaque URI with a readable label and keeps the message identity', async () => {
@@ -124,12 +149,7 @@ describe('expansion', () => {
       kind: 'reference-anything',
       form: 'recall',
       version: 1,
-      references: [expect.objectContaining({
-        label: 'Cache design',
-        retainedMessages: 0,
-        omittedMessages: 0,
-        truncated: true,
-      })],
+      references: [expect.objectContaining({ label: 'Cache design', source: 'file', id: 'chat.json' })],
     })
   })
 
@@ -147,17 +167,15 @@ describe('expansion', () => {
   })
 })
 
-describe('deferred references', () => {
-  it('does not probe a source while making a reference available to the agent', async () => {
+describe('references without a preview', () => {
+  it('does not read a failing source when no budget is known, and keeps the ref for a later read', async () => {
     const scoped = await mount({ read: () => Promise.reject(new Error('browser is closed')) })
     const result = await step(scoped, [userMessage(`see ${formatReferenceMention(ref, 'Cache design')}`)])
     const entered = (result as Extract<PreStepDecision, { kind: 'enter' }>).messages
     expect(entered[1]?.source).toMatchObject({ kind: 'reference-anything', form: 'recall' })
     const text = entered[1]?.content.flatMap(block => block.type === 'text' ? [block.text] : []).join('')
-    expect(text).toContain('bodies were not fetched')
-    expect(text).toContain('"preview": null')
-    // The uri survives, so the model can retry once the browser is back.
-    expect(text).toContain(encodeReferenceUri(ref))
+    expect(text).toContain('Preview not loaded')
+    expect(text).toContain('"id":"chat.json"')
     const prompt = entered[0]?.content.flatMap(block => block.type === 'text' ? [block.text] : []).join('')
     expect(prompt).toBe('see @Cache design')
   })

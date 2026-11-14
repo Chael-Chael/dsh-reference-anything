@@ -111,7 +111,7 @@ it.each([
 })
 
 it.each([
- ['Conversation changed; read its latest page again', 'REFERENCE_CURSOR_EXPIRED', 'omit cursor'],
+ ['Conversation changed; read its latest page again', 'REFERENCE_CURSOR_EXPIRED', 'without a cursor'],
  ['Conversation source not found: /private/path', 'REFERENCE_NOT_FOUND', 'no longer exists'],
  ['Conversation body unavailable: this Claude Desktop file contains metadata only.', 'REFERENCE_NOT_FOUND', 'metadata only'],
  ['Conversation could not be read: secret transcript content', 'REFERENCE_READ_FAILED', 'parser could not read'],

@@ -9,16 +9,17 @@ import { OpenCliError, OpenCliRunner, discoverOpenCli, installOpenCli as install
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { isDeepStrictEqual } from 'node:util'
+import { randomUUID } from 'node:crypto'
+import { isTokenProvider, readToken, tokenEntry, createWebChatClient, type TokenProvider } from '../../web-chat-token.ts'
 import type { ProviderTurnRow } from '../../store/store.ts'
 import { ReferenceAnythingError } from '../../errors.ts'
 import { parseProviderQuery } from '../../search.ts'
 import { validateDownloadDirectory } from '../../download-directory.ts'
 import type {} from '../../index.ts'
-import type { ReferenceAttachmentCapability } from '../../types.ts'
-import { webChatAttachments } from './attachments.ts'
 import { mountRemote } from '../../remote-mount.ts'
 import { WEB_CHAT_TYPERT_MANIFEST } from '../../typert.ts'
 import { WebChatRemote } from './remote.ts'
+import { webReferencePlugin } from './document.ts'
 
 export { parseProviderQuery }
 
@@ -53,7 +54,7 @@ export interface ConversationRow {
   partial: boolean
   syncedAt: string
 }
-const PROVIDERS: ChatProvider[] = ['chatgpt', 'claude', 'gemini', 'deepseek', 'grok', 'kimi']
+const PROVIDERS: ChatProvider[] = ['chatgpt', 'claude', 'gemini', 'deepseek', 'grok', 'kimi', 'qwen', 'qianwen', 'doubao']
 
 /** One ranked hit from the mention/search surface. */
 export interface ConversationSearchResult extends ConversationRow {
@@ -81,19 +82,15 @@ export default class WebChatHistoryService extends Service implements ReferenceS
   private autoSyncInterval?: ReturnType<typeof setInterval>
   private autoSyncCatchUp?: ReturnType<typeof setTimeout>
   private settingsUpdateQueue: Promise<void> = Promise.resolve()
+  private tokenMutation = false
+  private readonly tokenControllers = new Map<string, AbortController>()
   private validateDownloadDirectoryValue = validateDownloadDirectory
-  private readonly liveAttachments = new Map<string, { attachment: ConversationAttachment & { locator?: string }; expiresAt: number }>()
-
-  /** Files carried by mirrored conversations, for `reference_attachment_read`. */
-  readonly attachments: ReferenceAttachmentCapability
 
   constructor(ctx: Context, private readonly config: Config = {}) {
     super(ctx, 'referenceChatHistory')
-    this.attachments = webChatAttachments(this, config.timeoutMs ?? 60_000)
   }
 
   /** The user's cap on turns per model read. */
-  readLimit(): number { return this.store.settings.maxReadTurns }
 
   protected async [Service.init](): Promise<void> {
     const domain = await this.ctx.storageDomain.open(referenceAnythingDomainSpec)
@@ -112,12 +109,11 @@ export default class WebChatHistoryService extends Service implements ReferenceS
     // Sources now own their own settings. The record saved before that split
     // lives here; hand it to the core once so other sources can migrate.
     await this.ctx.references.publishLegacySettings(this.store.settings as unknown as Record<string, unknown>)
-    this.syncValue = new ConversationSyncManager(this.storeValue, () => new OpenCliRunner({
-      executable: this.store.settings.opencliPath, profile: this.store.settings.profile,
-      timeoutMs: this.config.timeoutMs, maxStdoutBytes: this.config.maxStdoutBytes,
-    }), this.ctx.logger)
+    this.syncValue = new ConversationSyncManager(this.storeValue, () => this.runner(), this.ctx.logger)
     await this.store.collectExpired()
     this.ctx.references.registerSource(this)
+    // The shared reference_* tools and send-time previews read web chats through this source.
+    this.ctx.references.registerPlugin(webReferencePlugin(this))
     mountRemote(this.ctx, scope => new WebChatRemote(scope), WEB_CHAT_TYPERT_MANIFEST)
     this.ctx.effect(() => () => { this.clearAutoSync() }, 'reference-web-chat.autoSyncCleanup')
     this.armAutoSync()
@@ -135,12 +131,12 @@ export default class WebChatHistoryService extends Service implements ReferenceS
   async available(): Promise<boolean> { return this.storeValue !== undefined }
 
   /** Providers the user has switched on; the others are neither listed nor read. */
-  private providerEnabled(provider: ChatProvider): boolean {
+  providerEnabled(provider: ChatProvider): boolean {
     return this.store.settings.enabledProviders.includes(provider)
   }
 
   /** List from the store, dropping switched-off providers without shrinking the page. */
-  private listEnabled(query: string, provider: ChatProvider | undefined, limit: number) {
+  listEnabled(query: string, provider: ChatProvider | undefined, limit: number) {
     if (provider !== undefined && !this.providerEnabled(provider)) return []
     const allOn = PROVIDERS.every(item => this.providerEnabled(item))
     const rows = this.store.list(query, provider, allOn ? limit : Math.min(1000, limit * PROVIDERS.length))
@@ -168,14 +164,6 @@ export default class WebChatHistoryService extends Service implements ReferenceS
     return this.store.read(ref.id, window)
   }
 
-  /** Resolve an attachment locator captured by a recent metadata-only read. Never persisted. */
-  liveAttachment(conversationKey: string, attachmentId: string) {
-    const key = `${conversationKey}\0${attachmentId}`
-    const hit = this.liveAttachments.get(key)
-    if (!hit || hit.expiresAt <= Date.now()) { this.liveAttachments.delete(key); return undefined }
-    return hit.attachment
-  }
-
   private async readRemote(conversationKey: string, window: ReferenceWindow, signal?: AbortSignal): Promise<ReferenceSnapshot> {
     const conversation = this.store.conversations.get(conversationKey)
     if (!conversation || conversation.remoteMissing) {
@@ -186,10 +174,18 @@ export default class WebChatHistoryService extends Service implements ReferenceS
     }
     let end: number | undefined = window.before
     if (window.cursor !== undefined) end = decodeLiveCursor(window.cursor, conversationKey)
-    let rows: ProviderTurnRow[]
+    const rows = await this.liveDetail(conversation, signal)
+    return this.liveSnapshot(conversationKey, conversation, projectRemoteTurns(rows, this.store.settings.includeThinking), end, window, rows)
+  }
+
+  /**
+   * Fetch one conversation's current turns from its provider, token first.
+   * Errors are already translated into model-facing reference errors.
+   */
+  async liveDetail(conversation: { provider: ChatProvider; externalId: string; accountScope: string }, signal?: AbortSignal): Promise<ProviderTurnRow[]> {
     try {
-      await this.ensureBrowser(signal)
-      rows = await this.runner().detail(conversation.provider, conversation.externalId, signal, conversation.accountScope)
+      if (!this.hasToken(conversation.provider)) await this.ensureBrowser(signal)
+      return await this.runner().detail(conversation.provider, conversation.externalId, signal, conversation.accountScope)
     } catch (error) {
       if (signal?.aborted) throw signal.reason
       if (error instanceof OpenCliError && error.code === 'PROVIDER_ACCOUNT_MISMATCH') {
@@ -200,18 +196,18 @@ export default class WebChatHistoryService extends Service implements ReferenceS
         )
       }
       throw new ReferenceAnythingError(
-        `could not fetch the conversation from ${conversation.provider}; ask the user to confirm the browser connection and login, sync ${conversation.provider}, and then retry`,
+        this.hasToken(conversation.provider)
+          ? `could not fetch the conversation from ${conversation.provider}; ask the user to unlock the system keyring or reconnect this account, sync it, and retry`
+          : `could not fetch the conversation from ${conversation.provider}; ask the user to confirm the browser connection and login, sync ${conversation.provider}, and then retry`,
         'REFERENCE_READ_FAILED',
         { cause: error },
       )
     }
-    const turns = projectRemoteTurns(rows)
+  }
+
+  private liveSnapshot(conversationKey: string, conversation: NonNullable<ReturnType<ConversationStore['conversations']['get']>>, turns: ReturnType<typeof projectRemoteTurns>, end: number | undefined, window: ReferenceWindow, rows: readonly ProviderTurnRow[] = []): ReferenceSnapshot {
     const boundedEnd = Math.max(0, Math.min(end ?? turns.length, turns.length))
     const start = Math.max(0, boundedEnd - Math.max(1, Math.trunc(window.limit)))
-    const expiresAt = Date.now() + 60 * 60_000
-    for (const turn of turns.slice(start, boundedEnd)) for (const attachment of turn.attachments ?? []) {
-      this.liveAttachments.set(`${conversationKey}\0${attachment.attachmentId}`, { attachment, expiresAt })
-    }
     const nextCursor = start > 0 ? encodeLiveCursor(conversationKey, start) : undefined
     return {
       ref: { source: this.id, id: conversationKey }, label: conversation.title, origin: conversation.url,
@@ -322,6 +318,7 @@ export default class WebChatHistoryService extends Service implements ReferenceS
     // by the snapshot captured before that await.
     const current = this.store.settings
     let settings = mergeSettingsUpdate(submittedAgainst, current, submitted)
+    settings = { ...settings, tokenAccounts: current.tokenAccounts }
     if (directoryChanged) settings = { ...settings, cloudDriveDownloadDirectory: validatedDirectory }
     const enteringMetadataOnly = settings.historyMode === 'metadata-only' && current.historyMode !== 'metadata-only'
     const historyRangeChanged = settings.syncHistoryDays !== current.syncHistoryDays
@@ -364,10 +361,131 @@ export default class WebChatHistoryService extends Service implements ReferenceS
     if (after) await this.store.setSettings({ ...settings, profile: after.alias || after.id })
   }
 
-  private runner(): OpenCliRunner {
+  hasToken(provider: ChatProvider): boolean {
+    return isTokenProvider(provider) && Boolean(this.store.settings.tokenAccounts?.[provider])
+  }
+
+  async connectToken(provider: TokenProvider, disconnect: boolean, signal?: AbortSignal): Promise<SettingsRecord> {
+    if (!isTokenProvider(provider)) throw new Error('Unsupported token provider')
+    if (this.tokenMutation || this.renewals.has(provider) || this.sync.isRunning()) throw new Error('Wait for the current account operation or sync to finish')
+    this.tokenMutation = true
+    try {
+      const previousId = this.store.settings.tokenAccounts?.[provider]
+      if (disconnect) {
+        this.tokenControllers.get(provider)?.abort()
+        if (previousId) {
+          try { await (await tokenEntry(previousId)).deletePassword() }
+          catch { throw new Error('Could not remove the credential from the system keyring; unlock it and retry') }
+        }
+        const tokenAccounts = { ...this.store.settings.tokenAccounts }
+        delete tokenAccounts[provider]
+        await this.store.setSettings({ ...this.store.settings, tokenAccounts })
+      } else {
+        const id = previousId ?? randomUUID()
+        const entry = await tokenEntry(id)
+        await this.ensureBrowser(signal)
+        const token = await this.runner().captureToken(provider, signal)
+        const { accountScope } = await createWebChatClient(provider, token).identity(signal)
+        signal?.throwIfAborted()
+        try { await entry.setPassword(JSON.stringify({ token, accountScope })) }
+        catch { throw new Error('Could not save the credential to the system keyring; no plaintext copy was saved') }
+        this.tokenControllers.get(provider)?.abort()
+        try { await this.store.setSettings({ ...this.store.settings, tokenAccounts: { ...this.store.settings.tokenAccounts, [provider]: id } }) }
+        catch (error) { if (!previousId) await entry.deletePassword(); throw error }
+      }
+      this.tokenControllers.set(provider, new AbortController())
+      return this.store.settings
+    } finally { this.tokenMutation = false }
+  }
+
+  runner(): OpenCliRunner {
     const settings = this.store.settings
-    return new OpenCliRunner({ executable: settings.opencliPath, profile: settings.profile,
+    const runner = new OpenCliRunner({ executable: settings.opencliPath, profile: settings.profile,
       timeoutMs: this.config.timeoutMs, maxStdoutBytes: this.config.maxStdoutBytes })
+    runner.hasToken = provider => this.hasToken(provider)
+    runner.tokenRequest = async (provider, operation, args, signal) => {
+      if (!isTokenProvider(provider)) return undefined
+      const id = this.store.settings.tokenAccounts?.[provider]
+      if (!id) return undefined
+      if (this.tokenMutation) throw new Error('Account connection is changing; retry after it finishes')
+      let controller = this.tokenControllers.get(provider)
+      if (!controller) { controller = new AbortController(); this.tokenControllers.set(provider, controller) }
+      const combined = AbortSignal.any([controller.signal, ...(signal ? [signal] : [])])
+      const call = async () => {
+        let saved: { token: string; accountScope: string }
+        // A locked keyring is not a login problem: never re-capture or fall back over it.
+        try { saved = await readToken(id) } catch (error) { this.setCredentialState(provider, 'keyring_locked'); throw error }
+        combined.throwIfAborted()
+        return { saved, rows: await createWebChatClient(provider, saved.token).run(operation, args, saved.accountScope, combined) }
+      }
+      try {
+        const { rows } = await call()
+        this.setCredentialState(provider, 'connected')
+        return rows
+      } catch (error) {
+        combined.throwIfAborted()
+        if (!(error instanceof OpenCliError) || error.code !== 'PROVIDER_NOT_LOGGED_IN' || this.credentialStates.get(provider)?.state === 'keyring_locked') throw error
+        // The token was refused: re-capture it from the user's browser once, for the same account only.
+        const outcome = await this.renewToken(provider, id, combined)
+        if (outcome === 'renewed') {
+          const { rows } = await call()
+          this.setCredentialState(provider, 'connected')
+          return rows
+        }
+        // Not logged in: the browser adapter may still read it, under its own account check.
+        if (outcome === 'needs_login' && BROWSER_FALLBACK.has(provider)) return undefined
+        throw new OpenCliError(outcome === 'account_changed'
+          ? `The browser is signed in to a different ${provider} account; reconnect in Reference Anything settings to switch accounts`
+          : `${provider} login expired; sign in to ${provider} in the browser, then retry`, 'PROVIDER_NOT_LOGGED_IN', { cause: error })
+      }
+    }
+    return runner
+  }
+
+  /** Non-secret credential state per token provider, for the settings page and diagnostics. */
+  private readonly credentialStates = new Map<TokenProvider, { state: CredentialState; at: number }>()
+  private readonly renewals = new Map<TokenProvider, Promise<RenewOutcome>>()
+
+  private setCredentialState(provider: TokenProvider, state: CredentialState): void {
+    this.credentialStates.set(provider, { state, at: Date.now() })
+  }
+
+  /** @returns the last known credential state of each connected token provider. */
+  credentialStateList(): Array<{ provider: TokenProvider; state: CredentialState; at: number }> {
+    return [...this.credentialStates].filter(([provider]) => this.hasToken(provider)).map(([provider, value]) => ({ provider, ...value }))
+  }
+
+  /**
+   * Re-capture a refused token from the user's browser, once per provider at a time.
+   *
+   * Only the browser renews: the plugin never uses refresh tokens or rotates
+   * cookies, so it cannot sign the user's own browser out. A capture for a
+   * different account is never saved.
+   */
+  private renewToken(provider: TokenProvider, id: string, signal: AbortSignal): Promise<RenewOutcome> {
+    const running = this.renewals.get(provider)
+    if (running) return abortable(running, signal)
+    const work = (async (): Promise<RenewOutcome> => {
+      this.setCredentialState(provider, 'renewing')
+      // Followers wait on this one attempt; it gets its own bound rather than the first caller's signal.
+      const bound = AbortSignal.timeout(RENEW_TIMEOUT_MS)
+      try {
+        const expected = (await readToken(id)).accountScope
+        let token: string
+        try { token = await this.runner().captureToken(provider, bound) } catch { this.setCredentialState(provider, 'needs_login'); return 'needs_login' }
+        const { accountScope } = await createWebChatClient(provider, token).identity(bound)
+        if (accountScope !== expected) { this.setCredentialState(provider, 'account_changed'); return 'account_changed' }
+        if (this.store.settings.tokenAccounts?.[provider] !== id) return 'needs_login'
+        await (await tokenEntry(id)).setPassword(JSON.stringify({ token, accountScope }))
+        this.setCredentialState(provider, 'connected')
+        return 'renewed'
+      } catch {
+        this.setCredentialState(provider, 'needs_login')
+        return 'needs_login'
+      } finally { this.renewals.delete(provider) }
+    })()
+    this.renewals.set(provider, work)
+    return abortable(work, signal)
   }
 
   async installAdapter(signal?: AbortSignal): Promise<boolean> {
@@ -484,10 +602,32 @@ function timestamp(value: string): number | undefined {
   return Number.isNaN(parsed) ? undefined : parsed
 }
 
-function projectRemoteTurns(rows: readonly ProviderTurnRow[]): ConversationItem[] {
+type CredentialState = 'connected' | 'renewing' | 'needs_login' | 'account_changed' | 'keyring_locked'
+type RenewOutcome = 'renewed' | 'needs_login' | 'account_changed'
+/** Providers whose OpenCLI page adapter can still read when the token channel cannot. */
+const BROWSER_FALLBACK = new Set<string>(['deepseek', 'kimi'])
+const RENEW_TIMEOUT_MS = 60_000
+
+function abortable<T>(work: Promise<T>, signal: AbortSignal): Promise<T> {
+  signal.throwIfAborted()
+  return new Promise<T>((accept, reject) => {
+    const abort = () => reject(signal.reason)
+    signal.addEventListener('abort', abort, { once: true })
+    work.then(value => { signal.removeEventListener('abort', abort); accept(value) },
+      error => { signal.removeEventListener('abort', abort); reject(error) })
+  })
+}
+
+/**
+ * Project provider rows onto conversation turns. Thinking is not the answer, so it
+ * is left out unless the user opted in; then it precedes the answer, tagged.
+ */
+export function projectRemoteTurns(rows: readonly ProviderTurnRow[], includeThinking = false): Array<ConversationItem & { attachments?: Array<ConversationAttachment & { locator?: string }> }> {
   return rows.filter(row => row.activeBranch !== false).sort((a, b) => a.ordinal - b.ordinal).flatMap(row => {
     const attachments = parseLiveAttachments(row.attachmentsJson)
-    const text = String(row.text || '')
+    const answer = String(row.text || '')
+    const thinking = includeThinking ? String(row.thinking || '').trim() : ''
+    const text = thinking ? `<thinking>\n${thinking}\n</thinking>${answer ? `\n\n${answer}` : ''}` : answer
     if (!text.trim() && attachments.length === 0) return []
     return [{ role: row.role, text, ...(attachments.length ? { attachments } : {}) }]
   })

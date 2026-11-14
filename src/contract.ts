@@ -187,6 +187,7 @@ export const WEB_CHAT_INVOCATIONS: readonly InvocationDescriptor[] = [
   descriptor(WEB_CHAT, 'installAdapter', [], strict('Boolean', z.boolean()), true),
   descriptor(WEB_CHAT, 'restartDaemon', [], strict('Boolean', z.boolean()), true),
   descriptor(WEB_CHAT, 'stats', [], strict('ProviderStats[]', z.array(providerStatsSchema))),
+  descriptor(WEB_CHAT, 'tokenConnect', [{ name: 'input', wire: 'input', source: 'json', codec: strict('TokenConnect', z.object({ provider: z.enum(['deepseek', 'kimi', 'qwen', 'qianwen', 'doubao']), disconnect: z.boolean() }).strict()) }], strict('SettingsRecord', settingsRecordSchema), true),
   descriptor(WEB_CHAT, 'syncStart', [{ name: 'input', wire: 'input', source: 'json', codec: strict('SyncStart', syncStartSchema) }], strict('JobId', z.string())),
   descriptor(WEB_CHAT, 'syncStatus', [{ name: 'input', wire: 'input', source: 'json', codec: strict('JobInput', jobInputSchema) }], strict('SyncStatus?', syncStatusSchema.optional())),
   descriptor(WEB_CHAT, 'syncCancel', [{ name: 'input', wire: 'input', source: 'json', codec: strict('JobInput', jobInputSchema) }], strict('Boolean', z.boolean())),

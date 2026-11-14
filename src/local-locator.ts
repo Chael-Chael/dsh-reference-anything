@@ -1,5 +1,5 @@
 /** Readable local locator shared by the composer and host. No Node imports. */
-export interface LocalLocator { source: string; path: string; sessionId: string }
+export type LocalLocator = { source: string; path: string; sessionId: string }
 export const LOCAL_REFERENCE_SCHEME = 'dsh-local:'
 export const LOCAL_REFERENCE_OPEN = '<local-agent-reference>'
 export const LOCAL_REFERENCE_CLOSE = '</local-agent-reference>'

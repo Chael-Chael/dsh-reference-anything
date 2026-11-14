@@ -70,6 +70,9 @@ import { memorySettings, type SourceSettingsHandle } from '../../settings.ts'
 import { mountRemote } from '../../remote-mount.ts'
 import { LOCAL_AGENT_TYPERT_MANIFEST } from '../../typert.ts'
 import { LocalAgentRemote } from './remote.ts'
+import { nameDefaultRoots, type LocalRoot } from './ids.ts'
+import { localReferencePlugin } from './reference.ts'
+import { localConversationRoots } from '../../local-conversation-reader.ts'
 import { LOCAL_AGENT_SETTINGS_ID, defaultLocalAgentSettings, localAgentSettingsFromLegacy, localAgentSettingsSchema, type LocalAgentSettings } from './settings.ts'
 
 /** Cordis plugin name used by loader diagnostics. */
@@ -91,8 +94,8 @@ const BACKFILL_CONCURRENCY = 8
 export interface Config {
   /** Agents whose default locations are searched. */
   agents?: AgentKind[]
-  /** Extra directories to search, as `~/`-prefixed or absolute paths. */
-  extraRoots?: { kind: AgentKind; path: string }[]
+  /** Extra directories to search, as `~/`-prefixed or absolute paths; `name` appears in reference ids (default `extra-<n>`). */
+  extraRoots?: { kind: AgentKind; path: string; name?: string }[]
   /** Whether discovery is limited to transcripts recorded in this workspace. */
   scope?: 'workspace' | 'all'
   /** Transcripts a directory scan will consider. */
@@ -147,6 +150,7 @@ export const Config: z<Config> = z.object({
   extraRoots: z.array(z.object({
     kind: z.union(AGENT_KINDS).default(DEFAULT_AGENT_KIND),
     path: z.string().default(''),
+    name: z.string().default(''),
   })).default([]),
   scope: z.union(['workspace', 'all'] as const).default('all'),
   maxTranscripts: z.natural().default(200),
@@ -232,6 +236,7 @@ export class LocalAgentService extends Service implements ReferenceSource {
     this.setAgentDirectories(this.preferences.get().agentDirectories)
     this.ctx.effect(() => this.preferences.subscribe(value => { this.setAgentDirectories(value.agentDirectories) }), 'reference-local-agent.preferences')
     this.ctx.effect(() => this.ctx.references.registerSource(this), 'reference-local-agent.registerSource()')
+    this.ctx.effect(() => this.ctx.references.registerPlugin(localReferencePlugin(this.ctx)), 'reference-local-agent.registerPlugin()')
     mountRemote(this.ctx, scope => new LocalAgentRemote(scope), LOCAL_AGENT_TYPERT_MANIFEST)
   }
 
@@ -252,6 +257,30 @@ export class LocalAgentService extends Service implements ReferenceSource {
       ],
     }, homedir())
     this.cache = undefined
+  }
+
+  /**
+   * Scan locations of one Agent in id-issuing priority: defaults (the first unnamed),
+   * the settings-page directory as `custom`, then deployment `extraRoots`.
+   */
+  namedRoots(agent: LocalAgent): LocalRoot[] {
+    const home = homedir()
+    const format = scanFormat(agent)
+    const own = localConversationRoots()[format]
+    const builtin = isAgentKind(agent) ? (adapterFor(agent)?.defaultRoots(home) ?? []) : []
+    const defaults = [...new Set([...(Array.isArray(own) ? own : own ? [own] : []), ...builtin].map(path => resolve(path)))]
+    const roots = nameDefaultRoots(defaults)
+    const custom = this.preferences.get().agentDirectories[agent]
+    const customPath = custom ? expandRoot(custom, home) : undefined
+    if (customPath) roots.push({ name: 'custom', path: customPath })
+    let index = 0
+    for (const extra of this.settings.extraRoots) {
+      if (extra.kind !== agent) continue
+      index++
+      const path = expandRoot(extra.path, home)
+      if (path) roots.push({ name: extra.name && /^[a-z0-9][a-z0-9-]{0,63}$/.test(extra.name) && extra.name !== 'custom' ? extra.name : `extra-${index}`, path })
+    }
+    return roots
   }
 
   /** Count transcripts recognized by the current roots, grouped by format. */

@@ -51,13 +51,29 @@
       "types": "./lib/sdk.d.ts",
       "default": "./lib/sdk.js"
     },
+    "./source": {
+      "types": "./lib/reference-source.d.ts",
+      "default": "./lib/reference-source.js"
+    },
     "./client": {
       "types": "./lib/client/index.d.ts",
       "default": "./lib/client.js"
     },
     "./locale/en.json": "./locale/en.json",
     "./locale/zh.json": "./locale/zh.json",
-    "./package.json": "./package.json"
+    "./package.json": "./package.json",
+    "./prestep/locale/en.json": "./locale/prestep/en.json",
+    "./prestep/locale/zh.json": "./locale/prestep/zh.json",
+    "./tool/locale/en.json": "./locale/tool/en.json",
+    "./tool/locale/zh.json": "./locale/tool/zh.json",
+    "./web-chat/locale/en.json": "./locale/web-chat/en.json",
+    "./web-chat/locale/zh.json": "./locale/web-chat/zh.json",
+    "./local-plugin/locale/en.json": "./locale/local-plugin/en.json",
+    "./local-plugin/locale/zh.json": "./locale/local-plugin/zh.json",
+    "./cloud-drive/locale/en.json": "./locale/cloud-drive/en.json",
+    "./cloud-drive/locale/zh.json": "./locale/cloud-drive/zh.json",
+    "./local-agent/locale/en.json": "./locale/local-agent/en.json",
+    "./local-agent/locale/zh.json": "./locale/local-agent/zh.json"
   },
   "files": [
     "lib",
@@ -65,7 +81,11 @@
     "opencli-plugin/opencli-plugin.json",
     "opencli-plugin/package.json",
     "cordis.patch.yml",
-    "locale/*.json",
+    "skills/*/SKILL.md",
+    "examples/reference-source-notes/package.json",
+    "examples/reference-source-notes/cordis.patch.yml",
+    "examples/reference-source-notes/src/*.ts",
+    "locale/**/*.json",
     "images/agents",
     "docs/release/**/*.md",
     "docs/release/**/*.json",
@@ -195,12 +215,13 @@
   },
   "dependencies": {
     "@deepseek-ai/schemastery": "^3.18.1",
-    "@jackwener/opencli": "2.0.0",
+    "@jackwener/opencli": "2.0.3",
     "@lobehub/icons": "^5.16.0",
     "fflate": "0.8.2",
     "react-markdown": "^10.1.0",
     "sortablejs": "^1.15.7",
-    "zod": "^4.4.3"
+    "zod": "^4.4.3",
+    "@napi-rs/keyring": "2.1.2"
   },
   "devDependencies": {
     "@deepseek-ai/cordis": "^4.0.1",

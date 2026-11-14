@@ -33,34 +33,40 @@ async function mount() {
 }
 
 let call = 0
-// One task: what it listed, it may read.
 const agent = { session: Session.create(SessionId('notes-task')), options: { provider: 'test', model: 'test' } } as Agent
-function run(ctx: Context, name: string, args: unknown) {
-  return ctx.tools.execute({ agent, signal: new AbortController().signal, callId: `notes-${++call}` as never, name, arguments: args })
+function run(ctx: Context, args: unknown) {
+  return ctx.tools.execute({ agent, signal: new AbortController().signal, callId: `notes-${++call}` as never, name: 'reference', arguments: args })
 }
 const text = (result: { content: readonly { type: string; text?: string }[] }) => result.content.map(block => block.text ?? '').join('')
 
 describe('example third-party source', () => {
-  it('is listed and read by the model through the shared tools, with no change to the core', async () => {
+  it('needs only load and list for the whole list, search and read flow, with no change to the core', async () => {
     const { ctx } = await mount()
-    const listed = await run(ctx, 'external_reference_list', { query: 'plan' })
+    // Reading needs the user's @; listing never grants it.
+    const listed = await run(ctx, { source: 'notes', op: 'list', args: { query: 'plan' } })
     expect(listed.isError, text(listed)).not.toBe(true)
-    expect(text(listed)).toContain('plan.md')
+    expect((listed.value as { items: unknown[] }).items).toMatchObject([{ source: 'notes', id: 'plan.md', title: 'plan.md' }])
     expect(text(listed)).not.toContain('ignored.json')
-    const uri = /dsh-ref:[A-Za-z0-9_-]+/u.exec(text(listed))?.[0]
-    expect(uri).toBeDefined()
-    const read = await run(ctx, 'external_reference_read', { uri })
+    const refused = await run(ctx, { source: 'notes', id: 'plan.md', op: 'read' })
+    expect(text(refused)).toContain('UNAUTHORIZED')
+    ctx.references.grantPlugin(String(agent.session.id), 'notes', 'plan.md')
+    const read = await run(ctx, { source: 'notes', id: 'plan.md', op: 'read' })
     expect(read.isError, text(read)).not.toBe(true)
     expect(text(read)).toContain('second block')
+    expect((read.value as { content: Array<{ role: string }> }).content.every(item => item.role === 'document')).toBe(true)
+    const search = await run(ctx, { source: 'notes', id: 'plan.md', op: 'search', args: { query: 'second' } })
+    expect((search.value as { hits: unknown[] }).hits).toHaveLength(1)
+    const titles = await run(ctx, { source: 'notes', op: 'search', args: { query: 'plan' } })
+    expect((titles.value as { hits: unknown[] }).hits).toMatchObject([{ id: 'plan.md' }])
   })
 
   it('keeps its settings in the core and takes its source with it when switched off', async () => {
     const { ctx, fiber } = await mount()
     expect(ctx.references.settingsOf('notes')).toEqual({ extensions: ['.md', '.txt'] })
     await ctx.references.updateSettings('notes', { extensions: ['.txt'] })
-    expect(await ctx.references.list('', 10)).toEqual([])
+    expect((await run(ctx, { source: 'notes', op: 'list' })).value).toMatchObject({ items: [] })
     await fiber.dispose()
-    expect(ctx.references.sourceIds()).not.toContain('notes')
+    expect(ctx.references.plugin('notes')).toBeUndefined()
     expect(ctx.references.settingsIds()).not.toContain('notes')
   })
 

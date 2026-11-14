@@ -1,0 +1,3 @@
+import{defineIcon as l,CR as n,f,ACC as s,rr as d,lines as r,at as h}from"../kit.js";import{typedPage as p,FILE_BADGES as g}from"./_files-text.js";var x=l({name:"file-text",category:"files",tags:["document","text","txt","page","notes"],variants:[...g,"cog","bolt"],svg:t=>p(t,`<path d="${r(9.6,5.4,[6.4])}" class="ln" stroke="#fff" data-w="stroke"/>
+    <path data-n="sh" d="${d(9,9.4,13,10.8,n)}" fill="#fff"/>
+    <path d="${r(11.4,12.6,[8.2])}" ${s}/><path data-n="l2" ${s}/>`),target:t=>({o:t?1:0}),draw(t,e){const a=Math.max(0,Math.min(1,t.o)),m=Math.min(1,a/.4),o=Math.max(0,(a-.45)/.55),i=Math.min(1,Math.max(0,(a-.3)/.3));h(e.sh,{d:d(9,9.4,13,10.8+1.4*i,n)}),h(e.l2,{d:`M11.4 15.6H${f(11.4+4.6+3.6*m)}`+(o>0?`M11.4 18.6H${f(11.4+6.4*o)}`:"")})}});export{x as default};

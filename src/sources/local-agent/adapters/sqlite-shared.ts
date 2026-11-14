@@ -163,8 +163,8 @@ export function pushSessionParts(
         break
       }
       case 'file':
-        // No attachment handle is emitted: `reference_attachment_read` only
-        // serves the web-chat source, so a handle here would be a dead end.
+        // No attachment handle is emitted: these exports keep no file bytes,
+        // so a handle here would be a dead end.
         pushAssistant(state, `[attachment: ${asText(part['filename']) ?? 'unknown'}]`)
         break
       case 'patch': {

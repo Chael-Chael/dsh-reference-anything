@@ -12,12 +12,16 @@ import * as Pi from '@lobehub/icons/es/Pi/components/Mono.js'
 import * as Qoder from '@lobehub/icons/es/Qoder/components/Mono.js'
 import * as XiaomiMiMo from '@lobehub/icons/es/XiaomiMiMo/components/Mono.js'
 import * as ZAI from '@lobehub/icons/es/ZAI/components/Mono.js'
+import { createIcon, KUBAI_ICONS, type KubaiIconName } from './vendor/kubai-icons/index.js'
 import { createElement, type ComponentType, type ReactElement } from 'react'
 import type { InputTriggerCandidate } from '@deepseek-ai/dsh-client-ui-input-trigger/client'
 import type { ChatProvider, LocalAgent } from '../wire.ts'
 
 /** Paths are shared by Settings and the DOM projection used by @ candidates/chips. */
 export const PROVIDER_ICON_PATH: Readonly<Record<ChatProvider, string>> = {
+  qwen: 'M12.604 1.34c.393.69.784 1.382 1.174 2.075a.18.18 0 00.157.091h5.552c.174 0 .322.11.446.327l1.454 2.57c.19.337.24.478.024.837-.26.43-.513.864-.76 1.3l-.367.658c-.106.196-.223.28-.04.512l2.652 4.637c.172.301.111.494-.043.77-.437.785-.882 1.564-1.335 2.34-.159.272-.352.375-.68.37-.777-.016-1.552-.01-2.327.016a.099.099 0 00-.081.05 575.097 575.097 0 01-2.705 4.74c-.169.293-.38.363-.725.364-.997.003-2.002.004-3.017.002a.537.537 0 01-.465-.271l-1.335-2.323a.09.09 0 00-.083-.049H4.982c-.285.03-.553-.001-.805-.092l-1.603-2.77a.543.543 0 01-.002-.54l1.207-2.12a.198.198 0 000-.197 550.951 550.951 0 01-1.875-3.272l-.79-1.395c-.16-.31-.173-.496.095-.965.465-.813.927-1.625 1.387-2.436.132-.234.304-.334.584-.335a338.3 338.3 0 012.589-.001.124.124 0 00.107-.063l2.806-4.895a.488.488 0 01.422-.246c.524-.001 1.053 0 1.583-.006L11.704 1c.341-.003.724.032.9.34zm-3.432.403a.06.06 0 00-.052.03L6.254 6.788a.157.157 0 01-.135.078H3.253c-.056 0-.07.025-.041.074l5.81 10.156c.025.042.013.062-.034.063l-2.795.015a.218.218 0 00-.2.116l-1.32 2.31c-.044.078-.021.118.068.118l5.716.008c.046 0 .08.02.104.061l1.403 2.454c.046.081.092.082.139 0l5.006-8.76.783-1.382a.055.055 0 01.096 0l1.424 2.53a.122.122 0 00.107.062l2.763-.02a.04.04 0 00.035-.02.041.041 0 000-.04l-2.9-5.086a.108.108 0 010-.113l.293-.507 1.12-1.977c.024-.041.012-.062-.035-.062H9.2c-.059 0-.073-.026-.043-.077l1.434-2.505a.107.107 0 000-.114L9.225 1.774a.06.06 0 00-.053-.031zm6.29 8.02c.046 0 .058.02.034.06l-.832 1.465-2.613 4.585a.056.056 0 01-.05.029.058.058 0 01-.05-.029L8.498 9.841c-.02-.034-.01-.052.028-.054l.216-.012 6.722-.012z',
+  qianwen: 'M12.604 1.34c.393.69.784 1.382 1.174 2.075a.18.18 0 00.157.091h5.552c.174 0 .322.11.446.327l1.454 2.57c.19.337.24.478.024.837-.26.43-.513.864-.76 1.3l-.367.658c-.106.196-.223.28-.04.512l2.652 4.637c.172.301.111.494-.043.77-.437.785-.882 1.564-1.335 2.34-.159.272-.352.375-.68.37-.777-.016-1.552-.01-2.327.016a.099.099 0 00-.081.05 575.097 575.097 0 01-2.705 4.74c-.169.293-.38.363-.725.364-.997.003-2.002.004-3.017.002a.537.537 0 01-.465-.271l-1.335-2.323a.09.09 0 00-.083-.049H4.982c-.285.03-.553-.001-.805-.092l-1.603-2.77a.543.543 0 01-.002-.54l1.207-2.12a.198.198 0 000-.197 550.951 550.951 0 01-1.875-3.272l-.79-1.395c-.16-.31-.173-.496.095-.965.465-.813.927-1.625 1.387-2.436.132-.234.304-.334.584-.335a338.3 338.3 0 012.589-.001.124.124 0 00.107-.063l2.806-4.895a.488.488 0 01.422-.246c.524-.001 1.053 0 1.583-.006L11.704 1c.341-.003.724.032.9.34zm-3.432.403a.06.06 0 00-.052.03L6.254 6.788a.157.157 0 01-.135.078H3.253c-.056 0-.07.025-.041.074l5.81 10.156c.025.042.013.062-.034.063l-2.795.015a.218.218 0 00-.2.116l-1.32 2.31c-.044.078-.021.118.068.118l5.716.008c.046 0 .08.02.104.061l1.403 2.454c.046.081.092.082.139 0l5.006-8.76.783-1.382a.055.055 0 01.096 0l1.424 2.53a.122.122 0 00.107.062l2.763-.02a.04.04 0 00.035-.02.041.041 0 000-.04l-2.9-5.086a.108.108 0 010-.113l.293-.507 1.12-1.977c.024-.041.012-.062-.035-.062H9.2c-.059 0-.073-.026-.043-.077l1.434-2.505a.107.107 0 000-.114L9.225 1.774a.06.06 0 00-.053-.031zm6.29 8.02c.046 0 .058.02.034.06l-.832 1.465-2.613 4.585a.056.056 0 01-.05.029.058.058 0 01-.05-.029L8.498 9.841c-.02-.034-.01-.052.028-.054l.216-.012 6.722-.012z',
+  doubao: 'M5.31 15.756c.172-3.75 1.883-5.999 2.549-6.739-3.26 2.058-5.425 5.658-6.358 8.308v1.12C1.501 21.513 4.226 24 7.59 24a6.59 6.59 0 002.2-.375c.353-.12.7-.248 1.039-.378.913-.899 1.65-1.91 2.243-2.992-4.877 2.431-7.974.072-7.763-4.5l.002.001z M22.57 10.283c-1.212-.901-4.109-2.404-7.397-2.8.295 3.792.093 8.766-2.1 12.773a12.782 12.782 0 01-2.244 2.992c3.764-1.448 6.746-3.457 8.596-5.219 2.82-2.683 3.353-5.178 3.361-6.66a2.737 2.737 0 00-.216-1.084v-.002zM14.303 1.867C12.955.7 11.248 0 9.39 0 7.532 0 5.883.677 4.545 1.807 2.791 3.29 1.627 5.557 1.5 8.125v9.201c.932-2.65 3.097-6.25 6.357-8.307.5-.318 1.025-.595 1.569-.829 1.883-.801 3.878-.932 5.746-.706-.222-2.83-.718-5.002-.87-5.617h.001z M17.305 4.961a199.47 199.47 0 01-1.08-1.094c-.202-.213-.398-.419-.586-.622l-1.333-1.378c.151.615.648 2.786.869 5.617 3.288.395 6.185 1.898 7.396 2.8-1.306-1.275-3.475-3.487-5.266-5.323z',
   chatgpt: 'M9.205 8.658v-2.26c0-.19.072-.333.238-.428l4.543-2.616c.619-.357 1.356-.523 2.117-.523 2.854 0 4.662 2.212 4.662 4.566 0 .167 0 .357-.024.547l-4.71-2.759a.797.797 0 00-.856 0l-5.97 3.473zm10.609 8.8V12.06c0-.333-.143-.57-.429-.737l-5.97-3.473 1.95-1.118a.433.433 0 01.476 0l4.543 2.617c1.309.76 2.189 2.378 2.189 3.948 0 1.808-1.07 3.473-2.76 4.163zM7.802 12.703l-1.95-1.142c-.167-.095-.239-.238-.239-.428V5.899c0-2.545 1.95-4.472 4.591-4.472 1 0 1.927.333 2.712.928L8.23 5.067c-.285.166-.428.404-.428.737v6.898zM12 15.128l-2.795-1.57v-3.33L12 8.658l2.795 1.57v3.33L12 15.128zm1.796 7.23c-1 0-1.927-.332-2.712-.927l4.686-2.712c.285-.166.428-.404.428-.737v-6.898l1.974 1.142c.167.095.238.238.238.428v5.233c0 2.545-1.974 4.472-4.614 4.472zm-5.637-5.303l-4.544-2.617c-1.308-.761-2.188-2.378-2.188-3.948A4.482 4.482 0 014.21 6.327v5.423c0 .333.143.571.428.738l5.947 3.449-1.95 1.118a.432.432 0 01-.476 0zm-.262 3.9c-2.688 0-4.662-2.021-4.662-4.519 0-.19.024-.38.047-.57l4.686 2.71c.286.167.571.167.856 0l5.97-3.448v2.26c0 .19-.07.333-.237.428l-4.543 2.616c-.619.357-1.356.523-2.117.523zm5.899 2.83a5.947 5.947 0 005.827-4.756C22.287 18.339 24 15.84 24 13.296c0-1.665-.713-3.282-1.998-4.448.119-.5.19-.999.19-1.498 0-3.401-2.759-5.947-5.946-5.947-.642 0-1.26.095-1.88.31A5.962 5.962 0 0010.205 0a5.947 5.947 0 00-5.827 4.757C1.713 5.447 0 7.945 0 10.49c0 1.666.713 3.283 1.998 4.448-.119.5-.19 1-.19 1.499 0 3.401 2.759 5.946 5.946 5.946.642 0 1.26-.095 1.88-.309a5.96 5.96 0 004.162 1.713z',
   claude: 'M4.709 15.955l4.72-2.647.08-.23-.08-.128H9.2l-.79-.048-2.698-.073-2.339-.097-2.266-.122-.571-.121L0 11.784l.055-.352.48-.321.686.06 1.52.103 2.278.158 1.652.097 2.449.255h.389l.055-.157-.134-.098-.103-.097-2.358-1.596-2.552-1.688-1.336-.972-.724-.491-.364-.462-.158-1.008.656-.722.881.06.225.061.893.686 1.908 1.476 2.491 1.833.365.304.145-.103.019-.073-.164-.274-1.355-2.446-1.446-2.49-.644-1.032-.17-.619a2.97 2.97 0 01-.104-.729L6.283.134 6.696 0l.996.134.42.364.62 1.414 1.002 2.229 1.555 3.03.456.898.243.832.091.255h.158V9.01l.128-1.706.237-2.095.23-2.695.08-.76.376-.91.747-.492.584.28.48.685-.067.444-.286 1.851-.559 2.903-.364 1.942h.212l.243-.242.985-1.306 1.652-2.064.73-.82.85-.904.547-.431h1.033l.76 1.129-.34 1.166-1.064 1.347-.881 1.142-1.264 1.7-.79 1.36.073.11.188-.02 2.856-.606 1.543-.28 1.841-.315.833.388.091.395-.328.807-1.969.486-2.309.462-3.439.813-.042.03.049.061 1.549.146.662.036h1.622l3.02.225.79.522.474.638-.079.485-1.215.62-1.64-.389-3.829-.91-1.312-.329h-.182v.11l1.093 1.068 2.006 1.81 2.509 2.33.127.578-.322.455-.34-.049-2.205-1.657-.851-.747-1.926-1.62h-.128v.17l.444.649 2.345 3.521.122 1.08-.17.353-.608.213-.668-.122-1.374-1.925-1.415-2.167-1.143-1.943-.14.08-.674 7.254-.316.37-.729.28-.607-.461-.322-.747.322-1.476.389-1.924.315-1.53.286-1.9.17-.632-.012-.042-.14.018-1.434 1.967-2.18 2.945-1.726 1.845-.414.164-.717-.37.067-.662.401-.589 2.388-3.036 1.44-1.882.93-1.086-.006-.158h-.055L4.132 18.56l-1.13.146-.487-.456.061-.746.231-.243 1.908-1.312-.006.006z',
   gemini: 'M20.616 10.835a14.147 14.147 0 01-4.45-3.001 14.111 14.111 0 01-3.678-6.452.503.503 0 00-.975 0 14.134 14.134 0 01-3.679 6.452 14.155 14.155 0 01-4.45 3.001c-.65.28-1.318.505-2.002.678a.502.502 0 000 .975c.684.172 1.35.397 2.002.677a14.147 14.147 0 014.45 3.001 14.112 14.112 0 013.679 6.453.502.502 0 00.975 0c.172-.685.397-1.351.677-2.003a14.145 14.145 0 013.001-4.45 14.113 14.113 0 016.453-3.678.503.503 0 000-.975 13.245 13.245 0 01-2.003-.678z',
@@ -32,14 +36,14 @@ export const PROVIDER_ICON_PATH: Readonly<Record<ChatProvider, string>> = {
 type InputTriggerCandidateIcon = string
 
 export const PROVIDER_ICON_MARKER = {
-  chatgpt: '\uE100', claude: '\uE101', gemini: '\uE102', deepseek: '\uE103', grok: '\uE104', kimi: '\uE105',
+  chatgpt: '\uE100', claude: '\uE101', gemini: '\uE102', deepseek: '\uE103', grok: '\uE104', kimi: '\uE105', qwen: '\uE160', qianwen: '\uE161', doubao: '\uE162',
 } as unknown as Readonly<Record<ChatProvider, InputTriggerCandidateIcon>>
 
 export type PickerIconKind =
   | 'command' | 'skill' | 'session' | 'refresh' | 'agent' | 'drive' | 'goal' | 'plan' | 'feedback' | 'compact' | 'permission' | 'export' | 'paperclip' | 'model'
   | 'plugin' | 'import' | 'summary' | 'undo-2'
   | 'folder' | 'file' | 'image' | 'text' | 'code' | 'data'
-  | 'archive' | 'spreadsheet' | 'audio' | 'video' | 'presentation' | 'font'
+  | 'archive' | 'spreadsheet' | 'audio' | 'video' | 'presentation' | 'font' | 'globe'
 
 /** Private-use markers let the host's string-only icon API carry an SVG identity. */
 export const PICKER_ICON_MARKER = {
@@ -49,7 +53,7 @@ export const PICKER_ICON_MARKER = {
   refresh: '\uE115', agent: '\uE116', drive: '\uE117',
   goal: '\uE125', plan: '\uE126', feedback: '\uE127', compact: '\uE128', permission: '\uE129', export: '\uE12A', paperclip: '\uE12C', model: '\uE12D',
   plugin: '\uE12B',
-  import: '\uE12E', summary: '\uE12F', 'undo-2': '\uE130',
+  import: '\uE12E', summary: '\uE12F', 'undo-2': '\uE130', globe: '\uE163',
 } as unknown as Readonly<Record<PickerIconKind, InputTriggerCandidateIcon>>
 export const SESSION_ICON_MARKER = PICKER_ICON_MARKER.session
 export const SKILL_ICON_MARKER = PICKER_ICON_MARKER.skill
@@ -63,6 +67,7 @@ export const LOCAL_AGENT_ICON_MARKER = {
   'gemini-cli': '\uE120', pi: '\uE121', opencode: '\uE122', mimocode: '\uE123', zcode: '\uE124',
   // Not E125: that is PICKER_ICON_MARKER.goal, and the icon projection matches by codepoint.
   chatgpt: '\uE144', omp: '\uE140', 'copilot-vscode': '\uE141', 'copilot-cli': '\uE142', doubao: '\uE143',
+  codebuddy: '\uE145', codearts: '\uE146', opencowork: '\uE147',
   reasonix: '\uE131', antigravity: '\uE132', kilocode: '\uE133', workbuddy: '\uE134',
   qwen: '\uE135', continue: '\uE136', cline: '\uE137', goose: '\uE138', dsh4: '\uE139',
   zed: '\uE13A', crush: '\uE13B', teleagent: '\uE13C', trae: '\uE13D', vibe: '\uE13E', dsh: '\uE13F',
@@ -229,6 +234,12 @@ export const PICKER_ICON_NODES = {
     { tag: 'path', attrs: { d: 'M3 16v-1.5a.5.5 0 0 1 .5-.5h7a.5.5 0 0 1 .5.5V16' } },
     { tag: 'path', attrs: { d: 'M6 22h2' } }, { tag: 'path', attrs: { d: 'M7 14v8' } },
   ],
+  // Globe (Lucide)
+  globe: [
+    { tag: 'circle', attrs: { cx: '12', cy: '12', r: '10' } },
+    { tag: 'path', attrs: { d: 'M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20' } },
+    { tag: 'path', attrs: { d: 'M2 12h20' } },
+  ],
   // ToyBrick (Lucide)
   plugin: [
     { tag: 'rect', attrs: { width: '18', height: '12', x: '3', y: '8', rx: '1' } },
@@ -253,9 +264,52 @@ export function ProviderLogo({ provider, size = 22 }: { provider: ChatProvider; 
   return <svg fill="currentColor" fillRule="evenodd" width={size} height={size} viewBox="0 0 24 24" aria-hidden><path d={PROVIDER_ICON_PATH[provider]} /></svg>
 }
 
-export function PickerSourceLogo({ kind, size = 18 }: { kind: PickerIconKind; size?: number }) {
+/** Non-provider kinds drawn with Kubai Icons (animated on hover of the nearest [data-kubai-trigger]). Others stay Lucide. */
+export const KUBAI_PICKER_ICON: Readonly<Partial<Record<PickerIconKind | 'lock' | 'whale', KubaiIconName>>> = {
+  folder: 'folder', file: 'file', image: 'file-image', text: 'file-text', code: 'file-code', data: 'database',
+  archive: 'file-archive', spreadsheet: 'file-spreadsheet', audio: 'file-audio', video: 'file-video', presentation: 'presentation',
+  command: 'command', paperclip: 'paperclip', export: 'export', import: 'import', 'undo-2': 'undo',
+  session: 'message-circle', skill: 'scroll', agent: 'bot', drive: 'cloud', refresh: 'sync', plugin: 'puzzle', globe: 'globe',
+  goal: 'target', plan: 'list-checks', feedback: 'message-square', permission: 'shield', model: 'cpu', lock: 'lock', whale: 'whale', compact: 'loader',
+}
+
+/** Kubai icons derive every shade from one accent; use the DSH business blue. */
+export const KUBAI_COLOR_PRESETS = ['#4176e6', '#8b5cf6', '#e84393', '#f2711c', '#22c55e', '#2b2d33'] as const
+let kubaiIconColor = '#4176e6'
+/** Current Kubai main colour; live icons follow the CSS variable, this feeds baked frames. */
+export function setKubaiIconColor(color: string): void { kubaiIconColor = color }
+export function getKubaiIconColor(): string { return kubaiIconColor }
+/** "multi": each icon name gets a stable colour from the preset palette (black excluded). */
+const KUBAI_MULTI_PALETTE = KUBAI_COLOR_PRESETS.slice(0, 5)
+export function kubaiColorForName(name: string): string {
+  if (kubaiIconColor !== 'multi') return kubaiIconColor
+  let hash = 0
+  for (const char of name) hash = (hash * 31 + char.charCodeAt(0)) >>> 0
+  return KUBAI_MULTI_PALETTE[hash % KUBAI_MULTI_PALETTE.length]!
+}
+/** Recolour already-mounted icons; single colours are also enforced by CSS. */
+export function recolorKubaiIcons(root: ParentNode = document): void {
+  for (const svg of Array.from(root.querySelectorAll<SVGElement>('svg.kubai-icon'))) {
+    const name = Array.from(svg.classList).find(c => c.startsWith('kubai-icon-'))?.slice('kubai-icon-'.length)
+    if (name !== undefined) svg.style.color = kubaiColorForName(name)
+  }
+}
+
+export function createKubaiIcon(kind: PickerIconKind | 'lock' | 'whale', size = 16): SVGSVGElement | undefined {
+  const name = KUBAI_PICKER_ICON[kind]
+  return name === undefined ? undefined : createIcon(KUBAI_ICONS[name], { size, color: kubaiColorForName(name), trigger: 'parent' })
+}
+
+function KubaiLogo({ kind, size }: { kind: PickerIconKind | 'lock' | 'whale'; size: number }) {
+  return <span className="dsh_ref_kubai_icon" aria-hidden ref={node => { if (node !== null && node.firstChild === null) { const icon = createKubaiIcon(kind, size); if (icon) node.append(icon) } }} />
+}
+
+export function PickerSourceLogo({ kind, size = 18 }: { kind: PickerIconKind | 'lock' | 'whale'; size?: number }) {
+  const kubai = KUBAI_PICKER_ICON[kind] === undefined ? null : <KubaiLogo kind={kind} size={size} />
+  if (kind === 'whale') return <>{kubai}<span className="dsh_ref_lucide_alt" style={{ display: 'inline-flex' }}><ProviderLogo provider="deepseek" size={size} /></span></>
+  if (kind === 'lock') return <>{kubai}<svg className="dsh_ref_lucide_alt" width={size} height={size} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" aria-hidden="true"><rect x="3" y="7" width="10" height="7" rx="2"/><path d="M5.5 7V5a2.5 2.5 0 0 1 5 0v2"/><path d="M8 10v1.5"/></svg></>
   const nodes = PICKER_ICON_NODES[kind] ?? PICKER_ICON_NODES.agent
-  return <svg width={size} height={size} viewBox={PICKER_ICON_VIEWBOX[kind] ?? '0 0 24 24'} fill="none" stroke="currentColor" strokeWidth={PICKER_ICON_STROKE_WIDTH} strokeLinecap="round" strokeLinejoin="round" aria-hidden>{nodes.map((node, index) => { const Tag = node.tag; return <Tag key={index} {...node.attrs} /> })}</svg>
+  return <>{kubai}<svg className={kubai === null ? undefined : 'dsh_ref_lucide_alt'} width={size} height={size} viewBox={PICKER_ICON_VIEWBOX[kind] ?? '0 0 24 24'} fill="none" stroke="currentColor" strokeWidth={PICKER_ICON_STROKE_WIDTH} strokeLinecap="round" strokeLinejoin="round" aria-hidden>{nodes.map((node, index) => { const Tag = node.tag; return <Tag key={index} {...node.attrs} /> })}</svg></>
 }
 
 const AGENT_LOGO = {

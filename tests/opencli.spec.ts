@@ -37,27 +37,27 @@ describe('OpenCLI execFile boundary', () => {
   it('parses 2.0 health and profile envelopes', async () => {
     const script = await fake(`
       const args=process.argv.slice(2).join(' ')
-      if(args==='--version') process.stdout.write('2.0.0')
+      if(args==='--version') process.stdout.write('2.0.3')
       else {
-        const data=args==='daemon status' ? {running:true,daemonVersion:'2.0.0',extensionConnected:true,extensionVersion:'1.0.25',profiles:[{}]}
-          : args==='plugin list' ? [{name:'dsh-chat-history',version:'0.2.3',commands:['chatgpt','claude','gemini','deepseek','grok','kimi']}]
+        const data=args==='daemon status' ? {running:true,daemonVersion:'2.0.3',extensionConnected:true,extensionVersion:'1.0.25',profiles:[{}]}
+          : args==='plugin list' ? [{name:'dsh-chat-history',version:'0.2.5',commands:['chatgpt','claude','gemini','deepseek','grok','kimi']}]
           : args==='doctor' ? {connectivity:{ok:true}}
           : {profiles:[{contextId:'test-profile',alias:'work',connected:true,default:true}]}
         process.stdout.write(JSON.stringify({ok:true,data}))
       }
     `)
     const runner = new OpenCliRunner({ executable: process.execPath, prefixArgs: [script] })
-    await expect(runner.health()).resolves.toMatchObject({ version: '2.0.0', daemonStale: false,
-      extensionConnected: true, connectivityOk: true, adapterCompatible: true, pluginVersion: '0.2.3' })
+    await expect(runner.health()).resolves.toMatchObject({ version: '2.0.3', daemonStale: false,
+      extensionConnected: true, connectivityOk: true, adapterCompatible: true, pluginVersion: '0.2.5' })
     await expect(runner.profiles()).resolves.toEqual([{ id: 'test-profile', alias: 'work', connected: true, isDefault: true }])
   })
 
   it.each([false, true])('uses doctor compatibility independently of extension age: incompatible=%s', async incompatible => {
     const script = await fake(`
       const args=process.argv.slice(2).join(' ')
-      if(args==='--version') process.stdout.write('2.0.0')
+      if(args==='--version') process.stdout.write('2.0.3')
       else {
-        const data=args==='daemon status' ? {running:true,daemonVersion:'2.0.0',extensionConnected:true,extensionVersion:'1.0.24'}
+        const data=args==='daemon status' ? {running:true,daemonVersion:'2.0.3',extensionConnected:true,extensionVersion:'1.0.24'}
           : args==='doctor' ? {connectivity:{ok:true},latestExtensionVersion:'1.0.25',issues:${JSON.stringify(incompatible ? ['CLI version incompatible with extension: requires CLI >=3.0.0'] : [])}}
           : []
         process.stdout.write(JSON.stringify({ok:true,data}))
@@ -230,14 +230,14 @@ describe('OpenCLI execFile boundary', () => {
   it('reports health probes independently', async () => {
     const script = await fake(`
       const args=process.argv.slice(2).join(' ')
-      if(args==='--version') process.stdout.write('2.0.0')
+      if(args==='--version') process.stdout.write('2.0.3')
       else if(args==='daemon status'){process.stderr.write('bridge offline');process.exitCode=1}
       else if(args==='plugin list') process.stdout.write('opencli-plugin-dsh-chat-history')
       else if(args==='doctor'){process.stderr.write('connectivity failed');process.exitCode=1}
     `)
     const health = await new OpenCliRunner({ executable: process.execPath, prefixArgs: [script] }).health()
     expect(health).toMatchObject({
-      version: '2.0.0', daemon: '', pluginInstalled: true, daemonError: 'bridge offline',
+      version: '2.0.3', daemon: '', pluginInstalled: true, daemonError: 'bridge offline',
       daemonRunning: false, extensionConnected: false, extensionState: 'daemon-offline', connectivityOk: false,
       opencliCompatible: true, adapterCompatible: false, doctorError: 'connectivity failed',
     })
@@ -247,9 +247,9 @@ describe('OpenCLI execFile boundary', () => {
     const script = await fake(`
       const args=process.argv.slice(2).join(' ')
       if(args.startsWith('dsh-')) { process.stderr.write('health opened a provider'); process.exit(78) }
-      if(args==='--version') process.stdout.write('2.0.0')
+      if(args==='--version') process.stdout.write('2.0.3')
       else if(args==='daemon status') process.stdout.write('Daemon: running (PID 1)\\nVersion: v1.8.6\\nExtension: connected')
-      else if(args==='plugin list') process.stdout.write('dsh-chat-history @0.2.3 (chatgpt, claude, deepseek, gemini, grok, kimi)')
+      else if(args==='plugin list') process.stdout.write('dsh-chat-history @0.2.5 (chatgpt, claude, deepseek, gemini, grok, kimi)')
       else if(args==='doctor') process.stdout.write('[OK] Connectivity: connected in 0.2s')
       else process.exit(78)
     `)
@@ -262,9 +262,9 @@ describe('OpenCLI execFile boundary', () => {
   it('checks local bridge and adapter state without running doctor', async () => {
     const script = await fake(`
       const args=process.argv.slice(2).join(' ')
-      if(args==='--version') process.stdout.write('2.0.0')
+      if(args==='--version') process.stdout.write('2.0.3')
       else if(args==='daemon status') process.stdout.write('Daemon: running (PID 1)\\nVersion: v1.8.6\\nExtension: connected')
-      else if(args==='plugin list') process.stdout.write('dsh-chat-history @0.2.3 (chatgpt, claude, deepseek, gemini, grok, kimi)')
+      else if(args==='plugin list') process.stdout.write('dsh-chat-history @0.2.5 (chatgpt, claude, deepseek, gemini, grok, kimi)')
       else if(args==='doctor') { process.stderr.write('doctor must not run'); process.exit(78) }
       else process.exit(78)
     `)
@@ -278,10 +278,10 @@ describe('OpenCLI execFile boundary', () => {
   it('treats a successful plugin listing with adapter import warnings as broken', async () => {
     const script = await fake(`
       const args=process.argv.slice(2).join(' ')
-      if(args==='--version') process.stdout.write('2.0.0')
+      if(args==='--version') process.stdout.write('2.0.3')
       else if(args==='daemon status') process.stdout.write('Daemon: running (PID 1)\\nVersion: v1.8.6\\nExtension: connected')
       else if(args==='plugin list') {
-        process.stdout.write('dsh-chat-history @0.2.3 (chatgpt, claude, deepseek, gemini, grok, kimi)')
+        process.stdout.write('dsh-chat-history @0.2.5 (chatgpt, claude, deepseek, gemini, grok, kimi)')
         process.stderr.write("⚠ Plugin dsh-chat-history/chatgpt.js: Cannot find package '@jackwener/opencli'")
       } else if(args==='doctor') process.stdout.write('[OK] Connectivity: connected in 0.2s')
     `)
@@ -298,7 +298,7 @@ describe('OpenCLI execFile boundary', () => {
       const marker = new URL('./repaired', import.meta.url)
       const args=process.argv.slice(2).join(' ')
       if(args==='plugin list') {
-        process.stdout.write('dsh-chat-history @0.2.3 (chatgpt, claude, deepseek, gemini, grok, kimi)')
+        process.stdout.write('dsh-chat-history @0.2.5 (chatgpt, claude, deepseek, gemini, grok, kimi)')
         if(!existsSync(marker)) process.stderr.write("⚠ Plugin dsh-chat-history/chatgpt.js: Cannot find package '@jackwener/opencli'")
       } else if(args==='plugin update dsh-chat-history') writeFileSync(marker, '')
       else process.exit(78)
@@ -314,7 +314,7 @@ describe('OpenCLI execFile boundary', () => {
       const marker = new URL('./installed', import.meta.url)
       const args=process.argv.slice(2).join(' ')
       if(args==='plugin list') {
-        if(existsSync(marker)) process.stdout.write('dsh-chat-history @0.2.3 (chatgpt, claude, deepseek, gemini, grok, kimi)')
+        if(existsSync(marker)) process.stdout.write('dsh-chat-history @0.2.5 (chatgpt, claude, deepseek, gemini, grok, kimi)')
       } else if(args==='plugin install file:///adapter') writeFileSync(marker, '')
       else process.exit(78)
     `)
@@ -326,15 +326,15 @@ describe('OpenCLI execFile boundary', () => {
   it('detects stale daemon, live connectivity, and adapter compatibility independently', async () => {
     const script = await fake(`
       const args=process.argv.slice(2).join(' ')
-      if(args==='--version') process.stdout.write('2.0.0')
+      if(args==='--version') process.stdout.write('2.0.3')
       else if(args==='daemon status') process.stdout.write('Daemon: running (PID 1)\\nVersion: v1.8.5\\nExtension: connected (v1.0.22)')
-      else if(args==='plugin list') process.stdout.write('dsh-chat-history @0.2.2 (chatgpt, claude, deepseek, gemini, grok, kimi)')
+      else if(args==='plugin list') process.stdout.write('dsh-chat-history @0.2.4 (chatgpt, claude, deepseek, gemini, grok, kimi)')
       else if(args==='doctor'&&process.env.OPENCLI_WINDOW==='background') process.stdout.write('[OK] Connectivity: connected in 0.2s')
     `)
     const health = await new OpenCliRunner({ executable: process.execPath, prefixArgs: [script] }).health()
     expect(health).toMatchObject({
       opencliCompatible: true, daemonVersion: '1.8.5', daemonStale: true,
-      connectivityOk: true, pluginVersion: '0.2.2', pluginInstalled: true, adapterCommandsReady: true, adapterCompatible: false,
+      connectivityOk: true, pluginVersion: '0.2.4', pluginInstalled: true, adapterCommandsReady: true, adapterCompatible: false,
     })
   })
 

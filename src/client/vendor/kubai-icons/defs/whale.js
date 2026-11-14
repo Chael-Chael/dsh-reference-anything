@@ -1,0 +1,6 @@
+import{defineIcon as o,f as l,OL as r,DEEPS as s,WHITE as $,ellipse as i,clamp01 as d,rattle as p,at as n}from"../kit.js";const t="M27 14.6C27 19.4 23.2 22.2 17.6 22.2H12.6C8.8 22.2 6.8 19.8 6.2 16.4L5.6 13L3 11.4Q2.2 10.8 3 10.2L6.2 9.8L7.8 7.6Q8.4 7 8.9 7.8L8.8 12.2C10.4 14.6 12.6 8.2 19 8.2C23.6 8.2 27 10.8 27 14.6Z";var c=o({name:"whale",zh:"\u9CB8\u9C7C",category:"nature",tags:["whale","ocean","sea","marine","animal","container"],svg:a=>`<clipPath id="${a.id("wb")}"><path d="${t}"/></clipPath>
+    <g data-n="sp"><path d="M20 7.4Q19.6 4.4 16.8 3.4M20.4 7.4Q21 4.4 23.8 3.6" fill="none" stroke-width="1.6" stroke-linecap="round" ${s}/></g>
+    <g data-n="w"><g filter="${a.sh}"><g filter="${a.hi}"><path d="${t}" fill="${a.loS}"/></g></g>
+      <g clip-path="url(#${a.id("wb")})"><g filter="${a.hi}"><path d="${i(19,23.6,10.4,4.6)}" fill="${a.upS}"/></g><path d="${i(19,23.6,10.4,4.6)}" ${r}/></g>
+      <path d="${t}" stroke-linejoin="round" ${r}/>
+      <circle cx="22.8" cy="14" r="1.3" ${$}/></g>`,target:a=>({o:a?1:0,s:a?1.25:.8}),draw(a,e){n(e.w,{transform:`rotate(${l(p(d(a.o),4,2))} 16 16)`}),n(e.sp,{transform:`translate(20.2 7.6) scale(${l(a.s)}) translate(-20.2 -7.6)`})}});export{c as default};

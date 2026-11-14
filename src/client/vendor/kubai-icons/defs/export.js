@@ -1,0 +1,3 @@
+import{defineIcon as e,WHITE as n,WHITES as s,f as d,arrow as f,at as p}from"../kit.js";import{trayBack as m,trayFront as w,trayLower as i}from"./_tray.js";import{swell as l}from"./_arrows.js";const a=f(15.5,12.3,15.5,5.9,3.4,2.9);var h=e({name:"export",category:"arrows",tags:["export","outbox","tray","send","arrow up"],svg:r=>`${m(r)}
+    <g data-n="arr"><path d="${a.shaft}" fill="none" stroke-width="2.2" stroke-linecap="round" ${s}/><path d="${a.head}" ${n}/></g>
+    ${w(r)}`,target:r=>({o:r?1:0}),draw(r,t){const o=l(r.o);i(t,1.8*o),p(t.arr,{transform:`translate(0 ${d(-r.o-.9*o)})`})}});export{h as default};

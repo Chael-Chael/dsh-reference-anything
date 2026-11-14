@@ -4,6 +4,7 @@
 
 | 当前任务 | 必读入口 |
 | --- | --- |
+| 查看/更新待改待测总表 | [任务跟踪清单](docs/development/checklist.md)：开工加一行，完成勾选并写证据位置 |
 | 开始/继续开发 | [开发闭环与命令](docs/development/workflow.md)、[代码与验收标准](docs/development/standards.md) |
 | 定位改动、找调用方和测试 | [子系统地图](docs/subsystems/README.md) |
 | 设计引用返回协议、精简本地 Agent 输出 | [引用协议重设计](docs/ideas/reference-protocol-redesign.md)（协议契约与实施入口） |

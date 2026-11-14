@@ -22,7 +22,7 @@ class Table<V> implements KvTable<string, V> {
 function store(overrides: Partial<SettingsRecord> = {}) {
   const tables = new Map<string, Table<never>>()
   let settings: SettingsRecord = {
-    opencliPath: 'opencli', profile: '', cloudDriveDownloadDirectory: '', detailConcurrency: 8, autoSync: false, syncOnStartup: false, autoSyncMinutes: 60, historyMode: 'offline-mirror', syncHistoryDays: null, enabledProviders: ['chatgpt', 'claude', 'gemini', 'deepseek', 'grok', 'kimi'], enabledAgents: [...ALL_LOCAL_AGENTS], maxReadTurns: 10, ...overrides,
+    opencliPath: 'opencli', profile: '', cloudDriveDownloadDirectory: '', detailConcurrency: 8, autoSync: false, syncOnStartup: false, autoSyncMinutes: 60, historyMode: 'offline-mirror', syncHistoryDays: null, enabledProviders: ['chatgpt', 'claude', 'gemini', 'deepseek', 'grok', 'kimi'], enabledAgents: [...ALL_LOCAL_AGENTS], includeThinking: false, ...overrides,
     inputRenderMode: overrides.inputRenderMode ?? 'pill',
   }
   const domain = {
@@ -71,6 +71,19 @@ const settled = (manager: ConversationSyncManager, jobId: string) =>
   waitFor(() => manager.status(jobId)?.status !== 'running')
 
 describe('auto-sync resilience', () => {
+  it('does not mark unseen conversations missing after a limited provider inventory', async () => {
+    const db = store({ enabledProviders: ['qwen'], historyMode: 'metadata-only' })
+    let marked = false
+    db.markRemoteMissing = async () => { marked = true }
+    const manager = new ConversationSyncManager(db, () => fakeRunner({
+      syncIndex: async () => ({ accountScope: 'scope-qwen', sinceApplied: '', listingComplete: false, rows: [row('qwen', 'recent')] }),
+    }))
+    const job = manager.start(['qwen'], 'full')
+    await settled(manager, job)
+    expect(manager.status(job)?.status).toBe('complete')
+    expect(marked).toBe(false)
+    expect(db.syncStates.get('qwen:scope-qwen')?.lastCompleteScanAt).toBeFalsy()
+  })
   it('rejects incompatible extensions before reading or changing provider data', async () => {
     const db = store()
     let read = false

@@ -1,0 +1,269 @@
+{
+  "v": 3,
+  "layout": "files",
+  "createdOnFiles": {
+    "v": 1,
+    "at": "2026-11-11T13:09:05Z"
+  },
+  "title": "Reference Anything",
+  "namespace": "ReferenceAnything",
+  "libraries": [],
+  "sections": {},
+  "groups": [
+    "Logos",
+    "Agents"
+  ],
+  "assetGroups": {
+    "Logos": {
+      "name": "Logos",
+      "tile": "l",
+      "order": [
+        "logo.png",
+        "logo-mono.png",
+        "logo-icon.png"
+      ],
+      "files": {
+        "logo.png": {
+          "name": "logo.png",
+          "blob": "ba3bc312c575c7443a08d3b7158a1cbe",
+          "size": 940334,
+          "type": "image/png"
+        },
+        "logo-mono.png": {
+          "name": "logo-mono.png",
+          "blob": "2feb05a60e13034163c7cf81aa7321a4",
+          "size": 9425,
+          "type": "image/png"
+        },
+        "logo-icon.png": {
+          "name": "logo-icon.png",
+          "blob": "2cd5faafd39fe383ee528230f8f87c9d",
+          "size": 37933,
+          "type": "image/png"
+        }
+      }
+    },
+    "Agents": {
+      "name": "Agents",
+      "tile": "s",
+      "order": [
+        "antigravity.svg",
+        "chatgpt.svg",
+        "claude.svg",
+        "cline.svg",
+        "codex.svg",
+        "continue.svg",
+        "crush.svg",
+        "cursor.svg",
+        "dsh.svg",
+        "gemini.svg",
+        "goose.svg",
+        "grokbuild.svg",
+        "hermes.svg",
+        "kilocode.svg",
+        "kimi.svg",
+        "mimocode.svg",
+        "omp.svg",
+        "openclaw.svg",
+        "opencode.svg",
+        "pi.svg",
+        "qoder.svg",
+        "qwen.svg",
+        "reasonix.svg",
+        "teleagent.svg",
+        "trae.svg",
+        "vibe.svg",
+        "workbuddy.svg",
+        "zcode.svg",
+        "zed.svg"
+      ],
+      "files": {
+        "antigravity.svg": {
+          "name": "antigravity.svg",
+          "blob": "8a7232ac3ed8eb823e763af6c1274726",
+          "size": 276,
+          "type": "image/svg+xml"
+        },
+        "chatgpt.svg": {
+          "name": "chatgpt.svg",
+          "blob": "2a0d0f311e14188a949c1b885a49f64b",
+          "size": 1685,
+          "type": "image/svg+xml"
+        },
+        "claude.svg": {
+          "name": "claude.svg",
+          "blob": "6870bc18320f0a7c7b552d5d9beabe92",
+          "size": 435,
+          "type": "image/svg+xml"
+        },
+        "cline.svg": {
+          "name": "cline.svg",
+          "blob": "c537d5dc2e2c418a716fc32eac95e41d",
+          "size": 336,
+          "type": "image/svg+xml"
+        },
+        "codex.svg": {
+          "name": "codex.svg",
+          "blob": "4c39bc7daf9f211242a9471fc4d5b3b0",
+          "size": 1618,
+          "type": "image/svg+xml"
+        },
+        "continue.svg": {
+          "name": "continue.svg",
+          "blob": "4b6b01adf0db7e15b5262ec1cb703cca",
+          "size": 335,
+          "type": "image/svg+xml"
+        },
+        "crush.svg": {
+          "name": "crush.svg",
+          "blob": "d5318d78da04a08d073cb8f4a1fcea1c",
+          "size": 336,
+          "type": "image/svg+xml"
+        },
+        "cursor.svg": {
+          "name": "cursor.svg",
+          "blob": "cfa2ca3b4541394b189cf29cfd7c5e3d",
+          "size": 538,
+          "type": "image/svg+xml"
+        },
+        "dsh.svg": {
+          "name": "dsh.svg",
+          "blob": "6170b90d609b8c4654322c2baddf76a8",
+          "size": 2167,
+          "type": "image/svg+xml"
+        },
+        "gemini.svg": {
+          "name": "gemini.svg",
+          "blob": "410ab1f4d8a0fd3c58d5b69849b1a08a",
+          "size": 2852,
+          "type": "image/svg+xml"
+        },
+        "goose.svg": {
+          "name": "goose.svg",
+          "blob": "e5eac1d5fb1d47a71b1563e03e27891c",
+          "size": 336,
+          "type": "image/svg+xml"
+        },
+        "grokbuild.svg": {
+          "name": "grokbuild.svg",
+          "blob": "d4d23ca6c8a6c3d0f28b03f72a119cd4",
+          "size": 749,
+          "type": "image/svg+xml"
+        },
+        "hermes.svg": {
+          "name": "hermes.svg",
+          "blob": "a51f1a5f9ee16a924000b20be25f4643",
+          "size": 19778,
+          "type": "image/svg+xml"
+        },
+        "kilocode.svg": {
+          "name": "kilocode.svg",
+          "blob": "c4ba1a90342327f8f66c42c9ca0dd2e1",
+          "size": 640,
+          "type": "image/svg+xml"
+        },
+        "kimi.svg": {
+          "name": "kimi.svg",
+          "blob": "f8931a15d5721a5007d3bd6269696e63",
+          "size": 863,
+          "type": "image/svg+xml"
+        },
+        "mimocode.svg": {
+          "name": "mimocode.svg",
+          "blob": "0437b1f7a139661a4fe96690660db416",
+          "size": 2603,
+          "type": "image/svg+xml"
+        },
+        "omp.svg": {
+          "name": "omp.svg",
+          "blob": "fcb1df8c5c51c15c82efaa77f1c26298",
+          "size": 339,
+          "type": "image/svg+xml"
+        },
+        "openclaw.svg": {
+          "name": "openclaw.svg",
+          "blob": "6a82d04c1d26b5648d3d7602ae80539f",
+          "size": 2110,
+          "type": "image/svg+xml"
+        },
+        "opencode.svg": {
+          "name": "opencode.svg",
+          "blob": "133182b3f3876d0c3ce9ba86a2ba285b",
+          "size": 322,
+          "type": "image/svg+xml"
+        },
+        "pi.svg": {
+          "name": "pi.svg",
+          "blob": "3b43934a33c7ad206ab2d95771bd2396",
+          "size": 323,
+          "type": "image/svg+xml"
+        },
+        "qoder.svg": {
+          "name": "qoder.svg",
+          "blob": "43eaf4dbd9178f26f3a3b085ca01f72d",
+          "size": 6213,
+          "type": "image/svg+xml"
+        },
+        "qwen.svg": {
+          "name": "qwen.svg",
+          "blob": "ba652ec9a08d2bee9b14a0974bdfaa5e",
+          "size": 2040,
+          "type": "image/svg+xml"
+        },
+        "reasonix.svg": {
+          "name": "reasonix.svg",
+          "blob": "fd30f6e311975ebdc4223311db653a68",
+          "size": 1767,
+          "type": "image/svg+xml"
+        },
+        "teleagent.svg": {
+          "name": "teleagent.svg",
+          "blob": "7a81d1c3412a950afdf3749ff6ba3e9a",
+          "size": 336,
+          "type": "image/svg+xml"
+        },
+        "trae.svg": {
+          "name": "trae.svg",
+          "blob": "770890260db02762eea67a4bb7430045",
+          "size": 336,
+          "type": "image/svg+xml"
+        },
+        "vibe.svg": {
+          "name": "vibe.svg",
+          "blob": "52a31baccbc15329ffbd07e685755705",
+          "size": 336,
+          "type": "image/svg+xml"
+        },
+        "workbuddy.svg": {
+          "name": "workbuddy.svg",
+          "blob": "f1bd91b886c225f9ac88322b5ada5de7",
+          "size": 4354,
+          "type": "image/svg+xml"
+        },
+        "zcode.svg": {
+          "name": "zcode.svg",
+          "blob": "cd1191c9ce77f9fd97c81043d1a5dd92",
+          "size": 423,
+          "type": "image/svg+xml"
+        },
+        "zed.svg": {
+          "name": "zed.svg",
+          "blob": "18a0f7806d7936caf7d8cf209e301f8f",
+          "size": 336,
+          "type": "image/svg+xml"
+        }
+      }
+    }
+  },
+  "blobs": {},
+  "docs": {
+    "readme": "project/README.md",
+    "sections": []
+  },
+  "lastChange": {
+    "by": "ChenYu Zhu",
+    "at": "2026-11-11T13:09:05Z",
+    "via": "Claude Code",
+    "note": "Created from the settings page and @ menu styles in src/client/styles.ts and design.md"
+  }
+}

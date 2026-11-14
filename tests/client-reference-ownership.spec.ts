@@ -60,7 +60,7 @@ it.each(['official-first', 'ra-first', 'official-disabled', 'ra-picker-hidden'] 
     remote: { $mount: async () => () => {}, fileReferences: { list: fileList }, sessionReferenceResolver: { candidates } },
     reflect: { get: () => remote },
     sessions: {
-      scope: () => undefined, binding: () => ({}), list: { getSnapshot: () => ({ byId: {} }) },
+      scope: () => undefined, binding: () => ({}), list: { getSnapshot: () => ({ byId: {} }), subscribe: () => () => {} },
       using: async (_id: unknown, _options: unknown, fn: Function) => fn({ binding: { session: { getSnapshot: () => ({ openState: 'open' }) } } }),
     },
     slots: { inject: (_name: string, fn: Function) => { const result = fn(); if (result?.next) [...result] }, register: () => undefined },

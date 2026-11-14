@@ -22,7 +22,7 @@ import type { REFERENCE_ANYTHING_NS } from './locale.ts'
 import type { MenuViewportAnchor, PickerMenuActionGuard, PickerMenuUpdater } from './menu-update.ts'
 
 const LABEL: Record<ChatProvider, string> = {
-  chatgpt: 'ChatGPT', claude: 'Claude', gemini: 'Gemini', deepseek: 'DeepSeek', grok: 'Grok', kimi: 'Kimi',
+  chatgpt: 'ChatGPT', claude: 'Claude', gemini: 'Gemini', deepseek: 'DeepSeek', grok: 'Grok', kimi: 'Kimi', qwen: 'Qwen', qianwen: '千问', doubao: '豆包',
 }
 type T = TranslateNS<typeof REFERENCE_ANYTHING_NS>
 

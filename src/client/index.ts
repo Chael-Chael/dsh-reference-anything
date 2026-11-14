@@ -21,6 +21,8 @@ import { createPickerMenuActionGuard, createPickerMenuUpdater } from './menu-upd
 import { adoptMenuOpening } from './menu-opening.ts'
 import { adoptOfficialReferenceMenu } from './official-reference-menu.ts'
 import { en, REFERENCE_ANYTHING_NS, zh } from './locale.ts'
+import { recolorKubaiIcons, setKubaiIconColor } from './provider-icons.tsx'
+import { refreshKubaiChips } from './styles.ts'
 import { runSetupSequence, setupReady, type SetupStage } from './health.ts'
 import { createAutoDismissNotice } from './notice.ts'
 import { filterAgentCandidates, filterDriveCandidates } from './selection.ts'
@@ -52,7 +54,7 @@ export function apply(ctx: ClientContext): void {
   ctx.effect(() => adoptReferenceIconProjection(), 'reference-anything.client.icon-projection')
   let remote: ReferenceAnythingRemoteFace | undefined
   const scope = createSnapshotStore<SettingsSnapshot>({
-    settings: { opencliPath: 'opencli', profile: '', detailConcurrency: 8, autoSync: false, syncOnStartup: false, autoSyncMinutes: 60, historyMode: 'metadata-only', syncHistoryDays: null, enabledProviders: [...ALL_PROVIDERS], enabledAgents: [...ALL_LOCAL_AGENTS], maxReadTurns: 10, inputRenderMode: 'pill', cloudDriveDownloadDirectory: '' }, loading: true,
+    settings: { opencliPath: 'opencli', profile: '', detailConcurrency: 8, autoSync: false, syncOnStartup: false, autoSyncMinutes: 60, historyMode: 'metadata-only', syncHistoryDays: null, enabledProviders: [...ALL_PROVIDERS], enabledAgents: [...ALL_LOCAL_AGENTS], includeThinking: false, inputRenderMode: 'pill', cloudDriveDownloadDirectory: '' }, loading: true,
   })
   /** Groups other plugins add to the `@` menu; see `source-registry.ts`. */
   const groups = createReferenceGroupRegistry(pickerSourceSchema.options)
@@ -99,6 +101,7 @@ export function apply(ctx: ClientContext): void {
   const refreshAgentStats = async (): Promise<void> => {
     if (!remote) return
     try { const agentStats = unwrap(await remote.agentStats()); scope.set({ ...scope.getSnapshot(), agentStats }) } catch { /* Optional local-agent source. */ }
+    try { const pluginCount = unwrap(await remote.localPlugins()).length; scope.set({ ...scope.getSnapshot(), pluginCount }) } catch { /* Optional dashboard count. */ }
   }
   let webChatLoaded = true
   /** Ask the Host which sources are loaded; rebuild the menu groups when that changed. */
@@ -332,6 +335,10 @@ export function apply(ctx: ClientContext): void {
   const officialReferences = loader?.internal?.manifest?.plugins.some(row => row.id === '@deepseek-ai/dsh-client-ui-reference') === true
   if (officialReferences) ctx.effect(() => adoptOfficialReferenceMenu(inputTriggers, () => scope.getSnapshot().settings.picker ?? defaultPickerSettings(), t), 'reference-anything.client.official-reference-menu')
   const sessions = (ctx as unknown as { sessions: ISessions }).sessions
+  // Dashboard count from the session list DSH already keeps; no extra Host request.
+  const syncSessionCount = () => { const list = sessions.list.getSnapshot(); if (list.phase === 'ready' && scope.getSnapshot().dshSessionCount !== list.ids.length) scope.set({ ...scope.getSnapshot(), dshSessionCount: list.ids.length }) }
+  syncSessionCount()
+  ctx.effect(() => sessions.list.subscribe(syncSessionCount), 'reference-anything.client.session-count')
   const filePreview = { sessions, openResource: (address: string) => {
     (ctx as unknown as { sidebarRight: { openResource(address: string): void } }).sidebarRight.openResource(address)
   } }
@@ -562,6 +569,13 @@ export function apply(ctx: ClientContext): void {
   }
   applySources = (picker) => {
     const next = picker ?? defaultPickerSettings()
+    document.documentElement.dataset.dshRefIconStyle = next.iconStyle
+    if (next.iconColor === 'multi') document.documentElement.style.removeProperty('--dsh-ref-kubai-color')
+    else document.documentElement.style.setProperty('--dsh-ref-kubai-color', next.iconColor)
+    document.documentElement.toggleAttribute('data-dsh-ref-icon-multi', next.iconColor === 'multi')
+    setKubaiIconColor(next.iconColor)
+    recolorKubaiIcons()
+    refreshKubaiChips()
     // Settings unrelated to the @ picker (for example Auto sync) use the
     // same save endpoint. Re-registering every input source for those saves
     // can dispose UI-owned registrations while the settings panel is still
@@ -580,7 +594,7 @@ export function apply(ctx: ClientContext): void {
     applySources?.(scope.getSnapshot().settings.picker)
   }
   ctx.effect(() => groups.subscribe(reapplySources), 'reference-anything.client.group-registry')
-  ctx.effect(() => () => { for (const dispose of sourceDisposers) dispose() }, 'reference-anything.client.sources')
+  ctx.effect(() => () => { for (const dispose of sourceDisposers) dispose(); delete document.documentElement.dataset.dshRefIconStyle; document.documentElement.style.removeProperty('--dsh-ref-kubai-color') }, 'reference-anything.client.sources')
 
   const save = async (settings: SettingsRecord): Promise<boolean> => {
     if (!remote) return false
@@ -641,6 +655,13 @@ export function apply(ctx: ClientContext): void {
     name: 'settings.section', id: 'reference-anything', order: 56, label: () => t('settings.title'), locale: REFERENCE_ANYTHING_NS,
     inject: () => ({
       hooks: { scope }, close: () => undefined, save, sync: startSync, refresh, quickRefreshOnOpen: async () => { await refreshLoadedSources(); await quickRefreshOnOpen() },
+      tokenConnect: async (provider: 'deepseek' | 'kimi' | 'qwen' | 'qianwen' | 'doubao', disconnect: boolean) => {
+        if (!remote) return
+        try {
+          const settings = unwrap(await remote.tokenConnect({ provider, disconnect }))
+          scope.set({ ...scope.getSnapshot(), settings, error: undefined })
+        } catch (error) { scope.set({ ...scope.getSnapshot(), error: message(error) }) }
+      },
       browse, deleteConversation, clearProvider, clearRemoteMissing, clearOldAccounts, refreshStats,
       refreshOpenList, refreshChatImport,
       upgradeChatImport: async () => {
@@ -662,6 +683,11 @@ export function apply(ctx: ClientContext): void {
       }),
       setGroupPlugin,
       registeredGroups: () => groups.list().map(group => ({ id: group.id, label: group.label, order: group.order, aliases: group.aliases })),
+      // Hosts before StartSessionOptions open a blank chat and ignore the prompt.
+      writeSource: () => {
+        const workspace = ctx.uiWorkspace as unknown as { startSession(workspaceId?: undefined, options?: { prompt: string; whenDraftExists: 'replace' }): void }
+        workspace.startSession(undefined, { prompt: t('settings.writeSourcePrompt'), whenDraftExists: 'replace' })
+      },
       openCloudDriveDownloadDirectory: async () => {
         try { if (remote) unwrap(await remote.openDownloadDirectory()) }
         catch (error) { scope.set({ ...scope.getSnapshot(), error: message(error), notice: undefined }) }

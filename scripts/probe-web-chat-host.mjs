@@ -18,7 +18,9 @@ export function failureCode(error) {
 // Reuse the shipped parsers, but stop after one list page during diagnostics.
 export async function loadAdapter(provider) {
   if (!providers.includes(provider)) throw new Error('UNKNOWN_PROVIDER')
-  const source = await readFile(new URL(`../opencli-plugin/${provider}.js`, import.meta.url), 'utf8')
+  let source = await readFile(new URL(`../opencli-plugin/${provider}.js`, import.meta.url), 'utf8')
+  if (provider === 'deepseek' || provider === 'kimi') source = (await readFile(new URL(`../opencli-plugin/${provider}-scripts.js`, import.meta.url), 'utf8')) + '\n' + source
+  source = source.replace(/^export \{.*$/gm, '')
   let adapter
   runInNewContext(source.replace(/^import .*$/gm, '').replace(/^export /gm, ''), {
     registerProvider: value => { adapter = value }, domFallbackScript: '',

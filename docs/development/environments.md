@@ -19,7 +19,7 @@ Desktop 欢迎页报认证失败时，可查阅 [本地认证 Cookie 累积导�
 
 - Profile：`C:/Users/27923/.dsh/profiles/agent-browser-test`。
 - `dsh-reference-anything` 使用 `link:D:/dsh-reference-anything`，测试当前本地构建产物。
-- `dsh-chat-import` 使用 npm 精确版本 `0.26.3`；两个插件都加入 profile 的 bundles。
+- `dsh-chat-import` 使用 npm 精确版本 `0.26.6`；两个插件都加入 profile 的 bundles。
 - `cordis.patch.yml` 必须同时将 `storage-json.config.root` 指向该 profile 的 `storages`，将 `session-persistence-jsonl.config.root` 指向该 profile 的 `sessions`。只改前者不能隔离实际会话。刷新脚本在启动前校验两项；工作区为仓库下 `.codex-tmp/agent-browser-test/workspace`。
 - 该环境仍使用真实本机插件和 Agent 数据源，不等于操作系统沙箱。导入测试使用明确的测试样例，不修改用户原始会话。
 - 日常启动（仓库根目录 PowerShell）：
@@ -38,6 +38,10 @@ Desktop 欢迎页报认证失败时，可查阅 [本地认证 Cookie 累积导�
 - 自动化浏览器实验和验收只在 `agent-browser-test` 做，不用用户亲测环境或 Desktop。
 - GIF 更新复用真实 Web 演示环境，保留旧 HTML 动画与 GIF 备份；遵循演示 README 的 build → prepare → start 流程。
 - 普通菜单检查不发送消息。真实引用端到端验收按[发版规程 4.4](../testing/npm-release-checklist.md#44-真实来源--官方账号模型--回答核验)发送；结束清空草稿，原始来源保持只读。
+
+### Desktop 同步本地构建
+
+用户于 2026-11-12 决定：Desktop profile 的 `dsh-reference-anything` 也改为 `link:D:/dsh-reference-anything`（原为 npm `^0.5.2`，备份在 profile 的 `backups/`），并在每次修改构建后同步接入，即 build 后执行 `npm run agent:sync -- all`。同步会重启 Desktop；完整窗口验收仍按下节条件执行。
 
 ### Desktop 何时验收
 

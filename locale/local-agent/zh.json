@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "本地 Agent 对话",
+    "description": "引用 Claude Code、Codex 等本地 Agent 的历史对话。"
+  }
+}

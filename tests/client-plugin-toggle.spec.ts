@@ -56,7 +56,7 @@ it('removes and restores the plugin source immediately through the settings save
       return () => { sources.delete(source.name) }
     } }),
     locale: { register: () => () => {}, bind: () => (key: keyof typeof en) => en[key] },
-    sessions: { scope: () => undefined, binding: () => bound ? binding : undefined, using, list: { getSnapshot: () => ({ byId: listed }) } },
+    sessions: { scope: () => undefined, binding: () => bound ? binding : undefined, using, list: { getSnapshot: () => ({ byId: listed }), subscribe: () => () => {} } },
     inputTriggers: { sessionOf: vi.fn() },
     slots: {
       inject: (_name: string, run: () => unknown) => run(),

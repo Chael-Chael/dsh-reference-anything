@@ -134,3 +134,20 @@
 - 观察日期：2026-10-30，Seen 1。
 - 验证：两种 Copilot 的目录发现、豆包子文件变更使旧 revision 失效、非普通文件拒绝读取均已回归。
 - 晋升：未达到三个独立日期，暂不晋升。
+
+## OpenCLI 适配器拆分文件后必须保留 cli( 标记
+- 状态：观察中。
+- 规则：拆分 `opencli-plugin/*.js` 时，注册站点的文件里必须保留一处能被 OpenCLI 识别的 `cli(` 文本（如 `// OpenCLI discovery marker: registerProvider performs the cli() calls.`）；改动后用随包 OpenCLI 跑 `dsh-<site> --help` 确认命令已注册。另外，全局 `~/.opencli/plugins/dsh-chat-history` 是指向某个工作区 `opencli-plugin` 的 junction，在一个工作区测试前先核对它指向哪里。
+- 原因：OpenCLI 2.0 只加载文本匹配 `/\b(?:cli|registerSiteAuthCommands|onStartup|…)\s*\(/` 的模块。main 未提交的 chatgpt/gemini/grok 改为 `registerProvider` 后没有这个标记，导致 `Unknown command: dsh-chatgpt` 等；而全局 junction 仍指向 main，所以 claude 工作区的测试环境也受影响。
+- 证据：agent-browser-test 同步状态中 chatgpt/gemini/grok 报 unknown_command；随包 OpenCLI `dsh-deepseek --help` 正常、`dsh-chatgpt --help` 只输出通用用法。
+- 观察日期：2026-11-11，Seen 1。
+- 验证：未修复（main 未提交改动不归本工作区管理）；已定位。
+- 晋升：未达到三个独立日期，暂不晋升。
+
+## 设置页特殊按钮会被宿主深色主题按钮规则覆盖
+- 状态：观察中。
+- 规则：设置页里需要自定义底色的按钮（如「立即尝试」渐变按钮），背景、文字色、边框加 `!important`，并在深色主题的真实页面里用 `getComputedStyle` 核对；jsdom 测试看不出样式冲突。
+- 原因：`body[data-ds-dark-theme] .dsh_ref_settings button`（特异度 0,2,2）高于 `.dsh_ref_settings .x>button`（0,2,1），渐变被改回模块灰底。
+- 观察日期：2026-11-11，Seen 1。
+- 验证：3081 深色主题下按钮计算样式为渐变。
+- 晋升：未达到三个独立日期，暂不晋升。
